@@ -1,0 +1,62 @@
+:root {
+  /* Ambleloft radius scale: shared values, with semantic aliases for conversation surfaces. */
+  --radius-micro: 2px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+  --radius-surface-card: var(--radius-panel);
+  --radius-conversation: 22px;
+  --radius-xl: 24px;
+  --radius-round: 50%;
+  --radius-message: var(--radius-conversation);
+  --radius-composer: var(--radius-conversation);
+
+  color-scheme: light;
+  --surface: #fafbfc;
+  --raised: #ffffff;
+  --raised-translucent: #ffffff80;
+  --sidebar: #f2f4f7;
+  --text: #262c35;
+  --secondary: #606773;
+  --muted: #737b88;
+  --border: #e3e6ec;
+  --border-soft: #edf0f3;
+  --composer-border: #dce1e9;
+  --hover: #f0f2f5;
+  --accent: #416cc2;
+  --selection: #e4ecfa;
+  --focus: #7196da;
+  --focus-soft: #7196da18;
+  --blue-bg: #edf3ff;
+  --blue-text: #4169ad;
+  --purple-bg: #f0edfa;
+  --purple-text: #7661aa;
+  --orange-bg: #faf0e7;
+  --orange-text: #97662c;
+  --green-bg: #eaf5ef;
+  --green-text: #397c58;
+
+  --content-font-size: 14px;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
+  --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
+  --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;
+  --hover: #2b2f38; --accent: #729ce8; --selection: #2e3c57; --focus: #8aaefa;
+  --blue-bg: #29364a; --blue-text: #a7c2f4; --purple-bg: #373044; --purple-text: #c3b1e8;
+  --orange-bg: #403529; --orange-text: #e0bc90; --green-bg: #293b33; --green-text: #9acdaf;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
+    --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
+    --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;
+    --hover: #2b2f38; --accent: #729ce8; --selection: #2e3c57; --focus: #8aaefa;
+    --blue-bg: #29364a; --blue-text: #a7c2f4; --purple-bg: #373044; --purple-text: #c3b1e8;
+    --orange-bg: #403529; --orange-text: #e0bc90; --green-bg: #293b33; --green-text: #9acdaf;
+  }
+}
