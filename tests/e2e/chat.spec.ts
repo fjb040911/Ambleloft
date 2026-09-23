@@ -398,3 +398,28 @@ test('preview maximize motion reverses from its visible bounds and respects redu
  expect(await dialog.evaluate(el=>el.getAnimations().filter(a=>a.playState==='running').length)).toBe(0);
  expect(Math.round((await dialog.boundingBox())!.width)).toBe(page.viewportSize()!.width);
 });
+
+test('Mermaid opens a maximized preview with zoom, restore and focus return',async({page})=>{
+ await prepare(page,'```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```');
+ const maximize=page.getByRole('button',{name:'最大化 Mermaid 图表'});
+ await expect(page.getByAltText('Mermaid 图表')).toBeVisible();
+ await maximize.click();const dialog=page.getByRole('dialog',{name:'Mermaid 图表'});
+ await expect(dialog.getByAltText('Mermaid 图表')).toBeVisible();
+ await expect.poll(async()=>Math.round((await dialog.boundingBox())!.width)).toBe(page.viewportSize()!.width);
+ const original=await dialog.getByAltText('Mermaid 图表').boundingBox();
+ await dialog.getByRole('button',{name:'放大',exact:true}).click();
+ await expect(dialog.locator('output')).toHaveText('110%');
+ const enlarged=await dialog.getByAltText('Mermaid 图表').boundingBox();expect(enlarged!.width/original!.width).toBeCloseTo(1.1,1);
+ await dialog.getByRole('button',{name:'缩小',exact:true}).click();await expect(dialog.locator('output')).toHaveText('100%');
+ await dialog.getByRole('button',{name:'放大',exact:true}).click();await dialog.getByRole('button',{name:'还原尺寸',exact:true}).click();await expect(dialog.locator('output')).toHaveText('100%');
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});
+ await page.screenshot({path:'test-results/mermaid-maximized.png'});
+ await expect(dialog.getByRole('button',{name:'退出最大化',exact:true})).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:'最大化',exact:true})).toHaveCount(0);
+ const fit=await dialog.locator('.artifact-preview-body').evaluate(el=>({width:el.clientWidth,height:el.clientHeight,scrollWidth:el.scrollWidth,scrollHeight:el.scrollHeight}));
+ expect(fit.scrollWidth).toBeLessThanOrEqual(fit.width+1);expect(fit.scrollHeight).toBeLessThanOrEqual(fit.height+1);
+ await page.setViewportSize({width:800,height:600});
+ await expect.poll(()=>dialog.locator('.artifact-preview-content').evaluate(el=>Math.round(el.getBoundingClientRect().width))).toBe(752);
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(maximize).toBeFocused();
+ await expect(page.getByAltText('Mermaid 图表')).toBeVisible();
+});

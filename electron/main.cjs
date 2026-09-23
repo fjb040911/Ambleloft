@@ -5,9 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Database } = require('./database.cjs');
-const { createStore } = require('./store.cjs');
-const { createProviderStore, probeProvider } = require('./provider.cjs');
-const { AgentRuntime } = require('./agent-runtime.cjs');
+const { probeProvider } = require('./provider.cjs');
 const { inspectEngine } = require('./engine.cjs');
 const { configureSecureStorage, createSecureStorage } = require('./secure-storage.cjs');
 
@@ -65,8 +63,32 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('无法打开数据库', error.message);
     await database.close().catch(() => {}); app.quit(); return;
   }
-  store = createStore(app.getPath('userData'), database);
-  const skills = require('./skills.cjs').createSkills(app.getPath('userData'), database);
+  const services=require('../core/services.cjs').createCoreServices({
+    directory:app.getPath('userData'),database,encryption:createSecureStorage(app,safeStorage),
+    publish:run=>{if(window&&!window.isDestroyed())window.webContents.send('agent:event',pageRun(run));}
+  });
+  store=services.workspace;runtime=services.tasks;
+  const skills=services.skills;
+  let extensionError='';
+  try{await services.extensions.initialize();}catch(error){extensionError=error.message;}
+  const extensionService=()=>{if(extensionError)throw new Error('扩展数据无法读取：'+extensionError);return services.extensions;};
+  ipcMain.handle('extensions:list',event=>{authorize(event);return extensionService().snapshot();});
+  ipcMain.handle('extensions:install',async event=>{
+    authorize(event);
+    const selection=await dialog.showOpenDialog(window,{title:'安装声明式扩展',properties:['openFile'],filters:[{name:'Extension manifest',extensions:['json']}]});
+    if(selection.canceled||!selection.filePaths[0])return extensionService().snapshot();
+    const fs=require('node:fs/promises');
+    const file=await fs.open(selection.filePaths[0],'r');let manifest;
+    try{const stat=await file.stat();if(!stat.isFile()||stat.size>256*1024)throw new Error('扩展清单不能超过 256 KB');manifest=JSON.parse(await file.readFile('utf8'));}finally{await file.close();}
+    require('../core/extensions/registry.cjs').validate(manifest);
+    const confirmation=await dialog.showMessageBox(window,{type:'question',title:'安装扩展',message:`安装 ${manifest.name}？`,detail:`标识：${manifest.id}\n版本：${manifest.version}\n此声明式扩展只能添加文本页面和页面导航命令，不执行代码，也不能读取会话或模型密钥。`,buttons:['取消','安装'],defaultId:0,cancelId:0});
+    if(confirmation.response!==1)return extensionService().snapshot();
+    return extensionService().install(manifest);
+  });
+  ipcMain.handle('extensions:enable',(event,input)=>{authorize(event);return extensionService().setEnabled(input?.id,input?.enabled);});
+  ipcMain.handle('extensions:remove',(event,id)=>{authorize(event);return extensionService().remove(id);});
+  ipcMain.handle('extensions:command',(event,id)=>{authorize(event);return extensionService().execute(id);});
+
   for (const action of ['list','detail','update','remove']) ipcMain.handle('skills:'+action,(event,input)=>{authorize(event);return skills[action](input);});
   const skillImports=new Map();
   ipcMain.handle('skills:import',async(event,options={})=>{
@@ -77,10 +99,8 @@ app.whenReady().then(async () => {
     if(result.duplicate){const token=require('node:crypto').randomUUID();if(skillImports.size>=20)skillImports.delete(skillImports.keys().next().value);skillImports.set(token,source);return {...result,token};}
     if(options.token)skillImports.delete(options.token);return result;
   });
-  const provider = createProviderStore(app.getPath('userData'), createSecureStorage(app, safeStorage), database);
-  runtime = new AgentRuntime({ directory: app.getPath('userData'), provider, workspace: store, database, skills,
-    publish: run => { if (window && !window.isDestroyed()) window.webContents.send('agent:event', pageRun(run)); } });
-  const files = require('./project-files.cjs').createProjectFiles({getWorkspace:()=>store.read(),getRuns:()=>runtime.runs,getApprovedApps:async()=>await database.call('readSetting',{key:'fileApplications'})||[],setApprovedApps:value=>database.call('writeSetting',{key:'fileApplications',value})});
+  const provider=services.providers;
+  const files=services.files;
   protocol.handle('atelier-preview', request=>files.resource(request));
   for (const action of ['context','list','search','read','apps']) ipcMain.handle('files:'+action,(event,input)=>{authorize(event);return files[action](input);});
   ipcMain.handle('files:open',(event,input)=>{authorize(event);return files.open(input,{shell,dialog,window});});

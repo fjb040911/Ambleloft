@@ -9,9 +9,10 @@ async function prepare(page:Page){
   };
   (window as any).__files=files;
   const run={id:'run',projectId:'p',title:'项目任务',cwd:'/actual-task-root',model:'fixture',baseUrl:'http://localhost',status:'completed',createdAt:new Date().toISOString(),messages:[{id:'u',role:'user',text:'查看文件'},{id:'a',role:'assistant',text:'请查看右侧项目文件。'}],tools:[],approvals:[],error:''};
+  (window as any).__panelRun=run;
   (window as any).desktop={
    readWorkspace:async()=>({tasks:[],projects:[{id:'p',name:'Demo',path:'/project',createdAt:''}],theme:'light'}),saveWorkspace:async()=>{},
-   getDevice:async()=>({mode:'desktop'}),getProvider:async()=>({configured:false}),listRuns:async()=>[run],onRun:()=>()=>{},onCommand:()=>()=>{},
+   getDevice:async()=>({mode:'desktop'}),getProvider:async()=>({configured:false}),listRuns:async()=>[run],onRun:(fn:any)=>{(window as any).__panelEmit=fn;return()=>{};},onCommand:()=>()=>{},
    copyText:async(text:string)=>{(window as any).__copied=text;},
    projectFiles:{
     context:async(input:any)=>({root:input.runId?'/actual-task-root':'/project',baseUrl:'atelier-preview://fixture/'}),
@@ -153,4 +154,97 @@ test('preview zoom precedes mode switch and only scales preview content',async({
  await expect(zoom.locator('output')).toHaveText('50%');await expect(zoom.getByRole('button',{name:'缩小',exact:true})).toBeDisabled();
  await panel.getByRole('button',{name:'index.html',exact:true}).click();await expect(zoom.locator('output')).toHaveText('100%');
  await zoom.getByRole('button',{name:'放大',exact:true}).click();expect(await panel.locator('.file-html').evaluate(el=>getComputedStyle(el).zoom)).toBe('1.1');
+});
+
+test('markdown uses normal paragraph spacing and renders escaped Mermaid indentation',async({page})=>{
+ await prepare(page);await project(page);
+ await expect(page.locator('.local-status')).toHaveCount(0);
+ const source=`flowchart LR
+&#x20; subgraph S[团队协作服务 · 一台服务器]
+&#x20;   A[身份/邀请] --> T[团队与项目]
+&#x20;   T --> K[子任务看板/状态/分配]
+&#x20;   T --> Th[频道与线程 消息日志]
+&#x20;   Th --> B[服务器端 Agent · codex app-server]
+&#x20;   B --> K
+&#x20;   B --> Kb[项目知识库 · 头脑风暴产物]
+&#x20;   G[Git元数据: branch/PR链接/事件] --> K
+&#x20;   C[连接器接口: 预留] --> G
+&#x20;   M[项目默认端点 · 管理员选定] --> B
+&#x20; end
+&#x20; subgraph M1[成员 A 的 Ambleloft]
+&#x20;   I1[邀请收件箱]
+&#x20;   P1[私有 coding 会话 · 本地 Agent]
+&#x20;   C1[本地 clone + 任务分支]
+&#x20; end
+&#x20; subgraph M2[成员 B 的 Ambleloft]
+&#x20;   P2[私有 coding 会话 · 本地 Agent]
+&#x20;   C2[本地 clone + 任务分支]
+&#x20; end
+&#x20; subgraph Git[Git 远程 GitHub/GitLab/Gitee/自建]
+&#x20;   R[(main + 任务分支 + PR)]
+&#x20; end
+&#x20; M1 -->|公开数据/事件| S
+&#x20; M2 -->|公开数据/事件| S
+&#x20; Kb -. 检索/浏览 .-> M1
+&#x20; Kb -. 检索/浏览 .-> M2
+&#x20; M1 -. 仅同步元数据与交接摘要 .-> S
+&#x20; C1 --> Git
+&#x20; C2 --> Git`;
+ await page.evaluate(source=>{(window as any).__files['README.md'].text='第一段\n\n第二段\n\n```mermaid\n'+source+'\n```';},source);
+ await page.locator('.file-tree').getByRole('button',{name:'README.md',exact:true}).click();
+ await expect(page.getByAltText('Mermaid 图表')).toBeVisible();
+ const spacing=await page.locator('.file-markdown .markdown').evaluate(el=>{const a=el.querySelectorAll(':scope > p');return {whiteSpace:getComputedStyle(el).whiteSpace,gap:a[1].getBoundingClientRect().top-a[0].getBoundingClientRect().bottom};});
+ expect(spacing.whiteSpace).toBe('normal');expect(spacing.gap).toBeLessThanOrEqual(10);
+ await page.evaluate(()=>{(window as any).__files['README.md'].text='```mermaid\nflowchart LR\n P2 / C2 同 A\n```';});
+ await expect(page.locator('.artifact-error')).toContainText('Parse error');
+});
+
+test('expanded file panel keeps the current conversation draft, live messages and sending',async({page})=>{
+ await prepare(page);
+ await page.locator('.tree-task > button:first-child').filter({hasText:'项目任务'}).click();
+ const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('请修改当前文档');
+ await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();
+ await page.getByRole('button',{name:'展开预览',exact:true}).click();
+ const floating=page.locator('.file-chat-floating');await expect(floating).toBeVisible();await expect(input).toHaveValue('请修改当前文档');
+ await floating.locator('.file-chat-toggle').click();await expect(floating).toContainText('请查看右侧项目文件。');
+ await page.evaluate(()=>{const run=(window as any).__panelRun;run.status='running';run.messages[1].text='正在修改文档内容';(window as any).__panelEmit(structuredClone(run));});
+ await expect(floating).toContainText('正在修改文档内容');await expect(floating.getByRole('button',{name:'停止',exact:true})).toBeVisible();
+ await page.evaluate(()=>{const run=(window as any).__panelRun;run.status='completed';(window as any).__panelEmit(structuredClone(run));});
+ await page.getByRole('button',{name:'恢复面板宽度',exact:true}).click();await expect(floating).toHaveCount(0);await expect(input).toHaveValue('请修改当前文档');
+ await page.getByRole('button',{name:'展开预览',exact:true}).click();
+ await page.evaluate(()=>{(window as any).desktop.startRun=async(input:any)=>{(window as any).__sent=input;return (window as any).__panelRun;};});
+ await floating.getByRole('button',{name:'发送后续消息',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__sent?.runId)).toBe('run');await expect(input).toHaveValue('');
+ await page.screenshot({path:'test-results/file-floating-chat.png'});
+});
+
+test('sidebar categories disclose independently and folders reflect expansion',async({page})=>{
+ await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
+ const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'聊天',exact:true});
+ await expect(projects).toHaveAttribute('aria-expanded','true');await projects.click();await expect(projects).toHaveAttribute('aria-expanded','false');await expect(chats).toHaveAttribute('aria-expanded','true');
+ await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder.locator('.lucide-folder-open')).toHaveCount(1);
+ const alignment=await sidebar.locator('.project-tree').first().evaluate(el=>({project:el.querySelector('.project-tree-name span')!.getBoundingClientRect().left,task:el.querySelector('.tree-task > button > span:nth-child(2)')!.getBoundingClientRect().left,folder:el.querySelector('.tree-toggle svg')!.getBoundingClientRect().right,dot:el.querySelector('.task-state')!.getBoundingClientRect().right}));
+ expect(Math.abs(alignment.project-alignment.task)).toBeLessThan(1);expect(Math.abs(alignment.folder-alignment.dot)).toBeLessThan(1);
+ await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-folder')).toHaveCount(1);await expect(sidebar.locator('.tree-task')).not.toBeVisible();
+ await sidebar.getByRole('button',{name:'展开项目：Demo'}).click();await expect(sidebar.locator('.tree-task')).toHaveCount(1);
+ await chats.click();await expect(chats).toHaveAttribute('aria-expanded','false');
+ await chats.hover();await expect(sidebar.getByRole('button',{name:'新建聊天',exact:true})).toHaveCSS('opacity','1');
+ await sidebar.getByRole('button',{name:'新建聊天',exact:true}).click();await expect(chats).toHaveAttribute('aria-expanded','false');
+ await expect.poll(()=>page.evaluate(()=>document.activeElement?.tagName)).toBe('TEXTAREA');
+ await projects.focus();await expect(sidebar.getByRole('button',{name:'添加项目',exact:true})).toHaveCSS('opacity','1');
+ await page.keyboard.press('Enter');await expect(projects).toHaveAttribute('aria-expanded','false');
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await page.screenshot({path:'test-results/sidebar-categories-dark.png'});
+});
+
+
+test('project names toggle children while management and new-task actions stay independent',async({page})=>{
+ await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
+ const project=sidebar.getByRole('button',{name:'Demo',exact:true});
+ await project.click();await expect(project).toHaveAttribute('aria-expanded','false');await expect(sidebar.locator('.tree-task')).not.toBeVisible();
+ await project.click();await expect(project).toHaveAttribute('aria-expanded','true');await expect(sidebar.locator('.tree-task')).toBeVisible();
+ await sidebar.getByRole('button',{name:'管理项目：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
+ await page.keyboard.press('Escape');
+ await sidebar.getByRole('button',{name:'在项目中新建任务：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ expect(await sidebar.locator('#nav-projects').evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
 });

@@ -2,7 +2,7 @@
   "name": "ambleloft",
   "version": "0.2.1",
   "private": true,
-  "description": "Local-first AI workspace for Mac",
+  "description": "Open-source, extensible desktop Agent workspace",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",

@@ -172,3 +172,10 @@ test('retry notifications and MCP progress follow actual events and ignore stale
  assert.equal(context.run.tools[0].progress,'已处理 8 个文件');
  runtime.notification(context,{method:'item/agentMessage/delta',params:{turnId:'turn',itemId:'m',delta:'恢复'}});assert.equal(context.run.retrying,false);assert.equal(context.run.error,'');
 });
+
+test('HTTP failure shows actionable sanitized upstream reason and request ID',async()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};runtime.persist=async()=>{};
+ const context={run:{},lastModelDiagnostic:{failed:true,httpStatus:400,reason:'模型服务返回 HTTP 400：图片请求不受支持或格式无效',requestId:'request-123'}};
+ await runtime.finish(context,'failed','unexpected status 400');
+ assert.match(context.run.error,/图片请求/);assert.match(context.run.error,/request-123/);
+});

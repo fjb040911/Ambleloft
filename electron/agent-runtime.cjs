@@ -1,3 +1,4 @@
+const {imageInputInstructions}=require('./model-capabilities.cjs');
 const { developerInstructions } = require('./agent-instructions.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -163,7 +164,7 @@ class AgentRuntime {
     await rpc.call('initialize', { clientInfo: { name: 'atelier', title: 'Ambleloft', version: require('../package.json').version } });
     rpc.send({ method: 'initialized', params: {} });
     const params = { model: config.model, modelProvider: 'atelier', cwd: run.cwd, sandbox: run.permission==='full'?'danger-full-access':'read-only', approvalPolicy: run.permission==='full'?'never':'on-request',
-      developerInstructions: developerInstructions + (context.skills?.instructions || '') + (context.projectDescription ? '\nProject context supplied by the user:\n' + context.projectDescription : '') };
+      developerInstructions: developerInstructions + imageInputInstructions(config) + (context.skills?.instructions || '') + (context.projectDescription ? '\nProject context supplied by the user:\n' + context.projectDescription : '') };
     const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId } : {}) });
     if (context.done || context.cancelled) return;
     run.threadId = thread.thread.id; run.status = 'running'; this.changed(run);
@@ -298,6 +299,9 @@ class AgentRuntime {
       error = (diagnostic.stage==='translate_tools'?'模型响应已接收，但工具调用解析失败。':error)+'\n模型请求诊断：'+diagnostic.reason+'；阶段：'+diagnostic.stage+
         (diagnostic.causeCode?'；原因代码：'+diagnostic.causeCode:'')+
         '；Request ID：'+diagnostic.requestId;
+    }
+    if(status==='failed'&&diagnostic?.failed&&!diagnostic.cancelled&&diagnostic.httpStatus>=400){
+      error=diagnostic.reason+'\nRequest ID：'+diagnostic.requestId;
     }
     if (/idle timeout waiting for SSE/i.test(error)) error='模型服务连续 5 分钟没有返回可消费的流式事件，连接已超时。服务端生成日志不一定代表响应已发送；请检查推理服务的流式输出或代理缓冲。';
     if (context.timing) {

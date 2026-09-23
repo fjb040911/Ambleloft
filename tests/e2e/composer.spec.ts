@@ -9,7 +9,7 @@ async function setup(page:import('@playwright/test').Page){
 test('composer groups models, adds context, preserves draft through settings',async({page})=>{
  await setup(page);await page.getByRole('textbox',{name:'任务内容',exact:true}).fill('我的草稿');
  await page.getByRole('button',{name:'选择模型',exact:true}).click();const menu=page.getByRole('dialog',{name:'模型列表'});
- await expect(menu.getByText('本地模型',{exact:true})).toBeVisible();await expect(menu.getByText('自定义模型',{exact:true})).toBeVisible();
+ await expect(menu.getByText('本地模型',{exact:true})).toHaveCount(0);await expect(menu.getByText('自定义模型',{exact:true})).toBeVisible();
  await menu.getByRole('button',{name:'Model B 服务 A'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await expect(page.getByRole('button',{name:'关闭添加菜单'})).toBeVisible();await page.getByRole('button',{name:'文件和文件夹',exact:true}).click();await expect(page.locator('.composer-chips')).toContainText('brief.txt');await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveValue('');
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'技能',exact:true}).click();await page.getByRole('button',{name:'管理技能'}).click();await expect(page.locator('.settings-workspace')).toBeVisible();await page.getByRole('button',{name:'返回应用'}).click();await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('我的草稿');
