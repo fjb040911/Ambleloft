@@ -16,7 +16,7 @@ test('settings preserve conversation DOM, draft and scroll while appearance and 
  await page.locator('.conversation-page').evaluate(el=>(el as any).__identity='retained');
  await page.getByRole('button',{name:'设置',exact:true}).click();
  await expect(page.getByRole('heading',{name:'舒服地，开始工作'})).toBeVisible();
- await expect(page.locator('.settings-sidebar .nav-item')).toHaveCount(11);
+ await expect(page.locator('.settings-sidebar .nav-item')).toHaveCount(6);
  await page.getByRole('button',{name:'深色',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
  await page.getByLabel('界面语言').selectOption('en');
  await expect(page.getByRole('heading',{name:'Make yourself at home'})).toBeVisible();

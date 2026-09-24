@@ -38,7 +38,7 @@
   --green-bg: #eaf5ef;
   --green-text: #397c58;
 
-  --content-font-size: 14px;
+  --content-font-size: calc(14px * var(--font-scale, 1));
 }
 :root[data-theme='dark'] {
   color-scheme: dark;

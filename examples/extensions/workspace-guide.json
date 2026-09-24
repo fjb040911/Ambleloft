@@ -1,0 +1,12 @@
+{
+  "id": "example.workspace-guide",
+  "name": "工作台指南",
+  "description": "验证声明式扩展页面、导航命令和启停生命周期。",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "requiredCapabilities": ["ui.views", "ui.commands"],
+  "contributes": {
+    "views": [{"id": "example.workspace-guide.home", "title": "工作台指南", "body": "欢迎使用 AmbleLoft 扩展平台。\n\n1. 在设置中连接一个可用的模型端点。\n2. 创建项目或独立任务。\n3. 在扩展页面停用此示例，侧栏入口会自动消失。\n\n这是声明式文本页面。扩展未获得会话、文件、模型密钥或网络访问权限。"}],
+    "commands": [{"id": "example.workspace-guide.open", "title": "打开指南", "viewId": "example.workspace-guide.home"}]
+  }
+}

@@ -3,12 +3,13 @@ export interface SkillDetail extends Skill {body:string}
 export interface SkillSnapshot {id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
 export interface SkillImportResult {skill?:Skill;duplicate?:Skill;token?:string}
 export interface SkillsAPI {list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}
-export type Page = 'home' | 'projects' | 'models' | 'plugins' | 'devices' | 'settings';
+export type Page = 'home' | 'projects' | 'extension-view' | 'plugins' | 'devices' | 'settings';
 export type Theme = 'system' | 'light' | 'dark';
 export interface ModelLimits {contextWindow?:number;autoCompactTokenLimit?:number;maxOutputTokens?:number}
 export interface ProviderCatalog {defaultId:string|null;providers:ProviderConfig[]}
-export interface ProviderConfig { id?:string; name?:string; models?:string[]; baseUrl: string; model: string; executable: string; hasKey: boolean; configured: boolean; detectedExecutable?: string; bundledEngine?: boolean; engineVersion?: string; engineError?: string; protocol?: 'auto'|'responses'|'chat'; webSearch?: 'disabled'|'live'; reasoningSummary?: boolean; limits?:ModelLimits; modelLimits?:Record<string,ModelLimits> }
-export interface ProviderInput { id?:string; create?:boolean; name?:string; models?:string[]; baseUrl: string; model: string; executable: string; apiKey?: string; clearKey?: boolean; protocol?: 'auto'|'responses'|'chat'; webSearch?: 'disabled'|'live'; reasoningSummary?: boolean; limits?:ModelLimits; modelLimits?:Record<string,ModelLimits> }
+export type ImageInputCapability = 'unknown'|'supported'|'unsupported';
+export interface ProviderConfig { id?:string; name?:string; models?:string[]; baseUrl: string; model: string; executable: string; hasKey: boolean; configured: boolean; detectedExecutable?: string; bundledEngine?: boolean; engineVersion?: string; engineError?: string; protocol?: 'auto'|'responses'|'chat'; webSearch?: 'disabled'|'live'; reasoningSummary?: boolean; limits?:ModelLimits; modelLimits?:Record<string,ModelLimits>; modelImageInputs?:Record<string,ImageInputCapability> }
+export interface ProviderInput { id?:string; create?:boolean; name?:string; models?:string[]; baseUrl: string; model: string; executable: string; apiKey?: string; clearKey?: boolean; protocol?: 'auto'|'responses'|'chat'; webSearch?: 'disabled'|'live'; reasoningSummary?: boolean; limits?:ModelLimits; modelLimits?:Record<string,ModelLimits>; modelImageInputs?:Record<string,ImageInputCapability> }
 export interface TurnTiming { startedAt: string; finishedAt?: string; durationMs?: number; outcome?: 'completed' | 'failed' | 'interrupted' }
 export interface TaskPlan {turnKey:string;explanation:string;steps:{step:string;status:'pending'|'inProgress'|'completed'}[]}
 export interface DeliveredFile {id:string;turnKey:string;path:string;name:string;size:number;modifiedAt:string}
@@ -26,13 +27,13 @@ export interface AgentRun {
 }
 export interface Task { selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
 export interface Project { id: string; name: string; path: string; description?: string; createdAt: string }
-export interface Workspace { tasks: Task[]; projects: Project[]; theme: Theme; language?: 'system'|'zh-CN'|'en' }
+export interface Workspace { tasks: Task[]; projects: Project[]; theme: Theme; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
 export interface Device { name: string; chip: string; memoryGB: number | null; freeMemoryGB: number | null; platform: string; arch: string; mode: 'desktop' | 'preview' }
-export interface Model { id: string; name: string; publisher: string; initials: string; color: string; description: string; tags: string[]; location: 'local' | 'cloud'; details: string }
 export interface Capability { id: string; name: string; category: string; description: string; icon: 'folder' | 'pen' | 'research'; color: string; prompt: string; permissions: string[] }
 declare global {
   interface Window {
     desktop?: {
+      extensions?: {list():Promise<ExtensionSnapshot>;install():Promise<ExtensionSnapshot>;enable(input:{id:string;enabled:boolean}):Promise<ExtensionSnapshot>;remove(id:string):Promise<ExtensionSnapshot>;command(id:string):Promise<{extensionId:string;viewId:string}>};
       skills?: SkillsAPI;
       projectFiles?: ProjectFilesAPI;
       selectAttachments(): Promise<{name:string;path:string}[]>;
@@ -76,3 +77,6 @@ export interface ProjectFilesAPI {
  apps(input:FileContext&{path:string}):Promise<FileApplication[]>;
  open(input:FileContext&{path:string;application?:string;action?:'reveal'}):Promise<FileApplication|null>;
 }
+
+export interface ExtensionManifest {id:string;name:string;version:string;apiVersion:'1';description?:string;contributes:{views?:{id:string;title:string;body:string}[];commands?:{id:string;title:string;viewId:string}[]}}
+export interface ExtensionSnapshot {capabilities:Record<string,number>;installed:{manifest:ExtensionManifest;enabled:boolean}[]}

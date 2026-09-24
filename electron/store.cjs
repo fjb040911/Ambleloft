@@ -21,7 +21,8 @@ function validateState(value) {
         typeof project.path !== 'string' || typeof project.createdAt !== 'string' || (project.description !== undefined && (typeof project.description !== 'string' || project.description.length > 10000))) throw new Error('项目数据格式不正确');
   }
   if(value.language!==undefined&&!['system','zh-CN','en'].includes(value.language))throw new Error('语言设置无效');
-  return { ...(value.language ? {language:value.language}:{}), tasks: value.tasks, projects: value.projects, theme: value.theme };
+  if(value.fontScale!==undefined&&![90,100,110,120,130].includes(value.fontScale))throw new Error('字体大小设置无效');
+  return { ...(value.fontScale!==undefined?{fontScale:value.fontScale}:{}), ...(value.language ? {language:value.language}:{}), tasks: value.tasks, projects: value.projects, theme: value.theme };
 }
 
 function createStore(directory, database) {

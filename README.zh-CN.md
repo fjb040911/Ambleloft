@@ -1,14 +1,14 @@
 <div align="center">
   <img src="public/brand/icon-128.png" width="96" height="96" alt="Ambleloft" />
   <h1>Ambleloft</h1>
-  <p>本地优先的个人 AI 工作台。</p>
+  <p>免费开源、可扩展的 Agent 工作台。</p>
   <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
   <p>v0.2.1 预览版 · macOS · Apache-2.0</p>
 </div>
 
 Ambleloft 将对话、项目文件和 AI 任务执行整合到一个桌面工作台。连接自己的模型服务，围绕自己的文件开展工作，并在执行过程中查看和审批 Agent 的操作。
 
-本仓库包含通用桌面客户端。规划中的模型与插件托管平台是独立的闭源服务；行业专用方案通过在通用工作台基础上的合作定制交付。
+本仓库提供免费开源的桌面核心。团队协作将作为 Extension，配合未来的商业服务端提供，目前尚未实现。平台目标覆盖 Windows、macOS 和 Linux。
 
 ## 当前能力
 
@@ -24,7 +24,7 @@ Ambleloft 将对话、项目文件和 AI 任务执行整合到一个桌面工作
 
 **0.2.1 是早期预览版，并非稳定发行版。** 当前已验证的桌面目标为 macOS Apple Silicon；现有打包流程尚不提供 Windows 和 Linux 发行包。
 
-模型目录及部分集成页面包含预览或占位功能。自动模型下载、托管本地推理、插件商城安装和远程节点管理尚未提供。本地模型需要已运行并提供兼容端点。
+模型下载和推理 Runtime 管理已退出产品范围；直接连接可用的本机、内网或云端端点。当前实验性扩展支持安装本地 JSON 清单，贡献文本页面和导航命令，不执行扩展脚本，也未提供商城。参见[扩展示例](examples/extensions/README.md)。
 
 ## 从源码运行
 

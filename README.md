@@ -1,14 +1,14 @@
 <div align="center">
   <img src="public/brand/icon-128.png" width="96" height="96" alt="Ambleloft" />
   <h1>Ambleloft</h1>
-  <p>A local-first personal AI workspace.</p>
+  <p>An open-source, extensible Agent workspace.</p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
   <p>v0.2.1 Preview · macOS · Apache-2.0</p>
 </div>
 
 Ambleloft brings conversations, project files, and AI-assisted task execution into one desktop workspace. Connect your own model provider, work with your own files, and review the agent's actions as it works.
 
-This repository contains the general-purpose desktop client. The planned hosted model and plugin platform is a separate, closed-source service. Specialized industry solutions are developed through custom partnerships on top of the workspace.
+This repository contains the free, open-source desktop core. Team collaboration is planned as an Extension backed by a commercial server service; it is not implemented yet. Windows, macOS and Linux are the platform targets.
 
 ## What you can do
 
@@ -24,7 +24,7 @@ This repository contains the general-purpose desktop client. The planned hosted 
 
 **0.2.1 is an early preview, not a stable release.** macOS Apple Silicon is the currently validated desktop target. Windows and Linux releases are not provided by the current packaging workflow.
 
-The model catalog and some integration screens include previews or placeholders. Automatic model downloads, managed local inference, plugin marketplace installation, and remote node management are not yet available. Local models must already be running behind a compatible endpoint.
+Model downloads and inference-runtime management are outside the product scope. Connect an existing local, private-network or cloud endpoint. The experimental extension slice supports local JSON manifests containing text views and navigation commands; it does not execute extension scripts or provide a marketplace. See [the extension example](examples/extensions/README.md).
 
 ## Run from source
 

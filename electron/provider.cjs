@@ -1,3 +1,4 @@
+const {normalizeModelImageInputs}=require('./model-capabilities.cjs');
 const {normalizeLimits,resolveLimits}=require('./model-limits.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -36,7 +37,7 @@ function normalizeProvider(input) {
   if(input.modelLimits!==undefined && (!input.modelLimits || typeof input.modelLimits!=='object' || Array.isArray(input.modelLimits) || Object.keys(input.modelLimits).length>100))throw new Error('模型覆盖设置无效');
   for(const [id,value] of Object.entries(input.modelLimits||{})){Object.defineProperty(modelLimits,id,{value:normalizeLimits(value),enumerable:true});resolveLimits(limits,modelLimits[id]);}
   resolveLimits(limits);
-  return { webSearch, limits, modelLimits, baseUrl, model, executable, protocol:input.protocol||'auto', reasoningSummary: input.reasoningSummary !== false };
+  return { modelImageInputs:normalizeModelImageInputs(input.modelImageInputs), webSearch, limits, modelLimits, baseUrl, model, executable, protocol:input.protocol||'auto', reasoningSummary: input.reasoningSummary !== false };
 }
 const fingerprint = config => createHash('sha256').update(JSON.stringify([config.baseUrl, config.model])).digest('hex');
 

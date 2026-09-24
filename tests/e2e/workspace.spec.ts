@@ -19,15 +19,8 @@ test('draft survives reload, can be copied, and is deleted only after confirmati
   await expect(page.getByText('你的聊天会显示在这里。')).toBeVisible();
 });
 
-test('catalog filtering, model preference and theme are interactive', async ({ page }) => {
+test('theme preference survives reload', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '模型中心 探索' }).click();
-  await page.getByRole('searchbox', { name: '搜索模型' }).fill('Qwen');
-  await expect(page.locator('.model-card')).toHaveCount(1);
-  await page.locator('.model-card').click();
-  await expect(page.getByRole('dialog')).toContainText('尚未接入');
-  await page.getByRole('button', { name: '用于草稿偏好' }).click();
-  await expect(page.locator('.composer-note')).toContainText('Qwen');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '深色', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -35,13 +28,8 @@ test('catalog filtering, model preference and theme are interactive', async ({ p
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
-test('template prepares input without execution and dialog restores focus', async ({ page }) => {
+test('model picker Escape restores focus', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '能力与插件', exact: true }).click();
-  await page.locator('.plugin-card').first().click();
-  await expect(page.getByRole('dialog')).toContainText('不会安装插件');
-  await page.getByRole('button', { name: '使用模板' }).click();
-  await expect(page.getByRole('textbox', { name: '任务内容' })).toHaveValue(/梳理/);
   await page.getByRole('button',{name:'选择模型',exact:true}).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button',{name:'选择模型',exact:true})).toBeFocused();
@@ -65,4 +53,14 @@ test('project picker includes icons and padding in its native click target',asyn
  await page.setViewportSize({width:760,height:600});await page.emulateMedia({reducedMotion:'reduce',colorScheme:'dark'});
  await expect(select).toBeVisible();expect(await picker.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.screenshot({path:'test-results/home-project-picker.png'});
+});
+
+test('font size updates typography, persists and restores default',async({page})=>{
+ await page.goto('/');await page.getByRole('button',{name:'设置',exact:true}).click();
+ const slider=page.getByRole('slider',{name:'字体大小'});await expect(slider).toHaveValue('100');
+ await slider.focus();await page.keyboard.press('ArrowRight');await expect(slider).toHaveValue('110');
+ await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe('17.6px');
+ await page.reload();await page.getByRole('button',{name:'设置',exact:true}).click();await expect(slider).toHaveValue('110');
+ await page.getByRole('button',{name:'恢复默认',exact:true}).click();await expect(slider).toHaveValue('100');
+ await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe('16px');
 });

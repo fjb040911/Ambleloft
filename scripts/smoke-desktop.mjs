@@ -35,8 +35,26 @@ try {
   await page.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
   await page.locator('.tree-task > button:first-child').filter({hasText:'桌面验证：整理项目'}).waitFor();
-  await page.getByRole('button', { name: '模型中心 探索' }).click();
-  await page.screenshot({ path: 'test-results/desktop-models.png' });
+  await page.getByRole('button', { name: '扩展', exact: true }).click();
+  await app.evaluate(({dialog},manifestPath)=>{
+    dialog.showOpenDialog=async()=>({canceled:false,filePaths:[manifestPath]});
+    dialog.showMessageBox=async()=>({response:1});
+  },path.resolve('examples/extensions/workspace-guide.json'));
+  await page.getByRole('button',{name:'安装扩展',exact:true}).click();
+  await page.locator('.sidebar').getByRole('button',{name:'工作台指南',exact:true}).waitFor();
+  await page.getByRole('button',{name:'打开指南',exact:true}).click();
+  await page.getByRole('heading',{name:'工作台指南',exact:true}).waitFor();
+  await page.getByRole('button',{name:'扩展',exact:true}).click();
+  await page.getByRole('button',{name:'停用',exact:true}).click();
+  await page.locator('.sidebar').getByRole('button',{name:'工作台指南',exact:true}).waitFor({state:'detached'});
+  await page.reload();
+  await page.getByRole('button',{name:'扩展',exact:true}).click();
+  await page.getByRole('button',{name:'启用',exact:true}).click();
+  await page.locator('.sidebar').getByRole('button',{name:'工作台指南',exact:true}).waitFor();
+  await page.evaluate(()=>{window.confirm=()=>true;});
+  await page.getByRole('button',{name:'卸载',exact:true}).click();
+  await page.getByText('尚未安装扩展。',{exact:true}).waitFor();
+  await page.screenshot({ path: 'test-results/desktop-extensions.png' });
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button',{name:'模型提供商',exact:true}).click();
   await page.getByRole('button',{name:'添加服务'}).click();
@@ -56,7 +74,7 @@ try {
   await page.reload();
   await page.locator('.tree-task > button:first-child').filter({hasText:'桌面 Codex 集成验证'}).click();
   await page.getByText('Desktop Codex verified', { exact: true }).waitFor();
-  console.log('Desktop smoke passed: bridge isolation, draft persistence, endpoint configuration/test, real Codex response, conversation persistence.');
+  console.log('Desktop smoke passed: extension install/navigation/disable/enable/uninstall, bridge isolation, draft persistence, endpoint configuration/test, real Codex response, conversation persistence.');
 } finally {
   await app?.close();
   server.closeAllConnections(); await new Promise(resolve => server.close(resolve));

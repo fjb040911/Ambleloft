@@ -2,9 +2,10 @@ import { t } from './i18n';
 import { useState } from 'react';
 import { Check, PlugZap } from 'lucide-react';
 import ModelLimitSettings from './ModelLimitSettings';
-import type { ModelLimits, ProviderConfig } from './types';
+import type { ImageInputCapability, ModelLimits, ProviderConfig } from './types';
 
 export default function ProviderSettings({ config, onSaved }: { config: ProviderConfig | null; onSaved(config: ProviderConfig): void }) {
+  const [modelImageInputs,setModelImageInputs]=useState<Record<string,ImageInputCapability>>(config?.modelImageInputs||{});
   const [limits,setLimits]=useState<ModelLimits>(config?.limits||{});
   const [modelLimits,setModelLimits]=useState<Record<string,ModelLimits>>(config?.modelLimits||{});
   const [overrideModel,setOverrideModel]=useState('');
@@ -21,11 +22,11 @@ export default function ProviderSettings({ config, onSaved }: { config: Provider
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const dirty = webSearch !== (config?.webSearch||'disabled') || JSON.stringify(limits)!==JSON.stringify(config?.limits||{}) || JSON.stringify(modelLimits)!==JSON.stringify(config?.modelLimits||{}) || protocol !== (config?.protocol||'auto') || name !== (config?.name||'') || modelList !== (config?.models||[config?.model||'']).join('\n') || baseUrl !== (config?.baseUrl || '') || model !== (config?.model || '') || executable !== (config?.executable || '') || reasoningSummary !== (config?.reasoningSummary !== false) || !!apiKey || clearKey;
+  const dirty = JSON.stringify(modelImageInputs)!==JSON.stringify(config?.modelImageInputs||{}) || webSearch !== (config?.webSearch||'disabled') || JSON.stringify(limits)!==JSON.stringify(config?.limits||{}) || JSON.stringify(modelLimits)!==JSON.stringify(config?.modelLimits||{}) || protocol !== (config?.protocol||'auto') || name !== (config?.name||'') || modelList !== (config?.models||[config?.model||'']).join('\n') || baseUrl !== (config?.baseUrl || '') || model !== (config?.model || '') || executable !== (config?.executable || '') || reasoningSummary !== (config?.reasoningSummary !== false) || !!apiKey || clearKey;
   const save = async () => {
     if (!window.desktop) return;
     setBusy(true); setError(''); setMessage('');
-    try { const next = await window.desktop.saveProvider({ id:config?.id, create:!config?.id, name, limits, modelLimits, models:[...new Set([...modelList.split('\n').map(m=>m.trim()).filter(Boolean),model.trim()])], baseUrl, model, executable, reasoningSummary, protocol, webSearch, ...(apiKey ? { apiKey } : {}), clearKey });
+    try { const next = await window.desktop.saveProvider({ id:config?.id, create:!config?.id, name, limits, modelLimits, modelImageInputs, models:[...new Set([...modelList.split('\n').map(m=>m.trim()).filter(Boolean),model.trim()])], baseUrl, model, executable, reasoningSummary, protocol, webSearch, ...(apiKey ? { apiKey } : {}), clearKey });
       const refreshed = await window.desktop.getProvider(next.id); onSaved(refreshed); setBaseUrl(next.baseUrl); setModel(next.model); setApiKey(''); setClearKey(false); setMessage('配置已保存，可以返回工作台开始对话。');
     } catch (error) { setError(String((error as Error).message)); } finally { setBusy(false); }
   };
@@ -41,6 +42,8 @@ export default function ProviderSettings({ config, onSaved }: { config: Provider
       <label>Base URL<input aria-label="Base URL" type="url" placeholder="https://api.example.com/v1" value={baseUrl} onChange={event => setBaseUrl(event.target.value)} autoComplete="off" spellCheck={false} /></label>
       <label>{t("模型 ID")}<input aria-label={t("模型 ID")} placeholder={t("填写服务提供的准确模型名称")} value={model} onChange={event => setModel(event.target.value)} autoComplete="off" spellCheck={false} /></label>
       <label>{t("可选模型（每行一个 ID）")}<textarea aria-label={t("可选模型")} value={modelList} onChange={e=>setModelList(e.target.value)}/></label>
+      <p className="fine-print">{t('图片输入能力按模型保存。未配置或不支持时，不发送图片；生成文件不代表已完成视觉检查。')}</p>
+      {[...new Set([model,...modelList.split('\n')].map(m=>m.trim()).filter(Boolean))].map(id=><label key={id}>{id} · {t('图片输入能力')}<select aria-label={`${id} · ${t('图片输入能力')}`} value={modelImageInputs[id]||'unknown'} onChange={e=>setModelImageInputs(previous=>({...previous,[id]:e.target.value as ImageInputCapability}))}><option value="unknown">{t('未配置（不发送图片）')}</option><option value="unsupported">{t('不支持图片')}</option><option value="supported">{t('支持图片')}</option></select></label>)}
       <label>{t("服务协议")}<select aria-label={t("服务协议")} value={protocol} onChange={e=>setProtocol(e.target.value as typeof protocol)}><option value="auto">{t("自动（DeepSeek 使用 Chat Completions）")}</option><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></label>
       <label>{t('网页搜索')}<select aria-label={t('网页搜索')} value={webSearch} onChange={e=>setWebSearch(e.target.value as 'disabled'|'live')}><option value="disabled">{t('关闭原生搜索')}</option><option value="live">{t('启用实时搜索')}</option></select></label><p className="fine-print">{t('仅适用于支持原生搜索工具的 Responses 服务，可能产生额外费用。关闭时仍可通过命令工具申请联网。')}</p>
       <label>API Key <span>{config?.hasKey ? t("已加密保存 · 留空保持不变") : t("本机无鉴权服务可留空")}</span><input aria-label="API Key" type="password" placeholder={config?.hasKey ? t("填写新密钥可替换") : t("使用系统能力加密后保存在本机")} value={apiKey} onChange={event => setApiKey(event.target.value)} autoComplete="new-password" /></label>

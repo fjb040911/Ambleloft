@@ -27,12 +27,12 @@ function Resizer({label,value,min,max,change}:{label:string;value:number;min:num
  const move=(event:PointerEvent)=>{if(start.current)change(Math.max(min,Math.min(max,start.current.value+start.current.x-event.clientX)));};
  return <div className="file-resizer" role="separator" aria-label={t(label)} aria-orientation="vertical" aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} tabIndex={0} onKeyDown={event=>{if(['ArrowLeft','ArrowRight'].includes(event.key)){event.preventDefault();change(Math.max(min,Math.min(max,value+(event.key==='ArrowLeft'?24:-24))));}}} onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.currentTarget.dataset.resizing='true';start.current={x:event.clientX,value};event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}/>;
 }
-export default function ProjectFilePanel({context,scope,open,close,rootHint,paused,request}:{request?:{path:string;id:number}|null;context:FileContext;scope:string;open:boolean;close:()=>void;rootHint:string;paused:boolean}) {
+export default function ProjectFilePanel({context,scope,open,close,rootHint,paused,request,full,setFull}:{full:boolean;setFull(value:boolean):void;request?:{path:string;id:number}|null;context:FileContext;scope:string;open:boolean;close:()=>void;rootHint:string;paused:boolean}) {
  const api=window.desktop?.projectFiles;
  const [state,setState]=useState<PanelState>(()=>{const value=load<PanelState>(scope,initial);return value&&Array.isArray(value.tabs)&&Array.isArray(value.expanded)&&value.reading?value:initial;});
  const [width,setWidth]=useState(()=>load<number>('width',680));
  const [treeWidth,setTreeWidth]=useState(()=>load<number>('treeWidth',220));
- const [full,setFull]=useState(false),[wrap,setWrap]=useState(true),[zoom,setZoom]=useState(1);
+ const [wrap,setWrap]=useState(true),[zoom,setZoom]=useState(1);
  const [previewZoom,setPreviewZoom]=useState(100);
  const [root,setRoot]=useState(rootHint),[base,setBase]=useState('');
  const [directories,setDirectories]=useState<Record<string,FileListing>>({});

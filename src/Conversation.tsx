@@ -1,8 +1,9 @@
+import {createPortal} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
 import QuestionQueue from './QuestionQueue';
 import { t } from './i18n';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Square, ShieldCheck, Clock3 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronUp, Square, ShieldCheck, Clock3 } from 'lucide-react';
 import SkillTags from './SkillTags';
 import ComposerControls, {type ComposerOptions} from './ComposerControls';
 import type { ProviderCatalog, AgentRun, TurnTiming } from './types';
@@ -29,14 +30,17 @@ function Approval({ approval, pending, decide }: { approval: AgentRun['approvals
     <div className="settings-actions"><button type="button" className="secondary-button" disabled={pending} onClick={() => decide('decline')}>{t("拒绝")}</button><button type="button" className="primary-button" disabled={pending} onClick={() => decide('accept')}>{pending ? t("正在提交…") : t("批准本次")}</button></div>
   </section>;
 }
-export default function Conversation({ visible = true, run, send, stop, approve, submitting, catalog, openSettings, openFile }: {
+export default function Conversation({ visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile }: {
   visible?:boolean;
+  floatingHost?:HTMLElement|null;
   openFile?(file: import('./types').DeliveredFile): void;
   run: AgentRun; send(prompt: string,options:ComposerOptions): Promise<void>; catalog:ProviderCatalog;openSettings(section:string):void; stop(): void;
   approve(id: string, decision: 'accept' | 'decline'): Promise<void>; submitting: boolean;
 }) {
   const [options,setOptions]=useState<ComposerOptions>({providerId:run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id,model:run.model,permission:run.permission||'default'});
   const [prompt, setPrompt] = useState(''); const [pending, setPending] = useState('');
+  const [recentOpen,setRecentOpen]=useState(false);
+  const [sendError,setSendError]=useState('');
   const [atBottom, setAtBottom] = useState(true);
   const scroll = useRef<HTMLDivElement>(null); const content = useRef<HTMLDivElement>(null); const follow = useRef(true);
   const visibleRef=useRef(visible);visibleRef.current=visible;
@@ -90,17 +94,18 @@ export default function Conversation({ visible = true, run, send, stop, approve,
     if(content.current)observer.observe(content.current);
     observer.observe(el);
     return()=>{observer.disconnect();cancelAnimationFrame(frame);};
-  },[visible]);
-  const submit = async () => { if ((!prompt.trim()&&!options.selectedSkillIds?.length) || active || submitting) return; try { await send(prompt,options); setPrompt(''); setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false})); jump(); } catch { /* Preserve input. */ } };
+  },[visible,floatingHost,recentOpen]);
+  const submit = async () => { if ((!prompt.trim()&&!options.selectedSkillIds?.length) || active || submitting) return; try { setSendError('');await send(prompt,options); setPrompt(''); setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false})); jump(); } catch(error) { setSendError((error as Error).message); } };
   const decide = async (id: string, decision: 'accept' | 'decline') => { if (pending) return; setPending(id); try { await approve(id, decision); } catch { /* Parent displays failure. */ } finally { setPending(''); } };
-  return <div className="conversation-page">
-    <div className="conversation-body">
+  const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
+    {floatingHost&&<button className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);follow.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp size={16} aria-hidden="true"/></button>}
+    <div className="conversation-body" inert={!!floatingHost&&!recentOpen} aria-hidden={floatingHost&&!recentOpen?true:undefined}>
       <TurnNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selected={selectedTurn || turns[0]?.user.id || ''} jump={jumpTurn} />
       <div className="conversation-scroll" ref={scroll} onScroll={trackScroll}>
         <div className="conversation-content" ref={content}>
           <div className="conversation-scope"><ShieldCheck size={14} />{t(run.permission==='full'?'完全访问 · 工作目录：':'默认权限 · 工作目录：')}{run.cwd}</div>
           {before&&<button className="secondary-button" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</button>}{historyError&&<p role="alert">{historyError}</p>}
-          <div className="messages">{turns.map(turn => <section className="conversation-turn" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`} ref={node=>{if(node)turnElements.current.set(turn.user.id,node);else turnElements.current.delete(turn.user.id);}}>
+          <div className="messages">{(floatingHost?turns.slice(-3):turns).map(turn => <section className="conversation-turn" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`} ref={node=>{if(node)turnElements.current.set(turn.user.id,node);else turnElements.current.delete(turn.user.id);}}>
             <VirtualBlock enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{turn.user.text}</div></article>
             <TurnProgress onToggle={()=>{follow.current=false;setAtBottom(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'}/></article>}
@@ -112,6 +117,7 @@ export default function Conversation({ visible = true, run, send, stop, approve,
       </div>
     </div>
     <div className="conversation-dock">
+      {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&<RunActivity run={run} turn={turns.at(-1)}/>}
       {!atBottom && <button className="jump-latest secondary-button" onClick={jump}><ArrowDown size={14} />{t("回到最新消息")}</button>}
       <QuestionQueue run={run}/>
@@ -119,4 +125,5 @@ export default function Conversation({ visible = true, run, send, stop, approve,
       <form className="composer followup" aria-busy={submitting} onSubmit={event => { event.preventDefault(); void submit(); }}><SkillTags ids={options.selectedSkillIds} disabled={active||submitting} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/><textarea disabled={submitting} aria-label={t("继续对话")} placeholder={run.approvals.length ? t("请先处理上方授权…") : t("继续这个任务…")} value={prompt} maxLength={20000} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} /><div className="composer-bottom"><ComposerControls catalog={catalog} value={options} onChange={setOptions} disabled={active||submitting} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>{active ? <button type="button" className="send-button" aria-label={t("停止")} title={t(run.status === 'stopping' ? "正在停止" : "停止")} onClick={stop} disabled={run.status === 'stopping'}><Square size={13} fill="currentColor" /></button> : <button className="send-button" aria-label={t("发送后续消息")} disabled={(!prompt.trim()&&!options.selectedSkillIds?.length) || submitting}><ArrowUp size={17} /></button>}</div></form>
     </div>
   </div>;
+  return floatingHost?createPortal(view,floatingHost):view;
 }
