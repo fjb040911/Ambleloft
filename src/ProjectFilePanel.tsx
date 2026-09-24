@@ -7,6 +7,7 @@ import {t} from './i18n';
 import type {FileApplication,FileContext,FileEntry,FileListing,FilePreview} from './types';
 import './project-files.css';
 const Code=lazy(()=>import('./FileCode'));
+const Office=lazy(()=>import('./OfficePreview'));
 const Pdf=lazy(()=>import('./FilePdf'));
 const prefix='atelier.files.v1.';
 function load<T>(key:string,fallback:T):T {try{return JSON.parse(localStorage.getItem(prefix+key)||'null')??fallback;}catch{return fallback;}}
@@ -82,7 +83,7 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
   const refresh=async()=>{if(running||document.hidden)return;running=true;
    try{const value=await api.read({...context,path:active,version:fileRef.current?.path===active?fileRef.current.version:undefined});
     if(!cancelled){if(!value.unchanged)setFile(value);setError('');}
-   }catch(e){if(!cancelled){setError((e as Error).message);setFile(null);}}finally{running=false;}
+   }catch(e){if(!cancelled){if(fileRef.current?.path===active&&['spreadsheet','presentation'].includes(fileRef.current.kind))setNotice((e as Error).message);else{setError((e as Error).message);setFile(null);}}}finally{running=false;}
   };
   void refresh();const timer=setInterval(refresh,2000);
   return()=>{cancelled=true;clearInterval(timer);};
@@ -158,6 +159,7 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
        selected.kind==='markdown'?<div className="file-markdown" ref={body} onScroll={event=>putReading({top:event.currentTarget.scrollTop})}><div className="file-markdown-scaled" style={{zoom:previewZoom/100}}><Markdown text={selected.text||''} resourceUrl={resource} onFileLink={follow}/></div></div>:
        selected.kind==='html'?(selected.truncated?<div className="file-empty"><p>{t('HTML 过大，请切换代码模式或使用外部应用打开。')}</p></div>:base&&<div className="file-html-viewport"><iframe style={{zoom:previewZoom/100,width:`${10000/previewZoom}%`,height:`${10000/previewZoom}%`}} ref={htmlFrame} onLoad={()=>htmlFrame.current?.contentWindow?.postMessage({type:'atelier-preview-restore',top:stateRef.current.reading[active]?.top||0},'*')} key={active+selected.version+reload} className="file-html" title={t('HTML 文件预览')} sandbox="allow-scripts" src={fileUrl}/></div>):
        selected.kind==='image'?<><div className="file-image-tools"><button aria-label={t('缩小图片')} onClick={()=>setZoom(Math.max(.1,zoom-.25))}><ZoomOut size={16}/></button><span>{Math.round(zoom*100)}%</span><button aria-label={t('放大图片')} onClick={()=>setZoom(Math.min(4,zoom+.25))}><ZoomIn size={16}/></button><button onClick={()=>setZoom(1)}>{t('适应窗口')}</button></div><div className="file-image"><img src={fileUrl} alt={selected.name} style={{width:`${zoom*100}%`}}/></div></>:
+       ['spreadsheet','presentation'].includes(selected.kind)?<Suspense fallback={<div className="file-empty">{t('正在加载…')}</div>}><Office key={active} context={context} path={active} version={selected.version} reload={reload} baseUrl={base}/></Suspense>:
        selected.kind==='pdf'?<Suspense fallback={<div className="file-empty">{t('正在加载…')}</div>}><Pdf url={fileUrl}/></Suspense>:
        <div className="file-empty"><File size={40}/><h3>{selected.name}</h3><p>{(selected.size/1024).toFixed(1)} KiB</p><p>{t(selected.reason||'此格式请使用外部应用打开。')}</p><button className="secondary-button" onClick={()=>openExternal(active,preferred.id)}>{t('使用外部应用打开')}</button></div>}
      </>}

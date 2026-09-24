@@ -6,7 +6,7 @@ import {t} from './i18n';
 // Modal order is independent of React ancestry and any zoomed document content.
 const previewStack:HTMLDialogElement[]=[];
 
-export default function PreviewDialog({name,children,icon,contentClass,initialMaximized=false,maximizedOnly=false,close}:{name:string;children:ReactNode;icon?:ReactNode;contentClass:string;initialMaximized?:boolean;maximizedOnly?:boolean;close():void}) {
+export default function PreviewDialog({name,children,icon,contentClass,initialMaximized=false,maximizedOnly=false,zoomable=true,close}:{name:string;children:ReactNode;icon?:ReactNode;contentClass:string;initialMaximized?:boolean;maximizedOnly?:boolean;zoomable?:boolean;close():void}) {
  const dialog=useRef<HTMLDialogElement>(null),titleId=useId();
  const body=useRef<HTMLDivElement>(null);
  const returnFocus=useRef<HTMLElement|null>(null);
@@ -67,7 +67,7 @@ export default function PreviewDialog({name,children,icon,contentClass,initialMa
   <header className="artifact-preview-heading">
    {icon}<h2 id={titleId} title={name}>{name}</h2>
    <div className="artifact-preview-toolbar" role="toolbar" aria-label={t('文件预览工具栏')}>
-    {maximized&&<><button className="icon-button" aria-label={t('缩小')} title={t('缩小')} disabled={zoom<=50} onClick={()=>setZoom(value=>Math.max(50,value-10))}><ZoomOut size={18}/></button><output aria-live="polite">{zoom}%</output><button className="icon-button" aria-label={t('放大')} title={t('放大')} disabled={zoom>=200} onClick={()=>setZoom(value=>Math.min(200,value+10))}><ZoomIn size={18}/></button><button className="icon-button" aria-label={t('还原尺寸')} title={t('还原尺寸')} disabled={zoom===100} onClick={()=>setZoom(100)}><RotateCcw size={18}/></button><span className="artifact-preview-divider"/></>}
+    {maximized&&zoomable&&<><button className="icon-button" aria-label={t('缩小')} title={t('缩小')} disabled={zoom<=50} onClick={()=>setZoom(value=>Math.max(50,value-10))}><ZoomOut size={18}/></button><output aria-live="polite">{zoom}%</output><button className="icon-button" aria-label={t('放大')} title={t('放大')} disabled={zoom>=200} onClick={()=>setZoom(value=>Math.min(200,value+10))}><ZoomIn size={18}/></button><button className="icon-button" aria-label={t('还原尺寸')} title={t('还原尺寸')} disabled={zoom===100} onClick={()=>setZoom(100)}><RotateCcw size={18}/></button><span className="artifact-preview-divider"/></>}
     {!maximizedOnly&&<button className="icon-button" aria-label={t(maximized?'退出最大化':'最大化')} title={t(maximized?'退出最大化':'最大化')} onClick={toggleMaximized}>{maximized?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>}
     <button className="icon-button" aria-label={t('关闭')} title={t('关闭')} onClick={close}><X size={18}/></button>
    </div>

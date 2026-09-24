@@ -497,3 +497,66 @@ test('finished turns expose copy, optional skills and their own model',async({pa
  await page.keyboard.press('Escape');
  await page.screenshot({path:'test-results/turn-actions.png'});
 });
+
+test('archive confirmation stays usable while another task waits for approval',async({page})=>{
+ await prepare(page,'等待审批');
+ await page.evaluate(()=>{
+  const w=window as any;
+  const other={...structuredClone(w.__demoRun),id:'other',title:'待归档任务',status:'completed',approvals:[]};
+  w.__archiveFails=true;
+  w.desktop.editRun=async(input:any)=>{
+   if(w.__archiveFails)throw new Error('保存失败，请重试');
+   w.__archiveInput=input;other.archivedAt=new Date().toISOString();
+   return [structuredClone(w.__demoRun),other];
+  };
+  w.desktop.listRuns=async()=>[structuredClone(w.__demoRun),other];
+  // Feed the second task through the same subscription used for runtime updates.
+  const original=w.__demoRun;w.__demoRun=other;
+  // The fixture emitter closes over its run; temporarily replace its fields instead.
+  const saved=structuredClone(original);Object.assign(original,other);w.__emit();Object.assign(original,saved);w.__demoRun=original;
+ });
+ await page.getByRole('button',{name:'管理任务：待归档任务',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'管理任务'});
+ await dialog.getByRole('button',{name:'归档任务',exact:true}).click();
+ await dialog.getByRole('button',{name:'确认归档任务',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toHaveText('保存失败，请重试');
+ await page.evaluate(()=>{(window as any).__archiveFails=false;});
+ await dialog.getByRole('button',{name:'确认归档任务',exact:true}).click();
+ await expect(dialog).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'管理任务：待归档任务',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'批准本次',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__archiveInput)).toEqual({id:'other',archived:true});
+});
+
+test('standalone Office delivery previews use a scoped artifact and keep controls outside zoom',async({page})=>{
+ await prepare(page,'表格已生成');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.artifacts=[{id:'sheet',turnKey:'u',path:'/fixture/book.xlsx',name:'book.xlsx',size:2048,modifiedAt:'2026-09-24'}];w.desktop.projectFiles={context:async(input:any)=>{w.__officeContext=input;return {root:'/fixture',baseUrl:'atelier-preview://fixture/'};},read:async()=>({path:'book.xlsx',name:'book.xlsx',kind:'spreadsheet',size:2048,version:'v1',truncated:false}),office:async()=>({version:'v1',asset:'fixture',kind:'spreadsheet',truncated:false,sheets:[{name:'Overview',columns:2,rows:[['Name','Value'],['Alpha','42']],truncated:false}]})};w.__emit();});
+ await page.getByRole('button',{name:'预览 book.xlsx',exact:true}).click();const dialog=page.getByRole('dialog',{name:'book.xlsx',exact:true});await expect(dialog.getByRole('table',{name:'Overview'})).toContainText('Alpha');
+ expect(await page.evaluate(()=>(window as any).__officeContext)).toEqual({runId:'demo',artifactId:'sheet'});
+ await dialog.getByRole('button',{name:'最大化',exact:true}).click();await expect(dialog.getByRole('button',{name:'放大',exact:true})).toHaveCount(0);await expect(dialog.getByRole('button',{name:'刷新文件',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(dialog).toHaveCount(0);
+});
+
+test('parallel streaming keeps sidebar order and selection stable after pointer leaves',async({page})=>{
+ await page.addInitScript(()=>{
+  const make=(id:string,startedAt:string)=>({id,title:'并行聊天 '+id,model:'fixture',baseUrl:'http://127.0.0.1/v1',cwd:'/fixture/'+id,createdAt:startedAt,updatedAt:startedAt,status:'running',error:'',tools:[],approvals:[],messages:[{id:'u'+id,role:'user',text:'问题 '+id,timing:{startedAt}},{id:'a'+id,role:'assistant',phase:'commentary',text:'处理中'}]});
+  const runs=[make('A','2026-09-24T00:00:00Z'),make('B','2026-09-24T00:01:00Z')];
+  let emit:any;const w=window as any;
+  w.__stream=(id:string,index:number)=>{const run=runs.find(r=>r.id===id)!;run.updatedAt=new Date(Date.UTC(2026,8,24,0,2,index)).toISOString();run.messages[1].text+='更新';emit(structuredClone(run));};
+  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
+ });
+ await page.goto('/');
+ const rows=page.locator('.tree-task > button:first-child');
+ await expect(rows).toHaveCount(2);
+ const initial=await rows.allTextContents();
+ for(const selected of ['A','B']){
+  await rows.filter({hasText:'并行聊天 '+selected}).click();await page.mouse.move(1000,50);
+  const row=page.locator('.tree-task.selected');const top=(await row.boundingBox())!.y;
+  for(let index=0;index<6;index++){
+   await page.evaluate(({id,index})=>(window as any).__stream(id,index),{id:index%2?'B':'A',index});
+   await expect(rows).toHaveText(initial);
+   await expect(row).toHaveCount(1);await expect(row).toContainText('并行聊天 '+selected);
+   await expect(row.locator('button').first()).toHaveAttribute('aria-current','page');
+   expect((await row.boundingBox())!.y).toBe(top);
+  }
+ }
+});

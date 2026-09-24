@@ -7,7 +7,9 @@ import type { AgentRun, Project, Task } from './types';
 import { runStatus } from './Conversation';
 export type NavTask = {unread?:boolean;queued?:boolean;questions?:AgentRun["questions"];archivedAt?:string|null;id:string; title:string; projectId:string|null; createdAt:string; updatedAt?:string; status:string; draft?:boolean};
 export function workspaceTasks(runs:AgentRun[], drafts:Task[], projects:Project[]):NavTask[] {
- return [...runs,...drafts.map(task=>({...task,draft:true}))].map<NavTask>(task=>({...task,projectId:projects.some(p=>p.id===task.projectId)?task.projectId:null})).sort((a,b)=>(b.updatedAt||b.createdAt).localeCompare(a.updatedAt||a.createdAt));
+ // Streaming updates change updatedAt on every event; only a new turn should reorder tasks.
+ const orderedRuns=runs.map(run=>({...run,updatedAt:run.messages?.findLast(message=>message.role==='user')?.timing?.startedAt||run.lastTurnStartedAt||run.createdAt}));
+ return [...orderedRuns,...drafts.map(task=>({...task,draft:true}))].map<NavTask>(task=>({...task,projectId:projects.some(p=>p.id===task.projectId)?task.projectId:null})).sort((a,b)=>(b.updatedAt||b.createdAt).localeCompare(a.updatedAt||a.createdAt));
 }
 export default function WorkspaceNavigation({projects,tasks,selected,projectId,open,newTask,openProject,editProject,editTask,addProject}:{projects:Project[];tasks:NavTask[];selected:string|null;projectId:string;open(task:NavTask):void;newTask(project?:string):void;openProject(id:string):void;editProject(project:Project):void;editTask(task:NavTask):void;addProject():void}) {
  const [limits,setLimits]=useState<Record<string,number>>({});

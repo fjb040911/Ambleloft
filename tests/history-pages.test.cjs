@@ -9,3 +9,11 @@ test('history pages use stable turn cursors, preserve tool association, and omit
  assert.equal(summary(run).messages.length,0);assert.equal(summary(run).tools.length,0);
  assert.throws(()=>pageRun(run,'missing'));assert.throws(()=>pageRun(run,undefined,10000));
 });
+
+test('history summaries retain the latest turn start for stable sidebar ordering',()=>{
+ const run={createdAt:'2026-09-24T00:00:00Z',updatedAt:'2026-09-24T00:10:00Z',messages:[{role:'user',timing:{startedAt:'2026-09-24T00:05:00Z'}}]};
+ assert.equal(summary(run).lastTurnStartedAt,'2026-09-24T00:05:00Z');
+ run.updatedAt='2026-09-24T00:20:00Z';
+ assert.equal(summary(run).lastTurnStartedAt,'2026-09-24T00:05:00Z');
+ assert.equal(summary({...run,messages:[]}).lastTurnStartedAt,run.createdAt);
+});

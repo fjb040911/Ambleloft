@@ -10,7 +10,7 @@ function createCoreServices({directory,database,encryption,publish}){
  const providers=createProviderStore(directory,encryption,database);
  const skills=createSkills(directory,database);
  const tasks=new AgentRuntime({directory,database,provider:providers,workspace,skills,publish});
- const files=createProjectFiles({getWorkspace:()=>workspace.read(),getRuns:()=>tasks.runs,
+ const files=createProjectFiles({cacheDirectory:require('node:path').join(directory,'office-preview'),getWorkspace:()=>workspace.read(),getRuns:()=>tasks.runs,
  getApprovedApps:async()=>await database.call('readSetting',{key:'fileApplications'})||[],
  setApprovedApps:value=>database.call('writeSetting',{key:'fileApplications',value})});
  return {workspace,providers,skills,tasks,files,extensions:new ExtensionService(database)};

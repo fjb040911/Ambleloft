@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   extensions: Object.fromEntries(['list','install','enable','remove','command'].map(action=>[action,input=>ipcRenderer.invoke('extensions:'+action,input)])),
   skills: Object.fromEntries(['list','detail','update','remove','import'].map(action=>[action,input=>ipcRenderer.invoke('skills:'+action,input)])),
-  projectFiles: Object.fromEntries(['context','list','search','read','apps','open'].map(action=>[action,input=>ipcRenderer.invoke('files:'+action,input)])),
+  projectFiles: Object.fromEntries(['context','list','search','read','office','apps','open'].map(action=>[action,input=>ipcRenderer.invoke('files:'+action,input)])),
   selectAttachments: () => ipcRenderer.invoke('attachments:select'),
   copyText: text => ipcRenderer.invoke('clipboard:write-text', text),
   openLink: url => ipcRenderer.invoke('link:open', url),

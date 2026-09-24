@@ -18,7 +18,7 @@ export interface TurnFileChanges {turnKey:string;files:FileChange[];notice?:stri
 export interface AgentRun {
   fileChanges?:TurnFileChanges[];
   queued?:boolean;
-  summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
+  lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
@@ -67,12 +67,14 @@ declare global {
   }
 }
 
-export interface FileContext {projectId:string;runId?:string}
+export interface FileContext {projectId?:string;runId?:string;artifactId?:string}
 export interface FileEntry {name:string;path:string;directory:boolean}
 export interface FileListing {entries:FileEntry[];truncated:boolean}
-export interface FilePreview {path:string;name:string;size:number;version:string;kind:'markdown'|'html'|'image'|'pdf'|'code'|'unsupported';text?:string;truncated:boolean;reason?:string;unchanged?:false}
+export interface FilePreview {path:string;name:string;size:number;version:string;kind:'markdown'|'html'|'image'|'pdf'|'code'|'spreadsheet'|'presentation'|'unsupported';text?:string;truncated:boolean;reason?:string;unchanged?:false}
 export interface FileApplication {id:string;name:string}
+export type OfficePreview = {version:string;asset:string}&({kind:'spreadsheet';sheets:{name:string;rows:string[][];columns:number;truncated:boolean}[];truncated:boolean}|{kind:'presentation';slides:{number:number;notes:string}[];legacy?:boolean});
 export interface ProjectFilesAPI {
+ office(input:FileContext&{path:string;version?:string}):Promise<OfficePreview>;
  context(input:FileContext):Promise<{root:string;baseUrl:string}>;
  list(input:FileContext&{path:string;hidden:boolean}):Promise<FileListing>;
  search(input:FileContext&{query:string;hidden:boolean}):Promise<FileListing>;

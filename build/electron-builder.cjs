@@ -8,8 +8,10 @@ module.exports = {
   linux: { icon: 'public/brand/icon-512.png' },
   directories: { output: 'release', buildResources: 'build' },
   asar: true,
-  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
+  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', '!electron/office-worker.cjs', { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
   extraResources: [
+    { from: 'build/office-worker.cjs', to: 'tools/office-worker.cjs' },
+    { from: 'build/office-LICENSES.txt', to: 'tools/office-LICENSES.txt' },
     { from: 'vendor/engine/darwin-${arch}', to: 'engine' },
     { from: 'electron/plan-server.cjs', to: 'tools/plan-server.cjs' },
   ],

@@ -1,5 +1,12 @@
 # Preview notes / 预览版说明
 
+## v0.2.1 — macOS Apple Silicon preview
+
+- First downloadable DMG and ZIP for Apple Silicon Macs, with SHA-256 checksums. Ad-hoc signed; not Apple-notarized.
+- Includes read-only Excel and PowerPoint previews, conversation archive improvements, per-turn file review, and the extensible workspace platform described below. PowerPoint preview requires a separate LibreOffice installation.
+- 首次提供 Apple Silicon Mac 的 DMG、ZIP 和 SHA-256 校验文件。使用 ad-hoc 签名，未经 Apple 公证。
+- 包含只读 Excel / PowerPoint 预览、会话归档改进、逐轮文件审阅及下述可扩展工作台能力。PowerPoint 预览需要单独安装 LibreOffice。
+
 ## 2026-09-24 — development snapshot (package version 0.2.1)
 
 These notes describe the source snapshot, not a newly signed installer or a new GitHub Release.

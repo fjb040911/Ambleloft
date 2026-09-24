@@ -179,3 +179,23 @@ test('HTTP failure shows actionable sanitized upstream reason and request ID',as
  await runtime.finish(context,'failed','unexpected status 400');
  assert.match(context.run.error,/图片请求/);assert.match(context.run.error,/request-123/);
 });
+
+test('archiving another task preserves pending approvals and live updates, including on save failure',async()=>{
+ const sent=[];
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});
+ runtime.changed=()=>{};
+ const waiting={id:'waiting',status:'waiting',messages:[],approvals:[{id:'42',rpcId:42}]};
+ const other={id:'other',status:'completed',title:'Other',messages:[]};
+ const context={run:waiting,rpc:{send:value=>sent.push(value)}};
+ runtime.runs=[waiting,other];runtime.contexts.set('waiting',context);
+ runtime.persist=async()=>{};
+ await runtime.edit({id:'other',archived:true});
+ assert.ok(other.archivedAt);assert.equal(runtime.runs[0],waiting);assert.equal(waiting.approvals.length,1);
+ await assert.rejects(runtime.edit({id:'waiting',archived:true}),/此任务/);
+ runtime.persist=async()=>{waiting.messages.push({id:'update',text:'Live update'});throw new Error('save failed');};
+ await assert.rejects(runtime.edit({id:'other',remove:true}),/save failed/);
+ assert.equal(runtime.runs[0],waiting);assert.equal(runtime.runs[1],other);assert.ok(other.archivedAt);
+ assert.equal(waiting.messages.length,1);
+ runtime.approve({runId:'waiting',approvalId:'42',decision:'accept'});
+ assert.equal(waiting.status,'running');assert.equal(waiting.approvals.length,0);assert.equal(sent.length,1);
+});

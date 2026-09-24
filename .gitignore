@@ -35,3 +35,6 @@ playwright-report/
 /build/icons/ambleloft-approved-design.png
 
 /outputs/
+
+/build/office-worker.cjs
+/build/office-LICENSES.txt

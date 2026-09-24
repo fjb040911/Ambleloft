@@ -49,9 +49,11 @@ class AgentRuntime {
     if (!input || typeof input.id !== 'string') throw new Error('任务无效');
     const run = this.runs.find(item => item.id === input.id);
     if (!run) throw new Error('任务不存在');
-    if (this.active || this.editing) throw new Error('请等待当前任务或操作结束');
+    if (this.editing) throw new Error('请等待当前操作结束');
+    if (BUSY.includes(run.status) || [...this.contexts.values()].some(context => context.run?.id === run.id)) throw new Error('请等待此任务结束后再操作');
     this.editing = true;
-    const before = structuredClone(this.runs);
+    const before = structuredClone(run);
+    const position = this.runs.indexOf(run);
     try {
       if (input.remove === true) { if (!run.archivedAt) throw new Error('请先归档会话，再永久删除'); this.runs = this.runs.filter(item => item.id !== input.id); }
       else {
@@ -73,7 +75,13 @@ class AgentRuntime {
       await this.persist();
       if (!input.remove) this.publish(structuredClone(run));
       return this.list();
-    } catch (error) { this.runs = before; throw error; }
+    } catch (error) {
+      // Preserve live objects and updates belonging to other running tasks.
+      for (const key of Object.keys(run)) delete run[key];
+      Object.assign(run, before);
+      if (!this.runs.includes(run)) this.runs.splice(position, 0, run);
+      throw error;
+    }
     finally { this.editing = false; }
   }
   persist() {

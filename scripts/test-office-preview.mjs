@@ -1,0 +1,34 @@
+import {_electron as electron,expect} from '@playwright/test';
+import {mkdtemp,mkdir,writeFile,rm,readFile,copyFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import XLSX from 'xlsx';
+import {unzipSync,zipSync,strFromU8,strToU8} from 'fflate';
+const temp=await mkdtemp(path.join(tmpdir(),'ambleloft-office-'));
+const root=path.join(temp,'project');await mkdir(root);await mkdir('output/office-preview',{recursive:true});
+const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([['Name','Value'],['Alpha',42]]),'Overview');XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(Array.from({length:5000},(_,i)=>[i,'Row '+i])),'Large sheet');await writeFile(path.join(root,'book.xlsx'),XLSX.write(book,{type:'buffer',bookType:'xlsx'}));
+await copyFile('tests/fixtures/office-preview.pptx',path.join(root,'deck.pptx'));
+let app;
+try{
+ app=await electron.launch({args:['.',`--user-data-dir=${path.join(temp,'data')}`],env:{...process.env,ATELIER_DEV:'0'}});
+ const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.getByLabel('任务内容',{exact:true}).waitFor();
+ await page.evaluate(async root=>{await window.desktop.saveWorkspace({tasks:[],projects:[{id:'office',name:'Office preview',path:root,createdAt:new Date().toISOString()}],theme:'light'});},root);
+ await page.reload();await page.getByLabel('当前项目',{exact:true}).click();await page.getByRole('option',{name:'Office preview',exact:true}).click();await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();
+ const tree=page.getByRole('complementary',{name:'项目文件树'});
+ await tree.getByRole('button',{name:'book.xlsx',exact:true}).dblclick();await expect(page.getByRole('table',{name:'Overview'})).toContainText('Alpha');
+ await page.getByRole('tab',{name:'Large sheet',exact:true}).click();if(await page.locator('.sheet-scroll tbody tr').count()>80)throw new Error('Rows are not virtualized');
+ await page.locator('.sheet-scroll').evaluate(el=>el.scrollTop=120000);await expect(page.locator('.sheet-scroll')).toContainText('Row 4000');
+ await page.getByRole('tab',{name:'Overview',exact:true}).click();await page.screenshot({path:'output/office-preview/excel.png'});
+ await tree.getByRole('button',{name:'deck.pptx',exact:true}).dblclick();await expect(page.locator('.speaker-notes')).toContainText('Speaker notes for slide 1',{timeout:45000});
+ await expect.poll(()=>page.locator('.slide-stage canvas').evaluate(c=>c.width>0)).toBe(true);
+ await page.getByRole('button',{name:'展开预览',exact:true}).click();await page.getByRole('button',{name:'跳转到幻灯片 2',exact:true}).click();await expect(page.locator('.speaker-notes')).toContainText('Speaker notes for slide 2');
+ await page.getByLabel('幻灯片缩放',{exact:true}).selectOption('2');
+ const initial=await readFile(path.join(root,'deck.pptx'));const files=unzipSync(initial);const note='ppt/notesSlides/notesSlide2.xml';files[note]=strToU8(strFromU8(files[note]).replace('Speaker notes for slide 2','Updated speaker notes for slide 2'));await writeFile(path.join(root,'deck.pptx'),zipSync(files));
+ await expect(page.locator('.speaker-notes')).toContainText('Updated speaker notes for slide 2',{timeout:45000});await expect(page.getByLabel('幻灯片缩放',{exact:true})).toHaveValue('2');
+ await page.getByLabel('幻灯片缩放',{exact:true}).selectOption('fit');await page.screenshot({path:'output/office-preview/ppt.png'});
+ await writeFile(path.join(root,'deck.pptx'),'broken pptx');await expect(page.locator('.office-status[role=alert]')).toBeVisible({timeout:15000});await expect(page.locator('.speaker-notes')).toContainText('Updated speaker notes for slide 2');
+ await writeFile(path.join(root,'deck.pptx'),initial);await expect(page.locator('.speaker-notes')).toContainText('Speaker notes for slide 2',{timeout:45000});await expect(page.locator('.office-status[role=alert]')).toHaveCount(0);
+ if(errors.length)throw new Error(errors.join('\n'));
+ console.log('Office desktop preview passed: XLSX virtualization, PPT rendering/notes, zoom retention, automatic update, failure retention and recovery.');
+}finally{await app?.close();await rm(temp,{recursive:true,force:true});}

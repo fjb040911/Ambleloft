@@ -75,6 +75,20 @@ try {
   other.send({ method: 'initialized', params: {} });
   app = await launch();
   let page = await app.firstWindow();
+  // Exercise the bundled Office worker; source-mode tests cannot catch missing package resources.
+  const XLSX = require('xlsx');
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['Packaged worksheet', 42]]), 'Sheet1');
+  const spreadsheet = path.join(directory, 'fixture.xlsx');
+  XLSX.writeFile(workbook, spreadsheet);
+  const office = await app.evaluate(async ({ app }, { spreadsheet, directory }) => {
+    const localRequire = process.getBuiltinModule('module').createRequire(app.getAppPath() + '/package.json');
+    const { createOfficePreview } = localRequire('./electron/office-preview.cjs');
+    return createOfficePreview({ directory: directory + '/office-cache' }).preview(spreadsheet);
+  }, { spreadsheet, directory });
+  assert.equal(office.kind, 'spreadsheet');
+  assert.ok(JSON.stringify(office).includes('Packaged worksheet'));
+  console.log('PASS packaged: Office worker and bundled spreadsheet dependencies');
   const info = await app.evaluate(({ app }) => ({ packaged: app.isPackaged, home: app.getPath('userData'), name: app.getName() }));
   assert.equal(info.packaged, true); assert.equal(info.name, 'Ambleloft'); assert.equal(await realpath(info.home), await realpath(dataDir));
   await page.evaluate(config => window.desktop.saveProvider({ ...config, name: 'Packaged fixture', executable: '/Applications/Codex.app/Contents/Resources/codex' }), config);

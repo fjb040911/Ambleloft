@@ -1,6 +1,6 @@
 function summary(run) {
  const {messages,tools,plans,fileChanges,artifacts,approvals,questions,...meta}=run;
- return {...meta,messages:[],tools:[],approvals:[],summaryOnly:true};
+ return {...meta,lastTurnStartedAt:messages?.findLast(message=>message.role==='user')?.timing?.startedAt||run.createdAt,messages:[],tools:[],approvals:[],summaryOnly:true};
 }
 function pageRun(run,before,limit=30) {
  if(!run)throw new Error('会话不存在');
