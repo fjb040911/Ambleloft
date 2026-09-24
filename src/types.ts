@@ -13,13 +13,16 @@ export interface ProviderInput { id?:string; create?:boolean; name?:string; mode
 export interface TurnTiming { startedAt: string; finishedAt?: string; durationMs?: number; outcome?: 'completed' | 'failed' | 'interrupted' }
 export interface TaskPlan {turnKey:string;explanation:string;steps:{step:string;status:'pending'|'inProgress'|'completed'}[]}
 export interface DeliveredFile {id:string;turnKey:string;path:string;name:string;size:number;modifiedAt:string}
+export interface FileChange {id:string;path:string;status:'added'|'modified'|'deleted';additions?:number;deletions?:number;reason?:string;hunks?:{oldStart:number;oldLines:number;newStart:number;newLines:number;lines:string[]}[]}
+export interface TurnFileChanges {turnKey:string;files:FileChange[];notice?:string}
 export interface AgentRun {
+  fileChanges?:TurnFileChanges[];
   queued?:boolean;
   summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
-  messages: { skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
+  messages: { model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];

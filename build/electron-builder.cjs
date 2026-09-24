@@ -8,7 +8,7 @@ module.exports = {
   linux: { icon: 'public/brand/icon-512.png' },
   directories: { output: 'release', buildResources: 'build' },
   asar: true,
-  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*'],
+  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
   extraResources: [
     { from: 'vendor/engine/darwin-${arch}', to: 'engine' },
     { from: 'electron/plan-server.cjs', to: 'tools/plan-server.cjs' },

@@ -25,7 +25,7 @@ async function prepare(page:Page){
  });
  await page.goto('/');
 }
-async function project(page:Page){await page.getByLabel('当前项目',{exact:true}).selectOption('p');await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();}
+async function project(page:Page){await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'Demo',exact:true}).click();await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();}
 test('project-only entry, preview modes, read-only source and persisted state',async({page})=>{
  await prepare(page);await expect(page.getByRole('button',{name:'显示侧边面板',exact:true})).toHaveCount(0);
  await project(page);const panel=page.getByRole('region',{name:'项目文件面板'});
@@ -36,8 +36,8 @@ test('project-only entry, preview modes, read-only source and persisted state',a
  await panel.locator('.cm-content').click();await page.keyboard.type('should not edit');await expect(panel.locator('.cm-content')).not.toContainText('should not edit');
  await page.getByRole('button',{name:'隐藏侧边面板',exact:true}).click();await expect(panel).not.toBeVisible();
  await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();await expect(panel.locator('.cm-content')).toContainText('# 项目说明');
- await page.getByLabel('当前项目',{exact:true}).selectOption('');await expect(panel).toHaveCount(0);
- await page.getByLabel('当前项目',{exact:true}).selectOption('p');await expect(page.locator('.cm-content')).toContainText('# 项目说明');
+ await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'不关联项目',exact:true}).click();await expect(panel).toHaveCount(0);
+ await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'Demo',exact:true}).click();await expect(page.locator('.cm-content')).toContainText('# 项目说明');
 });
 test('temporary tabs, pinned tabs, filtering, external opening and file changes',async({page})=>{
  await prepare(page);await project(page);const tree=page.getByRole('complementary',{name:'项目文件树'});
@@ -247,4 +247,16 @@ test('project names toggle children while management and new-task actions stay i
  await sidebar.getByRole('button',{name:'在项目中新建任务：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await sidebar.locator('#nav-projects').evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
+});
+
+test('custom project picker supports keyboard selection, dismissal and shared material',async({page})=>{
+ await prepare(page);const picker=page.getByRole('combobox',{name:'当前项目'});
+ await expect(picker).toHaveJSProperty('tagName','BUTTON');await picker.click();
+ const list=page.getByRole('listbox',{name:'当前项目'});await expect(list.getByRole('option',{name:'不关联项目'})).toBeFocused();
+ await page.keyboard.press('ArrowDown');await expect(list.getByRole('option',{name:'Demo',exact:true})).toBeFocused();await page.keyboard.press('Enter');
+ await expect(picker).toContainText('Demo');await expect(picker).toBeFocused();await expect(list).toHaveCount(0);
+ await picker.click();await expect(list.getByRole('option',{name:'Demo',exact:true})).toHaveAttribute('aria-selected','true');await page.keyboard.press('Escape');await expect(picker).toBeFocused();
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await picker.click();await expect(list).toHaveCSS('border-radius','12px');
+ await expect(list).toBeVisible();await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));await page.screenshot({path:'test-results/project-picker-custom-dark.png'});
+ await page.getByRole('heading').first().click();await expect(list).toHaveCount(0);
 });

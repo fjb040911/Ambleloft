@@ -633,3 +633,38 @@ body { font-optical-sizing: auto; }
 .font-size-labels { display: flex; justify-content: space-between; gap: 12px; color: var(--secondary); font-size: .75rem; padding-bottom: 12px; }
 .font-size-setting .text-button { min-height: 32px; padding: 4px 8px; border-radius: 6px; }
 .font-size-setting .text-button:hover:not(:disabled) { background: var(--hover); }
+
+/* Composer selectors share the project picker's control sizing and materials. */
+.composer-option-anchor > :is(.model-pill,.icon-button) { min-height: 36px; border-radius: var(--radius-control); background: var(--hover); color: var(--text); font-size: .8125rem; line-height: 1.5; transition: background-color 120ms ease-out; }
+.composer-option-anchor > .model-pill { padding: .5rem .625rem; gap: .5rem; }
+.composer-option-anchor > .icon-button { min-width: 36px; }
+.composer-option-anchor > button:is(:hover,:active,[aria-expanded='true']):not(:disabled) { background: var(--selection); }
+.composer-option-anchor > button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.composer-popover { padding: 6px; border-radius: 12px; background: var(--raised); color: var(--text); box-shadow: 0 12px 36px #0002, 0 2px 6px #0001; font-size: .8125rem; line-height: 1.5; }
+.composer-popover button { min-height: 36px; padding: 8px 10px; gap: 10px; border-radius: 6px; font: inherit; }
+.composer-popover button > svg { flex-shrink: 0; }
+.composer-popover button > span:first-child:not(.permission-toggle) { flex: 1; }
+.composer-popover button > span > small { padding: 2px 0 0; font-size: .6875rem; line-height: 1.4; }
+.composer-popover > small { padding: 6px 10px; font-size: .6875rem; font-weight: 600; }
+.composer-popover > p { margin: 4px 0 10px; padding: 6px 10px; font-size: .8125rem; }
+.composer-popover input { min-height: 36px; padding: 8px 10px; font: inherit; background: var(--surface); margin-bottom: 4px; }
+.composer-popover button[aria-pressed='true'] { background: var(--selection); color: var(--accent); }
+.composer-popover button[aria-pressed='true']:hover { background: var(--selection); }
+.composer-popover button[role='switch'] { justify-content: space-between; }
+.composer-popover .permission-toggle { margin-left: auto; }
+.composer-popover button:disabled { opacity: .45; cursor: default; }
+@media (pointer: coarse) { .composer-option-anchor > :is(.model-pill,.icon-button), .composer-popover button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .composer-popover { animation: none; }.permission-toggle > span { transition: none; } }
+@media (prefers-contrast: more) { .composer-popover { border-color: var(--text); } }
+
+.project-picker-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; max-width: min(100%,360px); padding: .5rem .625rem; border-radius: var(--radius-control); font-size: .8125rem; line-height: 1.5; background: var(--hover); color: var(--text); }
+.project-picker-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-picker-trigger svg { flex-shrink: 0; }
+.project-picker-trigger:is(:hover,:active,[aria-expanded='true']):not(:disabled) { background: var(--selection); }
+.project-picker-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.project-picker-trigger:disabled { opacity: .5; }
+.composer-popover { background: color-mix(in srgb,var(--raised) 88%,transparent); backdrop-filter: blur(24px) saturate(140%); border-radius: 12px; }
+.project-picker-popover { z-index: 100; max-width: calc(100vw - 24px); }
+.project-picker-popover button[aria-selected='true'] { background: var(--selection); color: var(--accent); }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .composer-popover { background: var(--raised); backdrop-filter: none; } }
+@media (pointer: coarse) { .project-picker-trigger { min-height: 44px; } }

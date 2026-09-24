@@ -1,0 +1,29 @@
+# Preview notes / 预览版说明
+
+## 2026-09-24 — development snapshot (package version 0.2.1)
+
+These notes describe the source snapshot, not a newly signed installer or a new GitHub Release.
+
+### English
+
+- Added per-turn workspace file-change summaries and read-only text diffs. Binary/Office files may show status only. Snapshot limits and external edits mean this is not an exhaustive audit of agent-only changes.
+- Added archive search, project/type filters, grouping, selection, restoration and confirmed bulk deletion.
+- Improved project selection, composer layout, reply copying, and visibility of the model and skills used for a turn.
+- Improved expandable previews and nested preview interactions.
+- Included the `diff` runtime dependency in desktop packaging.
+- Refreshed the English and Chinese README with reproducible screenshots of the actual UI using synthetic fixtures.
+
+The open-source core is a general-purpose, extensible desktop Agent workspace. Existing local/private/cloud model endpoints are supported; downloading models and managing inference runtimes are out of scope. The declarative Extension preview currently supports plain-text views and navigation commands only. Team collaboration and commercial services remain separate planned work.
+
+### 简体中文
+
+- 新增逐轮工作目录文件变更摘要和只读文本差异。二进制及 Office 文件可能仅展示状态；由于快照限制及外部编辑，这并不是只归属于 Agent 的完整修改审计。
+- 新增归档搜索、项目/类型筛选、分组、选择、恢复及确认后的批量删除。
+- 改进项目选择、输入区布局、回复复制，以及本轮使用的模型和技能展示。
+- 改进可展开预览与嵌套预览交互。
+- 桌面打包包含 `diff` 运行时依赖。
+- 重写中英文 README，加入可复现的真实界面截图，内容使用虚构演示数据。
+
+开源核心定位为通用、可扩展的桌面 Agent 工作台，连接已有本地/私有/云端模型端点，不负责模型下载和推理运行时管理。声明式扩展预览目前仅支持纯文本视图与导航命令；团队协作和商业服务属于独立的后续工作。
+
+这些说明描述源码快照，不代表新签名安装包或新的 GitHub Release。

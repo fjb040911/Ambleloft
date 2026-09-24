@@ -21,7 +21,7 @@ try{
  PRAGMA user_version=2;
  COMMIT;`);
 }catch(e){parentPort.postMessage({fatal:e.message});try{db?.close();}catch{};db=null;parentPort.close();process.exitCode=1;}
-const collections=['messages','tools','plans','artifacts','approvals','questions'];
+const collections=['messages','tools','plans','fileChanges','artifacts','approvals','questions'];
 function transaction(fn){db.exec('BEGIN IMMEDIATE');try{const value=fn();db.exec('COMMIT');return value;}catch(e){db.exec('ROLLBACK');throw e;}}
 function syncTable(table,values){
  const existing=new Map(db.prepare(`SELECT id,data FROM ${table}`).all().map(r=>[r.id,r.data]));

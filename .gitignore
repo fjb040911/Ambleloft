@@ -33,3 +33,5 @@ playwright-report/
 *.pfx
 *.mobileprovision
 /build/icons/ambleloft-approved-design.png
+
+/outputs/

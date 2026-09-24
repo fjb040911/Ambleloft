@@ -5,6 +5,7 @@ export interface ConversationTurn {
   tools: AgentRun['tools'];
   final?: AgentRun['messages'][number];
   active: boolean;
+  model?: string;
   outcome?: 'completed'|'failed'|'interrupted';
   plan?:TaskPlan;
   artifacts:DeliveredFile[];
@@ -15,7 +16,10 @@ export function conversationTurns(run: AgentRun): ConversationTurn[] {
     if (message.role === 'user') turns.push({ user: message, messages: [], tools: [], active: false, artifacts:[] });
     else if (turns.length) turns[turns.length - 1].messages.push(message);
   }
+  let model = turns.some(turn => turn.user.modelChange) ? undefined : run.model;
   turns.forEach((turn, index) => {
+    model = turn.user.model || turn.user.modelChange || model;
+    turn.model = model;
     const last = index === turns.length - 1;
     turn.active = last && ['preparing','running','waiting','stopping'].includes(run.status);
     turn.tools = run.tools.filter(tool => tool.turnKey === turn.user.id || (!tool.turnKey && turns.length === 1));

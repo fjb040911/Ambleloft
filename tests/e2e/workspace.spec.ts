@@ -43,13 +43,13 @@ test('project picker includes icons and padding in its native click target',asyn
  await page.getByRole('button',{name:'保存项目',exact:true}).click();
  await page.locator('.new-task').click();
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('切换项目时保留草稿');
- const picker=page.locator('.composer-project-picker');const select=page.getByRole('combobox',{name:'当前项目',exact:true});
+ const picker=page.locator('.project-picker-trigger');const select=page.getByRole('combobox',{name:'当前项目',exact:true});
  for(const fraction of [.08,.5,.94]){
   const rect=await picker.boundingBox();const point={x:rect!.x+rect!.width*fraction,y:rect!.y+rect!.height/2};
-  expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.tagName,point)).toBe('SELECT');
+  expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.closest('button')?.tagName,point)).toBe('BUTTON');
   await page.mouse.click(point.x,point.y);await page.keyboard.press('Escape');await expect(select).toBeFocused();
  }
- await select.selectOption({label:'交互验证项目'});await expect(input).toHaveValue('切换项目时保留草稿');
+ await select.click();await page.getByRole('option',{name:'交互验证项目',exact:true}).click();await expect(input).toHaveValue('切换项目时保留草稿');
  await page.setViewportSize({width:760,height:600});await page.emulateMedia({reducedMotion:'reduce',colorScheme:'dark'});
  await expect(select).toBeVisible();expect(await picker.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.screenshot({path:'test-results/home-project-picker.png'});

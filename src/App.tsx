@@ -1,3 +1,5 @@
+import ProjectPicker from './ProjectPicker';
+import FileChangesPanel from './FileChangesPanel';
 import {useExtensions} from './extensions';
 import ExtensionsPage from './ExtensionsPage';
 import { t, setLanguage, useLanguage } from './i18n';
@@ -168,12 +170,14 @@ export default function App() {
   const fileProject=workspace.projects.find(p=>p.id===(currentRun?currentRun.projectId:projectId));
   const fileRoot=currentRun?.cwd||fileProject?.path||'';
   const fileScope=JSON.stringify([currentRun?.id||'new',fileProject?.id||'',fileRoot]);
+  const [changeView,setChangeView]=useState<{scope:string;changes:import('./types').TurnFileChanges}|null>(null);
+  const activeChanges=changeView?.scope===fileScope&&page==='home'?changeView.changes:null;
   const [filesOpen,setFilesOpen]=useFilePanelOpen(fileScope);
   const [expandedFileScope,setExpandedFileScope]=useState<string|null>(null);
   const [fileChatHost,setFileChatHost]=useState<HTMLDivElement|null>(null);
   const canBrowseFiles=(page==='home'||page==='projects')&&!!fileProject;
   const [fileRequest,setFileRequest]=useState<{scope:string;path:string;id:number}|null>(null);
-  const openDeliveredFile=(file:import('./types').DeliveredFile)=>{setFileRequest(previous=>({scope:fileScope,path:file.path,id:(previous?.id||0)+1}));setFilesOpen(true);};
+  const openDeliveredFile=(file:import('./types').DeliveredFile)=>{setFileRequest(previous=>({scope:fileScope,path:file.path,id:(previous?.id||0)+1}));setChangeView(null);setFilesOpen(true);};
 
   return <><div inert={settingsOpen} style={settingsOpen?{visibility:'hidden',pointerEvents:'none'}:undefined} className={`app-shell ${sidebar ? '' : 'sidebar-hidden'} ${window.desktop ? 'desktop' : 'browser'}`}>
     <aside id="workspace-sidebar" className="sidebar" inert={!sidebar} aria-label={t("主导航")}>
@@ -186,10 +190,10 @@ export default function App() {
       <div className="sidebar-bottom"><div className="sidebar-footer"><button className={`nav-item ${page === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}><Settings size={17} />{t("设置")}</button><button className="icon-button" onClick={() => setModal('help')} aria-label={t("关于此版本")}><CircleHelp size={17} /></button></div></div>
     </aside>
     <div className="main-shell"><div className="workspace-content"><div className="conversation-shell">
-      <header className="toolbar"><div className="toolbar-left"><button className="icon-button" onClick={() => setSidebar(value => !value)} aria-controls="workspace-sidebar" aria-expanded={sidebar} aria-label={sidebar ? t("隐藏侧栏") : t("显示侧栏")}><PanelLeft size={18} /></button><span className="toolbar-divider" /><span className="toolbar-title" title={pageLabel}>{page==='home'&&currentRun?currentRun.title:t(pageLabel||'')}</span></div><div className="toolbar-right">{canBrowseFiles&&!filesOpen&&<button className="icon-button" onClick={() => setFilesOpen(!filesOpen)} aria-label={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} title={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} aria-pressed={filesOpen}><PanelRight size={20} /></button>}</div></header>
+      <header className="toolbar"><div className="toolbar-left"><button className="icon-button" onClick={() => setSidebar(value => !value)} aria-controls="workspace-sidebar" aria-expanded={sidebar} aria-label={sidebar ? t("隐藏侧栏") : t("显示侧栏")}><PanelLeft size={18} /></button><span className="toolbar-divider" /><span className="toolbar-title" title={pageLabel}>{page==='home'&&currentRun?currentRun.title:t(pageLabel||'')}</span></div><div className="toolbar-right">{canBrowseFiles&&!filesOpen&&!activeChanges&&<button className="icon-button" onClick={() => {setChangeView(null);setFilesOpen(!filesOpen);}} aria-label={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} title={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} aria-pressed={filesOpen}><PanelRight size={20} /></button>}</div></header>
       {error && <div className="error-banner" role="alert">{error}</div>}
       <main id="main-content" className={page === 'home' && currentRun ? 'chat-main' : undefined}>
-        {runs.filter(run=>!run.summaryOnly&&!run.archivedAt).map(viewRun=><div key={viewRun.id} style={{display:page==='home'&&runId===viewRun.id?'contents':'none'}}><Conversation floatingHost={page==='home'&&runId===viewRun.id&&filesOpen&&expandedFileScope===fileScope&&!settingsOpen?fileChatHost:null} visible={page==='home'&&runId===viewRun.id&&!settingsOpen} openFile={fileProject?openDeliveredFile:undefined} key={viewRun.id} run={viewRun} catalog={catalog} openSettings={section=>{setSettingsSection(section);navigate('settings');}} send={(text,options) => startAgent(text, viewRun.id,options)} stop={() => void stopAgent(viewRun.id)} approve={(id, decision) => approveAgent(viewRun.id, id, decision)} submitting={submitting} /></div>)}
+        {runs.filter(run=>!run.summaryOnly&&!run.archivedAt).map(viewRun=><div key={viewRun.id} style={{display:page==='home'&&runId===viewRun.id?'contents':'none'}}><Conversation openChanges={changes=>{setFilesOpen(false);setChangeView({scope:fileScope,changes});}} floatingHost={page==='home'&&runId===viewRun.id&&filesOpen&&expandedFileScope===fileScope&&!settingsOpen?fileChatHost:null} visible={page==='home'&&runId===viewRun.id&&!settingsOpen} openFile={fileProject?openDeliveredFile:undefined} key={viewRun.id} run={viewRun} catalog={catalog} openSettings={section=>{setSettingsSection(section);navigate('settings');}} send={(text,options) => startAgent(text, viewRun.id,options)} stop={() => void stopAgent(viewRun.id)} approve={(id, decision) => approveAgent(viewRun.id, id, decision)} submitting={submitting} /></div>)}
         {page === 'home' && currentRun?.summaryOnly && <p role="status">{t('正在加载会话…')}</p>}
         {page === 'home' && !currentRun && <div className="home-page">
           <div className="greeting-meta"><span className="tiny-spark">✦</span>{t("为专注而设计，让想法自然发生")}</div>
@@ -200,7 +204,7 @@ export default function App() {
             <SkillTags ids={composerOptions.selectedSkillIds} disabled={submitting||saving} onRemove={id=>setComposerOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/><textarea disabled={submitting||saving} ref={promptRef} aria-label={t("任务内容")} placeholder={t("今天，想一起完成什么？")} value={prompt} maxLength={20000} onChange={event => setPrompt(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void saveTask(); } }} />
             <div className="composer-bottom"><ComposerControls catalog={catalog} value={{providerId:choice?.providerId||provider?.id,model:choice?.model||provider?.model,...composerOptions}} onChange={next=>{setComposerOptions(next);if(next.providerId&&next.model)setChoice({providerId:next.providerId,model:next.model});}} disabled={submitting||saving} openSettings={section=>{setSettingsSection(section);navigate('settings');}}/><button className="send-button" type="submit" disabled={!ready || (!prompt.trim()&&!composerOptions.selectedSkillIds?.length) || saving || submitting} aria-label={provider?.configured ? t("发送任务") : t("保存任务草稿")}><ArrowUp size={19}/></button></div>
           </form>
-          <div className="composer-project-bar"><label className="composer-project-picker"><Folder size={17} aria-hidden="true"/><select disabled={submitting||saving} title={currentProject?.path||t("不关联项目")} aria-label={t("当前项目")} value={projectId} onChange={event=>setProjectId(event.target.value)}><option value="">{t("不关联项目")}</option>{workspace.projects.map(project=><option key={project.id} value={project.id}>{project.name}</option>)}</select><ChevronDown size={13} aria-hidden="true"/></label><span className="composer-project-hint">{t("Shift + Enter 换行")}</span></div>
+          <div className="composer-project-bar"><ProjectPicker projects={workspace.projects} value={projectId} onChange={setProjectId} disabled={submitting||saving}/><span className="composer-project-hint">{t("Shift + Enter 换行")}</span></div>
           </div>
           <div className="composer-note"><ShieldCheck size={13} /><span className="composer-status">{provider?.configured ? `模型服务： ${selectedProvider?.baseUrl} · ${composerOptions.permission==='full'?'完全访问':'默认权限'}` : `${t("配置模型服务即可开始；未配置时只保存草稿")}`}</span>{!provider?.configured && <button className="text-button" onClick={() => navigate('settings')}>{t("配置服务")}</button>}<span className="keyboard-hint">↵ {provider?.configured ? t("发送") : t("保存草稿")}</span></div>
           <section className="starter-section"><div className="section-heading"><h2>{t("从这里开始")}</h2><button className="text-button" onClick={() => navigate('plugins')}>{t("探索更多能力")}<ArrowRight size={13} /></button></div><div className="starter-grid">{capabilities.map(cap => { const Icon = capabilityIcons[cap.icon]; return <button className="starter-card" disabled={submitting||saving} key={cap.id} onClick={() => useCapability(cap)}><span className={`cap-icon ${cap.color}`}><Icon size={21} strokeWidth={1.6} /></span><h3>{t(cap.name)}<ArrowRight size={14} /></h3><p>{t(cap.description)}</p></button>; })}</div></section>
@@ -217,7 +221,8 @@ export default function App() {
 
       </main></div>
       <div className="file-chat-host" ref={setFileChatHost}/>
-      {canBrowseFiles&&fileProject&&<ProjectFilePanel full={expandedFileScope===fileScope} setFull={value=>setExpandedFileScope(value?fileScope:null)} request={fileRequest?.scope===fileScope?fileRequest:null} key={fileScope} scope={fileScope} context={{projectId:fileProject.id,runId:currentRun?.id}} rootHint={fileRoot} open={filesOpen} close={()=>{setFilesOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.toolbar-right button')?.focus());}} paused={settingsOpen}/>}
+      {activeChanges&&<FileChangesPanel key={activeChanges.turnKey} changes={activeChanges} close={()=>setChangeView(null)}/>}
+      {canBrowseFiles&&fileProject&&!activeChanges&&<ProjectFilePanel full={expandedFileScope===fileScope} setFull={value=>setExpandedFileScope(value?fileScope:null)} request={fileRequest?.scope===fileScope?fileRequest:null} key={fileScope} scope={fileScope} context={{projectId:fileProject.id,runId:currentRun?.id}} rootHint={fileRoot} open={filesOpen} close={()=>{setFilesOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.toolbar-right button')?.focus());}} paused={settingsOpen}/>}
       </div>
     </div>
     {notice && <div className="toast" role="status"><CircleHelp size={16} />{notice}</div>}

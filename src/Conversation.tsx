@@ -7,7 +7,8 @@ import { ArrowDown, ArrowUp, ChevronUp, Square, ShieldCheck, Clock3 } from 'luci
 import SkillTags from './SkillTags';
 import ComposerControls, {type ComposerOptions} from './ComposerControls';
 import type { ProviderCatalog, AgentRun, TurnTiming } from './types';
-import Markdown, { CopyButton } from './Markdown';
+import Markdown from './Markdown';
+import TurnActions from './TurnActions';
 import { conversationTurns } from './conversation-turns';
 import {TurnProgress} from './ProcessPanel';
 import RunActivity from './RunActivity';
@@ -30,7 +31,8 @@ function Approval({ approval, pending, decide }: { approval: AgentRun['approvals
     <div className="settings-actions"><button type="button" className="secondary-button" disabled={pending} onClick={() => decide('decline')}>{t("拒绝")}</button><button type="button" className="primary-button" disabled={pending} onClick={() => decide('accept')}>{pending ? t("正在提交…") : t("批准本次")}</button></div>
   </section>;
 }
-export default function Conversation({ visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile }: {
+export default function Conversation({ visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openChanges }: {
+  openChanges(changes:import('./types').TurnFileChanges):void;
   visible?:boolean;
   floatingHost?:HTMLElement|null;
   openFile?(file: import('./types').DeliveredFile): void;
@@ -49,14 +51,14 @@ export default function Conversation({ visible = true, floatingHost, run, send, 
   const [older,setOlder]=useState<AgentRun|null>(null);
   const [loadingHistory,setLoadingHistory]=useState(false);
   const [historyError,setHistoryError]=useState('');
-  const merged=older?{...run,messages:[...older.messages.filter(m=>!run.messages.some(n=>n.id===m.id)),...run.messages],tools:[...older.tools.filter(m=>!run.tools.some(n=>n.id===m.id)),...run.tools],plans:[...(older.plans||[]).filter(m=>!run.plans?.some(n=>n.turnKey===m.turnKey)),...(run.plans||[])],artifacts:[...(older.artifacts||[]).filter(m=>!run.artifacts?.some(n=>n.id===m.id)),...(run.artifacts||[])]}:run;
+  const merged=older?{...run,fileChanges:[...(older.fileChanges||[]).filter(c=>!run.fileChanges?.some(n=>n.turnKey===c.turnKey)),...(run.fileChanges||[])],messages:[...older.messages.filter(m=>!run.messages.some(n=>n.id===m.id)),...run.messages],tools:[...older.tools.filter(m=>!run.tools.some(n=>n.id===m.id)),...run.tools],plans:[...(older.plans||[]).filter(m=>!run.plans?.some(n=>n.turnKey===m.turnKey)),...(run.plans||[])],artifacts:[...(older.artifacts||[]).filter(m=>!run.artifacts?.some(n=>n.id===m.id)),...(run.artifacts||[])]}:run;
   const turns = conversationTurns(merged);
   const before=older?older.historyBefore:run.historyBefore;
   const loadOlder=async()=>{
    if(!before||!window.desktop?.getRunPage||loadingHistory)return;
    setLoadingHistory(true);setHistoryError('');follow.current=false;
    const el=scroll.current;const height=el?.scrollHeight||0;const top=el?.scrollTop||0;
-   try{const page=await window.desktop.getRunPage({id:run.id,before});setOlder(previous=>previous?{...page,messages:[...page.messages,...previous.messages],tools:[...page.tools,...previous.tools],plans:[...(page.plans||[]),...(previous.plans||[])],artifacts:[...(page.artifacts||[]),...(previous.artifacts||[])]}:page);requestAnimationFrame(()=>{if(el&&visibleRef.current)el.scrollTop=top+el.scrollHeight-height;});}catch(e){setHistoryError((e as Error).message);}finally{setLoadingHistory(false);}
+   try{const page=await window.desktop.getRunPage({id:run.id,before});setOlder(previous=>previous?{...page,fileChanges:[...(page.fileChanges||[]),...(previous.fileChanges||[])],messages:[...page.messages,...previous.messages],tools:[...page.tools,...previous.tools],plans:[...(page.plans||[]),...(previous.plans||[])],artifacts:[...(page.artifacts||[]),...(previous.artifacts||[])]}:page);requestAnimationFrame(()=>{if(el&&visibleRef.current)el.scrollTop=top+el.scrollHeight-height;});}catch(e){setHistoryError((e as Error).message);}finally{setLoadingHistory(false);}
   };
   const turnElements = useRef(new Map<string, HTMLElement>());
   const [selectedTurn, setSelectedTurn] = useState('');
@@ -109,7 +111,7 @@ export default function Conversation({ visible = true, floatingHost, run, send, 
             <VirtualBlock enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{turn.user.text}</div></article>
             <TurnProgress onToggle={()=>{follow.current=false;setAtBottom(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'}/></article>}
-            <DeliveredFiles openFile={openFile} runId={run.id} files={turn.artifacts}/></VirtualBlock>
+            <DeliveredFiles openFile={openFile} runId={run.id} files={turn.artifacts}/>{merged.fileChanges?.filter(change=>change.turnKey===turn.user.id&&(change.files.length||change.notice)).map(change=><button key={change.turnKey} className="secondary-button turn-changes-button" onClick={()=>openChanges(change)}>{t('查看本轮变更')} ({change.files.length}){change.notice?' · '+t('记录不完整'):''}</button>)}{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
 
           </section>)}</div>
           {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><button type="button" className="secondary-button" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</button><button type="button" className="secondary-button" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</button></div>}</div>}

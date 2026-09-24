@@ -6,25 +6,53 @@
   <p>v0.2.1 Preview · macOS · Apache-2.0</p>
 </div>
 
-Ambleloft brings conversations, project files, and AI-assisted task execution into one desktop workspace. Connect your own model provider, work with your own files, and review the agent's actions as it works.
+**Ambleloft is a free, open-source desktop Agent workspace for everyday work.** Bring your own model service, give the agent project context, and work through tasks with conversations, files, approvals, and results in one place.
 
-This repository contains the free, open-source desktop core. Team collaboration is planned as an Extension backed by a commercial server service; it is not implemented yet. Windows, macOS and Linux are the platform targets.
+Use it to understand a codebase, organize documents, prepare a handoff, or explore data. The core is general-purpose; domain-specific workflows can be built through skills, extensions, and custom integrations.
 
-## What you can do
+![Ambleloft workspace with a project conversation and structured results](.github/assets/workspace-en.png)
 
-- **Bring your own model.** Configure multiple local or cloud providers, select models, and test connections. Supports Responses API and a Chat Completions adapter; tool compatibility depends on the provider and model.
-- **Work in projects.** Associate conversations with folders, browse files, and preview code, Markdown, HTML, images, and PDFs alongside your work.
-- **Follow execution.** See streamed answers, available reasoning summaries, tool activity, and task plans. Approve requested actions or stop a task.
-- **Keep your work.** Save drafts, resume conversations, and archive sessions with local SQLite persistence.
-- **Use reusable skills.** Create, edit, import, and enable local SKILL.md bundles for tasks.
-- **Read rich results.** Render Markdown, code, equations, Mermaid diagrams, ECharts, SVG, and basic draw.io content.
-- **Make it yours.** English and Simplified Chinese, light/dark/system appearance, and a collapsible workspace layout.
+*Screenshots show the current application UI with synthetic demonstration content and a mocked desktop bridge. The sample model and endpoint are illustrative, not a live provider or benchmark.*
 
-## Preview status
+## From a task to a reviewable result
 
-**0.2.1 is an early preview, not a stable release.** macOS Apple Silicon is the currently validated desktop target. Windows and Linux releases are not provided by the current packaging workflow.
+| Capability | What is available today |
+| --- | --- |
+| Your models | Multiple local, private-network, or cloud endpoints; Responses API and Chat Completions adaptation; model selection and connection tests. |
+| Project context | Folder-linked conversations, keyboard-accessible project selection, file/folder attachments, and a side-by-side file browser. |
+| Visible execution | Streamed responses, available reasoning summaries, tool activity, task plans, questions, approvals, and stopping tasks. |
+| File review | Per-turn file-change summaries and read-only text diffs, including added, modified, and deleted files. |
+| Rich results | Markdown, code, equations, Mermaid, ECharts, SVG, basic draw.io, and supported file previews with expandable dialogs. |
+| Conversation continuity | Local SQLite history, per-turn model and skill details, answer copying, drafts, archive search/filtering, restore, and confirmed bulk deletion. |
+| Reusable skills | Create, import, edit, enable, and select local SKILL.md bundles for tasks. |
+| Personal workspace | English / Simplified Chinese, light / dark / system appearance, collapsible panels, and adjustable text size. |
 
-Model downloads and inference-runtime management are outside the product scope. Connect an existing local, private-network or cloud endpoint. The experimental extension slice supports local JSON manifests containing text views and navigation commands; it does not execute extension scripts or provide a marketplace. See [the extension example](examples/extensions/README.md).
+### Review what changed
+
+Open a turn's change summary to inspect text additions and deletions without leaving the conversation. Changes compare the working directory before and after a turn, so they can include external edits made during execution. Snapshots are bounded and omit dependency/build/cache directories; some files show status only. This is a review view, not a Git commit or rollback tool.
+
+![Per-turn file changes and a read-only diff beside the conversation](.github/assets/changes-en.png)
+
+### Choose your model service
+
+Connect existing services and keep provider configuration in the workspace. Model capabilities and tool support vary by endpoint; per-model image-input settings help describe those capabilities.
+
+![Model provider settings with an example endpoint](.github/assets/providers-en.png)
+
+## Open core, extensible workflows
+
+- **Desktop core:** free and Apache-2.0 licensed. Use your own compatible model endpoint without waiting for an official hosted platform.
+- **Skills:** reusable task instructions and local supporting resources.
+- **Extensions:** an experimental declarative slice supports local JSON manifests with plain-text views and navigation commands. It does not execute extension scripts or provide a marketplace. See the [extension example and current limits](examples/extensions/README.md).
+- **Commercial and custom services:** hosted model/plugin services and planned team collaboration are separate from the open desktop core. Research and medical-imaging solutions are partner customizations built on the general workspace, not built-in capabilities claimed by this preview.
+
+## Preview scope
+
+**The current package version is 0.2.1 Preview.** It is under active development, not a stable release. macOS Apple Silicon is the currently validated desktop target. Windows and Linux are targets, but the current packaging workflow does not provide their releases.
+
+Ambleloft connects to existing endpoints. Model downloads and inference-runtime management are outside the current product scope. Team collaboration, marketplace installation, executable extensions, and application connectors are not implemented. Provider compatibility depends on the actual model and protocol.
+
+See [the preview notes](CHANGELOG.md) for the latest changes and known boundaries.
 
 ## Run from source
 
@@ -88,11 +116,12 @@ npm run test:e2e                  # Browser UI tests
 npm run test:desktop              # Desktop smoke test with a local model fixture
 npm run test:codex                # Pinned engine integration tests
 npm run test:credentials          # Credential persistence across restarts
+node scripts/capture-readme.mjs   # Recreate screenshots using installed Chrome and demo data
 ```
 
 Desktop checks run on macOS and may use the system keychain. Local test fixtures do not establish compatibility with every external model provider.
 
-Internal planning (`docs/`), generated deliverables (`output/`), dependencies, runtime binaries, user data, and build outputs are intentionally excluded from Git. Runtime assets are prepared by the setup/build scripts.
+Internal planning (`docs/`), generated deliverables (`output/`, `outputs/`), dependencies, runtime binaries, user data, and build outputs are intentionally excluded from Git. Runtime assets are prepared by the setup/build scripts.
 
 ## Feedback and contributions
 

@@ -9,7 +9,7 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await page.getByRole('button',{name:'保存项目',exact:true}).click();
  await expect(page.getByRole('heading',{name:'品牌设计',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'在项目中新建任务：品牌设计',exact:true}).click();
- await expect(page.getByLabel('当前项目')).not.toHaveValue('');
+ await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('品牌设计');
  await page.getByRole('textbox',{name:'任务内容'}).fill('设计包装');
  await page.getByRole('button',{name:'保存任务草稿'}).click();
  await page.getByRole('button',{name:'关闭',exact:true}).click();
@@ -20,21 +20,21 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await page.getByRole('region',{name:'项目信息'}).getByRole('button',{name:'编辑项目'}).click();
  await expect(page.getByRole('textbox',{name:'项目名称'})).toHaveValue('品牌设计');
  await page.getByRole('button',{name:'关闭',exact:true}).click();
- await page.getByRole('button',{name:'我的项目',exact:true}).click();
- await expect(page.locator('.project-tree')).toBeHidden();
+ await page.getByRole('button',{name:'项目',exact:true}).click();
+ await expect(page.locator('#nav-projects')).toHaveAttribute('aria-hidden','true');
  await expect(page.getByRole('button',{name:'添加项目',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'我的项目',exact:true}).click();
+ await page.getByRole('button',{name:'项目',exact:true}).click();
  await expect(page.locator('.project-tree')).toBeVisible();
 
  await page.locator('.new-task').click();
- await expect(page.getByLabel('当前项目')).toHaveValue('');
+ await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
  await page.getByRole('button',{name:'管理任务：设计包装'}).click();
  await page.getByRole('textbox',{name:'任务名称'}).fill('包装方案');
  await page.getByLabel('所属项目').selectOption('');
  await page.getByRole('button',{name:'保存修改'}).click();
  await expect(page.getByRole('region',{name:'聊天',exact:true})).toContainText('包装方案');
  await page.getByRole('button',{name:'聊天',exact:true}).click();
- await expect(page.locator('#nav-chats')).toBeHidden();
+ await expect(page.locator('#nav-chats')).toHaveAttribute('aria-hidden','true');
  await page.getByRole('button',{name:'聊天',exact:true}).click();
  await expect(page.locator('#nav-chats')).toBeVisible();
 

@@ -22,7 +22,7 @@ test('SQLite persists workspace and turns across restart, ignores legacy JSON, a
   assert.equal((await provider.list()).providers.length,0);
   const state={theme:'dark',projects:[{id:'p',name:'设计',path:dir,createdAt:'2026-09-15'}],tasks:[]};
   await store.write(state);
-  const run={id:'r',modelSessionId:'session-fixture',status:'running',projectId:'p',messages:[{id:'u',role:'user',text:'hello',timing:{}},{id:'a',role:'assistant',text:'partial'}],tools:[],updatedAt:'2026-09-15'};
+  const run={id:'r',modelSessionId:'session-fixture',status:'running',projectId:'p',messages:[{id:'u',role:'user',text:'hello',timing:{}},{id:'a',role:'assistant',text:'partial'}],tools:[],fileChanges:[{turnKey:'u',files:[{id:'f',path:'README.md',status:'modified',hunks:[{lines:['-before','+after']}]}]}],updatedAt:'2026-09-15'};
   await db.call('saveRuns',[run]);
   run.messages[1].text='complete';await db.call('saveRuns',[run]);
   await assert.rejects(db.call('saveRuns',[{id:'broken',messages:[{id:'x',value:1n}]}]));
@@ -31,6 +31,7 @@ test('SQLite persists workspace and turns across restart, ignores legacy JSON, a
   assert.deepEqual(await createStore(dir,db).read(),state);
   const runtime=new AgentRuntime({directory:dir,database:db,workspace:createStore(dir,db),provider,publish:()=>{}});
   await runtime.init();
+  assert.deepEqual(runtime.runs[0].fileChanges,run.fileChanges);
   assert.equal(runtime.runs[0].modelSessionId,'session-fixture');
   assert.equal(runtime.runs[0].status,'interrupted');
   assert.equal(runtime.runs[0].messages[1].text,'complete');

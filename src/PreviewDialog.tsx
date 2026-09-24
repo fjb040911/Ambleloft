@@ -1,10 +1,15 @@
 import {useEffect,useLayoutEffect,useId,useRef,useState,type CSSProperties,type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import {Maximize2,Minimize2,ZoomIn,ZoomOut,RotateCcw,X} from 'lucide-react';
 import {t} from './i18n';
+
+// Modal order is independent of React ancestry and any zoomed document content.
+const previewStack:HTMLDialogElement[]=[];
 
 export default function PreviewDialog({name,children,icon,contentClass,initialMaximized=false,maximizedOnly=false,close}:{name:string;children:ReactNode;icon?:ReactNode;contentClass:string;initialMaximized?:boolean;maximizedOnly?:boolean;close():void}) {
  const dialog=useRef<HTMLDialogElement>(null),titleId=useId();
  const body=useRef<HTMLDivElement>(null);
+ const returnFocus=useRef<HTMLElement|null>(null);
  useEffect(()=>{
   const element=body.current;if(!element||!maximizedOnly)return;
   const update=()=>{element.style.setProperty('--preview-fit-width',`${Math.max(1,element.clientWidth-48)}px`);element.style.setProperty('--preview-fit-height',`${Math.max(1,element.clientHeight-48)}px`);};
@@ -39,11 +44,22 @@ export default function PreviewDialog({name,children,icon,contentClass,initialMa
   return()=>{finish();media.removeEventListener('change',finish);window.removeEventListener('resize',finish);};
  },[]);
  useEffect(()=>{
-  const previous=document.activeElement as HTMLElement|null;
-  const element=dialog.current; element?.showModal();
-  return()=>{element?.close();queueMicrotask(()=>{if(previous?.isConnected&&!document.querySelector('dialog[open]'))previous.focus();});};
+  const element=dialog.current;if(!element)return;
+  returnFocus.current??=document.activeElement as HTMLElement|null;
+  previewStack.push(element);element.showModal();
+  return()=>{
+   const wasTop=previewStack.at(-1)===element;
+   const index=previewStack.indexOf(element);if(index!==-1)previewStack.splice(index,1);
+   element.close();
+   queueMicrotask(()=>{
+    const previous=returnFocus.current;if(!wasTop||!previous?.isConnected)return;
+    const top=previewStack.at(-1);
+    if(top?top.contains(previous):!document.querySelector('dialog[open]'))previous.focus({preventScroll:true});
+   });
+  };
  },[]);
- return <dialog ref={dialog} className={`modal delivered-preview-dialog${maximized?' is-maximized':''}`} aria-labelledby={titleId} onCancel={event=>{event.preventDefault();close();}} onClick={event=>{
+ return createPortal(<dialog ref={dialog} className={`modal delivered-preview-dialog${maximized?' is-maximized':''}`} aria-labelledby={titleId} onCancel={event=>{event.preventDefault();event.stopPropagation();if(previewStack.at(-1)===dialog.current)close();}} onClick={event=>{
+  event.stopPropagation();
   if(event.target!==event.currentTarget)return;
   const rect=event.currentTarget.getBoundingClientRect();
   if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)close();
@@ -61,5 +77,5 @@ export default function PreviewDialog({name,children,icon,contentClass,initialMa
     {children}
    </div>
   </div>
- </dialog>;
+ </dialog>,document.body);
 }

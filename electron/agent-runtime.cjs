@@ -7,6 +7,7 @@ const { CodexRPC, findCodex } = require('./codex-rpc.cjs');
 const { writeJSON, fingerprint, redact } = require('./provider.cjs');
 const { prepareEngineHome, engineRuntime } = require('./engine.cjs');
 const {validPlan} = require(engineRuntime().packaged ? path.join(process.resourcesPath, 'tools/plan-server.cjs') : './plan-server.cjs');
+const {snapshot,compare}=require('./file-changes.cjs');
 const {collectArtifacts} = require('./artifacts.cjs');
 const {startChatBridge,usesChat} = require('./chat-bridge.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
@@ -138,12 +139,14 @@ class AgentRuntime {
       run.status = 'preparing'; run.error = ''; run.retrying=false; run.questions=[]; run.approvals = []; run.turnId = null;
       context.timing = { startedAt: context.startedAt };
       context.turnKey = randomUUID();
-      run.messages.push({ id: context.turnKey, role: 'user', modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
+      run.messages.push({ id: context.turnKey, role: 'user', model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
       if (!previous) this.runs.unshift(run);
       context.run = run; context.config = config;
       await this.persist(); this.changed(run);
       if (context.cancelled) { await this.finish(context, 'interrupted'); return structuredClone(run); }
       context.launch=async()=>{
+      try { context.fileBaseline=await snapshot(run.cwd); } catch { context.fileBaseline=null; }
+      if(context.cancelled||context.done)return;
       context.bridge=await startChatBridge(config, run.modelSessionId, !usesChat(config), diagnostic => {
         run.modelRequests=[...(run.modelRequests||[]),diagnostic].slice(-100);
         context.lastModelDiagnostic=diagnostic;
@@ -294,6 +297,7 @@ class AgentRuntime {
   async finish(context, status, error = '') {
     if (context.done) return;
     context.done = true;
+    context.rpc?.close(); context.bridge?.close();
     const diagnostic=context.lastModelDiagnostic;
     if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
       error = (diagnostic.stage==='translate_tools'?'模型响应已接收，但工具调用解析失败。':error)+'\n模型请求诊断：'+diagnostic.reason+'；阶段：'+diagnostic.stage+
@@ -310,10 +314,14 @@ class AgentRuntime {
       context.timing.outcome = status;
     }
     if (context.run && context.turnKey) {
+      try {
+        const changes=context.fileBaseline?await compare(context.run.cwd,context.fileBaseline,context.turnKey):{turnKey:context.turnKey,files:[],notice:'本轮未能记录文件变更基准。'};
+        context.run.fileChanges=[...(context.run.fileChanges||[]),changes];
+      } catch { context.run.fileChanges=[...(context.run.fileChanges||[]),{turnKey:context.turnKey,files:[],notice:'文件变更记录失败。'}]; }
+      context.fileBaseline=null;
       try { context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
     }
     if (context.run) { context.run.queued=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
-    context.rpc?.close(); context.bridge?.close();
     try { await this.persist(); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publish(structuredClone(context.run)); } }
     this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);this.drain();
   }

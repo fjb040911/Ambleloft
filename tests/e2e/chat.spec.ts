@@ -423,3 +423,77 @@ test('Mermaid opens a maximized preview with zoom, restore and focus return',asy
  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(maximize).toBeFocused();
  await expect(page.getByAltText('Mermaid 图表')).toBeVisible();
 });
+
+test('nested Mermaid preview isolates document zoom and returns to the parent modal',async({page})=>{
+ await prepare(page,'文档已生成');
+ await page.evaluate(()=>{
+  const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
+  run.artifacts=[{id:'nested',turnKey:'u',name:'nested.md',path:'/fixture/nested.md',size:100}];
+  (window as any).desktop.accessArtifact=async()=>({name:'nested.md',text:'# 嵌套预览\n\n'+('文档正文。\n\n'.repeat(12))+'```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```\n\n'+('后续内容。\n\n'.repeat(20))});
+  (window as any).__emit();
+ });
+ const eye=page.getByRole('button',{name:'预览 nested.md',exact:true});await eye.click();
+ const parent=page.locator('dialog').filter({has:page.getByRole('heading',{name:'nested.md',exact:true})});
+ await parent.getByRole('button',{name:'最大化',exact:true}).click();
+ for(const zoom of [150,200]){
+  for(let i=0;i<5;i++)await parent.getByRole('button',{name:'放大',exact:true}).click();
+  await expect(parent.locator('output')).toHaveText(zoom+'%');
+  const trigger=parent.getByRole('button',{name:'最大化 Mermaid 图表'});await trigger.scrollIntoViewIfNeeded();
+  const scroll=await parent.locator('.artifact-preview-body').evaluate(el=>el.scrollTop);
+  await trigger.click();const child=page.getByRole('dialog',{name:'Mermaid 图表',exact:true});
+  await expect(child.getByAltText('Mermaid 图表')).toBeVisible();await expect(child.locator('output')).toHaveText('100%');
+  expect(await child.evaluate(el=>el.parentElement===document.body)).toBe(true);
+  for(const viewport of [{width:1240,height:840},{width:800,height:600}]){
+   await page.setViewportSize(viewport);
+   const bounds=await child.boundingBox();expect(Math.round(bounds!.width)).toBe(viewport.width);expect(Math.round(bounds!.height)).toBe(viewport.height);
+   for(const name of ['放大','还原尺寸','关闭']){const button=await child.getByRole('button',{name,exact:true}).boundingBox();expect(button!.x).toBeGreaterThanOrEqual(0);expect(button!.x+button!.width).toBeLessThanOrEqual(viewport.width);expect(button!.y+button!.height).toBeLessThanOrEqual(viewport.height);}
+  }
+  await child.getByRole('button',{name:'放大',exact:true}).click();await child.getByRole('button',{name:'还原尺寸',exact:true}).click();await expect(child.locator('output')).toHaveText('100%');
+  await page.setViewportSize({width:1240,height:840});
+  if(zoom===150)await page.keyboard.press('Escape');else await child.getByRole('button',{name:'关闭',exact:true}).click();
+  await expect(child).toHaveCount(0);await expect(parent).toBeVisible();await expect(parent.locator('output')).toHaveText(zoom+'%');await expect(trigger).toBeFocused();
+  expect(Math.abs(await parent.locator('.artifact-preview-body').evaluate(el=>el.scrollTop)-scroll)).toBeLessThan(3);
+ }
+ await page.keyboard.press('Escape');await expect(parent).toHaveCount(0);await expect(eye).toBeFocused();
+});
+
+test('turn file changes open a readonly panel with text diff and Office status',async({page})=>{
+ await prepare(page,'文件已更新');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.fileChanges=[{turnKey:'u',files:[{id:'md',path:'README.md',status:'modified',additions:1,deletions:1,hunks:[{oldStart:1,oldLines:1,newStart:1,newLines:1,lines:['-old heading','+new heading']}]},{id:'xlsx',path:'report.xlsx',status:'added',reason:'此文件类型仅展示变更状态'},{id:'pptx',path:'slides.pptx',status:'modified',reason:'此文件类型仅展示变更状态'}]}];w.__emit();});
+ await page.getByRole('button',{name:'查看本轮变更 (3)'}).click();
+ const panel=page.getByRole('complementary',{name:'本轮文件变更'});
+ await expect(panel).toBeVisible();
+ await panel.locator('summary').filter({hasText:'README.md'}).click();
+ await expect(panel.locator('.addition')).toContainText('+new heading');await expect(panel.locator('.deletion')).toContainText('-old heading');
+ await panel.locator('summary').filter({hasText:'report.xlsx'}).click();
+ await expect(panel).toContainText('此文件类型仅展示变更状态');
+ await expect(panel.locator('summary').filter({hasText:'slides.pptx'})).toContainText('已修改');
+ await panel.getByRole('button',{name:'展开面板'}).click();await expect(panel).toHaveClass(/expanded/);
+ await page.setViewportSize({width:800,height:600});
+ const close=panel.getByRole('button',{name:'关闭变更面板'});const rect=await close.boundingBox();expect(rect!.x+rect!.width).toBeLessThanOrEqual(800);
+ await close.click();await expect(panel).toHaveCount(0);await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
+});
+
+test('finished turns expose copy, optional skills and their own model',async({page})=>{
+ await prepare(page,'第一轮回答');
+ await expect(page.locator('.turn-actions')).toHaveCount(0);
+ await page.evaluate(()=>{
+  const w=window as any;const run=w.__demoRun;
+  run.messages[0].model='first-model';
+  run.messages[0].skills=[{id:'writing',name:'写作',description:'写作技能',version:1,body:'整理内容',hash:'fixture',path:'/fixture'}];
+  run.messages.push({id:'u2',role:'user',text:'继续',model:'second-model'},{id:'a2',role:'assistant',text:'第二轮回答'});
+  run.model='second-model';run.status='completed';run.approvals=[];w.__emit();
+ });
+ const actions=page.locator('.turn-actions');await expect(actions).toHaveCount(2);
+ await expect(actions.first()).toContainText('first-model');await expect(actions.last()).toContainText('second-model');
+ await expect(actions.last().getByRole('button',{name:'skills'})).toHaveCount(0);
+ await actions.first().getByRole('button',{name:'拷贝',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).__copiedText)).toBe('第一轮回答');
+ await actions.first().getByRole('button',{name:'skills 1'}).click();
+ await expect(page.getByRole('dialog')).toContainText('写作');
+ await page.keyboard.press('Escape');
+ await actions.last().getByRole('button',{name:'second-model'}).click();
+ await expect(page.getByRole('dialog')).toContainText('second-model');
+ await page.keyboard.press('Escape');
+ await page.screenshot({path:'test-results/turn-actions.png'});
+});
