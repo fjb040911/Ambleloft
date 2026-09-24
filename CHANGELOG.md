@@ -13,7 +13,7 @@ These notes describe the source snapshot, not a newly signed installer or a new 
 - Included the `diff` runtime dependency in desktop packaging.
 - Refreshed the English and Chinese README with reproducible screenshots of the actual UI using synthetic fixtures.
 
-The open-source core is a general-purpose, extensible desktop Agent workspace. Existing local/private/cloud model endpoints are supported; downloading models and managing inference runtimes are out of scope. The declarative Extension preview currently supports plain-text views and navigation commands only. Team collaboration and commercial services remain separate planned work.
+Ambleloft is a general-purpose, extensible desktop AI workspace platform, with specialized workflows delivered through extensions and integrations. Existing local/private/cloud model endpoints are supported; downloading models and managing inference runtimes are out of scope. The declarative Extension preview currently supports plain-text views and navigation commands only.
 
 ### 简体中文
 
@@ -24,6 +24,6 @@ The open-source core is a general-purpose, extensible desktop Agent workspace. E
 - 桌面打包包含 `diff` 运行时依赖。
 - 重写中英文 README，加入可复现的真实界面截图，内容使用虚构演示数据。
 
-开源核心定位为通用、可扩展的桌面 Agent 工作台，连接已有本地/私有/云端模型端点，不负责模型下载和推理运行时管理。声明式扩展预览目前仅支持纯文本视图与导航命令；团队协作和商业服务属于独立的后续工作。
+Ambleloft 定位为通用、可扩展的桌面 AI 工作台平台，专业工作流通过扩展和集成实现。平台连接已有本地/私有/云端模型端点，不负责模型下载和推理运行时管理。声明式扩展预览目前仅支持纯文本视图与导航命令。
 
 这些说明描述源码快照，不代表新签名安装包或新的 GitHub Release。

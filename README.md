@@ -1,14 +1,14 @@
 <div align="center">
   <img src="public/brand/icon-128.png" width="96" height="96" alt="Ambleloft" />
   <h1>Ambleloft</h1>
-  <p>An open-source, extensible Agent workspace.</p>
+  <p>An open-source, extensible AI workspace platform.</p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
   <p>v0.2.1 Preview · macOS · Apache-2.0</p>
 </div>
 
-**Ambleloft is a free, open-source desktop Agent workspace for everyday work.** Bring your own model service, give the agent project context, and work through tasks with conversations, files, approvals, and results in one place.
+**Ambleloft is a free, open-source desktop platform for AI-powered work.** Bring your own model service, give the agent project context, and work through tasks with conversations, files, approvals, and results in one place.
 
-Use it to understand a codebase, organize documents, prepare a handoff, or explore data. The core is general-purpose; domain-specific workflows can be built through skills, extensions, and custom integrations.
+Use it to understand a codebase, organize documents, prepare a handoff, or explore data. Its platform approach is similar to VS Code: a general-purpose workspace that you adapt through skills, extensions, and integrations. The extension system is still at an early preview stage.
 
 ![Ambleloft workspace with a project conversation and structured results](.github/assets/workspace-en.png)
 
@@ -39,18 +39,18 @@ Connect existing services and keep provider configuration in the workspace. Mode
 
 ![Model provider settings with an example endpoint](.github/assets/providers-en.png)
 
-## Open core, extensible workflows
+## A platform built for extension
 
-- **Desktop core:** free and Apache-2.0 licensed. Use your own compatible model endpoint without waiting for an official hosted platform.
+- **Desktop core:** free and Apache-2.0 licensed, providing conversations, project context, execution approvals, and result review. Connect your own compatible model endpoints.
 - **Skills:** reusable task instructions and local supporting resources.
 - **Extensions:** an experimental declarative slice supports local JSON manifests with plain-text views and navigation commands. It does not execute extension scripts or provide a marketplace. See the [extension example and current limits](examples/extensions/README.md).
-- **Commercial and custom services:** hosted model/plugin services and planned team collaboration are separate from the open desktop core. Research and medical-imaging solutions are partner customizations built on the general workspace, not built-in capabilities claimed by this preview.
+- **Specialized workflows:** domain-specific capabilities and external services belong in extensions and integrations, keeping the platform general-purpose.
 
 ## Preview scope
 
 **The current package version is 0.2.1 Preview.** It is under active development, not a stable release. macOS Apple Silicon is the currently validated desktop target. Windows and Linux are targets, but the current packaging workflow does not provide their releases.
 
-Ambleloft connects to existing endpoints. Model downloads and inference-runtime management are outside the current product scope. Team collaboration, marketplace installation, executable extensions, and application connectors are not implemented. Provider compatibility depends on the actual model and protocol.
+Ambleloft connects to existing endpoints. Model downloads and inference-runtime management are outside the current product scope. Marketplace installation, executable extensions, and application connectors are not implemented. Provider compatibility depends on the actual model and protocol.
 
 See [the preview notes](CHANGELOG.md) for the latest changes and known boundaries.
 
