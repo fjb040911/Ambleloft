@@ -47,9 +47,5 @@ playwright-report/
 /build/form-template.cjs
 
 *.tsbuildinfo
-/tooling-report/**/*.png
-/tooling-report/**/*.json
-/tooling-report/**/*.txt
-/tooling-report/**/*.mjs
 
-/tooling-report/**/*.amble-extension
+/tooling-report/

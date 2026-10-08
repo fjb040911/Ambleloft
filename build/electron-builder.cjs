@@ -8,7 +8,7 @@ module.exports = {
   linux: { icon: 'public/brand/icon-512.png' },
   directories: { output: 'release', buildResources: 'build' },
   asar: true,
-  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', '!electron/office-worker.cjs', ...['openid-client','oauth4webapi','jose'].map(name=>({from:'node_modules/'+name,to:'node_modules/'+name,filter:['**/*']})), { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
+  files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', '!specs{,/**/*}', '!tooling-report{,/**/*}', '!outputs{,/**/*}', '!output{,/**/*}', '!docs{,/**/*}', '!tests{,/**/*}', '!scripts{,/**/*}', '!electron/office-worker.cjs', ...['openid-client','oauth4webapi','jose'].map(name=>({from:'node_modules/'+name,to:'node_modules/'+name,filter:['**/*']})), { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
   extraResources: [
     { from: 'build/form-template.cjs', to: 'tools/form-template.cjs' },
     { from: 'build/extension-manifest.cjs', to: 'tools/extension-manifest.cjs' },
