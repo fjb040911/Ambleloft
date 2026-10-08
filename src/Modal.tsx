@@ -1,16 +1,18 @@
-import {useEffect,useId,useRef,type ReactNode} from 'react';
+import {useLayoutEffect,useId,useRef,type ReactNode} from 'react';
 import {X} from 'lucide-react';
 import {t} from './i18n';
 export default function Modal({ title, children, close, wide = false, busy = false }: { title: string; children: ReactNode; close(): void; wide?: boolean; busy?: boolean }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
     returnFocus.current ??= document.activeElement as HTMLElement;
+    const key='modal-'+crypto.randomUUID();window.desktop?.extensionPage?.overlay({key,enabled:true});
     dialog?.showModal();
     return () => {
       dialog?.close();
+      window.desktop?.extensionPage?.overlay({key,enabled:false});
       queueMicrotask(() => {
         if (returnFocus.current?.isConnected && !document.querySelector('dialog[open]')) returnFocus.current.focus();
       });

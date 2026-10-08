@@ -42,3 +42,15 @@ test('execution sends current catalog and explicit workflow while a follow-up do
  await runtime.execute({rpc,run,config:{model:'test'},skills:{instructions:'CURRENT CATALOG',explicit:''}});
  assert.equal(calls.find(c=>c.method==='turn/start').params.input[0].text,'Shorten it');assert.match(calls.find(c=>c.method==='thread/resume').params.developerInstructions,/CURRENT CATALOG/);
 });
+
+test('skill previews read owned files and reject traversal and symlinks',async t=>{
+ const {skills,source,dir}=await fixture(t);await fs.writeFile(path.join(source,'script.py'),'print("hello")');await fs.writeFile(path.join(source,'binary.bin'),Buffer.from([0,1]));
+ const {skill}=await skills.importFolder(source);
+ assert.equal((await skills.readFile({id:skill.id,file:'SKILL.md'})).kind,'markdown');
+ assert.equal((await skills.readFile({id:skill.id,file:'references/format.md'})).text,'Meeting format');
+ assert.equal((await skills.readFile({id:skill.id,file:'script.py'})).kind,'text');
+ assert.equal((await skills.readFile({id:skill.id,file:'binary.bin'})).kind,'unsupported');
+ await assert.rejects(skills.readFile({id:skill.id,file:'../SKILL.md'}),/路径/);
+ const target=path.join(path.dirname(skill.path),'references/format.md');await fs.unlink(target);await fs.symlink(path.join(source,'SKILL.md'),target);
+ await assert.rejects(skills.readFile({id:skill.id,file:'references/format.md'}),/符号链接/);
+});

@@ -1,0 +1,61 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) important;
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@source not inline("shimmer");
+@custom-variant dark (&:is([data-theme="dark"] *));
+@theme inline {
+ --color-sidebar: var(--sidebar);
+ --color-sidebar-foreground: var(--text);
+ --color-sidebar-accent: var(--hover);
+ --color-sidebar-accent-foreground: var(--text);
+ --color-sidebar-border: var(--border);
+ --color-sidebar-ring: var(--focus);
+ --color-sidebar-primary: var(--accent);
+ --color-sidebar-primary-foreground: var(--surface);
+ --color-background: var(--surface);
+ --color-foreground: var(--text);
+ --color-popover: var(--raised);
+ --color-popover-foreground: var(--text);
+ --color-card: var(--raised);
+ --color-card-foreground: var(--text);
+ --color-muted: var(--hover);
+ --color-muted-foreground: var(--secondary);
+ --color-accent: var(--hover);
+ --color-accent-foreground: var(--text);
+ --color-primary: var(--text);
+ --color-primary-foreground: var(--surface);
+ --color-secondary: var(--hover);
+ --color-secondary-foreground: var(--text);
+ --color-border: var(--border);
+ --color-input: var(--border);
+ --color-ring: var(--focus);
+ --color-destructive: var(--orange-text);
+ --radius-sm: 4px;
+ --radius-md: 6px;
+ --radius-lg: 8px;
+ --radius-xl: 12px;
+ --radius-2xl: 16px;
+}
+/* Scope base rules to shadcn surfaces; legacy screens retain their own reset. */
+[data-slot="dialog-content"], [data-slot="dialog-content"] * { border-style:solid; border-width:0; }
+[data-slot="dialog-content"] :is(input, textarea) { font:inherit; color:inherit; background:transparent; }
+/* Tailwind preflight is scoped away from legacy screens; supply component border defaults. */
+.message-center [data-slot], .integration-page [data-slot], .extension-detail [data-slot], .extension-config-form [data-slot], [data-slot="dropdown-menu-content"] { border-color:var(--border); border-style:solid; border-width:0; }
+
+/* Scoped reset: this app deliberately does not load Tailwind's global preflight. */
+.task-questionnaire [data-slot] { border-style: solid; border-width: 0; }
+.task-questionnaire [data-slot=questionnaire-item], .task-questionnaire [data-slot=questionnaire-title] { margin: 0; }
+.task-questionnaire [data-slot=questionnaire-item][hidden] { display: none !important; }
+.task-questionnaire { padding: 16px; margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--raised); }
+.questionnaire-body { max-height: 24vh; overflow-y: auto; overscroll-behavior: contain; }
+@layer utilities {
+  .task-questionnaire [hidden] { display: none !important; }
+}
+/* FieldSet relies on Tailwind preflight; reset only this component in the mixed UI. */
+[data-slot="field-set"] { border:0; padding:0; margin:0; min-width:0; }
+
+/* Sidebar lists normally receive these resets from Tailwind preflight. */
+[data-slot="sidebar-menu"], [data-slot="sidebar-menu-sub"] { list-style:none; padding:0; margin:0; }
+[data-slot="sidebar"] [data-slot="collapsible-content"][hidden] { display:none; }

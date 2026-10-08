@@ -38,3 +38,21 @@ playwright-report/
 
 /build/office-worker.cjs
 /build/office-LICENSES.txt
+
+/build/extension-manifest.cjs
+/packages/extension-sdk/contracts.d.ts
+/packages/extension-sdk/extension.schema.json
+*.tgz
+
+/build/form-template.cjs
+
+*.tsbuildinfo
+
+/tooling-report/
+
+# Local artifacts at any depth; keep source specs versioned.
+output/
+outputs/
+tooling-report/
+coverage/
+.cache/

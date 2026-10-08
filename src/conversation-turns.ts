@@ -16,15 +16,22 @@ export function conversationTurns(run: AgentRun): ConversationTurn[] {
     if (message.role === 'user') turns.push({ user: message, messages: [], tools: [], active: false, artifacts:[] });
     else if (turns.length) turns[turns.length - 1].messages.push(message);
   }
+  const byId = new Map(turns.map(turn => [turn.user.id, turn]));
+  for (const tool of run.tools) {
+    const turn = tool.turnKey ? byId.get(tool.turnKey) : turns.length === 1 ? turns[0] : undefined;
+    turn?.tools.push(tool);
+  }
+  for (const plan of run.plans || []) {
+    const turn = byId.get(plan.turnKey);
+    if (turn && !turn.plan) turn.plan = plan;
+  }
+  for (const file of run.artifacts || []) byId.get(file.turnKey)?.artifacts.push(file);
   let model = turns.some(turn => turn.user.modelChange) ? undefined : run.model;
   turns.forEach((turn, index) => {
     model = turn.user.model || turn.user.modelChange || model;
     turn.model = model;
     const last = index === turns.length - 1;
     turn.active = last && ['preparing','running','waiting','stopping'].includes(run.status);
-    turn.tools = run.tools.filter(tool => tool.turnKey === turn.user.id || (!tool.turnKey && turns.length === 1));
-    turn.plan=run.plans?.find(plan=>plan.turnKey===turn.user.id);
-    turn.artifacts=run.artifacts?.filter(file=>file.turnKey===turn.user.id)||[];
     turn.outcome=turn.active?undefined:turn.user.timing?.outcome||(last?(run.status==='failed'?'failed':run.status==='interrupted'?'interrupted':'completed'):'completed');
     const answers = turn.messages.filter(message => message.role === 'assistant' && !message.kind);
     turn.final = [...answers].reverse().find(message => message.phase === 'final_answer');

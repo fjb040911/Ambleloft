@@ -1,0 +1,8 @@
+.task-app-card{margin:18px 0;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--surface);color:var(--text);}
+.task-app-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;}
+.task-app-card>header>div{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.task-app-card strong{font-size:14px;font-weight:600;overflow-wrap:anywhere;}
+.task-app-source{font-size:12px;color:var(--muted);}
+.task-app-card>p,.task-app-status{padding:0 18px 16px;font-size:13px;color:var(--muted);}
+.task-app-card iframe{display:block;width:100%;border:0;background:transparent;}
+.task-app-status .secondary-button{display:inline-flex;gap:6px;align-items:center;}

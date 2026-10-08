@@ -1,0 +1,42 @@
+/* Shared navigation rhythm; component tokens own settings selection and focus. */
+.workspace-navigation { flex:1; min-height:0; overflow-y:auto; padding:0 12px 16px; scrollbar-width:thin; }
+:is(.workspace-navigation,.settings-sidebar nav) > [data-slot="sidebar-group"] { margin-top:20px; }
+:is(.workspace-navigation,.settings-sidebar nav) > [data-slot="sidebar-group"]:first-child { margin-top:8px; }
+.settings-sidebar nav { padding:0 12px 20px; }
+.settings-nav-item { margin:0; }
+.sidebar .new-task { min-height:36px; margin-bottom:4px; }
+.sidebar > nav:empty { display:none; }
+.sidebar .sidebar-bottom { padding-top:12px; }
+.sidebar .sidebar-footer { margin-top:0; }
+.nav-caption.caption-action { display:flex; align-items:center; gap:4px; margin:0 0 4px; padding:0 4px; }
+.nav-group-toggle { flex:1; min-width:0; min-height:32px; gap:8px; padding:4px 6px; border:0; background:transparent; text-align:left; cursor:pointer; }
+.nav-group-toggle > svg { flex:none; width:16px; height:16px; padding:0; }
+.nav-group-toggle > svg:last-child { width:12px; height:12px; }
+.nav-empty { color:var(--muted); font-size:.75rem; line-height:1.5; margin:6px 10px 8px; }
+.project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:36px; border-radius:var(--radius-control); }
+.project-tree-row:hover,.tree-task:hover { background:var(--hover); }
+.sidebar :is(.project-tree-row,.tree-task,.extension-nav-row).selected { background:var(--selection); color:var(--accent); }
+.project-tree-name,.tree-task > button:first-child { min-height:36px; min-width:0; flex:1; background:transparent; color:inherit; }
+.project-tree-name span,.tree-task > button > span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar .tree-toggle { display:flex; align-items:center; justify-content:center; flex:none; width:28px; min-width:28px; height:32px; padding:4px; }
+.tree-row-actions { position:absolute; inset-block:0; right:2px; display:flex; align-items:center; }
+.sidebar .row-menu { width:28px; height:32px; opacity:0; }
+:is(.project-tree-row,.tree-task):is(:hover,:focus-within) .row-menu { opacity:1; }
+.project-tree-row:is(:hover,:focus-within) { padding-right:60px; }
+.tree-task:is(:hover,:focus-within) { padding-right:30px; }
+.sidebar .project-children { margin:2px 0 4px 20px; padding:0 0 0 8px; border-left:1px solid var(--border-soft); }
+.tree-task small { flex:none; font-size:.6875rem; color:var(--muted); }
+.sidebar .nav-group-add { opacity:0; }
+.caption-action:is(:hover,:focus-within) .nav-group-add { opacity:1; }
+.sidebar button:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.sidebar .extension-nav-row { border-radius:var(--radius-control); }
+@media (hover:none) {
+ .sidebar .row-menu,.sidebar .nav-group-add { opacity:1; }
+ .project-tree-row { padding-right:60px; }
+ .tree-task { padding-right:30px; }
+}
+@media (pointer:coarse) {
+ :is(.sidebar,.settings-sidebar) [data-slot="sidebar-menu-button"] { min-height:44px; }
+ .sidebar .row-menu { height:40px; }
+}
+@media (prefers-contrast:more) { .sidebar :is(.project-tree-row,.tree-task).selected { outline:1px solid currentColor; outline-offset:-1px; } }

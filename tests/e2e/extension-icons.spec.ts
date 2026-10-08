@@ -1,0 +1,10 @@
+import {test,expect} from '@playwright/test';
+import fs from 'node:fs';
+const image='data:image/png;base64,'+fs.readFileSync('public/brand/icon-128.png').toString('base64');
+test('extension icons follow explicit and system themes; broken images use default',async({page})=>{
+ await page.addInitScript(image=>{const installed=[{manifest:{id:'demo.custom',name:'自定义图标',version:'1',icon:{light:image,dark:image},contributes:{}},enabled:true},{manifest:{id:'demo.default',name:'默认图标',version:'1',contributes:{}},enabled:true},{manifest:{id:'demo.broken',name:'损坏图标',version:'1',icon:{light:'data:image/png;base64,broken',dark:'data:image/png;base64,broken'},contributes:{}},enabled:true}];(window as any).desktop={readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),getDevice:async()=>({mode:'desktop'}),getProvider:async()=>({configured:false}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed,capabilities:{}})}};},image);
+ await page.goto('/');const entry=page.locator('.sidebar').getByRole('button',{name:'自定义图标',exact:true});await expect(entry.locator('.extension-icon-light img')).toBeVisible();await expect(entry.locator('.extension-icon-dark')).toBeHidden();await expect(page.locator('.sidebar').getByRole('button',{name:'默认图标',exact:true}).locator('svg')).toBeVisible();await expect(page.locator('.sidebar').getByRole('button',{name:'损坏图标',exact:true}).locator('.extension-icon-light svg')).toBeVisible();
+ expect(await entry.locator('img').first().evaluate((el:HTMLImageElement)=>el.naturalWidth)).toBe(128);
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect(entry.locator('.extension-icon-dark img')).toBeVisible();await expect(entry.locator('.extension-icon-light')).toBeHidden();
+ await page.evaluate(()=>document.documentElement.dataset.theme='system');await page.emulateMedia({colorScheme:'dark'});await expect(entry.locator('.extension-icon-dark img')).toBeVisible();await page.emulateMedia({colorScheme:'light'});await expect(entry.locator('.extension-icon-light img')).toBeVisible();await page.screenshot({path:'test-results/extension-icons.png'});
+});

@@ -16,7 +16,7 @@ test('draft survives reload, can be copied, and is deleted only after confirmati
   await page.locator('.tree-task > button:first-child').filter({hasText:'整理我的品牌项目资料'}).click();
   await page.getByRole('button', { name: '归档草稿', exact: true }).click();
   await page.getByRole('button', { name: '归档草稿', exact: true }).click();
-  await expect(page.getByText('你的聊天会显示在这里。')).toBeVisible();
+  await expect(page.getByText('你的任务会显示在这里。')).toBeVisible();
 });
 
 test('theme preference survives reload', async ({ page }) => {
@@ -57,8 +57,8 @@ test('project picker includes icons and padding in its native click target',asyn
 
 test('font size updates typography, persists and restores default',async({page})=>{
  await page.goto('/');await page.getByRole('button',{name:'设置',exact:true}).click();
- const slider=page.getByRole('slider',{name:'字体大小'});await expect(slider).toHaveValue('100');
- await slider.focus();await page.keyboard.press('ArrowRight');await expect(slider).toHaveValue('110');
+ const slider=page.getByRole('combobox',{name:'字体大小'});await expect(slider).toHaveValue('100');
+ await slider.selectOption('110');await expect(slider).toHaveValue('110');
  await expect.poll(()=>page.evaluate(()=>getComputedStyle(document.documentElement).fontSize)).toBe('17.6px');
  await page.reload();await page.getByRole('button',{name:'设置',exact:true}).click();await expect(slider).toHaveValue('110');
  await page.getByRole('button',{name:'恢复默认',exact:true}).click();await expect(slider).toHaveValue('100');

@@ -6,7 +6,7 @@ async function setup(page:Page){await page.addInitScript(()=>{
  });await page.goto('/');}
 async function picker(page:Page){await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'技能',exact:true}).click();}
 test('skill tags are separate from text, survive failure and apply to only the submitted turn',async({page})=>{
- await setup(page);await picker(page);const item=page.getByRole('button',{name:/meeting-summary 整理/});await item.click();await expect(item).toHaveAttribute('aria-pressed','true');await item.click();await expect(page.locator('.composer .skill-tag')).toHaveCount(0);await item.click();await page.keyboard.press('Escape');
+ await setup(page);await picker(page);const item=page.getByRole('option',{name:/meeting-summary/});await item.click();await expect(item).toHaveAttribute('data-checked','true');await item.click();await expect(page.locator('.composer .skill-tag')).toHaveCount(0);await item.click();await page.keyboard.press('Escape');
  await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('');await expect(page.locator('.composer .skill-tag')).toHaveCount(1);
  await page.locator('.composer .skill-tag button').first().click();await expect(page.getByRole('dialog',{name:'meeting-summary'})).toContainText('Summarize the meeting.');await page.getByRole('dialog',{name:'meeting-summary'}).getByRole('button',{name:'关闭',exact:true}).click();expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
  await page.screenshot({path:'test-results/skills-composer.png'});
@@ -15,28 +15,43 @@ test('skill tags are separate from text, survive failure and apply to only the s
  expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['skill-1']);
  await page.getByRole('textbox',{name:'继续对话'}).fill('再简短一些');await page.getByRole('button',{name:'发送后续消息'}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds||[])).toEqual([]);
 });
-test('personal skills can be imported, edited, disabled and removed from settings',async({page})=>{
- await setup(page);await picker(page);await page.getByRole('button',{name:'管理技能'}).click();const settings=page.locator('.settings-workspace');await expect(settings.locator('.personal-skill-card')).toHaveCount(1);
- await settings.getByRole('button',{name:'导入本地技能'}).click();await expect(settings.locator('.personal-skill-card')).toHaveCount(2);
- await settings.locator('.personal-skill-card').filter({hasText:'meeting-summary'}).click();let dialog=page.getByRole('dialog',{name:'技能详情'});await dialog.getByLabel('名称',{exact:true}).fill('会议助手');await dialog.getByLabel('技能指令').fill('Updated workflow');await dialog.getByRole('button',{name:'保存',exact:true}).click();
- await settings.locator('.personal-skill-card').filter({hasText:'会议助手'}).click();dialog=page.getByRole('dialog',{name:'技能详情'});await expect(dialog.getByLabel('技能指令')).toHaveValue('Updated workflow');await dialog.getByRole('button',{name:'停用',exact:true}).click();await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(settings.locator('.personal-skill-card').filter({hasText:'会议助手'})).toContainText('已停用');await page.screenshot({path:'test-results/skills-manager.png'});
- await settings.getByRole('button',{name:'返回应用'}).click();await picker(page);await expect(page.getByRole('dialog',{name:'添加内容'})).not.toContainText('会议助手');await page.getByRole('button',{name:'管理技能'}).click();await settings.locator('.personal-skill-card').filter({hasText:'会议助手'}).click();page.once('dialog',d=>d.accept());await page.getByRole('dialog',{name:'技能详情'}).getByRole('button',{name:'删除',exact:true}).click();await expect(settings.locator('.personal-skill-card')).toHaveCount(1);
+async function openSkill(page:Page){await setup(page);await picker(page);await page.getByRole('button',{name:'管理技能'}).click();await page.locator('.personal-skill-card').first().click();return page.getByRole('dialog',{name:'meeting-summary',exact:true});}
+test('skills edit in place, save to preview, disable and delete',async({page})=>{
+ const dialog=await openSkill(page);await dialog.evaluate(el=>(window as any).__skillDialog=el);
+ await dialog.getByRole('button',{name:'编辑',exact:true}).click();
+ expect(await dialog.evaluate(el=>el===(window as any).__skillDialog)).toBe(true);
+ await expect(dialog.getByRole('button',{name:'保存修改'})).toBeDisabled();
+ await dialog.getByLabel('名称',{exact:true}).fill('会议助手');await dialog.getByLabel('技能指令',{exact:true}).fill('# Updated workflow');
+ await dialog.getByRole('button',{name:'保存修改'}).click();
+ const saved=page.getByRole('dialog',{name:'会议助手',exact:true});await expect(saved.getByRole('heading',{name:'Updated workflow'})).toBeVisible();await expect(saved).toContainText('v2');
+ await expect(saved.getByRole('status')).toContainText('技能已保存');
+ await saved.getByRole('button',{name:'停用',exact:true}).click();await expect(saved).toContainText('已停用');
+ await saved.getByRole('button',{name:'删除技能'}).click();await page.getByRole('button',{name:'确认删除'}).click();await expect(page.locator('.personal-skill-card')).toHaveCount(0);
+});
+
+test('skill edit keeps undo across preview, guards dirty exit and supports save shortcut',async({page})=>{
+ const dialog=await openSkill(page);await dialog.getByRole('button',{name:'编辑',exact:true}).click();
+ const editor=dialog.getByLabel('技能指令',{exact:true});await editor.fill('Draft instructions');
+ await dialog.getByRole('tab',{name:'预览',exact:true}).click();await expect(dialog.locator('.markdown')).toContainText('Draft instructions');
+ await dialog.getByRole('tab',{name:'编辑',exact:true}).click();await expect(editor).toHaveText('Draft instructions');
+ await editor.press('ControlOrMeta+z');await expect(editor).toContainText('Summarize the meeting.');
+ await editor.fill('Saved with shortcut');await editor.press('ControlOrMeta+s');await expect(dialog.locator('.markdown')).toContainText('Saved with shortcut');
+ await dialog.getByRole('button',{name:'编辑',exact:true}).click();await dialog.getByLabel('名称',{exact:true}).fill('未保存');
+ await page.keyboard.press('Escape');const confirm=page.getByRole('dialog',{name:'放弃未保存的修改？'});await expect(confirm).toBeVisible();await confirm.getByRole('button',{name:'继续编辑'}).click();await expect(dialog.getByLabel('名称',{exact:true})).toHaveValue('未保存');
+ await dialog.getByRole('button',{name:'取消编辑'}).click();await page.getByRole('button',{name:'放弃修改'}).click();await expect(dialog.getByRole('button',{name:'编辑',exact:true})).toBeFocused();await expect(dialog.locator('.markdown')).toContainText('Saved with shortcut');
+ await page.setViewportSize({width:760,height:600});await dialog.getByRole('button',{name:'编辑',exact:true}).click();await expect(editor).toBeVisible();
+ expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await page.emulateMedia({reducedMotion:'reduce'});await page.screenshot({path:'test-results/skill-inline-editor.png'});
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));await page.screenshot({path:'test-results/skill-inline-editor-dark.png'});
 });
 
 test('skill detail keeps pending saves visible and recovers after failure',async({page})=>{
- await setup(page);await picker(page);await page.getByRole('button',{name:'管理技能'}).click();
- await page.locator('.personal-skill-card').first().click();
- const dialog=page.getByRole('dialog',{name:'技能详情'});
+ const dialog=await openSkill(page);await dialog.getByRole('button',{name:'编辑',exact:true}).click();
  await dialog.getByLabel('名称',{exact:true}).fill('未保存修改');
  await page.evaluate(()=>{(window as any).desktop.skills.update=()=>new Promise((resolve,reject)=>{(window as any).__rejectSave=reject;});});
- await dialog.getByRole('button',{name:'保存',exact:true}).click();
- await expect(dialog.getByRole('button',{name:'处理中…',exact:true})).toBeDisabled();
- await expect(dialog.getByRole('button',{name:'关闭',exact:true})).toBeDisabled();
+ await dialog.getByRole('button',{name:'保存修改'}).click();await expect(dialog.getByRole('button',{name:'正在保存…'})).toBeDisabled();await expect(dialog.getByRole('button',{name:'关闭',exact:true})).toBeDisabled();
  await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
  await page.evaluate(()=>(window as any).__rejectSave(new Error('保存失败，请重试')));
- await expect(dialog.getByRole('alert')).toContainText('保存失败');
- await expect(dialog.getByLabel('名称',{exact:true})).toHaveValue('未保存修改');
- await expect(dialog.getByRole('button',{name:'保存',exact:true})).toBeEnabled();
- await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();
- await expect(page.locator('.personal-skill-card').first()).toBeFocused();
+ await expect(dialog.getByRole('alert')).toContainText('保存失败');await expect(dialog.getByLabel('名称',{exact:true})).toHaveValue('未保存修改');await expect(dialog.getByRole('button',{name:'保存修改'})).toBeEnabled();
+ await page.keyboard.press('Escape');await page.getByRole('button',{name:'放弃修改'}).click();await expect(dialog).not.toBeVisible();await expect(page.locator('.personal-skill-card').first()).toBeFocused();
 });

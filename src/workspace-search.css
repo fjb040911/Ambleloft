@@ -1,0 +1,4 @@
+.window-space.global-sidebar-actions { display:flex; align-items:center; justify-content:space-between; height:60px; min-height:60px; flex-shrink:0; padding:0 12px 0 20px; }
+.sidebar-search { -webkit-app-region:no-drag; margin-left:auto; }
+
+.settings-sidebar .settings-return { padding-top: 0; }

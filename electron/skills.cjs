@@ -62,6 +62,27 @@ function createSkills(directory,database) {
   return {
     async list(){await queue;return (await readAll()).map(summary);},
     async detail(id){await queue;return get(id);},
+    async readFile({id,file}){
+      await queue;const record=await get(id);
+      if(typeof file!=='string'||!file||file.includes('\\')||path.isAbsolute(file)||file.split('/').some(part=>!part||part==='.'||part==='..')||!record.files.includes(file))throw new Error('技能文件路径无效');
+      const base=path.dirname(record.path),target=path.join(base,file);
+      if(!base.startsWith(root+path.sep))throw new Error('技能目录无效');
+      let current=base;
+      for(const part of file.split('/')){current=path.join(current,part);if((await fs.lstat(current)).isSymbolicLink())throw new Error('不支持符号链接');}
+      const realBase=await fs.realpath(base),real=await fs.realpath(target);
+      if(!realBase.startsWith((await fs.realpath(root))+path.sep)||!real.startsWith(realBase+path.sep))throw new Error('技能文件路径无效');
+      const stat=await fs.stat(real);if(!stat.isFile())throw new Error('请选择文件');
+      const ext=path.extname(file).toLowerCase();
+      const mime={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp'}[ext];
+      const result={path:file,size:stat.size,kind:'unsupported'};
+      if(stat.size>(mime?5:2)*1024*1024)return {...result,reason:'文件过大，暂不支持预览'};
+      if(!mime&&!['.md','.txt','.json','.yaml','.yml','.toml','.js','.ts','.tsx','.jsx','.py','.sh','.css','.html','.csv','.xml','.svg','.ini','.cfg','.sql','.c','.h','.rs','.go'].includes(ext)&&path.basename(file)!=='LICENSE')return {...result,reason:'此文件格式暂不支持预览'};
+      const data=await fs.readFile(real);
+      if(mime)return {...result,kind:'image',dataUrl:`data:${mime};base64,${data.toString('base64')}`};
+      if(data.includes(0))return {...result,reason:'此文件格式暂不支持预览'};
+      let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(data);}catch{return {...result,reason:'此文件编码暂不支持预览'};}
+      return {...result,kind:ext==='.md'?'markdown':'text',text};
+    },
     importFolder(source,options={}){return serial(async()=>{
       const resolved=await fs.realpath(source);
       if(resolved===root||resolved.startsWith(root+path.sep))throw new Error('请选择原始技能目录');

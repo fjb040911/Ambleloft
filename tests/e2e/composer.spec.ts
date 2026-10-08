@@ -9,16 +9,16 @@ async function setup(page:import('@playwright/test').Page){
 test('composer groups models, adds context, preserves draft through settings',async({page})=>{
  await setup(page);await page.getByRole('textbox',{name:'任务内容',exact:true}).fill('我的草稿');
  await page.getByRole('button',{name:'选择模型',exact:true}).click();const menu=page.getByRole('dialog',{name:'模型列表'});
- await expect(menu.getByText('本地模型',{exact:true})).toHaveCount(0);await expect(menu.getByText('自定义模型',{exact:true})).toBeVisible();
- await menu.getByRole('button',{name:'Model B 服务 A'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
+ await expect(menu.getByText('本地模型',{exact:true})).toHaveCount(0);await expect(page.getByText('自定义模型',{exact:true})).toHaveCount(0);
+ await menu.getByRole('option',{name:'Model B 服务 A'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await expect(page.getByRole('button',{name:'关闭添加菜单'})).toBeVisible();await page.getByRole('button',{name:'文件和文件夹',exact:true}).click();await expect(page.locator('.composer-chips')).toContainText('brief.txt');await expect(page.getByRole('combobox',{name:'当前项目'})).toContainText('不关联项目');
  await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'技能',exact:true}).click();await page.getByRole('button',{name:'管理技能'}).click();await expect(page.locator('.settings-workspace')).toBeVisible();await page.getByRole('button',{name:'返回应用'}).click();await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('我的草稿');
  await page.getByRole('button',{name:'发送任务',exact:true}).click();const sent=await page.evaluate(()=>(window as any).__sent);expect(sent.model).toBe('Model B');expect(sent.attachments[0].path).toBe('/tmp/brief.txt');
 });
 test('existing task confirms service and full access changes and submits next-turn options',async({page})=>{
  await setup(page);await page.locator('.tree-task > button:first-child').filter({hasText:'现有任务'}).click();
- await page.getByRole('button',{name:'选择模型',exact:true}).click();page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'Model 1 服务 B'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model A');
- page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Model 1 服务 B'}).click();
+ await page.getByRole('button',{name:'选择模型',exact:true}).click();page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('option',{name:'Model 1 服务 B'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model A');
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('option',{name:'Model 1 服务 B'}).click();
  await page.getByRole('button',{name:'默认权限',exact:true}).click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('switch',{name:'允许完全访问'}).click();await expect(page.getByRole('button',{name:'完全访问',exact:true})).toBeVisible();
  await page.getByRole('textbox',{name:'继续对话'}).fill('继续');await page.getByRole('button',{name:'发送后续消息'}).click();const sent=await page.evaluate(()=>(window as any).__sent);expect(sent).toMatchObject({runId:'r',providerId:'b',model:'Model 1',permission:'full',confirmProviderChange:true});
  await page.setViewportSize({width:800,height:600});await page.screenshot({path:'test-results/composer-compact.png'});
@@ -29,10 +29,10 @@ test('composer popovers move and restore keyboard focus without overflowing',asy
  const trigger=page.getByRole('button',{name:'选择模型',exact:true});
  await trigger.focus();await page.keyboard.press('Enter');
  const menu=page.getByRole('dialog',{name:'模型列表'});
- await expect(menu.getByRole('button').first()).toBeFocused();
+ await expect(menu.getByRole('combobox',{name:'搜索模型'})).toBeFocused();
  const bounds=await menu.boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(12);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(748);
  await page.keyboard.press('Escape');await expect(trigger).toBeFocused();await expect(menu).toHaveCount(0);
- await trigger.click();await page.getByRole('button',{name:'Model B 服务 A'}).click();await expect(trigger).toBeFocused();
+ await trigger.click();await page.getByRole('option',{name:'Model B 服务 A'}).click();await expect(trigger).toBeFocused();
  await page.getByRole('button',{name:'添加内容',exact:true}).click();
  await expect(page.getByRole('button',{name:'文件和文件夹',exact:true})).toBeFocused();
  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'添加内容',exact:true})).toBeFocused();
@@ -52,4 +52,32 @@ test('pending submission protects input and a failure retains the draft',async({
  await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(input).toBeDisabled();
  await page.evaluate(()=>(window as any).__rejectSend(new Error('暂时无法发送')));
  await expect(input).toBeEnabled();await expect(input).toHaveValue('保留这份草稿');
+});
+
+test('composer grows, handles IME and retains running drafts until explicitly sent',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{const desktop=(window as any).desktop,original=desktop.startRun;desktop.startRun=async(input:any)=>({...await original(input),id:input.runId||'new-run'});});
+ const home=page.getByRole('textbox',{name:'任务内容',exact:true});
+ const initial=(await home.boundingBox())!.height;
+ await home.fill(Array(20).fill('多行草稿').join('\n'));
+ expect((await home.boundingBox())!.height).toBeGreaterThan(initial);
+ expect((await home.boundingBox())!.height).toBeLessThanOrEqual(200);
+ await home.fill('中文输入');
+ await home.dispatchEvent('keydown',{key:'Enter',isComposing:true});
+ expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await home.press('Shift+Enter');await expect(home).toHaveValue('中文输入\n');
+ await home.press('Enter');
+ const input=page.getByRole('textbox',{name:'继续对话'});
+ await input.fill('下一轮的草稿');await input.press('Enter');
+ await expect(input).toHaveValue('下一轮的草稿');
+ await expect(page.locator('.composer-hint:visible')).toContainText('草稿尚未发送');
+ expect(await page.evaluate(()=>(window as any).__sent.prompt)).toBe('中文输入\n');
+});
+
+test('model picker supports search and keyboard selection',async({page})=>{
+ await setup(page);await page.getByRole('button',{name:'选择模型',exact:true}).click();
+ const search=page.getByRole('combobox',{name:'搜索模型'});await search.fill('Model B');
+ await expect(page.getByRole('dialog',{name:'模型列表'}).getByRole('option').first()).toHaveAttribute('aria-label','Model B 服务 A');await search.press('Enter');
+ await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
+ await expect(page.getByRole('button',{name:'选择模型',exact:true})).toBeFocused();
 });
