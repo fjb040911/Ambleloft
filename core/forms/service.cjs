@@ -10,7 +10,17 @@ class FormService{
  }
  async rows(runId){return this.database.call('formData',{action:'list',runId});}
  async write(flow,revision){if(flow.submission){flow.submissions ||= [];const index=flow.submissions.findIndex(s=>s.id===flow.submission.id);const record=structuredClone(flow.submission);if(index<0)flow.submissions.push(record);else flow.submissions[index]=record;}const value=await this.database.call('formData',{action:'put',flow,revision});this.publish();return value;}
- async list(runId){return this.serial(async()=>{const rows=await this.rows(runId);for(let flow of rows)if(flow.status==='unknown'&&this.runtime.runs.find(r=>r.id===runId)?.messages.some(m=>m.formSubmissionId===flow.submission?.id)){flow.status='completed';flow.submission.status='succeeded';await this.write(flow,flow.revision);}return this.rows(runId);});}
+ async list(runId){return this.serial(async()=>{
+  const rows=await this.rows(runId);
+  for(const flow of rows){
+   const recovered=flow.status==='unknown'&&this.runtime.runs.find(r=>r.id===runId)?.messages.some(m=>m.formSubmissionId===flow.submission?.id);
+   if(recovered){flow.status='completed';flow.submission.status='succeeded';}
+   // Repair successful records persisted by older hosts with a stale failure message.
+   const staleError=flow.status==='completed'&&flow.submission?.status==='succeeded'&&flow.error;
+   if(recovered||staleError){delete flow.error;await this.write(flow,flow.revision);}
+  }
+  return this.rows(runId);
+ });}
  async present(run,turnKey,key,prefill={}){return this.serial(async()=>{const c=await this.catalog(),entry=c.entries.find(e=>e.key===key);if(!entry)throw Error('表单不可用');const existing=(await this.rows(run.id)).find(f=>f.turnKey===turnKey&&f.key===key);if(existing)return {id:existing.id,status:existing.status};const drafts={};for(const [stepId,values]of Object.entries(prefill)){const step=entry.template.steps.find(s=>s.id===stepId);if(!step)throw Error('未知步骤');const checked=T.validateValues(step,values,{partial:true});if(Object.keys(checked.errors).length)throw Error('预填数据无效');drafts[stepId]=checked.values;}
  const flow={id:randomUUID(),runId:run.id,conversationId:run.conversationId||run.id,turnKey,key,extensionId:entry.extensionId,digest:entry.digest,sourceRevision:entry.revision,template:entry.template,projectId:run.projectId,drafts,values:{},results:{},step:0,status:'editing',revision:0};await this.write(flow,null);return {id:flow.id,status:flow.status};});}
  async action(input,owner){return this.serial(async()=>{let flow=(await this.rows(input.runId)).find(f=>f.id===input.id);if(!flow||flow.revision!==input.revision)throw Error('表单已在其他窗口更新，请重新载入。当前输入仍保留。');const run=this.runtime.runs.find(r=>r.id===flow.runId);if(!run||run.archivedAt)throw Error('请先还原聊天');if(flow.status==='completed')throw Error('表单已完成');const entry=(await this.catalog()).entries.find(e=>e.key===flow.key);if(!entry||entry.digest!==flow.digest||entry.revision!==flow.sourceRevision)throw Error('表单来源已停用或更新，请重新打开一份表单');
@@ -21,7 +31,7 @@ class FormService{
  if(input.action==='reconcile'&&flow.status==='unknown'){
  const action=flow.step===flow.template.steps.length-1?flow.template.submit:step.next;if(!action?.recovery)throw Error('此表单未提供核实接口，请联系业务服务');const recoveryId=typeof action.recovery==='string'?action.recovery:action.recovery.operation;const item=this.router.item(recoveryId),op=item.manifest.operations.find(o=>o.id===recoveryId);if(item.id!==flow.extensionId||op.effect!=='read')throw Error('核实接口必须是本扩展的只读操作');
  const result=await this.router.invoke(recoveryId,{submissionId:flow.submission.id,...(op.projectScoped?{projectId:flow.projectId}:{})},{caller:'page',extensionId:flow.extensionId,owner,validate});
- if(result.ok&&result.value?.status==='succeeded'){const original=this.router.item(action.operation).manifest.operations.find(o=>o.id===action.operation);if(!await this.extensions.packages.validateValue(original.outputSchema,result.value.result))throw Error('核实结果格式无效');flow.results[step.id]=result.value.result;flow.submission.status='succeeded';flow.status=flow.step===flow.template.steps.length-1?'completed':'editing';if(flow.status==='editing')flow.step++;}else if(result.ok&&result.value?.status==='notExecuted'){flow.status='editing';flow.submission.status='notExecuted';}return persist();
+ if(result.ok&&result.value?.status==='succeeded'){const original=this.router.item(action.operation).manifest.operations.find(o=>o.id===action.operation);if(!await this.extensions.packages.validateValue(original.outputSchema,result.value.result))throw Error('核实结果格式无效');delete flow.error;flow.results[step.id]=result.value.result;flow.submission.status='succeeded';flow.status=flow.step===flow.template.steps.length-1?'completed':'editing';if(flow.status==='editing')flow.step++;}else if(result.ok&&result.value?.status==='notExecuted'){delete flow.error;flow.status='editing';flow.submission.status='notExecuted';}return persist();
  }
  if(flow.status==='unknown')throw Error('上次提交结果待核实，请联系业务服务确认，不能重复提交');
  if(input.action!=='next')throw Error('不支持的表单操作');const checked=T.validateValues(step,flow.drafts[step.id]||{},{raw:true});if(Object.keys(checked.errors).length)return {flow,errors:checked.errors};flow.values[step.id]=checked.values;

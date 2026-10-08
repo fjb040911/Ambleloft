@@ -22,11 +22,11 @@ Targeting **Windows, macOS, and Linux**. Currently a **0.3.0 development preview
 >
 > **App:** Sends the structured information back to the conversation for the next step.
 
-You can try this with the repository's [travel expense example](examples/skills/travel-expense/SKILL.md). Users interact with real controls, with fields, validation, and submission behavior defined by a template. This example sends information to the chat; it does not submit a claim to an expense service.
+Explore the complete [travel expense assistant](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) in the independent samples repository: a three-step form, submission to a local demo service, a records view, and read-only reconciliation after a lost response. This uses fictional data, not a production expense system.
 
 To connect a business system, route form submissions to an extension's backend operation. Declarative forms support linear multi-step flows, saved drafts, and submission confirmation. For a custom interface, the limited MCP Apps adapter can display extension-provided HTML/JS inside a task.
 
-[Explore the forms guide](specs/extensions/declarative-forms-guide.md) · [See the in-chat UI example](examples/extensions/task-form/README.md)
+[Explore the forms guide](specs/extensions/declarative-forms-guide.md) · [See the in-chat UI example](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.md)
 
 ![Interactive travel expense form in Ambleloft](.github/assets/travel-expense-en.png)
 
@@ -54,24 +54,30 @@ Ambleloft provides project context, model connections, conversation history, exe
 
 ## Build your first extension
 
-Start with the repository's TypeScript example to see how a page, backend operations, and manifest work together. After setting up the source environment below, run:
+Extension examples now live in [ambleloft-extension-samples](https://github.com/fjb040911/ambleloft-extension-samples). Each runnable sample has its own lockfile and uses published npm SDK/CLI packages, without a neighboring host checkout or npm link.
 
-```bash
-npm run extensions:sdk
-npm run extensions:demo
-```
+~~~bash
+git clone https://github.com/fjb040911/ambleloft-extension-samples.git
+cd ambleloft-extension-samples/hello-operation
+npm ci
+npm run build
+npm run validate
+npm test
+npm run pack
+~~~
 
-Follow the [example instructions](examples/extensions/project-card/README.md) to install the generated extension, then adapt its interface and business logic.
+In the host, open **Settings → Extensions → Install**, select the generated package, confirm trust, and grant the required permissions. Then follow the sample walkthrough.
 
 | What you want to build | Start here |
 | --- | --- |
-| Fields and multi-step forms in chat | [Declarative forms guide](specs/extensions/declarative-forms-guide.md) |
-| Custom HTML/JS inside a task | [In-chat UI example](examples/extensions/task-form/README.md) |
-| A standalone page with backend operations | [Project Card example](examples/extensions/project-card/README.md) |
-| Message actions and business authentication | [Message actions and authentication](specs/extensions/message-actions-auth-guide.md) |
-| SDK setup, dependencies, validation, and packaging | [Extension developer guide](specs/extensions/developer-guide.md) |
+| Multi-step business forms in chat | [Travel expense assistant](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) |
+| Custom HTML/JS inside a task | [In-chat travel card](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.md) |
+| Operations shared by pages and agents | [Your first operation](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.md) |
+| Data processing with npm dependencies | [CSV to JSON](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/npm-data-transform/README.md) |
+| Message actions and reconciliation | [Message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md) |
+| Business authentication | [Authentication example](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.md) |
 
-The SDK and extension APIs are developer previews. The repository SDK builds into a local npm package and is not published to the public npm registry. An extension marketplace is not implemented yet. Linked extension guides are currently primarily in Chinese.
+Samples pin the published SDK/CLI to **0.1.0-alpha.7**. The reference SDK in this host repository remains at alpha.1 and is maintained separately. Extension APIs are still a developer preview; a marketplace is not implemented. See the [verification record](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/docs/verification.md).
 
 ## What the workspace already provides
 
@@ -106,10 +112,12 @@ The project is under active development and APIs are not stable. Previously publ
 
 ## Try the travel expense form
 
-1. Run the desktop app from source using the steps below and connect a model with compatible tool calling.
-2. Import `examples/skills/travel-expense` in the skill manager.
-3. Select the skill in a new task and ask, “I need to submit my travel expenses.”
-4. Fill in the form the agent presents and confirm to send the information to the chat.
+1. Start a compatible extension-enabled host and connect a model with compatible tool calling.
+2. Follow the [travel expense assistant instructions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) to build, package, and install the extension.
+3. Start its local demo service and configure the service URL in the extension settings.
+4. Request a travel expense claim in chat and complete the three-step form. Query records from the extension home or test lost-response reconciliation as documented.
+
+The screenshot above shows the host’s two-step UI demo. The independent repository provides the three-step business example and real desktop verification screenshots.
 
 ## Run from source
 

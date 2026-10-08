@@ -1010,5 +1010,6 @@
   "放弃当前修改并重新载入": "Discard changes and reload",
   "上一步": "Previous",
   "下一步": "Next",
-  "已提交": "Submitted"
+  "已提交": "Submitted",
+  "提交结果": "Submission result"
 }

@@ -26,3 +26,27 @@ test('page RPC denies foreign frame, wrong version, duplicate IDs, arbitrary pro
  assert.equal((await call('3','invoke')).error.code,'UNSUPPORTED');assert.equal((await call('4','requestGrant',{projectId:'hidden',capabilities:['projects.read']})).error.code,'FORBIDDEN');
  assert.equal((await manager.rpc({...event,senderFrame:{url:wc.mainFrame.url}},{id:'5',method:'initialize'})).error.code,'FORBIDDEN');item.generation=2;assert.equal((await call('6','initialize')).error.code,'FORBIDDEN');
 });
+
+test('new page initializes with owner locale, saved preference, or system fallback and keeps live updates',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-page-locale-'));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));await fs.mkdir(path.join(root,'web'));
+ const registry=new WindowRegistry('file:///app/index.html'),win=windowFixture(),owner=registry.add(win,'one');
+ win.contentView={addChildView(){},removeChildView(){}};win.getContentSize=()=>[1000,800];win.webContents.getZoomFactor=()=>1;
+ let id=20;
+ class View {
+  constructor(){this.webContents=new EventEmitter();Object.assign(this.webContents,{id:id++,mainFrame:{url:''},setWindowOpenHandler(){},setZoomFactor(){},send(){},isDestroyed:()=>false,close(){},async loadURL(url){this.mainFrame.url=url;}});}
+  setVisible(){} setBounds(){}
+ }
+ const item={id:'demo.page',kind:'package',active:'digest',generation:1,enabled:true,trusted:true,revisions:[{digest:'digest',relativePath:'.'}],manifest:{contributes:{home:{webRoot:'web',entry:'index.html'}}}};
+ let language='en',onRead=()=>{};
+ const host=new PageHost({registry,service:{items:[item],packages:{root,prepare:async()=>({digest:'digest'})}},workspace:{read:async()=>{onRead();return {projects:[],language};}},locale:'zh-CN',
+  electron:{nativeTheme:{shouldUseDarkColors:false},WebContentsView:View,session:{fromPartition:()=>({setPermissionRequestHandler(){},setPermissionCheckHandler(){},on(){},webRequest:{onBeforeRequest(){}},protocol:{async handle(){},unhandle(){}},clearStorageData:async()=>{}})}}});
+ const event={sender:win.webContents,senderFrame:win.webContents.mainFrame};
+ const open=async()=>{await host.open(event,{extensionId:item.id,slotId:'slot'});const p=host.owners.get(owner.id);const wc=p.view.webContents;return (await host.rpc({sender:wc,senderFrame:wc.mainFrame},{id:'1',protocolVersion:'1',method:'initialize',params:{}})).value.locale;};
+ assert.equal(await open(),'en','saved preference before any context event');
+ host.contexts.set(owner.id,{locale:'fr',projectId:null});assert.equal(await open(),'fr','reopened view retains owner context');
+ host.contexts.clear();language='system';assert.equal(await open(),'zh-CN','system preference resolves to system locale');
+ host.contexts.clear();language='en';onRead=()=>{host.owners.get(owner.id).locale='de';};
+ assert.equal(await open(),'de','newer context wins over pending workspace read');
+ host.closeOwner(owner.id);
+});
