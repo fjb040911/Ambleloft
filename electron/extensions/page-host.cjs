@@ -13,8 +13,11 @@ class PageHost{
  async open(event,input){
   const owner=this.registry.authorize(event);if(typeof input?.slotId!=='string'||input.slotId.length>100)throw Error('INVALID_ARGUMENT');this.closeOwner(owner.id);
   const item=this.item(input.extensionId);const projectId=this.contexts.get(owner.id)?.projectId;if(!this.allowed(item,projectId,item.manifest.contributes.home.when))throw Error('FORBIDDEN');
-  const p={id:randomUUID(),owner,slotId:input.slotId,extensionId:item.id,revision:item.active,generation:item.generation,projectId,pending:new Map(),lastRequest:0,selected:new Set(),closed:false};this.owners.set(owner.id,p);
+  const p={id:randomUUID(),owner,slotId:input.slotId,extensionId:item.id,revision:item.active,generation:item.generation,projectId,locale:this.contexts.get(owner.id)?.locale,pending:new Map(),lastRequest:0,selected:new Set(),closed:false};this.owners.set(owner.id,p);
   try{
+   // A new view must use the saved host language even before its first context event.
+   // Preserve a newer context update that arrives while workspace storage is read.
+   if(!p.locale){const state=await this.workspace.read();this.valid(p);p.locale||=state.language&&state.language!=='system'?state.language:this.locale;}
    const revision=item.revisions.find(r=>r.digest===item.active),directory=path.join(this.service.packages.root,revision.relativePath);
    const checked=await this.service.packages.prepare(directory,'directory');if(checked.digest!==item.active)throw Error('FORBIDDEN');this.valid(p);
    if(item.manifest.main){await this.service.hosts.activate(item.id);this.valid(p);}

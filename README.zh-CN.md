@@ -22,11 +22,11 @@
 >
 > **应用：** 将结构化信息带回当前对话，供后续任务使用。
 
-这是仓库中可以体验的[差旅表单示例](examples/skills/travel-expense/SKILL.md)。用户直接填写真实控件；字段、校验和提交方式由模板定义。当前示例将信息发送到聊天，并未向报销系统提交。
+完整案例见独立示例仓库的[差旅报销助手](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.zh-CN.md)：三步填写与确认、向本地演示服务提交、查询账本，以及丢失响应后的只读核实。案例使用虚构数据，不代表已对接生产报销系统。
 
 接入业务系统时，你可以把表单提交连接到扩展的后端操作。对于更长的流程，声明式表单支持线性多步骤、草稿保存和提交确认；需要定制界面时，可以使用当前有限支持的 MCP Apps 适配，在聊天中展示扩展提供的 HTML/JS。
 
-[查看表单开发指南](specs/extensions/declarative-forms-guide.md) · [查看聊天内 UI 示例](examples/extensions/task-form/README.md)
+[查看表单开发指南](specs/extensions/declarative-forms-guide.md) · [查看聊天内 UI 示例](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.zh-CN.md)
 
 ![Ambleloft 聊天中的差旅费用分步表单](.github/assets/travel-expense-zh-CN.png)
 
@@ -54,24 +54,30 @@ Ambleloft 提供项目上下文、模型连接、对话历史、执行审批和�
 
 ## 开发第一个扩展
 
-从仓库的 TypeScript 示例开始，查看页面、后端操作和 manifest 如何协作。在完成下方源码环境安装后运行：
+扩展案例统一维护在 [ambleloft-extension-samples](https://github.com/fjb040911/ambleloft-extension-samples)。每个可运行案例都有独立锁文件，使用 npm 发布的 SDK/CLI，不依赖相邻宿主源码或 npm link。
 
-```bash
-npm run extensions:sdk
-npm run extensions:demo
-```
+~~~bash
+git clone https://github.com/fjb040911/ambleloft-extension-samples.git
+cd ambleloft-extension-samples/hello-operation
+npm ci
+npm run build
+npm run validate
+npm test
+npm run pack
+~~~
 
-按照[示例说明](examples/extensions/project-card/README.md)安装生成的扩展，再替换为自己的界面和业务逻辑。
+在宿主「设置 → 扩展 → 安装扩展」中选择生成的安装包，确认信任并授予所需权限，然后按案例说明体验页面与 Agent 操作。
 
 | 想构建的能力 | 从这里开始 |
 | --- | --- |
-| 聊天中的字段与分步表单 | [声明式表单指南](specs/extensions/declarative-forms-guide.md) |
-| 聊天中的定制 HTML/JS 界面 | [任务内 UI 示例](examples/extensions/task-form/README.md) |
-| 独立页面与后端业务操作 | [Project Card 示例](examples/extensions/project-card/README.md) |
-| 消息操作与业务认证 | [消息操作和认证接入](specs/extensions/message-actions-auth-guide.md) |
-| SDK、依赖准备、校验与打包 | [扩展开发指南](specs/extensions/developer-guide.md) |
+| 聊天中的多步骤业务表单 | [差旅报销助手](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.zh-CN.md) |
+| 定制 HTML/JS 界面 | [聊天内差旅卡片](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.zh-CN.md) |
+| 页面和 Agent 共用业务操作 | [第一个操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.zh-CN.md) |
+| 复用 npm 依赖处理数据 | [CSV 转 JSON](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/npm-data-transform/README.zh-CN.md) |
+| 消息操作与结果核实 | [消息操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.zh-CN.md) |
+| 业务认证接入 | [认证案例](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.zh-CN.md) |
 
-SDK 和扩展 API 当前为开发者预览。仓库 SDK 可构建为本地 npm 包，尚未发布到公共 npm registry；扩展商城尚未实现。
+示例固定使用已发布的 SDK/CLI **0.1.0-alpha.7**；宿主仓库内的参考 SDK 仍为 alpha.1，两者独立维护。扩展 API 仍处于开发者预览，扩展商城尚未实现。覆盖范围与已知边界见[验证记录](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/docs/verification.md).
 
 ## 工作台已经提供什么
 
@@ -106,10 +112,12 @@ SDK 和扩展 API 当前为开发者预览。仓库 SDK 可构建为本地 npm �
 
 ## 体验差旅表单
 
-1. 按下方步骤从源码启动桌面应用，连接支持兼容工具调用的模型。
-2. 在技能管理中导入仓库的 `examples/skills/travel-expense` 技能包。
-3. 在新任务中选择该技能，输入「我要报销差旅费」。
-4. 填写 Agent 展示的表单，确认后将结果发送到聊天。
+1. 启动支持扩展的宿主，连接支持兼容工具调用的模型。
+2. 按[差旅报销助手说明](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.zh-CN.md)构建、打包并安装扩展。
+3. 启动案例的本地演示服务，在扩展设置中配置服务地址。
+4. 在聊天中请求报销差旅费用，完成三步表单；在扩展主页查询账本，或按说明验证丢响应后的核实流程。
+
+上方截图为宿主两步表单演示；独立仓库提供三步业务案例及真实桌面验证截图。
 
 ## 从源码运行
 

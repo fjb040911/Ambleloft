@@ -787,3 +787,22 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  await row.locator('summary').focus();await page.keyboard.press('Enter');
  await expect(row.getByLabel('工具输出')).not.toBeVisible();
 });
+
+test('reconciled forms replace stale local errors with the confirmed submission result',async({page})=>{
+ await prepare(page,'请核实提交结果。');
+ await page.evaluate(()=>{
+  const flow={id:'recovery',runId:'demo',turnKey:'u',revision:1,status:'unknown',step:0,error:'提交未完成：INTERNAL',drafts:{main:{amount:'1280'}},template:{title:'报销申请',steps:[{id:'main',title:'费用',fields:[{name:'amount',label:'金额',type:'text'}]}],submit:{label:'提交'}}};
+  (window as any).__recovery=flow;
+  (window as any).desktop.forms.list=async()=>[structuredClone(flow)];
+  (window as any).desktop.forms.action=async()=>{throw Error('暂时无法连接');};
+  (window as any).__formsChanged();
+ });
+ const card=page.getByLabel('报销申请',{exact:true});
+ await expect(card.getByRole('alert')).toContainText('INTERNAL');
+ await card.getByRole('button',{name:'核实提交结果'}).click();
+ await expect(card.getByRole('alert')).toContainText('暂时无法连接');
+ await page.evaluate(()=>{const f=(window as any).__recovery;f.revision++;f.status='completed';delete f.error;f.results={main:{claimId:'CL-001',amount:'1280.00'}};(window as any).__formsChanged();});
+ await expect(card.getByRole('alert')).toHaveCount(0);
+ await expect(card.getByRole('region',{name:'提交结果'})).toContainText('CL-001');
+ await expect(card.getByRole('button',{name:'核实提交结果'})).toHaveCount(0);
+});
