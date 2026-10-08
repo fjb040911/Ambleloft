@@ -1,0 +1,89 @@
+{
+  "$schema": "../contracts/extension.schema.json",
+  "specVersion": "1.0-draft",
+  "publisher": "example",
+  "name": "project-card",
+  "version": "0.1.0",
+  "displayName": "项目卡片",
+  "description": "通过同一个操作为页面和 Agent 返回项目基本信息。",
+  "engines": {
+    "api": "1"
+  },
+  "main": "dist/extension.mjs",
+  "permissions": [
+    {
+      "capability": "projects.read",
+      "scope": "project"
+    }
+  ],
+  "contributes": {
+    "home": {
+      "title": "项目卡片",
+      "webRoot": "web",
+      "entry": "index.html"
+    },
+    "commands": [
+      {
+        "id": "example.project-card.open",
+        "title": "打开项目卡片",
+        "action": "openHome"
+      }
+    ]
+  },
+  "operations": [
+    {
+      "id": "example.project-card.describe",
+      "title": "读取项目卡片",
+      "description": "返回已授权项目的名称和说明，不返回工作目录。",
+      "handler": "describeProject",
+      "exposeTo": [
+        "page",
+        "agent"
+      ],
+      "effect": "read",
+      "projectScoped": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "projects.read"
+      ]
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 import {t, useLanguage} from './i18n';
-import { memo, useState, type ReactNode, isValidElement } from 'react';
+import { memo, type ReactNode, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import Artifact from './renderers/Artifact';
-import { copyText } from './clipboard';
+import {useCopyFeedback} from './hooks/use-copy-feedback';
 import 'katex/dist/katex.min.css';
 
 function textOf(node: ReactNode): string {
@@ -17,8 +17,8 @@ function textOf(node: ReactNode): string {
 }
 export function CopyButton({ text }: { text: string }) {
   useLanguage();
-  const [status, setStatus] = useState('复制');
-  return <button type="button" className="text-button" onClick={async () => { try { await copyText(text); setStatus('已复制'); } catch { setStatus('复制失败'); } }}> {t(status)} </button>;
+  const {status,copy}=useCopyFeedback();
+  return <button type="button" className="text-button" aria-live="polite" onClick={()=>void copy(text)}> {t(status)} </button>;
 }
 function CodeBlock({ children }: { children?: ReactNode }) {
   const child = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;

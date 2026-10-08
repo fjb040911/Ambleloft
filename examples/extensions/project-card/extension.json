@@ -1,0 +1,89 @@
+{
+  "$schema": "../../../specs/extensions/contracts/extension.schema.json",
+  "specVersion": "1.0-draft",
+  "publisher": "example",
+  "name": "project-card",
+  "version": "0.1.0",
+  "displayName": "%name%",
+  "description": "%description%",
+  "engines": {
+    "api": "1"
+  },
+  "main": "dist/extension.cjs",
+  "permissions": [
+    {
+      "capability": "projects.read",
+      "scope": "project"
+    }
+  ],
+  "contributes": {
+    "home": {
+      "title": "%name%",
+      "webRoot": "web",
+      "entry": "index.html"
+    },
+    "commands": [
+      {
+        "id": "example.project-card.open",
+        "title": "%open%",
+        "action": "openHome"
+      }
+    ]
+  },
+  "operations": [
+    {
+      "id": "example.project-card.describe",
+      "title": "%describe%",
+      "description": "%operationDescription%",
+      "handler": "describeProject",
+      "exposeTo": [
+        "page",
+        "agent"
+      ],
+      "effect": "read",
+      "projectScoped": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "projectId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "projects.read"
+      ]
+    }
+  ]
+}

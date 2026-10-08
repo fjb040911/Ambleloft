@@ -1,0 +1,29 @@
+/* Message center layout; interactive controls use shadcn variants. */
+.message-center { max-width:1120px; margin:0 auto; width:100%; container:messages / inline-size; }
+.message-actions,.message-filters { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.message-filters { justify-content:space-between; margin-top:12px; border-bottom:1px solid var(--border); padding-bottom:8px; }
+.message-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,.9fr); gap:24px; }
+.message-layout:not(:has(.message-detail)) { grid-template-columns:1fr; }
+.message-list { min-width:0; }
+.message-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
+.message-row.selected { background:var(--hover); border-radius:var(--radius-control); }
+.message-open { display:flex; flex:1; flex-direction:column; gap:8px; min-width:0; text-align:left; }
+.message-open strong { overflow-wrap:anywhere; }
+.message-row.unread strong:before { content:''; display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:8px; background:var(--accent); }
+.message-meta { font-size:.75rem; font-weight:400; color:var(--secondary); }
+.message-preview { overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; font-weight:400; color:var(--secondary); overflow-wrap:anywhere; }
+.message-detail { padding:20px; border:1px solid var(--border); border-radius:var(--radius-card); align-self:start; min-width:0; }
+.message-detail h2 { font-size:1.125rem; line-height:1.5; overflow-wrap:anywhere; }
+.message-detail-meta { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:.75rem; color:var(--secondary); }
+.message-detail p { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.7; }
+@container messages (max-width:680px) { .message-layout { grid-template-columns:1fr; } .message-detail { grid-row:1; } }
+.message-empty{text-align:center;padding:64px 24px;color:var(--muted,#777)}.message-empty svg{margin-bottom:14px}.message-empty h2,.message-empty h3{color:var(--text,inherit);font-weight:600}.message-count{margin-left:auto;background:var(--hover,#e7e9ee);color:inherit;border-radius:12px;padding:1px 7px;font-size:11px}.connection-form label{display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:13px}.connection-form input{padding:10px 12px;border:1px solid var(--border,#ccc);border-radius:9px;color:inherit;background:var(--surface,transparent)}.connection-issuer{overflow-wrap:anywhere}.account-section-title{font-size:17px;margin-top:28px}.connection-form input:focus-visible{outline:2px solid #397bec;outline-offset:3px}.message-open:active{background:var(--hover,rgba(128,128,128,.08))}@media(max-width:850px){.message-layout{grid-template-columns:1fr}.message-detail{grid-row:1}.message-center .section-heading{align-items:flex-start;gap:16px;flex-direction:column}}@media(prefers-reduced-motion:reduce){.message-center *{scroll-behavior:auto}}
+
+.sidebar-top-actions{display:flex;align-items:center;gap:8px;margin-left:auto;-webkit-app-region:no-drag}
+.sidebar-top-actions .icon-button{width:32px;height:32px;flex-shrink:0}
+.sidebar-messages{position:relative;overflow:visible}
+.sidebar-messages.active{background:var(--hover,rgba(128,128,128,.12));color:var(--secondary)}
+.sidebar-messages .message-count{position:absolute;top:-4px;right:-7px;display:flex;align-items:center;justify-content:center;min-width:17px;height:17px;margin:0;padding:0 4px;box-sizing:border-box;background:#d93643;color:#fff;border-radius:9px;font-size:10px;font-weight:600;line-height:17px;font-variant-numeric:tabular-nums;pointer-events:none;box-shadow:0 0 0 2px var(--sidebar,#f5f5f7)}
+.sidebar-top-actions .icon-button:focus-visible{outline:2px solid var(--accent,#397bec);outline-offset:3px}
+.sidebar-top-actions .icon-button:active{background:var(--hover,rgba(128,128,128,.12))}
+.connection-form select,.connection-form textarea{padding:10px 12px;border:1px solid var(--border);border-radius:9px;color:inherit;background:var(--surface,transparent);font:inherit}.connection-form textarea{min-height:120px;resize:vertical;font-family:monospace}.connection-form label small{color:var(--secondary);line-height:1.5}.connection-form input[type=checkbox]{align-self:flex-start;width:18px;height:18px;accent-color:var(--accent)}

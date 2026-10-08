@@ -11,7 +11,7 @@ function validateState(value) {
   }
   for (const task of value.tasks) {
     if(task.selectedSkillIds!==undefined&&(!Array.isArray(task.selectedSkillIds)||task.selectedSkillIds.length>20||task.selectedSkillIds.some(id=>typeof id!=='string'||id.length>120)))throw new Error('草稿技能格式无效');
-    if (typeof task.id !== 'string' || typeof task.prompt !== 'string' || !task.prompt.trim() || task.prompt.length > 20000 ||
+    if (typeof task.id !== 'string' || typeof task.prompt !== 'string' || task.prompt.length > 20000 ||
         typeof task.createdAt !== 'string' || typeof task.modelId !== 'string' ||
         typeof task.title !== 'string' || task.status !== 'draft' ||
         !(task.projectId === null || typeof task.projectId === 'string')) throw new Error('任务数据格式不正确');
@@ -22,13 +22,15 @@ function validateState(value) {
   }
   if(value.language!==undefined&&!['system','zh-CN','en'].includes(value.language))throw new Error('语言设置无效');
   if(value.fontScale!==undefined&&![90,100,110,120,130].includes(value.fontScale))throw new Error('字体大小设置无效');
-  return { ...(value.fontScale!==undefined?{fontScale:value.fontScale}:{}), ...(value.language ? {language:value.language}:{}), tasks: value.tasks, projects: value.projects, theme: value.theme };
+  return { ...(Number.isSafeInteger(value.revision)?{revision:value.revision}:{}), ...(Number.isSafeInteger(value.settingsRevision)?{settingsRevision:value.settingsRevision}:{}), ...(value.fontScale!==undefined?{fontScale:value.fontScale}:{}), ...(value.language ? {language:value.language}:{}), tasks: value.tasks, projects: value.projects, theme: value.theme };
 }
 
 function createStore(directory, database) {
   if (database) return {
     read: async () => validateState(await database.call("readWorkspace")),
     write: value => database.call("writeWorkspace", validateState(value)),
+    patch: input => database.call("patchWorkspace", input),
+    resolveConversation: id => database.call("resolveConversation", {id}),
   };
   const file = path.join(directory, 'workspace.json');
   let queue = Promise.resolve();

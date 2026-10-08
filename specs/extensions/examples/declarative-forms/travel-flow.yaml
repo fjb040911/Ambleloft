@@ -1,0 +1,77 @@
+# Proposed DSL v1. Referenced Operations must be implemented and declared separately.
+version: 1
+id: travel-expense-flow
+title: 差旅报销
+description: 先保存行程草稿，再填写费用，最后核对并提交。
+steps:
+  - id: itinerary
+    title: 填写行程
+    fields:
+      - name: region
+        type: select
+        label: 出差地区
+        required: true
+        options:
+          - label: 上海
+            value: shanghai
+          - label: 北京
+            value: beijing
+      - name: date
+        type: date
+        label: 出差日期
+        required: true
+    next:
+      kind: operation
+      label: 保存行程并继续
+      operation: example.expense.saveDraft
+      input:
+        projectId:
+          from: context.projectId
+        region:
+          from: steps.itinerary.region
+        date:
+          from: steps.itinerary.date
+      recovery:
+        operation: example.expense.lookupDraftSubmission
+  - id: expenses
+    title: 填写费用
+    fields:
+      - name: amount
+        type: money
+        label: 金额
+        required: true
+        currency: CNY
+        scale: 2
+        minimum: "0.01"
+        maximum: "100000.00"
+      - name: remark
+        type: textarea
+        label: 费用说明
+        maxLength: 500
+  - id: confirmation
+    title: 核对信息
+    description: 下一步将展示实际提交的行程、金额及业务操作。
+    fields:
+      - name: checked
+        type: checkbox
+        label: 我已核对所填写的信息
+        required: true
+submit:
+  kind: operation
+  label: 提交报销
+  operation: example.expense.submit
+  input:
+    projectId:
+      from: context.projectId
+    draftId:
+      from: results.itinerary.draftId
+    amount:
+      from: steps.expenses.amount
+    currency:
+      value: CNY
+    remark:
+      from: steps.expenses.remark
+    checked:
+      from: steps.confirmation.checked
+  recovery:
+    operation: example.expense.lookupFinalSubmission

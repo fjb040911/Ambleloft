@@ -1,0 +1,49 @@
+/* Extension management uses the available settings width, independently of OS chrome. */
+
+.extension-install-actions { display:flex; align-items:center; gap:4px; }
+.extension-detail { min-width:0; }
+.extension-detail-header { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:16px; align-items:start; padding:24px 0; }
+.extension-detail-heading { min-width:0; display:grid; gap:6px; }
+.extension-detail-title { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.extension-detail-title h1 { font-size:calc(26px * var(--font-scale,1)); font-weight:600; letter-spacing:-.025em; line-height:1.3; margin:0; overflow-wrap:anywhere; }
+.extension-detail-heading p { margin:0; color:var(--secondary); line-height:1.6; overflow-wrap:anywhere; }
+.extension-detail-meta { font-size:calc(12px * var(--font-scale,1)); }
+.extension-detail-description { font-size:var(--content-font-size); padding-top:4px; }
+.extension-detail-logo { display:grid; place-items:center; width:52px; height:52px; border:1px solid var(--border); background:var(--raised); border-radius:var(--radius-card); color:var(--secondary); }
+.extension-detail-actions { display:flex; gap:8px; align-items:center; }
+.extension-detail-tabbar { border-bottom:1px solid var(--border); padding-bottom:5px; }
+.extension-detail-tabs { margin-top:8px; min-width:0; }
+.extension-detail-tabs [data-slot=tabs-content] { min-width:0; }
+.extension-readme { max-width:72ch; overflow-wrap:anywhere; }
+.extension-readme .markdown > :first-child { margin-top:0; }
+.extension-readme .markdown h1 { font-size:calc(22px * var(--font-scale,1)); }
+.extension-install-info { border-top:1px solid var(--border); margin-top:28px; padding-top:16px; font-size:calc(13px * var(--font-scale,1)); }
+.extension-install-info summary { cursor:pointer; color:var(--secondary); width:fit-content; }
+.extension-install-info summary:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.extension-install-info dl { display:grid; grid-template-columns:minmax(100px,1fr) minmax(0,2fr); gap:12px 20px; margin:16px 0 0; }
+.extension-install-info dt { color:var(--secondary); overflow-wrap:anywhere; }
+.extension-install-info dd { margin:0; overflow-wrap:anywhere; }
+.extension-permission-definition { display:contents; }
+.extension-permission-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.extension-permission-heading h2,.extension-self-grants h3 { margin:0; font-size:calc(16px * var(--font-scale,1)); font-weight:600; }
+.extension-permission-heading p,.extension-self-grants p { margin:6px 0 0; color:var(--secondary); line-height:1.6; }
+.extension-projects { margin:20px 0 0; padding:0; list-style:none; }
+.extension-projects li { display:flex; gap:12px; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); }
+.extension-projects svg { flex:none; color:var(--secondary); }
+.extension-projects li > div { flex:1; min-width:0; overflow-wrap:anywhere; }
+.extension-projects p { margin:4px 0 0; font-size:calc(13px * var(--font-scale,1)); color:var(--secondary); }
+.extension-permission-empty { color:var(--secondary); padding:24px 0; }
+.extension-self-grants { padding-top:20px; }
+.extension-config-field { min-width:0; }
+.extension-config-field [data-slot="field-label"], .extension-config-field [data-slot="field-description"] { overflow-wrap:anywhere; }
+.extension-config-actions { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+.extension-config-save { display:flex; gap:12px; align-items:center; margin-left:auto; flex-wrap:wrap; }
+.extension-config-save > span { font-size:calc(12px * var(--font-scale,1)); color:var(--secondary); }
+.extension-detail [hidden] { display:none !important; }
+.integration-page:has(.extension-detail) > .integration-heading,
+.integration-page:has(.extension-detail) > .integration-tab-row,
+.integration-page:has(.extension-detail) > .integration-tools { display:none; }
+@container integration-page (max-width:600px) {
+ .extension-detail-header { grid-template-columns:52px minmax(0,1fr); }
+ .extension-detail-actions { grid-column:2; }
+}

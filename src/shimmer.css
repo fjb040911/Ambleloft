@@ -1,0 +1,6 @@
+/* Animated background-position must not be !important: it would override keyframes.
+   Compile the official shimmer utility separately from the legacy compatibility sheet. */
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "shadcn/tailwind.css";
+@custom-variant dark (&:is([data-theme="dark"] *));
+@source inline("shimmer");

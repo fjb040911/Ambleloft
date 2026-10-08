@@ -1,0 +1,45 @@
+version: 1
+id: travel
+title: 财务报销助手
+description: 本机模拟报销。修改行程会生成新草稿；返回上一步不会撤销业务记录。
+steps:
+  - id: itinerary
+    title: 行程
+    fields:
+      - name: region
+        type: select
+        label: 出差地区
+        required: true
+        options:
+          - {label: 上海, value: shanghai}
+          - {label: 北京, value: beijing}
+      - {name: date, type: date, label: 出差日期, required: true}
+    next:
+      kind: operation
+      label: 保存行程并继续
+      operation: example.expense.saveDraft
+      input:
+        projectId: {from: context.projectId}
+        region: {from: steps.itinerary.region}
+        date: {from: steps.itinerary.date}
+      recovery: {operation: example.expense.lookupDraft}
+  - id: expenses
+    title: 费用
+    fields:
+      - {name: amount, type: money, label: 金额, currency: CNY, scale: 2, minimum: '0.01', maximum: '1000000.00', required: true}
+      - {name: remark, type: textarea, label: 说明, maxLength: 2000, required: true}
+  - id: confirmation
+    title: 确认
+    fields:
+      - {name: confirmed, type: checkbox, label: 我已核对报销信息, required: true}
+submit:
+  kind: operation
+  label: 提交报销
+  operation: example.expense.submitExpense
+  input:
+    projectId: {from: context.projectId}
+    draftId: {from: results.itinerary.draftId}
+    amount: {from: steps.expenses.amount}
+    remark: {from: steps.expenses.remark}
+    confirmed: {from: steps.confirmation.confirmed}
+  recovery: {operation: example.expense.lookupExpense}

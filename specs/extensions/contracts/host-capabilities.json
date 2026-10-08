@@ -1,0 +1,59 @@
+{
+  "formatVersion": 1,
+  "kind": "source-capability-inventory",
+  "hostApi": "1",
+  "manifestVersion": "1.0-draft",
+  "formVersion": 1,
+  "runtimeNegotiation": false,
+  "features": [
+    {
+      "id": "operations",
+      "status": "preview",
+      "source": "core/extensions/operations.cjs"
+    },
+    {
+      "id": "configuration",
+      "status": "preview",
+      "source": "core/extensions/bootstrap.cjs"
+    },
+    {
+      "id": "localMessages",
+      "status": "preview",
+      "source": "core/extensions/message-service.cjs"
+    },
+    {
+      "id": "declarativeForms",
+      "status": "preview",
+      "source": "core/forms/service.cjs"
+    },
+    {
+      "id": "mcpApps",
+      "status": "preview",
+      "source": "core/extensions/mcp-apps.cjs"
+    },
+    {
+      "id": "extensionAuthentication",
+      "status": "preview",
+      "source": "core/auth/extension-auth.cjs"
+    },
+    {
+      "id": "agentHooks",
+      "status": "unavailable"
+    },
+    {
+      "id": "formResumeApi",
+      "status": "unavailable"
+    },
+    {
+      "id": "messageActions",
+      "status": "preview",
+      "source": "core/extensions/action-journal.cjs"
+    }
+  ],
+  "limits": {
+    "localMessages": "Local messages and persistent Operation actions; account-scoped message delivery remains unavailable.",
+    "declarativeForms": "Static fields and linear steps; no dynamic choices, template migration or SDK presentation API.",
+    "mcpApps": "Packaged task UI only; not arbitrary remote MCP or full ChatGPT Apps compatibility.",
+    "extensionAuthentication": "OIDC resource grants and host HTTPS requests. Interactive reconnect on expiry; no refresh tokens, raw tokens or WebSocket credentials."
+  }
+}

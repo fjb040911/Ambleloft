@@ -20,7 +20,7 @@ function codexEnvironment(config, home, inherited = process.env) {
   if (config.apiKey) env.ATELIER_PROVIDER_KEY = config.apiKey;
   return env;
 }
-function configurationArgs(config, home) {
+function configurationArgs(config, home, extensionMcp) {
   const runtime = engineRuntime();
   const values = {
     model: config.model, model_provider: 'atelier',
@@ -37,18 +37,20 @@ function configurationArgs(config, home) {
     'mcp_servers.atelier_progress.env.ELECTRON_RUN_AS_NODE': '1',
     'features.default_mode_request_user_input': true,
     'analytics.enabled': false, web_search: config.webSearch || 'disabled', 'features.multi_agent': false,
-    'shell_environment_policy.inherit': 'all', 'shell_environment_policy.include_only': SHELL_ENV_ALLOWLIST, 'shell_environment_policy.exclude': ['ATELIER_PROVIDER_KEY'],
+    'shell_environment_policy.inherit': 'all', 'shell_environment_policy.include_only': SHELL_ENV_ALLOWLIST, 'shell_environment_policy.exclude': ['ATELIER_PROVIDER_KEY','AMBLE_EXTENSION_AUTH'],
   };
+  if(extensionMcp){values['features.shell_snapshot']=false;values['mcp_servers.amble_extensions.url']=extensionMcp.url;values['mcp_servers.amble_extensions.env_http_headers.Authorization']='AMBLE_EXTENSION_AUTH';values['mcp_servers.amble_extensions.tool_timeout_sec']=extensionMcp.tool_timeout_sec;for(const name of ['extension_list_operations','extension_invoke_operation','forms_list','forms_present'])values['mcp_servers.amble_extensions.tools.'+name+'.approval_mode']='approve';}
   if(config.effectiveLimits?.contextWindow)values.model_context_window=config.effectiveLimits.contextWindow;
   if(config.effectiveLimits?.autoCompactTokenLimit)values.model_auto_compact_token_limit=config.effectiveLimits.autoCompactTokenLimit;
   if (config.apiKey) values['model_providers.atelier.env_key'] = 'ATELIER_PROVIDER_KEY';
   return Object.entries(values).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
 }
 class CodexRPC {
-  constructor({ executable, config, home, cwd, notification, request, exit }) {
+  constructor({ executable, config, home, cwd, notification, request, exit, extensionMcp }) {
     this.pending = new Map(); this.sequence = 0; this.closed = false; this.tail = '';
     const env = codexEnvironment(config, home);
-    this.child = spawn(executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    if(extensionMcp)env.AMBLE_EXTENSION_AUTH=extensionMcp.http_headers.Authorization;
+    this.child = spawn(executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home, extensionMcp)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdin.on('error', () => {});
     this.child.stderr.on('data', data => { this.tail = redact((this.tail + data.toString()).slice(-5000), config.apiKey); });
     this.reader = createInterface({ input: this.child.stdout, crlfDelay: Infinity });

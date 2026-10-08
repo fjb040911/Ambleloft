@@ -1,0 +1,36 @@
+{
+  "name": "@ambleloft/extension-sdk",
+  "version": "0.1.0-alpha.1",
+  "description": "Ambleloft Extension SDK \u2014 M1 developer preview",
+  "license": "Apache-2.0",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    },
+    "./webview": {
+      "types": "./webview.d.ts",
+      "import": "./webview.mjs"
+    },
+    "./extension.schema.json": "./extension.schema.json",
+    "./form.schema.json": "./form.schema.json"
+  },
+  "files": [
+    "index.cjs",
+    "index.mjs",
+    "index.d.ts",
+    "webview.mjs",
+    "webview.d.ts",
+    "contracts.d.ts",
+    "extension.schema.json",
+    "README.md",
+    "LICENSE",
+    "form.schema.json"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -173,11 +173,11 @@ test('markdown uses normal paragraph spacing and renders escaped Mermaid indenta
 &#x20; end
 &#x20; subgraph M1[成员 A 的 Ambleloft]
 &#x20;   I1[邀请收件箱]
-&#x20;   P1[私有 coding 会话 · 本地 Agent]
+&#x20;   P1[私有 coding 任务 · 本地 Agent]
 &#x20;   C1[本地 clone + 任务分支]
 &#x20; end
 &#x20; subgraph M2[成员 B 的 Ambleloft]
-&#x20;   P2[私有 coding 会话 · 本地 Agent]
+&#x20;   P2[私有 coding 任务 · 本地 Agent]
 &#x20;   C2[本地 clone + 任务分支]
 &#x20; end
 &#x20; subgraph Git[Git 远程 GitHub/GitLab/Gitee/自建]
@@ -220,16 +220,16 @@ test('expanded file panel keeps the current conversation draft, live messages an
 
 test('sidebar categories disclose independently and folders reflect expansion',async({page})=>{
  await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
- const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'聊天',exact:true});
+ const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'任务',exact:true});
  await expect(projects).toHaveAttribute('aria-expanded','true');await projects.click();await expect(projects).toHaveAttribute('aria-expanded','false');await expect(chats).toHaveAttribute('aria-expanded','true');
  await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder.locator('.lucide-folder-open')).toHaveCount(1);
  const alignment=await sidebar.locator('.project-tree').first().evaluate(el=>({project:el.querySelector('.project-tree-name span')!.getBoundingClientRect().left,task:el.querySelector('.tree-task > button > span:nth-child(2)')!.getBoundingClientRect().left,folder:el.querySelector('.tree-toggle svg')!.getBoundingClientRect().right,dot:el.querySelector('.task-state')!.getBoundingClientRect().right}));
- expect(Math.abs(alignment.project-alignment.task)).toBeLessThan(1);expect(Math.abs(alignment.folder-alignment.dot)).toBeLessThan(1);
+ expect(alignment.task).toBeGreaterThan(alignment.project);expect(alignment.dot).toBeGreaterThan(alignment.folder);
  await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-folder')).toHaveCount(1);await expect(sidebar.locator('.tree-task')).not.toBeVisible();
  await sidebar.getByRole('button',{name:'展开项目：Demo'}).click();await expect(sidebar.locator('.tree-task')).toHaveCount(1);
  await chats.click();await expect(chats).toHaveAttribute('aria-expanded','false');
- await chats.hover();await expect(sidebar.getByRole('button',{name:'新建聊天',exact:true})).toHaveCSS('opacity','1');
- await sidebar.getByRole('button',{name:'新建聊天',exact:true}).click();await expect(chats).toHaveAttribute('aria-expanded','false');
+ await chats.hover();await expect(sidebar.getByRole('button',{name:'新建任务',exact:true})).toHaveCSS('opacity','1');
+ await sidebar.getByRole('button',{name:'新建任务',exact:true}).click();await expect(chats).toHaveAttribute('aria-expanded','false');
  await expect.poll(()=>page.evaluate(()=>document.activeElement?.tagName)).toBe('TEXTAREA');
  await projects.focus();await expect(sidebar.getByRole('button',{name:'添加项目',exact:true})).toHaveCSS('opacity','1');
  await page.keyboard.press('Enter');await expect(projects).toHaveAttribute('aria-expanded','false');
@@ -242,8 +242,8 @@ test('project names toggle children while management and new-task actions stay i
  const project=sidebar.getByRole('button',{name:'Demo',exact:true});
  await project.click();await expect(project).toHaveAttribute('aria-expanded','false');await expect(sidebar.locator('.tree-task')).not.toBeVisible();
  await project.click();await expect(project).toHaveAttribute('aria-expanded','true');await expect(sidebar.locator('.tree-task')).toBeVisible();
- await sidebar.getByRole('button',{name:'管理项目：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
- await page.keyboard.press('Escape');
+ await sidebar.getByRole('button',{name:'管理项目：Demo',exact:true}).click();await expect(page.getByRole('dialog',{name:'管理项目'})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(project).toHaveAttribute('aria-expanded','true');
  await sidebar.getByRole('button',{name:'在项目中新建任务：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await sidebar.locator('#nav-projects').evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
@@ -256,7 +256,18 @@ test('custom project picker supports keyboard selection, dismissal and shared ma
  await page.keyboard.press('ArrowDown');await expect(list.getByRole('option',{name:'Demo',exact:true})).toBeFocused();await page.keyboard.press('Enter');
  await expect(picker).toContainText('Demo');await expect(picker).toBeFocused();await expect(list).toHaveCount(0);
  await picker.click();await expect(list.getByRole('option',{name:'Demo',exact:true})).toHaveAttribute('aria-selected','true');await page.keyboard.press('Escape');await expect(picker).toBeFocused();
- await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await picker.click();await expect(list).toHaveCSS('border-radius','12px');
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await picker.click();await expect(list).toHaveAttribute('data-slot','popover-content');await expect(list).toHaveCSS('display','flex');await expect(list).toHaveCSS('flex-direction','column');
  await expect(list).toBeVisible();await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));await page.screenshot({path:'test-results/project-picker-custom-dark.png'});
  await page.getByRole('heading').first().click();await expect(list).toHaveCount(0);
+});
+
+test('markdown image nodes remain mounted while preview scroll position updates',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>{(window as any).__files['README.md'].text='# 图片文档\n\n![示意图](image.png)\n\n'+Array.from({length:80},(_,i)=>'段落 '+i+'\n\n').join('');});
+ await project(page);await page.getByRole('button',{name:'README.md',exact:true}).click();
+ const image=page.locator('.file-markdown img');await expect(image).toHaveCount(1);
+ await image.evaluate(node=>(window as any).__previewImage=node);
+ const body=page.locator('.file-markdown');
+ for(const top of [120,400,750,200]){await body.evaluate((node,top)=>{node.scrollTop=top;node.dispatchEvent(new Event('scroll',{bubbles:true}));return new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));},top);await expect.poll(()=>image.evaluate(node=>node===(window as any).__previewImage)).toBe(true);}
+ await expect(image).toHaveAttribute('src','atelier-preview://fixture/image.png');
 });

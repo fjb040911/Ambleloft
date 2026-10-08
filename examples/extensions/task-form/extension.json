@@ -1,0 +1,140 @@
+{
+  "specVersion": "1.0-draft",
+  "publisher": "example",
+  "name": "task-form",
+  "version": "0.1.0",
+  "displayName": "差旅表单演示",
+  "engines": {
+    "api": "1"
+  },
+  "main": "main.cjs",
+  "permissions": [
+    {
+      "capability": "storage",
+      "scope": "self"
+    }
+  ],
+  "contributes": {
+    "mcpApps": [
+      {
+        "uri": "ui://example.task-form/travel",
+        "title": "差旅记录",
+        "entry": "form.html",
+        "mimeType": "text/html;profile=mcp-app"
+      }
+    ]
+  },
+  "operations": [
+    {
+      "id": "example.task-form.render",
+      "title": "填写差旅记录",
+      "description": "显示差旅记录表单。提供地点和金额，用户可以在任务内修改。",
+      "handler": "render",
+      "exposeTo": [
+        "agent"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "destination",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "destination",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [],
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://example.task-form/travel"
+        }
+      }
+    },
+    {
+      "id": "example.task-form.save",
+      "title": "保存差旅记录",
+      "description": "将地点和金额保存到此扩展的本地记录中，不会提交给财务系统。",
+      "handler": "save",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "write",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "destination",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": [
+          "destination",
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "storage"
+      ]
+    }
+  ]
+}

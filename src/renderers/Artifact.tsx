@@ -3,7 +3,7 @@ import PreviewDialog from '../PreviewDialog';
 import {t,useLanguage} from '../i18n';
 import { lazy, Suspense, useEffect, useId, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { copyText } from '../clipboard';
+import {useCopyFeedback} from '../hooks/use-copy-feedback';
 const Chart = lazy(() => import('./Chart'));
 const Drawio = lazy(() => import('./Drawio'));
 let mermaidQueue = Promise.resolve();
@@ -41,14 +41,14 @@ function Mermaid({ source }: { source: string }) {
 }
 export default function Artifact({ language, source }: { language: string; source: string }) {
   useLanguage();
-  const [raw, setRaw] = useState(false); const [copy, setCopy] = useState('复制');
+  const [raw, setRaw] = useState(false); const {status:copy,copy:copySource}=useCopyFeedback();
   const [expanded, setExpanded] = useState(false);
   const [previewOpen,setPreviewOpen]=useState(false);
   return <section className={`artifact ${expanded ? 'artifact-expanded' : ''}`} aria-label={`${language} 图表`}>
     <div className="artifact-toolbar"><strong>{language === 'drawio' ? t('draw.io · 基础预览') : language}</strong><div>
       <button type="button" onClick={() => setRaw(!raw)}>{raw ? t('预览') : t('源码')}</button>
       {language==='mermaid'?<button type="button" aria-label={t('最大化 Mermaid 图表')} title={t('最大化 Mermaid 图表')} onClick={()=>setPreviewOpen(true)}><Maximize2 size={16}/></button>:<button type="button" onClick={() => setExpanded(!expanded)}>{expanded ? t('收起') : t('放大')}</button>}
-      <button type="button" onClick={async () => { try { await copyText(source); setCopy('已复制'); } catch { setCopy('复制失败'); } }}>{t(copy)}</button>
+      <button type="button" aria-live="polite" onClick={()=>void copySource(source)}>{t(copy)}</button>
       <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([source], { type: 'text/plain' })); const a = document.createElement('a'); a.href = url; a.download = `diagram.${language === 'echarts' ? 'json' : language === 'mermaid' ? 'mmd' : language}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>{t('下载')}</button>
     </div></div>
     {raw ? <pre>{source}</pre> : source.length > 50000 ? <p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p> : <div className="artifact-preview"><Suspense fallback={<p>{t('正在加载预览…')}</p>}>

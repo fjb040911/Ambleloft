@@ -9,6 +9,7 @@ test('image capability is editable and persists separately for each model',async
   await page.getByRole('button',{name:'设置',exact:true}).click();
   await page.getByRole('button',{name:'模型提供商',exact:true}).click();
   await page.getByRole('button',{name:'编辑',exact:true}).click();
+  await page.getByRole('button',{name:'模型能力与协议',exact:true}).click();
  };
  await page.goto('/');await open();
  await expect(page.getByLabel('text-model · 图片输入能力')).toHaveValue('unknown');

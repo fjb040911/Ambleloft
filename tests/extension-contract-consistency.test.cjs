@@ -1,0 +1,2 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {publicCode}=require('../core/extensions/errors.cjs');
+test('all SDK public failure codes survive the host whitelist',()=>{const source=fs.readFileSync('specs/extensions/contracts/sdk.d.ts','utf8');const union=source.match(/export type ErrorCode = ([\s\S]*?);/)[1];for(const [,code]of union.matchAll(/'([A-Z_]+)'/g))assert.equal(publicCode({code}),code);assert.equal(publicCode({code:'UNDECLARED'}),'INTERNAL');assert.match(union,/'QUOTA_EXCEEDED'/);});

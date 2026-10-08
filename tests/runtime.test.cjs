@@ -199,3 +199,18 @@ test('archiving another task preserves pending approvals and live updates, inclu
  runtime.approve({runId:'waiting',approvalId:'42',decision:'accept'});
  assert.equal(waiting.status,'running');assert.equal(waiting.approvals.length,0);assert.equal(sent.length,1);
 });
+
+test('command actions are preserved and redacted; compaction has a real lifecycle',()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};
+ const context={turnKey:'u',run:{messages:[],tools:[]},config:{apiKey:'secret'}};
+ const event=(method,item)=>runtime.notification(context,{method,params:{item}});
+ event('item/started',{id:'cmd',type:'commandExecution',command:'cat secret.md',commandActions:[{type:'read',name:'secret.md',path:'/secret.md'}]});
+ assert.equal(context.run.tools[0].commandActions[0].type,'read');
+ assert.ok(!JSON.stringify(context.run.tools[0]).includes('secret'));
+ event('item/completed',{id:'cmd',type:'commandExecution',command:'cat secret.md',status:'completed'});
+ assert.equal(context.run.tools[0].commandActions[0].type,'read');
+ event('item/started',{id:'compact',type:'contextCompaction'});
+ assert.equal(context.run.tools[1].status,'inProgress');
+ event('item/completed',{id:'compact',type:'contextCompaction'});
+ assert.equal(context.run.tools.length,2);assert.equal(context.run.tools[1].status,'completed');
+});
