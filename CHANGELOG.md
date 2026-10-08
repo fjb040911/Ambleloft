@@ -1,5 +1,39 @@
 # Preview notes / 预览版说明
 
+## v0.3.0 — Interactive Agent applications preview
+
+- Introduces trusted Node.js extensions, isolated pages, permission-checked operations, configuration, message actions, and OIDC business authentication.
+- Adds in-chat forms with linear multi-step flows, drafts, confirmation, and explicit recovery of uncertain submissions; includes limited MCP Apps task UI support.
+- Refreshes chat, approvals, settings, skills, extension details, and message center interactions with shadcn/ui components.
+- Repositions the bilingual README around building interactive Agent applications, with current UI screenshots and a bilingual travel-expense example.
+- Ships macOS Apple Silicon DMG and ZIP with SHA-256 checksums. Ad-hoc signed, not Apple-notarized. Windows/Linux remain target platforms; public task subscriptions and Agent hooks remain roadmap items.
+- 新增扩展与聊天表单能力，优化聊天、授权、设置和扩展管理体验；更新中英文文档与截图。此版本为开发者预览，API 尚未稳定，SDK 未发布到公共 npm。
+
+## 2026-10-08 — message actions and extension authentication (unreleased)
+
+- Added persistent notification Operation dispatch, explicit result reporting, atomic message updates, idempotent reports and conservative restart recovery.
+- Added declared business resources, interactive enterprise OIDC connection, encrypted host-owned access tokens and bounded HTTPS requests. Settings shows extension connections and supports disconnect.
+- Synced independent SDK/CLI contracts and source capability diagnostics; added a notification/authentication demonstration. No npm publication.
+- Token expiry currently requires interactive reconnect; account-scoped notifications and WebSocket credentials are not implemented. See [integration guide](specs/extensions/message-actions-auth-guide.md).
+
+## 2026-10-05 — extension heartbeat recovery (unreleased)
+
+- Pause extension heartbeat failure detection during system suspend. On resume, probe active backends and allow a full response window before declaring them unresponsive.
+- Use a monotonic heartbeat clock and re-probe after long host timer delays, avoiding false failures when power events are missed. Stopped/stale processes are not reactivated by resume.
+- 验证：18 项心跳及真实 Node 后端测试通过，涵盖模拟长时间休眠、唤醒回复、漏报休眠事件、唤醒后真正卡死和过期进程。没有通过自动化让真实电脑进入休眠；此验证不代表跨平台电源事件验收。
+
+## 2026-10-04 — extension source preview (unreleased)
+
+These changes describe the current source tree, not a new installer or npm release.
+
+- Trusted Node.js extension backends, isolated pages, configuration and notification integration, and shared authorization for page/Agent operations.
+- Host-rendered YAML forms: strict validation, multi-step drafts, confirmed chat or business submission, and explicit result recovery. MCP Apps remains a separate, limited task UI path.
+- Fixed missing approval configuration for forms_list/forms_present and autosave interruptions while typing.
+- Preserved allowlisted backend error codes through the host, including UNSUPPORTED, FORBIDDEN and OUTCOME_UNKNOWN; arbitrary exception details are not exposed and effect status stays host-controlled.
+- Verification: 202 host tests passed; the local SDK/CLI reimbursement desktop checks T19 and T21 now pass. This is not a cross-platform release certification.
+
+以上为未发布的源码更新：新增业务表单基础链路，修复表单工具审批与自动保存打断输入；后端公开错误码已正确透传。SDK/CLI 仍通过本地预览包联调，未据此发布新版安装包或 npm 包。
+
 ## v0.2.1 — macOS Apple Silicon preview
 
 - First downloadable DMG and ZIP for Apple Silicon Macs, with SHA-256 checksums. Ad-hoc signed; not Apple-notarized.

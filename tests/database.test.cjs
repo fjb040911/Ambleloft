@@ -17,11 +17,11 @@ test('SQLite persists workspace and turns across restart, ignores legacy JSON, a
   await fs.writeFile(path.join(dir,'provider.json'),'invalid legacy data');
   db=new Database(dir);await db.call('ready');
   const store=createStore(dir,db);
-  assert.deepEqual(await store.read(),{theme:'system',projects:[],tasks:[]});
+  assert.deepEqual(await store.read(),{theme:'system',projects:[],tasks:[],revision:0,settingsRevision:0});
   const provider=createProviderStore(dir,{},db);
   assert.equal((await provider.list()).providers.length,0);
-  const state={theme:'dark',projects:[{id:'p',name:'设计',path:dir,createdAt:'2026-09-15'}],tasks:[]};
-  await store.write(state);
+  let state={revision:0,theme:'dark',projects:[{id:'p',name:'设计',path:dir,createdAt:'2026-09-15'}],tasks:[]};
+  state=await store.write(state);
   const run={id:'r',modelSessionId:'session-fixture',status:'running',projectId:'p',messages:[{id:'u',role:'user',text:'hello',timing:{}},{id:'a',role:'assistant',text:'partial'}],tools:[],fileChanges:[{turnKey:'u',files:[{id:'f',path:'README.md',status:'modified',hunks:[{lines:['-before','+after']}]}]}],updatedAt:'2026-09-15'};
   await db.call('saveRuns',[run]);
   run.messages[1].text='complete';await db.call('saveRuns',[run]);

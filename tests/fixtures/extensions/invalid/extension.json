@@ -1,0 +1,9 @@
+{
+  "specVersion": "1.0-draft",
+  "publisher": "fixture",
+  "name": "invalid",
+  "version": "1.0.0",
+  "displayName": "Invalid permission scope",
+  "engines": { "api": "1" },
+  "permissions": [{ "capability": "projects.read", "scope": "self" }]
+}

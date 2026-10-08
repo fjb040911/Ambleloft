@@ -1,0 +1,165 @@
+{
+  "specVersion": "1.0-draft",
+  "publisher": "example",
+  "name": "notification-auth",
+  "version": "0.1.0",
+  "displayName": "通知与认证演示",
+  "engines": {
+    "api": "1"
+  },
+  "main": "main.cjs",
+  "permissions": [],
+  "contributes": {
+    "home": {
+      "title": "通知与认证演示",
+      "webRoot": "web",
+      "entry": "index.html"
+    }
+  },
+  "operations": [
+    {
+      "id": "example.notification-auth.publish",
+      "title": "发送演示通知",
+      "description": "发送演示通知，用于验证扩展宿主链路。",
+      "handler": "publish",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "write",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "timeoutMs": 30000,
+      "risk": {
+        "reversible": false,
+        "impacts": []
+      }
+    },
+    {
+      "id": "example.notification-auth.complete",
+      "title": "完成演示任务",
+      "description": "完成演示任务，用于验证扩展宿主链路。",
+      "handler": "complete",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "write",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "eventKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "eventKey"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "timeoutMs": 30000,
+      "risk": {
+        "reversible": false,
+        "impacts": []
+      }
+    },
+    {
+      "id": "example.notification-auth.connect",
+      "title": "连接企业账号",
+      "description": "连接企业账号，用于验证扩展宿主链路。",
+      "handler": "connect",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "timeoutMs": 120000
+    },
+    {
+      "id": "example.notification-auth.request",
+      "title": "查询业务服务",
+      "description": "查询业务服务，用于验证扩展宿主链路。",
+      "handler": "request",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "timeoutMs": 30000
+    }
+  ],
+  "authentication": {
+    "resources": [
+      {
+        "id": "business",
+        "title": "演示业务服务",
+        "baseUrl": "https://api.example.com/",
+        "audience": "https://api.example.com/",
+        "scopes": [
+          "tasks.read"
+        ]
+      }
+    ]
+  }
+}

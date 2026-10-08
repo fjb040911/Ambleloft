@@ -1,0 +1,10 @@
+.extension-custom-icon { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; }
+.extension-custom-icon img { display:block; width:100%; height:100%; object-fit:contain; }
+.extension-icon-light,.extension-icon-dark { width:100%; height:100%; }
+.extension-icon-dark { display:none; }
+[data-theme="dark"] .extension-icon-light { display:none; }
+[data-theme="dark"] .extension-icon-dark { display:block; }
+@media (prefers-color-scheme:dark) {
+ :root:not([data-theme="light"]) .extension-icon-light { display:none; }
+ :root:not([data-theme="light"]) .extension-icon-dark { display:block; }
+}

@@ -1,0 +1,9 @@
+{
+  "specVersion": "1.0-draft",
+  "publisher": "fixture",
+  "name": "skills-only",
+  "version": "1.0.0",
+  "displayName": "%title%",
+  "engines": { "api": "1" },
+  "skills": ["skills/demo"]
+}

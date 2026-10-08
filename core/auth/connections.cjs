@@ -1,0 +1,10 @@
+const {randomUUID}=require('node:crypto');
+// Configuration only: storing a connection never authenticates a user.
+function connectionHandlers(db,transaction){
+ const key='authentication.connections.v1';
+ const read=()=>JSON.parse(db.prepare('SELECT data FROM settings WHERE key=?').get(key)?.data||'{"revision":0,"defaultId":null,"connections":[]}');
+ const save=s=>db.prepare('INSERT INTO settings(key,data) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET data=excluded.data').run(key,JSON.stringify(s));
+ const validate=v=>{if(!v||typeof v!=='object'||Object.keys(v).some(k=>!['id','name','issuer','clientId','tenant'].includes(k)))throw Error('INVALID_ARGUMENT: Connection');for(const k of ['name','issuer','clientId'])if(typeof v[k]!=='string'||!v[k].trim()||v[k].length>2048)throw Error('INVALID_ARGUMENT: '+k);if(v.tenant!==undefined&&(typeof v.tenant!=='string'||v.tenant.length>256))throw Error('INVALID_ARGUMENT: tenant');let u;try{u=new URL(v.issuer);}catch{throw Error('INVALID_ARGUMENT: issuer');}if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash)throw Error('INVALID_ARGUMENT: HTTPS issuer required');return {id:v.id||randomUUID(),name:v.name.trim(),issuer:v.issuer,clientId:v.clientId.trim(),tenant:v.tenant?.trim()||''};};
+ return {authConnections({action='list',expectedRevision,value,id}={}){if(action==='list')return read();return transaction(()=>{const s=read();if(s.revision!==expectedRevision)throw Error('CONFLICT: Connections changed');if(action==='save'){const v=validate(value),i=s.connections.findIndex(c=>c.id===v.id);if(value.id&&i<0)throw Error('NOT_FOUND');if(i<0){if(s.connections.length>=50)throw Error('QUOTA_EXCEEDED');s.connections.push(v);}else s.connections[i]=v;}else if(action==='remove'){if(!s.connections.some(c=>c.id===id))throw Error('NOT_FOUND');s.connections=s.connections.filter(c=>c.id!==id);if(s.defaultId===id)s.defaultId=null;}else if(action==='default'){if(id!==null&&!s.connections.some(c=>c.id===id))throw Error('NOT_FOUND');s.defaultId=id;}else throw Error('UNSUPPORTED');s.revision++;save(s);return s;});}};
+}
+module.exports={connectionHandlers};

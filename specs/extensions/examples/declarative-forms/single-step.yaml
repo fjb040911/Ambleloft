@@ -1,0 +1,34 @@
+# Declarative forms DSL v1.
+version: 1
+id: travel-expense
+title: 差旅费用登记
+description: 请填写出差地区和金额，确认后发送到当前聊天。
+fields:
+  - name: region
+    type: select
+    label: 出差地区
+    required: true
+    options:
+      - label: 上海
+        value: shanghai
+      - label: 北京
+        value: beijing
+  - name: amount
+    type: money
+    label: 金额
+    required: true
+    currency: CNY
+    scale: 2
+    minimum: "0.01"
+    maximum: "100000.00"
+  - name: travel-date
+    type: date
+    label: 出差日期
+    required: true
+  - name: remark
+    type: textarea
+    label: 费用说明
+    maxLength: 500
+submit:
+  kind: chat
+  label: 将填写结果发送到聊天

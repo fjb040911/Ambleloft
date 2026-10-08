@@ -8,17 +8,17 @@ test('declarative contributions validate ownership, version, code and command ta
  assert.throws(()=>registry.register(manifest),/already/);dispose();registry.register(manifest);dispose();assert.equal(registry.list().length,1);
  for(const invalid of [{...manifest,entry:'index.js'},{...manifest,apiVersion:'2'},{...manifest,requiredCapabilities:['tasks.read']},{...manifest,contributes:{views:[{id:'core.home',title:'Bad',body:'Text'}]}},{...manifest,contributes:{commands:[{id:manifest.id+'.bad',title:'Bad',viewId:'other.view'}]}}])assert.throws(()=>validate(invalid));
 });
-test('extension lifecycle persists, rejects disabled commands and serializes mutations',async()=>{
- let saved=null;const database={async call(method,{value}){if(method==='readSetting')return structuredClone(saved);saved=structuredClone(value);}};
- const service=new ExtensionService(database);await service.initialize();await service.install(manifest);
- assert.equal(service.execute(manifest.id+'.open').viewId,manifest.id+'.home');
- await assert.rejects(service.install(manifest),/已安装/);
- await service.setEnabled(manifest.id,false);assert.throws(()=>service.execute(manifest.id+'.open'),/停用/);
- const restarted=new ExtensionService(database);await restarted.initialize();assert.equal(restarted.snapshot().installed[0].enabled,false);
- await Promise.all([restarted.setEnabled(manifest.id,true),restarted.remove(manifest.id)]);
- assert.equal(restarted.snapshot().installed.length,0);assert.equal(saved.length,0);
-});
 test('failed persistence does not expose uncommitted contributions',async()=>{
- const service=new ExtensionService({async call(method){if(method==='readSetting')return null;throw new Error('disk full');}});
- await service.initialize();await assert.rejects(service.install(manifest),/disk full/);assert.equal(service.snapshot().installed.length,0);
+ const service=new ExtensionService({async call(){throw new Error('disk full');}});
+ await assert.rejects(service.install(manifest),/disk full/);assert.equal(service.snapshot().installed.length,0);
+});
+
+test('extension snapshots resolve description localization with locale and default fallback',()=>{
+ const service=new ExtensionService({}, {locale:'zh-CN'});
+ service.items=[{id:'demo',kind:'package',manifest:{displayName:'Demo',description:'%description%',version:'1.0.0'},dictionaries:{default:{description:'Default description'},zh:{description:'本地化描述'}}}];
+ assert.equal(service.snapshot().installed[0].manifest.description,'本地化描述');
+ delete service.items[0].dictionaries.zh;
+ assert.equal(service.snapshot().installed[0].manifest.description,'Default description');
+ service.items[0].manifest.description='Plain description';
+ assert.equal(service.snapshot().installed[0].manifest.description,'Plain description');
 });

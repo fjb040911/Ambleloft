@@ -85,8 +85,7 @@ class AgentRuntime {
     finally { this.editing = false; }
   }
   persist() {
-    const snapshot = structuredClone(this.runs);
-    const operation = this.writes.then(() => this.database ? this.database.call('saveRuns', snapshot) : writeJSON(this.file, snapshot));
+    const operation = this.writes.then(() => {const snapshot=structuredClone(this.runs);return this.database ? this.database.call('saveRuns', snapshot) : writeJSON(this.file, snapshot);});
     this.writes = operation.catch(() => {});
     return operation;
   }
@@ -97,12 +96,25 @@ class AgentRuntime {
       this.persist().catch(() => { run.error = '对话保存失败，请检查磁盘空间。'; this.publish(structuredClone(run)); for(const context of this.contexts.values())if(context.run===run)void this.finish(context,'failed',run.error); });
     }, 250);
   }
-  async start(input) {
+  async patchWorkspace(input) {
+    const deleted=(input?.changes||[]).filter(c=>c.kind==='project'&&c.action==='delete').map(c=>c.id);
+    if(!deleted.length)return this.workspace.patch(input);
+    if(this.contexts.size||this.editing)throw new Error('BUSY: 请等待任务结束后再删除项目');
+    this.editing=true;
+    const operation=this.writes.then(async()=>{
+      const state=await this.workspace.patch(input);
+      for(const run of this.runs)if(deleted.includes(run.projectId)){run.projectId=null;run.archivedAt ||= new Date().toISOString();this.publish(structuredClone(run));}
+      return state;
+    });
+    this.writes=operation.catch(()=>{});
+    try{return await operation;}finally{this.editing=false;}
+  }
+  async start(input, hostContext={}) {
     if (this.closing || this.editing) throw new Error('请等待当前操作结束');
-    if(input.runId&&[...this.contexts.values()].some(c=>c.requestRunId===input.runId))throw new Error('该任务正在执行或排队');
+    if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?c.requestRunId===input.runId:c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
     if (!input || typeof input.prompt !== 'string' || (!input.prompt.trim() && !input.selectedSkillIds?.length) || input.prompt.length > 20000) throw new Error('请输入 1–20000 字的任务内容');
     // Reserve before any await so two windows/rapid clicks cannot start two processes.
-    const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.key=randomUUID();context.requestRunId=input.runId;this.contexts.set(context.key,context);
+    const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.owner=hostContext.owner;context.key=randomUUID();context.requestRunId=input.runId;context.draftId=input.draftId;this.contexts.set(context.key,context);
     try {
       context.skills = this.skills ? await this.skills.prepare(input.selectedSkillIds) : {instructions:'',snapshots:[],explicit:''};
       if(!this.skills && input.selectedSkillIds?.length)throw new Error('技能服务不可用');
@@ -125,7 +137,9 @@ class AgentRuntime {
       for(const file of attachments){if(!file||typeof file.path!=='string'||!path.isAbsolute(file.path)||file.path.length>4096)throw new Error('附件路径无效');await fs.stat(file.path);}
       if (previous && BUSY.includes(previous.status)) throw new Error('该任务尚未停止');
       const state = await this.workspace.read();
-      const selectedProjectId = previous ? previous.projectId : input.projectId;
+      const draft=input.draftId?state.tasks.find(task=>task.id===input.draftId):null;
+      if(input.draftId&&(previous||!draft||draft.archivedAt||draft.revision!==input.draftRevision))throw new Error('CONFLICT: 草稿已变更，请重新打开');
+      const selectedProjectId = previous ? previous.projectId : draft?draft.projectId:input.projectId;
       const project = selectedProjectId ? state.projects.find(item => item.id === selectedProjectId) : null;
       if (selectedProjectId && !project) throw new Error('项目不存在，请重新选择');
       const cwd = project ? await fs.realpath(project.path) : (previous?.cwd || path.join(this.directory, 'scratch', context.key));
@@ -133,7 +147,7 @@ class AgentRuntime {
       else if (!(await fs.stat(cwd)).isDirectory()) throw new Error('项目路径不是文件夹');
       const home = await prepareEngineHome(this.directory);
       if (context.cancelled) throw new Error('执行已取消');
-      const run = previous || { id: randomUUID(), title: prompt.slice(0, 50), messages: [], tools: [], approvals: [],
+      const run = previous || { id: randomUUID(), conversationId:draft?.conversationId||randomUUID(), ...(draft?{draftId:draft.id}:{}), title: draft?.title||prompt.slice(0, 50), messages: [], tools: [], approvals: [],
         projectId: project?.id || null, cwd, model: config.model, baseUrl: config.baseUrl, providerFingerprint: fingerprint(config),
         createdAt: new Date().toISOString(), threadId: null, turnId: null };
       const modelChange=previous&&(run.model!==config.model||run.baseUrl!==config.baseUrl)?config.model:null;
@@ -147,9 +161,17 @@ class AgentRuntime {
       run.status = 'preparing'; run.error = ''; run.retrying=false; run.questions=[]; run.approvals = []; run.turnId = null;
       context.timing = { startedAt: context.startedAt };
       context.turnKey = randomUUID();
-      run.messages.push({ id: context.turnKey, role: 'user', model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
-      if (!previous) this.runs.unshift(run);
-      context.run = run; context.config = config;
+      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.formSubmissionId?{formSubmissionId:hostContext.formSubmissionId}:{}), model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
+      context.config = config;
+      if (!previous && this.database) {
+        const operation=this.writes.then(async()=>{
+          const identities=await this.database.call('commitRunStart',{runs:structuredClone([run,...this.runs]),draftId:draft?.id,expectedRevision:draft?.revision});
+          run.conversationId=identities.find(item=>item.id===run.id).conversationId;
+          this.runs.unshift(run);
+        });
+        this.writes=operation.catch(()=>{});await operation;
+      } else if(!previous)this.runs.unshift(run);
+      context.run = run;
       await this.persist(); this.changed(run);
       if (context.cancelled) { await this.finish(context, 'interrupted'); return structuredClone(run); }
       context.launch=async()=>{
@@ -161,7 +183,12 @@ class AgentRuntime {
         this.changed(run);
       });
       if(context.cancelled||context.done){context.bridge?.close();return structuredClone(run);}
-      context.rpc = this.rpcFactory({ executable, config:context.bridge?.config||config, home, cwd,
+      if(this.extensionRouter){const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
+       const extensionContext=signal=>({caller:'agent',projectId:run.projectId,owner:context.owner,signal,validate:()=>{if(context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});}});
+       context.extensionChannel=await createAgentChannel({forms:this.forms?{list:async()=>{const c=await this.forms.catalog();return {templates:c.entries.map(e=>({key:e.key,template:e.template})),instances:(await this.forms.list(run.id)).map(f=>({id:f.id,key:f.key,step:f.step,status:f.status})),errors:c.errors};},present:(args)=>this.forms.present(run,context.turnKey,args.key,args.prefill)}:undefined,list:signal=>this.extensionRouter.list(extensionContext(signal)),invoke:(id,input,signal)=>this.mcpApps?this.mcpApps.invokeTask(id,input,extensionContext(signal),run,context.turnKey):this.extensionRouter.invoke(id,input,extensionContext(signal)),...(this.mcpApps?{tools:signal=>this.mcpApps.tools(extensionContext(signal)),resource:(uri,signal)=>this.mcpApps.resourceForAgent(uri,extensionContext(signal))}:{})});
+       if(context.done||context.cancelled){context.extensionChannel.close();return;}
+      }
+      context.rpc = this.rpcFactory({ executable, config:context.bridge?.config||config, home, cwd, extensionMcp:context.extensionChannel?.config,
         notification: message => this.notification(context, message), request: message => this.request(context, message),
         exit: error => { if (!context.done) void this.finish(context, 'failed', redact(error.message, config.apiKey)); } });
       void this.execute(context).catch(error => { if (!context.done) void this.finish(context, context.cancelled ? 'interrupted' : 'failed', redact(error.message, config.apiKey)); });
@@ -227,7 +254,7 @@ class AgentRuntime {
         existing.text = clean(item.text);
         if (['commentary', 'final_answer'].includes(item.phase)) existing.phase = item.phase;
         existing.status = method === 'item/completed' ? 'completed' : 'running';
-      } else if (['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch', 'plan'].includes(item.type)) {
+      } else if (['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch', 'plan', 'contextCompaction'].includes(item.type)) {
         if(item.type==='mcpToolCall'&&item.server==='atelier_progress'&&item.tool==='update_plan') {
           if(method==='item/completed'&&item.status==='completed'&&validPlan(item.arguments)) {
             run.plans=[...(run.plans||[]).filter(plan=>plan.turnKey!==context.turnKey),{turnKey:context.turnKey,explanation:clean(item.arguments.explanation),steps:item.arguments.plan.map(step=>({step:clean(step.step),status:step.status==='in_progress'?'inProgress':step.status}))}];
@@ -237,6 +264,8 @@ class AgentRuntime {
         const previous = run.tools.find(tool => tool.id === item.id);
         const tool = { ...(previous || stamp()), id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
           detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : previous?.detail || '')) };
+        if(item.type==='commandExecution'&&Array.isArray(item.commandActions))tool.commandActions=item.commandActions.filter(action=>['read','listFiles','search','unknown'].includes(action.type)).map(action=>({type:action.type,...Object.fromEntries(['name','path','query'].filter(key=>typeof action[key]==='string').map(key=>[key,clean(action[key])]))}));
+        if(item.type==='contextCompaction'){tool.label='上下文压缩';tool.detail='';}
         const index = run.tools.findIndex(tool => tool.id === item.id); if (index < 0) run.tools.push(tool); else run.tools[index] = tool;
       }
     } else if(method==='item/mcpToolCall/progress'){
@@ -298,14 +327,14 @@ class AgentRuntime {
   async stop(id) {
     const context = [...this.contexts.values()].find(c=>c.run?.id===id);
     if (!context || context.run?.id !== id) return;
-    context.cancelled = true; context.run.status = 'stopping'; this.changed(context.run);
+    context.cancelled = true;context.extensionChannel?.close(); context.run.status = 'stopping'; this.changed(context.run);
     try { if (context.run.turnId && context.rpc && !context.rpc.closed) await context.rpc.call('turn/interrupt', { threadId: context.run.threadId, turnId: context.run.turnId }, 5000); } catch {}
     if (!context.done) await this.finish(context, 'interrupted', '已停止。若工具已执行，请核实结果后继续。');
   }
   async finish(context, status, error = '') {
     if (context.done) return;
     context.done = true;
-    context.rpc?.close(); context.bridge?.close();
+    context.extensionChannel?.close();context.rpc?.close(); context.bridge?.close();
     const diagnostic=context.lastModelDiagnostic;
     if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
       error = (diagnostic.stage==='translate_tools'?'模型响应已接收，但工具调用解析失败。':error)+'\n模型请求诊断：'+diagnostic.reason+'；阶段：'+diagnostic.stage+

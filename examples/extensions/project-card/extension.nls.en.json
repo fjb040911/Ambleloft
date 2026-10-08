@@ -1,0 +1,7 @@
+{
+  "name": "Project Card",
+  "description": "Read an authorized local project from a page or the Agent.",
+  "open": "Open Project Card",
+  "describe": "Read Project Card",
+  "operationDescription": "Read the authorized project name and description without its working directory."
+}

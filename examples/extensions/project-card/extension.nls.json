@@ -1,0 +1,7 @@
+{
+  "name": "项目卡片",
+  "description": "在页面或 Agent 中了解已授权的本地项目。",
+  "open": "打开项目卡片",
+  "describe": "读取项目卡片",
+  "operationDescription": "返回已授权项目的名称和说明，不返回工作目录。"
+}

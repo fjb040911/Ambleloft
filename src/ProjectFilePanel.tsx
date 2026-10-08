@@ -1,4 +1,4 @@
-import {lazy,Suspense,useEffect,useLayoutEffect,useRef,useState,type CSSProperties,type PointerEvent,type ReactNode} from 'react';
+import {lazy,Suspense,useCallback,useEffect,useLayoutEffect,useRef,useState,type CSSProperties,type PointerEvent,type ReactNode} from 'react';
 import {ChevronDown,ChevronRight,ChevronsDownUp,Code2,Copy,ExternalLink,File,FileCode2,FileImage,FileText,Folder,Folders,FolderOpen,Maximize2,Minimize2,PanelRight,RefreshCw,RotateCcw,Search,WrapText,X,ZoomIn,ZoomOut} from 'lucide-react';
 import Markdown from './Markdown';
 import FileTypeIcon from './FileTypeIcon';
@@ -97,10 +97,10 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
  useEffect(()=>{if(body.current)body.current.scrollTop=reading.top||0;setZoom(1);},[active,mode,file?.path]);
  useEffect(()=>setPreviewZoom(100),[active]);
  useEffect(()=>{const receive=(event:MessageEvent)=>{if(event.source!==htmlFrame.current?.contentWindow||event.data?.type!=='atelier-preview-scroll'||typeof event.data.top!=='number'||!Number.isFinite(event.data.top))return;putReading({top:Math.max(0,event.data.top)});};window.addEventListener('message',receive);return()=>window.removeEventListener('message',receive);},[]);
- const openFile=(path:string,pinned=false)=>{
+ const openFile=useCallback((path:string,pinned=false)=>{
   setError('');setMenu(null);
   setState(old=>{const found=old.tabs.find(tab=>tab.path===path);const tabs=found?old.tabs.map(tab=>tab.path===path?{...tab,pinned:tab.pinned||pinned}:tab):[...old.tabs.filter(tab=>tab.pinned),{path,pinned}];return {...old,tabs,active:path,tree:(panelRef.current?.clientWidth||999)<590?false:old.tree};});
- };
+ },[]);
  const handledRequest=useRef<number|null>(null);
  useEffect(()=>{
   if(!request||!open||paused||!api||handledRequest.current===request.id)return;
@@ -121,13 +121,13 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
  const run=async(action:()=>Promise<unknown>)=>{setBusy(true);try{await action();}catch(e){setNotice((e as Error).message);}finally{setBusy(false);}};
  const ext=(path:string)=>path.split('.').pop()?.toLowerCase()||'';
  const openExternal=(path:string,application:string)=>void run(async()=>{const app=await api?.open({...context,path,application});if(app){save('app.'+ext(path),app);setNotice(t('已在外部应用中打开'));}setMenu(null);});
- const resource=(path:string)=>{
+ const resource=useCallback((path:string)=>{
   if(!base)return '';
   const current=base+active.split('/').map(encodeURIComponent).join('/');
   return new URL(path.startsWith('/')?path.slice(1):path,path.startsWith('/')?base:current).href;
- };
+ },[base,active]);
  const fileUrl=base+active.split('/').map(encodeURIComponent).join('/')+'?v='+encodeURIComponent(file?.version||'');
- const follow=(path:string)=>{if(path.startsWith('#')){const target=document.getElementById(path.slice(1));target?.scrollIntoView();return;}const url=new URL(resource(path));if(url.protocol==='atelier-preview:'&&url.host===new URL(base).host)openFile(decodeURIComponent(url.pathname.slice(1)));};
+ const follow=useCallback((path:string)=>{if(path.startsWith('#')){const target=document.getElementById(path.slice(1));target?.scrollIntoView();return;}const url=new URL(resource(path));if(url.protocol==='atelier-preview:'&&url.host===new URL(base).host)openFile(decodeURIComponent(url.pathname.slice(1)));},[resource,base,openFile]);
  const toggleFolder=(path:string)=>setState(old=>({...old,expanded:old.expanded.includes(path)?old.expanded.filter(item=>item!==path&&!item.startsWith(path+'/')):[...old.expanded,path]}));
  const renderEntries=(path:string,depth=0):ReactNode=>{
   const listing=directories[path];
