@@ -12,7 +12,7 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('品牌设计');
  await page.getByRole('textbox',{name:'任务内容'}).fill('设计包装');
  await page.getByRole('button',{name:'保存任务草稿'}).click();
- await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.project-children .tree-task')).toContainText('设计包装');
  await page.locator('.project-tree-name').hover();
  await expect(page.getByRole('region',{name:'项目信息'})).toContainText('品牌设计');
@@ -59,7 +59,8 @@ test('sidebar component preserves project and task pagination and keyboard acces
  });
  await page.goto('/');
  const projects=page.getByRole('region',{name:'我的项目'});const tasks=page.getByRole('region',{name:'任务',exact:true});
- await expect(projects.locator('.project-tree')).toHaveCount(30);
+ // Offscreen project rows are virtualized; verify pagination through its user-facing control.
+ await expect(projects.getByRole('button',{name:'加载更多项目'})).toBeAttached();
  await projects.getByRole('button',{name:'加载更多项目'}).click();await expect(projects.getByRole('button',{name:'加载更多项目'})).toHaveCount(0);await expect(projects.getByRole('button',{name:'管理项目：项目 31',exact:true})).toBeAttached();
  await expect(tasks.locator('.tree-task')).toHaveCount(30);
  await tasks.getByRole('button',{name:/加载更多/}).click();await expect(tasks.locator('[data-slot=sidebar-menu-item]')).toHaveCount(35);await expect(tasks.getByRole('button',{name:/加载更多/})).toHaveCount(0);

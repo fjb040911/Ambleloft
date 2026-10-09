@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import {t, useLanguage} from './i18n';
 import { memo, type ReactNode, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -18,7 +19,7 @@ function textOf(node: ReactNode): string {
 export function CopyButton({ text }: { text: string }) {
   useLanguage();
   const {status,copy}=useCopyFeedback();
-  return <button type="button" className="text-button" aria-live="polite" onClick={()=>void copy(text)}> {t(status)} </button>;
+  return <Button type="button" variant="ghost" size="sm" aria-live="polite" onClick={()=>void copy(text)}> {t(status)} </Button>;
 }
 function CodeBlock({ children }: { children?: ReactNode }) {
   const child = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;

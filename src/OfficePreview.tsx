@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import {RefreshCw} from 'lucide-react';
 import type {FileContext,OfficePreview as OfficeData} from './types';
@@ -35,8 +36,8 @@ export default function OfficePreview({context,path,version,reload=0,baseUrl,sho
   },initial.current?0:1500);initial.current=false;
   return()=>{cancelled=true;clearTimeout(timer);};
  },[context.projectId,context.runId,context.artifactId,path,version,reload,retry]);
- return <div className="office-preview">{showRefresh&&<div className="office-inline-toolbar"><button className="secondary-button" aria-label={t('刷新文件')} onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('刷新文件')}</button></div>}
-  {(busy||error)&&<div className={error?'file-warning office-status':'file-notice office-status'} role={error?'alert':'status'}><span>{error?t(error):t(data?'正在更新预览…':'正在准备文档预览…')}{error&&data?' '+t('当前显示上次成功的预览。'):''}</span>{error&&<button className="secondary-button" onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('重试')}</button>}</div>}
+ return <div className="office-preview">{showRefresh&&<div className="office-inline-toolbar"><Button variant="outline" aria-label={t('刷新文件')} onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('刷新文件')}</Button></div>}
+  {(busy||error)&&<div className={error?'file-warning office-status':'file-notice office-status'} role={error?'alert':'status'}><span>{error?t(error):t(data?'正在更新预览…':'正在准备文档预览…')}{error&&data?' '+t('当前显示上次成功的预览。'):''}</span>{error&&<Button variant="outline" onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('重试')}</Button>}</div>}
   {data?.kind==='spreadsheet'?<Spreadsheet data={data}/>:data?.kind==='presentation'?<Suspense fallback={<p>{t('正在加载…')}</p>}><Slides url={baseUrl+path.split('/').map(encodeURIComponent).join('/')+'?office='+data.asset} slides={data.slides} legacy={data.legacy}/></Suspense>:!busy&&!error?<p>{t('没有可预览的内容')}</p>:null}
  </div>;
 }

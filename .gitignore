@@ -56,3 +56,9 @@ outputs/
 tooling-report/
 coverage/
 .cache/
+
+# Local design/video projects; published videos live in Release assets.
+/.hyperframes/
+/design-previews/
+/videos/
+/.github/media/*.mp4

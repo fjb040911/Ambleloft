@@ -36,8 +36,8 @@ test('installation actions stay in the header and dirty configuration survives c
  await page.getByRole('button',{name:'更多安装方式'}).click();await page.getByRole('menuitem',{name:'加载开发目录'}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('directory');
  await page.locator('.extension-list-card').click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toHaveCount(0);
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByLabel('language').fill('English');
- page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'返回扩展列表'}).click();await expect(page.getByLabel('language')).toHaveValue('English');
- page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'停用',exact:true}).click();await expect(page.locator('.extension-detail-title')).toContainText('已启用');
+ await page.getByRole('button',{name:'返回扩展列表'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');
+ await page.getByRole('button',{name:'停用',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.locator('.extension-detail-title')).toContainText('已启用');
  await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('tab',{name:'设置',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');
  await page.getByRole('button',{name:'保存配置',exact:true}).click();await expect(page.getByText('已保存',{exact:true})).toBeVisible();await page.getByRole('button',{name:'返回扩展列表'}).click();await expect(page.locator('.extension-list-card')).toBeVisible();
 });

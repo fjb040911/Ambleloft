@@ -9,13 +9,14 @@ import {useSkills} from './skills';
 import {Fragment,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {Search,BookOpen,Folder,FileText,Puzzle,Plus,Settings,FolderPlus} from 'lucide-react';
 import {Command,CommandDialog,CommandShortcut,CommandInput,CommandList,CommandGroup,CommandItem,CommandEmpty,CommandSeparator} from './components/ui/command';
-import {t} from './i18n';
+import {t,formatDate,useLanguage} from './i18n';
 import type {SearchResult} from './types';
 import './workspace-search.css';
 const categoryLabels={task:'任务',project:'项目',extension:'扩展',skill:'技能'};
 export type SearchAction='new-task'|'new-project'|'settings'|'extensions';
 const actions=[{id:'new-task' as const,title:'新建任务',keywords:'new task chat',Icon:Plus},{id:'new-project' as const,title:'创建项目',keywords:'new create project',Icon:FolderPlus},{id:'settings' as const,title:'设置',keywords:'settings preferences',Icon:Settings},{id:'extensions' as const,title:'管理扩展',keywords:'extensions plugins',Icon:Puzzle}];
 export default function WorkspaceSearch({close,open,fallback,onAction}:{close():void;open(item:SearchResult):void;fallback:SearchResult[];onAction(action:SearchAction):void}){
+ useLanguage();
  const highlight=(text:string)=>{
   const words=query.trim().split(/\s+/).filter(Boolean);if(!words.length)return text;
   const escaped=words.map(word=>word.split('').map(char=>'\\u'+char.charCodeAt(0).toString(16).padStart(4,'0')).join(''));
@@ -74,7 +75,7 @@ export default function WorkspaceSearch({close,open,fallback,onAction}:{close():
  {[...new Set(items.map(item=>item.kind))].map((kind,index)=><Fragment key={kind}>
  {index>0&&<CommandSeparator alwaysRender/>}
  <CommandGroup heading={t(categoryLabels[kind])}>
- {items.filter(item=>item.kind===kind).map(item=>{const Icon=item.kind==='project'?Folder:item.kind==='extension'?Puzzle:item.kind==='skill'?BookOpen:FileText;const showSnippet=!!item.snippet;return <CommandItem className="search-result" value={item.kind+':'+(item.draft?'draft:':'')+item.id} key={item.kind+':'+(item.draft?'draft:':'')+item.id} onSelect={()=>open(item)}><Icon aria-hidden="true"/><span className="flex min-w-0 flex-1 flex-col"><span className="truncate">{highlight(item.title)}</span>{showSnippet&&<span className="truncate text-xs text-muted-foreground">{highlight(item.snippet)}</span>}</span>{item.date&&<CommandShortcut><time>{new Date(item.date).toLocaleDateString()}</time></CommandShortcut>}</CommandItem>;})}
+ {items.filter(item=>item.kind===kind).map(item=>{const Icon=item.kind==='project'?Folder:item.kind==='extension'?Puzzle:item.kind==='skill'?BookOpen:FileText;const showSnippet=!!item.snippet;return <CommandItem className="search-result" value={item.kind+':'+(item.draft?'draft:':'')+item.id} key={item.kind+':'+(item.draft?'draft:':'')+item.id} onSelect={()=>open(item)}><Icon aria-hidden="true"/><span className="flex min-w-0 flex-1 flex-col"><span className="truncate">{highlight(item.title)}</span>{showSnippet&&<span className="truncate text-xs text-muted-foreground">{highlight(item.snippet)}</span>}</span>{item.date&&<CommandShortcut><time>{formatDate(item.date)}</time></CommandShortcut>}</CommandItem>;})}
  </CommandGroup></Fragment>)}
  {next&&<CommandGroup value="pagination"><CommandItem value="load-more" className="search-more" disabled={busy} onSelect={()=>void load(next)}>{t(busy?'正在加载…':'加载更多')}</CommandItem></CommandGroup>}
  {!!items.length&&!!matchedActions.length&&<CommandSeparator alwaysRender/>}

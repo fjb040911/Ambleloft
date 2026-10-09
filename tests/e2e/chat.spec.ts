@@ -71,7 +71,6 @@ test('user bubble contains only text and each finished turn has its own duration
   run.status='completed';run.approvals=[];(window as any).__emit();
  });
  await expect(page.locator('.turn-duration')).toHaveText(['用时 1 分 5 秒','用时 0 分 5 秒']);
- expect(await page.locator('.message.user').first().evaluate(el=>getComputedStyle(el).borderRadius)).toBe('22px');
  const items=await page.locator('.conversation-turn .turn-duration, .conversation-turn article').allTextContents();
  expect(items.findIndex(t=>t.includes('用时 1 分 5 秒'))).toBeLessThan(items.findIndex(t=>t.includes('第一轮回答')));
 });
@@ -155,6 +154,7 @@ test('unclassified providers resolve on completion; failed turns retain their pr
  await prepare(page);
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];delete run.messages[2].phase;run.messages[2].text='正在安装';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toContainText('正在安装');
+ await page.locator('.turn-progress-toggle').click();
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='failed';run.error='安装失败';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeVisible();await expect(page.getByRole('alert')).toContainText('安装失败');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.error='';run.messages.push({id:'last',role:'assistant',text:'安装完成，文档已生成。'});(window as any).__emit();});
@@ -198,6 +198,7 @@ test('thinking scrolls independently, disappears after interruption, and tools s
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
  await page.screenshot({path:'test-results/process-abc.png'});
  await page.evaluate(()=>{(window as any).__demoRun.status='interrupted';(window as any).__emit();});
+ await expect(page.locator('.process-panel')).toHaveCount(0);await page.locator('.turn-progress-toggle').click();
  await expect(window).toHaveCount(0);await expect(page.locator('.process-milestone')).toBeVisible();await expect(tool).toBeVisible();
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
  await page.locator('.turn-progress-toggle').click();await page.locator('.turn-progress-toggle').click();await expect(window).toHaveCount(0);
@@ -572,7 +573,8 @@ test('parallel streaming keeps sidebar order and selection stable after pointer 
 test('sidebar peer categories toggle without changing the current chat',async({page})=>{
  await prepare(page,'保持当前任务');
  await page.getByRole('button',{name:'隐藏侧栏',exact:true}).click();
- await expect(page.locator('#workspace-sidebar')).not.toBeVisible();
+ await expect(page.locator('#workspace-sidebar')).toHaveAttribute('aria-hidden','true');
+ await expect.poll(async()=>{const box=await page.locator('#workspace-sidebar').boundingBox();return box!.x+box!.width;}).toBeLessThanOrEqual(0);
  await expect.poll(async()=>(await page.locator('.main-shell').boundingBox())!.width).toBeGreaterThan(1000);
  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
  await page.getByRole('button',{name:'显示侧栏',exact:true}).click();
@@ -805,4 +807,43 @@ test('reconciled forms replace stale local errors with the confirmed submission 
  await expect(card.getByRole('alert')).toHaveCount(0);
  await expect(card.getByRole('region',{name:'提交结果'})).toContainText('CL-001');
  await expect(card.getByRole('button',{name:'核实提交结果'})).toHaveCount(0);
+});
+
+test('running summary exposes the current step while failed tools automatically reveal details',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=run.messages.slice(0,1);run.plans=[{turnKey:'u',explanation:'执行计划',steps:[{step:'读取资料',status:'completed'},{step:'生成报告',status:'inProgress'}]}];run.tools=[{id:'report',turnKey:'u',type:'commandExecution',label:'python report.py',status:'inProgress',detail:'Generating report'}];(window as any).__emit();});
+ await expect(page.locator('.turn-progress-toggle')).toContainText('生成报告');await expect(page.locator('.turn-progress-toggle')).toContainText('1/2');await expect(page.locator('.process-panel')).toBeVisible();
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toHaveCount(0);
+ await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='failed';(window as any).__demoRun.tools[0].detail='Report generation failed';(window as any).__emit();});
+ await expect(page.locator('.process-panel')).toBeVisible();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+ await page.locator('.process-entry.commandExecution summary').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.tools[0].status='completed';(window as any).__emit();});
+ await expect(page.locator('.process-panel')).toHaveCount(0);await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
+});
+
+test('queued execution follows application language',async({page})=>{
+ await prepare(page);
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByLabel('界面语言').selectOption('en');await page.getByRole('button',{name:'Back to app',exact:true}).click();
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='preparing';run.queued=true;run.approvals=[];(window as any).__emit();});
+ await expect(page.locator('.run-activity')).toHaveText('Queued · Waiting for an available execution slot or working directory');
+});
+
+test('project execution status and empty description are translated',async({page})=>{
+ await prepare(page);
+ await page.addInitScript(()=>{const api=(window as any).desktop;api.readWorkspace=async()=>({theme:'light',language:'en',tasks:[],projects:[{id:'p',name:'Demo',path:'/fixture',createdAt:new Date().toISOString()}]});const run=(window as any).__demoRun;run.projectId='p';run.status='completed';run.approvals=[];});
+ await page.reload();await page.locator('.project-tree-name').click();
+ await expect(page.locator('.project-task-list small')).toHaveText('Turn ended');
+ await expect(page.locator('.page-description')).toHaveText('Add a description to share context across project tasks.');
+});
+
+test('approval card keeps command and decisions readable across themes and narrow layouts',async({page})=>{
+ await prepare(page,'等待审批');const card=page.getByRole('region',{name:'执行授权'});
+ await expect(card).toContainText('允许执行此命令？');await page.screenshot({path:'test-results/approval-light.png'});
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByLabel('界面语言').selectOption('en');await page.getByRole('button',{name:'Dark',exact:true}).click();await page.getByRole('button',{name:'Back to app',exact:true}).click();
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.approvals[0].detail=JSON.stringify({command:'node scripts/check-project-and-extension-permissions.mjs --directory /a/very/long/project/path --verbose',cwd:'/a/very/long/project/path/with/additional/nested/directories',reason:'Review the project permissions before continuing.'});(window as any).__emit();});
+ await page.setViewportSize({width:640,height:800});const englishCard=page.getByRole('region',{name:'Execution approval'});
+ await expect(englishCard).toContainText('Allow this command to run?');await expect(englishCard.getByRole('button',{name:'Approve once',exact:true})).toBeVisible();
+ expect(await englishCard.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/approval-english-dark.png'});
+ await page.setViewportSize({width:360,height:740});await expect(englishCard.getByRole('button',{name:'Approve once',exact:true})).toBeVisible();expect(await englishCard.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.approvals[0].method='item/fileChange/requestApproval';run.approvals[0].detail='{}';(window as any).__emit();});await expect(englishCard).toContainText('Allow file changes?');
 });

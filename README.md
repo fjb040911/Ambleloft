@@ -1,62 +1,48 @@
 <div align="center">
-  <img src="public/brand/icon-128.png" width="96" height="96" alt="Ambleloft" />
+  <img src="public/brand/icon-128.png" width="80" height="80" alt="Ambleloft" />
   <h1>Ambleloft</h1>
-  <p><strong>Build interactive Agent applications.</strong></p>
-  <p>Bring forms, interfaces, and business operations into AI conversations.</p>
+  <p><strong>Bring your apps into AI conversations.</strong></p>
+  <p><a href="https://ambleloft.com/">Official website</a> · <a href="#build-your-first-extension">Build an extension</a> · <a href="specs/README.md">Documentation</a></p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
-  <p>Open-source desktop workspace · Your models · JavaScript / TypeScript extensions · Apache-2.0</p>
-  <p><a href="#try-the-travel-expense-form">Try an example app</a> · <a href="#build-your-first-extension">Build your first extension</a></p>
 </div>
 
-**You build the business capabilities. Ambleloft provides the interface and runtime for people and agents to work together.** Turn a request into a workflow where users fill in information, confirm actions, and review results inside the conversation. Build extensions with familiar JavaScript / TypeScript tools and npm packages.
+Ambleloft is an open-source platform for connecting your apps to AI agents. Build extensions that let users fill out forms, confirm actions, and follow business progress in chat.
 
-Targeting **Windows, macOS, and Linux**. Currently a **0.3.0 development preview**, validated on macOS Apple Silicon; Windows and Linux packages are not available yet. Extension capabilities below describe the current source. Run from source to try the latest features.
+[![Watch the 80-second introduction: complete a travel expense form in chat](.github/assets/intro-en.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)
 
-## From a request to an application
+**Watch the 80-second introduction:** [English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4) · [简体中文](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4). Both videos have captions and no audio.
 
-> **User:** I need to submit my travel expenses.
->
-> **Agent:** Presents a travel expense form.
->
-> **User:** Selects a location, enters an amount and date, reviews the information, and confirms.
->
-> **App:** Sends the structured information back to the conversation for the next step.
+*Real application UI with demo data and a simulated desktop bridge. The video shows collecting travel details and returning them to chat, not a production reimbursement submission.*
 
-Explore the complete [travel expense assistant](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) in the independent samples repository: a three-step form, submission to a local demo service, a records view, and read-only reconciliation after a lost response. This uses fictional data, not a production expense system.
+## Your app, inside the conversation
 
-To connect a business system, route form submissions to an extension's backend operation. Declarative forms support linear multi-step flows, saved drafts, and submission confirmation. For a custom interface, the limited MCP Apps adapter can display extension-provided HTML/JS inside a task.
+### Let users act in chat
 
-[Explore the forms guide](specs/extensions/declarative-forms-guide.md) · [See the in-chat UI example](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.md)
+Present a form or custom interface when a user asks to do something. They can enter details, review choices, and confirm the next step in the conversation. Use declarative forms for linear, multi-step flows, or the supported MCP Apps subset for custom HTML/JS.
 
-![Interactive travel expense form in Ambleloft](.github/assets/travel-expense-en.png)
+[Explore in-chat forms](specs/extensions/declarative-forms-guide.md)
 
-*The current UI with synthetic data and a two-step example template. The screenshot shows step 1, trip details; step 2 collects expenses. The bundled travel Skill is a simpler single-step example. Neither demonstration submits to an expense service.*
+### Let the Agent call your app
 
-## Three layers for your Agent application
+Wrap your existing APIs and business logic as extension operations. The same operation can serve your interface and the Agent. Ambleloft provides the runtime, permission checks, and confirmation interactions; your extension defines what the operation does.
 
-### Make conversation the entry point
+[Build your first operation](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.md)
 
-Use a Skill to describe when the agent should use your capability, a form or task UI to collect input, and an extension operation to execute business logic. Ship the interface, agent-callable operations, and backend together in one extension.
+### Bring progress back to the user
 
-An expense form needs amounts and dates. A service request needs a project and a description. You define the information your app needs; the workspace provides rendering, validation, and confirmation interactions.
+Subscribe to events from your business service and publish updates in the message center. Add action buttons so users can review a change and continue the workflow. The samples demonstrate SSE events and confirmed message actions.
 
-### Build with the npm ecosystem
+[Explore service events](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.md) · [Add message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md)
 
-Reuse libraries for data processing, document generation, and service integrations. Extensions have user-trusted Node.js backends and isolated frontend pages. Include runtime dependencies in the extension package or bundle them into your build.
-
-Users do not need to run npm or install system Node to install an extension. Developers prepare dependencies ahead of time; native modules still require target-platform and host ABI compatibility checks.
-
-### Give users a shared place to work
-
-Ambleloft provides project context, model connections, conversation history, execution approvals, and result review. Extensions can declare settings, business operations, and message actions, using the host's permission checks and interaction mechanisms.
-
-**Next direction: extensions that work alongside an associated task.** We want extensions to follow task progress and turn conversation content into summaries, action items, and business records. A public task subscription / Agent hook SDK is not available yet; this is a roadmap direction.
+*These are events from your own service. Public subscriptions to chat turns and Agent lifecycle hooks are not available yet.*
 
 ## Build your first extension
 
-Extension examples now live in [ambleloft-extension-samples](https://github.com/fjb040911/ambleloft-extension-samples). Each runnable sample has its own lockfile and uses published npm SDK/CLI packages, without a neighboring host checkout or npm link.
+Use JavaScript / TypeScript and npm packages to connect your app. Extensions combine isolated frontend pages with user-trusted Node.js backends. Bundle dependencies with the extension; users do not need to install Node or run npm. Native modules need platform and host ABI compatibility checks.
 
-~~~bash
+Start with the runnable [hello-operation sample](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.md):
+
+```bash
 git clone https://github.com/fjb040911/ambleloft-extension-samples.git
 cd ambleloft-extension-samples/hello-operation
 npm ci
@@ -64,60 +50,80 @@ npm run build
 npm run validate
 npm test
 npm run pack
-~~~
+```
 
-In the host, open **Settings → Extensions → Install**, select the generated package, confirm trust, and grant the required permissions. Then follow the sample walkthrough.
+In a compatible host, open **Settings → Extensions → Install**, select the package, confirm trust, and grant the required permissions. [Run the host from source](#run-from-source) for the current extension preview.
 
-| What you want to build | Start here |
+<details>
+<summary>How an extension fits together</summary>
+
+![Extension overview: interactive interfaces and operations shared by users and agents](.github/assets/extension-platform-en.png)
+
+Use a Skill to describe when the Agent should use your capability, a form or page to collect input, and an operation to execute business logic. See the [current capabilities and contracts](specs/extensions/current-capabilities.md).
+
+</details>
+
+## Start with a working example
+
+| Build this | Example |
 | --- | --- |
-| Multi-step business forms in chat | [Travel expense assistant](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) |
-| Custom HTML/JS inside a task | [In-chat travel card](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.md) |
-| Operations shared by pages and agents | [Your first operation](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.md) |
-| Data processing with npm dependencies | [CSV to JSON](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/npm-data-transform/README.md) |
-| Message actions and reconciliation | [Message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md) |
-| Business authentication | [Authentication example](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.md) |
+| A multi-step form connected to a service | [Travel expense assistant](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) |
+| A custom interface inside chat | [In-chat travel card](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/mcp-apps-card/README.md) |
+| Business progress updates | [Service events](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.md) |
+| Messages with confirmed actions | [Message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md) |
+| Authenticated business integrations | [Authentication](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.md) |
+| Data processing with npm libraries | [CSV to JSON](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/npm-data-transform/README.md) |
 
-Samples pin the published SDK/CLI to **0.1.0-alpha.7**. The reference SDK in this host repository remains at alpha.1 and is maintained separately. Extension APIs are still a developer preview; a marketplace is not implemented. See the [verification record](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/docs/verification.md).
+[Browse all examples](https://github.com/fjb040911/ambleloft-extension-samples)
 
-## What the workspace already provides
+<details>
+<summary>Try the travel expense form</summary>
+<a id="try-the-travel-expense-form"></a>
 
-| Capability | Use it in your workflow |
+1. Start the host and connect a model with compatible tool calling.
+2. Follow the [expense assistant guide](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) to build and install the extension.
+3. Start its local demo service and configure the service URL in extension settings.
+4. Ask to submit travel expenses, complete the three-step flow, and query the resulting records.
+
+This sample uses fictional data and a local demo service. It also demonstrates read-only reconciliation after a lost response. The introduction video shows a separate two-step UI demo that returns input to chat.
+
+</details>
+
+## A workspace your extensions can build on
+
+Ambleloft provides model connections, project files, conversation history, and execution approvals. Choose a compatible model service and bring the context your app needs.
+
+| Foundation | Included |
 | --- | --- |
-| Your models | Connect compatible local, private-network, or cloud endpoints; configure multiple services with Responses API and Chat Completions adaptation. |
-| Project context | Link project folders, attach files, and browse files beside the conversation. |
-| Visible execution | Follow streamed responses, tool activity, task plans, questions, and approvals; stop tasks when needed. |
-| Result review | Render Markdown, code, equations, Mermaid, ECharts, SVG, and basic draw.io; inspect per-turn file changes and read-only diffs. |
-| Conversation continuity | Local SQLite history, drafts, archive search and restore, plus per-turn model and skill details. |
-| Reusable skills | Create, import, edit, and select local SKILL.md bundles. |
-| Desktop experience | English and Simplified Chinese, light and dark themes, collapsible panels, and supported file and Office previews. |
+| Models and context | Local, private-network, or cloud endpoints; Responses and Chat Completions adaptation; project folders and file attachments. |
+| Execution and review | Tool activity, plans, approvals, stopping tasks, rich results, and per-turn file-change review. |
+| Everyday work | Local history, archive search and restore, reusable Skills, file and Office previews. |
+| Your workspace | English / Simplified Chinese, light / dark themes, adjustable panels, and grouped sidebar or activity-bar navigation. |
 
-File diffs compare directory snapshots before and after a turn. They can include external edits and have size and count limits. They support review, not Git commits or rollback.
+<details>
+<summary>Workspace preview and navigation</summary>
 
-![Current Ambleloft workspace and navigation](.github/assets/workspace-en.png)
+![Ambleloft workspace with project context and results](.github/assets/workspace-en.png)
 
-*Current application UI with synthetic project content and a mocked desktop bridge.*
+*Application UI with synthetic project content and a simulated desktop bridge.*
 
-## Current status and roadmap
+Switch layouts in **Settings → General → Navigation layout**. The grouped sidebar is the default. Switching layouts or activity groups keeps your current conversation and draft. The activity bar uses icons with tooltips and separate project, task, and extension entry points. Standalone tasks are grouped by time. Narrow windows use a sidebar drawer with Escape-to-close and focus restoration.
 
-| Status | Scope |
-| --- | --- |
-| Available in current source | In-chat forms, linear multi-step flows, drafts and confirmed submissions, Node.js extension backends, isolated pages, business operations, settings, message actions, and OIDC authentication integration. |
-| Limited preview | MCP Apps task UI; this does not imply arbitrary remote MCP or full ChatGPT Apps compatibility. |
-| Future direction | Extensions subscribing to associated task conversations and progress for summaries and follow-up business workflows. No public Agent hook SDK yet. |
-| Target platforms | Windows, macOS, and Linux. Only macOS Apple Silicon is currently validated; the packaging workflow does not provide Windows or Linux releases. |
+File diffs compare directory snapshots before and after a turn. They may include external edits and have size and count limits. They support review, not Git commits or rollback.
 
-The project is under active development and APIs are not stable. Previously published 0.2.1 installers may not include these capabilities. Ambleloft connects existing model endpoints; model downloads and inference-runtime management are outside the current scope.
+</details>
 
-[Current capabilities and contracts](specs/extensions/current-capabilities.md) · [Changelog](CHANGELOG.md)
+## Current preview
 
-## Try the travel expense form
+**0.3.1 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
 
-1. Start a compatible extension-enabled host and connect a model with compatible tool calling.
-2. Follow the [travel expense assistant instructions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/expense-workflow/README.md) to build, package, and install the extension.
-3. Start its local demo service and configure the service URL in the extension settings.
-4. Request a travel expense claim in chat and complete the three-step form. Query records from the extension home or test lost-response reconciliation as documented.
+- **Platforms:** validated on macOS Apple Silicon. Windows and Linux are targets; packages are not available yet.
+- **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
+- **Tooling:** samples pin published SDK/CLI **0.1.0-alpha.7**. This repository's alpha.1 reference SDK is maintained separately. APIs are not stable; a marketplace and public Agent hook SDK are not available.
 
-The screenshot above shows the host’s two-step UI demo. The independent repository provides the three-step business example and real desktop verification screenshots.
+Ambleloft connects to existing model endpoints. Model downloads and inference-runtime management are outside the current scope. Model and external service charges are separate.
+
+[Capability reference](specs/extensions/current-capabilities.md) · [Sample verification](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/docs/verification.md) · [Changelog](CHANGELOG.md)
 
 ## Run from source
 
@@ -179,6 +185,9 @@ Use a base URL such as `https://api.example.com/v1`, without appending `/respons
 - The app maintains a separate engine configuration and does not reuse the official Codex application's login or configuration.
 - For compatibility with earlier development builds, macOS data remains under `~/Library/Application Support/Atelier`, including `atelier.sqlite` and a separate `codex-home`. Browser preview data is separate.
 
+<details>
+<summary>Packaging and development checks</summary>
+
 ## Build a Mac application
 
 ```bash
@@ -205,6 +214,8 @@ node scripts/capture-readme.mjs   # Recreate screenshots using installed Chrome 
 Desktop checks run on macOS and may use the system keychain. Local test fixtures do not establish compatibility with every external model provider.
 
 Internal planning (`docs/`), generated deliverables (`output/`, `outputs/`), dependencies, runtime binaries, user data, and build outputs are intentionally excluded from Git. Runtime assets are prepared by the setup/build scripts.
+
+</details>
 
 ## Feedback and contributions
 

@@ -218,14 +218,14 @@ test('expanded file panel keeps the current conversation draft, live messages an
  await page.screenshot({path:'test-results/file-floating-chat.png'});
 });
 
-test('sidebar categories disclose independently and folders reflect expansion',async({page})=>{
+test('sidebar categories disclose independently and arrows reflect expansion',async({page})=>{
  await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
  const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'任务',exact:true});
  await expect(projects).toHaveAttribute('aria-expanded','true');await projects.click();await expect(projects).toHaveAttribute('aria-expanded','false');await expect(chats).toHaveAttribute('aria-expanded','true');
- await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder.locator('.lucide-folder-open')).toHaveCount(1);
+ await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder.locator('.lucide-chevron-right')).toHaveCSS('transform','matrix(0, 1, -1, 0, 0, 0)');
  const alignment=await sidebar.locator('.project-tree').first().evaluate(el=>({project:el.querySelector('.project-tree-name span')!.getBoundingClientRect().left,task:el.querySelector('.tree-task > button > span:nth-child(2)')!.getBoundingClientRect().left,folder:el.querySelector('.tree-toggle svg')!.getBoundingClientRect().right,dot:el.querySelector('.task-state')!.getBoundingClientRect().right}));
  expect(alignment.task).toBeGreaterThan(alignment.project);expect(alignment.dot).toBeGreaterThan(alignment.folder);
- await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-folder')).toHaveCount(1);await expect(sidebar.locator('.tree-task')).not.toBeVisible();
+ await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-chevron-right')).toHaveCSS('transform','none');await expect(sidebar.locator('.tree-task')).not.toBeVisible();
  await sidebar.getByRole('button',{name:'展开项目：Demo'}).click();await expect(sidebar.locator('.tree-task')).toHaveCount(1);
  await chats.click();await expect(chats).toHaveAttribute('aria-expanded','false');
  await chats.hover();await expect(sidebar.getByRole('button',{name:'新建任务',exact:true})).toHaveCSS('opacity','1');
@@ -237,14 +237,16 @@ test('sidebar categories disclose independently and folders reflect expansion',a
 });
 
 
-test('project names toggle children while management and new-task actions stay independent',async({page})=>{
+test('project names navigate without changing disclosure or management actions',async({page})=>{
  await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
  const project=sidebar.getByRole('button',{name:'Demo',exact:true});
- await project.click();await expect(project).toHaveAttribute('aria-expanded','false');await expect(sidebar.locator('.tree-task')).not.toBeVisible();
- await project.click();await expect(project).toHaveAttribute('aria-expanded','true');await expect(sidebar.locator('.tree-task')).toBeVisible();
+ await project.click();await expect(page.locator('.content-page h1')).toHaveText('Demo');await expect(sidebar.locator('.tree-task')).toBeVisible();
+ await sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true}).click();
+ await project.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo',exact:true})).toHaveAttribute('aria-expanded','false');
+ await sidebar.getByRole('button',{name:'展开项目：Demo',exact:true}).click();
  await sidebar.getByRole('button',{name:'管理项目：Demo',exact:true}).click();await expect(page.getByRole('dialog',{name:'管理项目'})).toBeVisible();
- await page.keyboard.press('Escape');await expect(project).toHaveAttribute('aria-expanded','true');
- await sidebar.getByRole('button',{name:'在项目中新建任务：Demo',exact:true}).click();await expect(project).toHaveAttribute('aria-expanded','true');
+ await page.keyboard.press('Escape');await expect(sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true})).toHaveAttribute('aria-expanded','true');
+ await sidebar.getByRole('button',{name:'在项目中新建任务：Demo',exact:true}).click();await expect(sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true})).toHaveAttribute('aria-expanded','true');
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await sidebar.locator('#nav-projects').evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
 });

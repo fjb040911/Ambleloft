@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import {useEffect,useState} from 'react';
 import PreviewDialog from './PreviewDialog';
 import OfficePreview from './OfficePreview';
@@ -15,5 +16,5 @@ export default function OfficeArtifactPreview({runId,artifactId,path,name,close}
   }catch(e){if(!cancelled)setError((e as Error).message);}finally{running=false;}};
   void refresh();const timer=setInterval(()=>{if(!document.hidden)void refresh();},2000);return()=>{cancelled=true;clearInterval(timer);};
  },[runId,artifactId,path]);
- return <PreviewDialog name={name} icon={<FileTypeIcon name={name}/>} contentClass="is-office" zoomable={false} close={close}>{source&&<div className="office-inline-toolbar"><button className="secondary-button" onClick={()=>{void window.desktop?.projectFiles?.open({runId,artifactId,path:source.relative}).catch(e=>setError(e.message));}}>{t('使用外部应用打开')}</button></div>}{error&&<p role="alert">{error}</p>}{source&&<OfficePreview showRefresh context={{runId,artifactId}} path={source.relative} version={source.version} baseUrl={source.base}/>}</PreviewDialog>;
+ return <PreviewDialog name={name} icon={<FileTypeIcon name={name}/>} contentClass="is-office" zoomable={false} close={close}>{source&&<div className="office-inline-toolbar"><Button variant="outline" onClick={()=>{void window.desktop?.projectFiles?.open({runId,artifactId,path:source.relative}).catch(e=>setError(e.message));}}>{t('使用外部应用打开')}</Button></div>}{error&&<p role="alert">{error}</p>}{source&&<OfficePreview showRefresh context={{runId,artifactId}} path={source.relative} version={source.version} baseUrl={source.base}/>}</PreviewDialog>;
 }

@@ -89,7 +89,7 @@ const handlers={
    for(const item of value[key]) {const previous=current[key].find(p=>p.id===item.id);changes.push({kind,action:'put',id:item.id,value:item,expectedRevision:previous?.revision??null});}
    for(const item of current[key])if(!value[key].some(p=>p.id===item.id))changes.push({kind,action:'delete',id:item.id,expectedRevision:item.revision});
   }
-  const settings={};for(const key of ['theme','language','fontScale'])if(value[key]!==undefined)settings[key]=value[key];
+  const settings={};for(const key of ['theme','language','fontScale','layoutMode'])if(value[key]!==undefined)settings[key]=value[key];
   changes.push({kind:'settings',action:'patch',expectedRevision:current.settingsRevision,value:settings});
   return resources.patch({changes});
  });},

@@ -1,3 +1,4 @@
+import {useConfirm} from './Confirmation';
 import ExtensionIcon from './ExtensionIcon';
 import {useEffect,useState,type ReactNode} from 'react';
 import {ArrowLeft,Puzzle,MoreHorizontal,Folder,ShieldCheck} from 'lucide-react';
@@ -20,6 +21,7 @@ function DetailEmpty({title,description}:{title:string;description:string}) {
 const permissionName=(key:string)=>t(({'projects.read':'读取项目信息','projects.path.read':'读取项目路径','conversations.create':'创建聊天','conversations.open':'打开聊天','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
 
 export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle}:{item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
+ const confirm=useConfirm();
  const [dirty,setDirty]=useState(false);
  const [tab,setTab]=useState('details'),[error,setError]=useState(''),[projectError,setProjectError]=useState('');
  const [details,setDetails]=useState<{readme:string;publisher:string;size:number|null}|null>(null),[projects,setProjects]=useState<Project[]>([]);
@@ -33,7 +35,7 @@ export default function ExtensionDetail({item,back,permissions,grantConfiguratio
  const canConfigure=!!item.grants?.some(g=>g.capability==='configuration'&&g.resource==='self');
  const projectIds=[...new Set(item.grants?.filter(g=>g.resource.startsWith('project:')).map(g=>g.resource.slice(8))||[])];
  const runtimeLabel=t(!item.hasBackend?'无需后台':({active:'运行中',starting:'启动中',dormant:'待命',failed:'运行异常',stopped:'已停止',stopping:'停止中',recovering:'恢复中',paused:'已暂停'} as Record<string,string>)[item.runtime?.state||'dormant']||'待命');
- const leave=(action:()=>void)=>{if(!dirty||window.confirm(t('放弃未保存的修改？')))action();};
+ const leave=async(action:()=>void)=>{if(!dirty||await confirm({title:t('放弃未保存的修改？'),description:t('离开后，本次未保存的修改将丢失。'),action:t('放弃修改'),destructive:true}))action();};
  return <div className="extension-detail">
   <Button variant="ghost" size="sm" onClick={()=>leave(back)}><ArrowLeft data-icon="inline-start"/>{t('返回扩展列表')}</Button>
   <header className="extension-detail-header">

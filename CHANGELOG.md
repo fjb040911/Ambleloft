@@ -1,5 +1,17 @@
 # Preview notes / 预览版说明
 
+## v0.3.1 — Workspace navigation and app-in-chat introduction
+
+- Adds persistent grouped-sidebar / activity-bar layouts, with narrow-window drawers, keyboard dismissal, and focus restoration.
+- Improves draft reopening, conversation focus, confirmation dialogs, approvals, composer controls, and localized labels. Cancelling task archival no longer accidentally submits the edit form.
+- Includes extension locale inheritance and form-result reconciliation fixes.
+- Rewrites both READMEs around bringing apps into AI conversations, with the official website, 80-second bilingual videos, and extension examples. Videos are Release assets, not Git source files.
+- macOS Apple Silicon preview; ad-hoc signed, not Apple-notarized. Release binaries correspond to the PR commit, which may not yet be merged into main.
+- 新增可持久化的分组侧栏/活动栏布局，完善窄窗口抽屉、键盘操作与焦点恢复。
+- 改进草稿续写、确认弹窗、审批、输入区及语言显示，包含扩展语言继承与表单结果核实修复。
+- 重写中英文 README，加入官网与中英文介绍视频；视频通过 Release 附件分发，不进入 Git 历史。
+- 仅发布 Apple Silicon Mac 预览包，使用 ad-hoc 签名，未经 Apple 公证；安装包对应 PR 提交，PR 可能尚未合并。
+
 ## v0.3.0 — Interactive Agent applications preview
 
 - Introduces trusted Node.js extensions, isolated pages, permission-checked operations, configuration, message actions, and OIDC business authentication.

@@ -15,7 +15,8 @@ function validateRecord(kind, value) {
   }
 }
 function validateSettings(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !['theme','language','fontScale'].includes(k))) fail('INVALID_ARGUMENT', 'Invalid settings');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !['theme','language','fontScale','layoutMode'].includes(k))) fail('INVALID_ARGUMENT', 'Invalid settings');
+  if(value.layoutMode!==undefined&&!['classic','activity'].includes(value.layoutMode))fail('INVALID_ARGUMENT','Invalid layout mode');
   if (value.theme !== undefined && !['system','light','dark'].includes(value.theme) || value.language !== undefined && !['system','zh-CN','en'].includes(value.language) || value.fontScale !== undefined && ![90,100,110,120,130].includes(value.fontScale)) fail('INVALID_ARGUMENT', 'Invalid settings value');
 }
 function createWorkspaceResources(db) {

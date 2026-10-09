@@ -13,7 +13,8 @@ export function workspaceChanges(before:Workspace, after:Workspace):WorkspaceCha
   }
   // Explicit draft edits run before project deletion cascades, within the same transaction.
   changes.push(...deletes);
-  const value:Partial<Pick<Workspace,'theme'|'language'|'fontScale'>>={};
+  const value:Partial<Pick<Workspace,'theme'|'language'|'fontScale'|'layoutMode'>>={};
+  if(before.layoutMode!==after.layoutMode&&after.layoutMode!==undefined)value.layoutMode=after.layoutMode;
   if(before.theme!==after.theme)value.theme=after.theme;
   if(before.language!==after.language&&after.language!==undefined)value.language=after.language;
   if(before.fontScale!==after.fontScale&&after.fontScale!==undefined)value.fontScale=after.fontScale;

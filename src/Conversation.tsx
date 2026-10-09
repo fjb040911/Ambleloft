@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal} from 'react-dom';
@@ -94,7 +95,7 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
       <MessageScroller className="min-w-0 flex-1">
         {/* Keep utility controls outside the message list so prepend anchoring tracks turns. */}
         {(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
-          {before&&<div><button className="secondary-button" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</button></div>}{historyError&&<p role="alert">{historyError}</p>}
+          {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<p role="alert">{historyError}</p>}
         </div>}
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
         <MessageScrollerContent className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
@@ -104,10 +105,10 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
             {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'}/></article>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
-            <DeliveredFiles openFile={openFile} runId={run.id} files={turn.artifacts}/>{(changesByTurn.get(turn.user.id)||[]).filter(change=>change.files.length||change.notice).map(change=><button key={change.turnKey} className="secondary-button turn-changes-button" onClick={()=>openChanges(change)}>{t('查看本轮变更')} ({change.files.length}){change.notice?' · '+t('记录不完整'):''}</button>)}{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
+            <DeliveredFiles openFile={openFile} runId={run.id} files={turn.artifacts}/>{(changesByTurn.get(turn.user.id)||[]).filter(change=>change.files.length||change.notice).map(change=><Button key={change.turnKey} variant="outline" className="turn-changes-button" onClick={()=>openChanges(change)}>{t('查看本轮变更')} ({change.files.length}){change.notice?' · '+t('记录不完整'):''}</Button>)}{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
 
           </MessageScrollerItem>)}
-          {run.error && <MessageScrollerItem messageId="error" className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><button type="button" className="secondary-button" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</button><button type="button" className="secondary-button" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</button></div>}</MessageScrollerItem>}
+          {run.error && <MessageScrollerItem messageId="error" className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button><Button type="button" variant="outline" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</Button></div>}</MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
     </div>

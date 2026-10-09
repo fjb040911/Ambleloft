@@ -28,7 +28,7 @@ export default function RunActivity({run,turn,visible=true,compact=false}:{run:A
  const quiet=Math.max(0,Math.floor((now-(Number.isFinite(last)?last:now))/1000));
  const tools=turn?.tools.filter(tool=>toolBusy(tool.status))||[];
  const latest=turn?.messages.at(-1);
- if(run.queued)return <div className="run-activity" role="status">排队中 · 等待执行名额或工作目录释放</div>;
+ if(run.queued)return <div className="run-activity" role="status">{t('排队中 · 等待执行名额或工作目录释放')}</div>;
  const waiting=run.status==='waiting';const stopping=run.status==='stopping';
  let label=run.status==='preparing'?'正在准备':tools.length?'正在执行工具':turn?.final?'正在生成回答':latest?.kind==='reasoning'?'正在思考':latest?'等待模型继续响应':'等待模型响应';
  if(tools.length===1&&tools[0].type==='commandExecution')label=commandPresentation(tools[0]).title;
