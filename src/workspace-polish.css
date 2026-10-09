@@ -10,21 +10,6 @@
   grid-template-columns: var(--navigation-width) minmax(0, 1fr);
   transition: grid-template-columns var(--motion-response) var(--motion-settle);
 }
-.app-shell > [data-slot="sidebar-wrapper"] > .sidebar {
-  min-width: 0;
-  width: var(--navigation-width);
-  transition: transform var(--motion-response) var(--motion-settle),
-    opacity var(--motion-quick) ease-out, visibility var(--motion-response);
-}
-.app-shell > .main-shell { grid-column: 2; min-width: 0; }
-.app-shell.sidebar-hidden { grid-template-columns: 0px minmax(0, 1fr); }
-.app-shell.sidebar-hidden > [data-slot="sidebar-wrapper"] > .sidebar {
-  display: flex;
-  transform: translateX(-100%);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
 .conversation-shell { container-type: inline-size; }
 .toolbar .icon-button { min-width: 32px; min-height: 32px; }
 .toolbar-title { font-weight: 500; }
@@ -535,3 +520,63 @@ body { font-optical-sizing: auto; }
 .composer-option-row { font-weight: normal; }
 .message.assistant { padding: 4px 0 6px; }
 .message.assistant .markdown > :first-child { margin-top: 0; }
+
+/* Both navigation modes share the same mounted workspace and lists. */
+.app-shell.activity-layout { --navigation-width:256px; grid-template-columns:60px var(--navigation-width) minmax(0,1fr); }
+.app-shell.activity-layout > .main-shell { grid-column:3; }
+.app-shell.activity-layout.sidebar-hidden { grid-template-columns:60px 0 minmax(0,1fr); }
+.activity-rail { grid-column:1; grid-row:1; display:flex; flex-direction:column; align-items:center; gap:24px; padding:20px 5px 12px; background:var(--sidebar); border-right:1px solid var(--border); min-height:0; }
+.desktop .activity-rail { padding-top:64px; -webkit-app-region:drag; }
+.activity-rail button { -webkit-app-region:no-drag; }
+.activity-brand { width:44px; height:44px; }
+.activity-brand img { width:36px; height:36px; }
+.activity-groups { display:flex; flex-direction:column; gap:8px; width:100%; }
+.activity-group { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:60px; border-radius:8px; color:var(--secondary); font-size:11px; }
+.activity-group svg { width:20px; height:20px; }
+.activity-group[aria-pressed=true]::before { content:''; position:absolute; left:-5px; height:22px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
+.activity-footer { margin-top:auto; display:flex; flex-direction:column; gap:10px; }
+.activity-layout .sidebar { grid-column:2; grid-row:1; }
+.activity-layout .workspace-navigation { padding-top:10px; }
+.activity-layout.sidebar-hidden.desktop .toolbar-left { padding-left:30px; }
+.toolbar-right .window-space.global-sidebar-actions { height:auto; min-height:0; padding:0; }
+.layout-options { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.layout-options .layout-option { height:auto; display:flex; flex-direction:column; align-items:stretch; gap:12px; padding:14px; white-space:normal; text-align:left; }
+.layout-option-title { display:flex; justify-content:space-between; align-items:center; }
+.layout-mini { display:flex; height:86px; overflow:hidden; border:1px solid var(--border); border-radius:6px; background:var(--surface); }
+.layout-mini>i { display:none; }
+.layout-mini>span:first-of-type { display:flex; flex-direction:column; gap:10px; width:35%; padding:14px 8px; border-right:1px solid var(--border); background:var(--sidebar); }
+.layout-mini b { height:4px; width:80%; background:var(--border); border-radius:2px; }
+.layout-mini.activity>i { display:block; width:18px; background:var(--sidebar); border-right:1px solid var(--border); }
+
+.activity-layout .sidebar .nav-group-add { opacity:1; }
+.activity-layout .workspace-navigation > [data-slot="sidebar-group"] { margin-top:8px; }
+
+/* A continuous titlebar keeps the macOS window controls in one visual region. */
+.activity-rail { position:relative; border-right:0; }
+.activity-rail::after { content:''; position:absolute; right:0; top:60px; bottom:0; width:1px; background:var(--border); pointer-events:none; }
+.activity-group { min-height:48px; }
+.activity-group svg { width:26px; height:26px; }
+.activity-group[data-active]::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); height:22px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
+.activity-footer svg { width:22px; height:22px; }
+.nav-date-heading { margin:18px 8px 6px; font-size:11px; font-weight:500; color:var(--muted); }
+.activity-layout .workspace-navigation { padding-top:14px; }
+
+/* Sidebar owns its desktop gap and mobile Sheet; the activity rail is independent. */
+.app-shell, .app-shell.activity-layout, .app-shell.sidebar-hidden { display:flex; min-width:0; transition:none; }
+.app-shell > .main-shell { flex:1; min-width:0; }
+.app-shell > .activity-rail { flex:0 0 60px; z-index:20; }
+.workspace-sidebar-container { background:var(--sidebar); }
+.workspace-sidebar-container [data-slot="sidebar-inner"] { background:var(--sidebar); border-right:0; }
+@media(min-width:768px) {
+ .app-shell.activity-layout > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:256px; }
+ .app-shell:not(.activity-layout) > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:224px; }
+ .app-shell > [data-slot="sidebar"][data-collapsible="offcanvas"] { pointer-events:none; }
+}
+
+/* Keep the task input dominant; examples remain quiet shortcuts. */
+.home-page { padding-top:clamp(2rem,5vh,3rem); }
+.home-page h1 { font-size:clamp(1.5rem,3cqi,1.875rem); }
+.home-page .new-task-composer { margin-top:1.5rem; }
+.home-page .starter-section { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem .75rem; margin-top:1.25rem; }
+.starter-suggestions { display:flex; flex-wrap:wrap; gap:.25rem; }
+.turn-step-summary { max-width:40ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

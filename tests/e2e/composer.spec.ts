@@ -17,9 +17,9 @@ test('composer groups models, adds context, preserves draft through settings',as
 });
 test('existing task confirms service and full access changes and submits next-turn options',async({page})=>{
  await setup(page);await page.locator('.tree-task > button:first-child').filter({hasText:'现有任务'}).click();
- await page.getByRole('button',{name:'选择模型',exact:true}).click();page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('option',{name:'Model 1 服务 B'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model A');
- page.once('dialog',dialog=>dialog.accept());await page.getByRole('option',{name:'Model 1 服务 B'}).click();
- await page.getByRole('button',{name:'默认权限',exact:true}).click();page.once('dialog',dialog=>dialog.accept());await page.getByRole('switch',{name:'允许完全访问'}).click();await expect(page.getByRole('button',{name:'完全访问',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'选择模型',exact:true}).click();await page.getByRole('option',{name:'Model 1 服务 B'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model A');
+ await page.getByRole('button',{name:'选择模型',exact:true}).click();await page.getByRole('option',{name:'Model 1 服务 B'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'切换模型服务',exact:true}).click();
+ await page.getByRole('button',{name:'默认权限',exact:true}).click();await page.locator('[data-slot=toggle-group-item]').filter({hasText:'完全访问'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'允许完全访问',exact:true}).click();await expect(page.getByRole('button',{name:'完全访问',exact:true})).toBeVisible();
  await page.getByRole('textbox',{name:'继续对话'}).fill('继续');await page.getByRole('button',{name:'发送后续消息'}).click();const sent=await page.evaluate(()=>(window as any).__sent);expect(sent).toMatchObject({runId:'r',providerId:'b',model:'Model 1',permission:'full',confirmProviderChange:true});
  await page.setViewportSize({width:800,height:600});await page.screenshot({path:'test-results/composer-compact.png'});
 });
@@ -80,4 +80,26 @@ test('model picker supports search and keyboard selection',async({page})=>{
  await expect(page.getByRole('dialog',{name:'模型列表'}).getByRole('option').first()).toHaveAttribute('aria-label','Model B 服务 A');await search.press('Enter');
  await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
  await expect(page.getByRole('button',{name:'选择模型',exact:true})).toBeFocused();
+});
+
+
+test('confirmation focuses cancel and Escape restores the model trigger',async({page})=>{
+ await setup(page);await page.locator('.tree-task > button:first-child').click();
+ const trigger=page.getByRole('button',{name:'选择模型',exact:true});await trigger.click();await page.getByRole('option',{name:'Model 1 服务 B'}).click();
+ const confirmation=page.getByRole('alertdialog');await expect(confirmation.getByRole('button',{name:'取消',exact:true})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(confirmation).toHaveCount(0);await expect(trigger).toBeFocused();await expect(trigger).toContainText('Model A');
+});
+
+test('permission modes clearly show selection, confirm full access and restore default',async({page})=>{
+ await setup(page);const trigger=page.getByRole('button',{name:'默认权限',exact:true});await trigger.click();
+ const popup=page.getByRole('dialog',{name:'权限模式'});const modes=popup.locator('[data-slot=toggle-group-item]');
+ await expect(modes.first()).toHaveAttribute('aria-pressed','true');await expect(modes.last()).toHaveAttribute('aria-pressed','false');
+ expect(await popup.locator('[data-slot=popover-title]').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeLessThanOrEqual(16);
+ await page.screenshot({path:'test-results/permission-modes-light.png',animations:'disabled'});
+ await modes.last().click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(trigger).toBeFocused();
+ await trigger.click();await modes.last().click();await page.getByRole('alertdialog').getByRole('button',{name:'允许完全访问',exact:true}).click();
+ await page.getByRole('button',{name:'完全访问',exact:true}).click();await expect(modes.last()).toHaveAttribute('aria-pressed','true');await modes.first().click();await expect(popup).not.toBeVisible();await expect(trigger).toBeVisible();await expect(page.getByRole('alertdialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByLabel('界面语言').selectOption('en');await page.getByRole('button',{name:'Dark',exact:true}).click();await page.getByRole('button',{name:'Back to app',exact:true}).click();await page.setViewportSize({width:360,height:740});
+ await page.getByRole('button',{name:'Default permissions',exact:true}).click();const english=page.getByRole('dialog',{name:'Permission mode'});
+ await expect(english).toContainText('Permission mode');expect(await english.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/permission-modes-english-dark.png',animations:'disabled'});
 });

@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import {useEffect,useRef,useState} from 'react';
 import {ChevronDown,ChevronUp,RotateCcw} from 'lucide-react';
 import {t} from './i18n';
@@ -41,7 +42,7 @@ export default function TaskAppCard({app,runId,visible,archived}:{app:TaskApp;ru
  return <section className="task-app-card" aria-label={t('任务交互内容')}>
   <header><div><span className="task-app-source">{app.extensionName}</span><strong>{app.title}</strong></div><button className="icon-button" aria-label={t(expanded?'收起交互内容':'打开交互内容')} aria-expanded={expanded} disabled={archived} onClick={()=>setExpanded(value=>!value)}>{expanded?<ChevronUp size={17}/>:<ChevronDown size={17}/>}</button></header>
   {archived?<p>{t('还原此任务后可继续操作。')}</p>:expanded&&visible?<>
-   {error?<div className="task-app-status" role="alert"><p>{error}</p><button className="secondary-button" onClick={()=>setAttempt(value=>value+1)}><RotateCcw size={14}/>{t('重新打开')}</button></div>:<>
+   {error?<div className="task-app-status" role="alert"><p>{error}</p><Button variant="outline" onClick={()=>setAttempt(value=>value+1)}><RotateCcw size={14}/>{t('重新打开')}</Button></div>:<>
     {!ready&&<p role="status">{t('正在打开交互内容…')}</p>}
     {url&&<iframe ref={frame} onLoad={()=>{if(++loads.current>1)failCurrent.current();}} title={app.title} src={url} sandbox="allow-scripts allow-forms" allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-write 'none'" referrerPolicy="no-referrer" style={{height}}/>}
    </>}

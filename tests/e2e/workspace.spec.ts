@@ -1,22 +1,27 @@
 import { test, expect } from '@playwright/test';
 
-test('draft survives reload, can be copied, and is deleted only after confirmation', async ({ page }) => {
+test('draft survives reload, reopens for editing, and archives only after confirmation', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('textbox', { name: '任务内容' }).fill('整理我的品牌项目资料');
-  await page.getByRole('button', { name: '保存任务草稿' }).click();
-  await expect(page.getByRole('dialog')).toContainText('草稿尚未执行');
-  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  const input=page.getByRole('textbox',{name:'任务内容',exact:true});
+  await input.fill('整理我的品牌项目资料');
+  await page.getByRole('button',{name:'保存任务草稿',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();
-  await page.locator('.tree-task > button:first-child').filter({hasText:'整理我的品牌项目资料'}).click();
-  await page.getByRole('button', { name: '归档草稿', exact: true }).click();
-  await page.getByRole('button', { name: '保留', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: '复制到新任务' }).click();
-  await expect(page.getByRole('textbox', { name: '任务内容' })).toHaveValue('整理我的品牌项目资料');
-  await page.locator('.tree-task > button:first-child').filter({hasText:'整理我的品牌项目资料'}).click();
-  await page.getByRole('button', { name: '归档草稿', exact: true }).click();
-  await page.getByRole('button', { name: '归档草稿', exact: true }).click();
-  await expect(page.getByText('你的任务会显示在这里。')).toBeVisible();
+  const task=page.locator('.tree-task [data-slot=sidebar-menu-button]').filter({hasText:'整理我的品牌项目资料'});
+  await task.click();
+  await expect(input).toHaveValue('整理我的品牌项目资料');
+  await expect(input).toBeFocused();
+  await page.getByRole('button',{name:'管理任务：整理我的品牌项目资料',exact:true}).click();
+  await page.getByRole('button',{name:'归档任务',exact:true}).click();
+  await page.getByRole('button',{name:'保留任务',exact:true}).click();
+  await page.getByRole('button',{name:'关闭',exact:true}).click();
+  await expect(task).toHaveCount(1);
+  await page.getByRole('button',{name:'管理任务：整理我的品牌项目资料',exact:true}).click();
+  await page.getByRole('button',{name:'归档任务',exact:true}).click();
+  await page.getByRole('button',{name:'确认归档任务',exact:true}).click();
+  await expect(task).toHaveCount(0);
+  await page.reload();
+  await expect(task).toHaveCount(0);
 });
 
 test('theme preference survives reload', async ({ page }) => {

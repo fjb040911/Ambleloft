@@ -7,7 +7,7 @@
   --radius-card: 12px;
   --radius-panel: 16px;
   --radius-surface-card: var(--radius-panel);
-  --radius-conversation: 22px;
+  --radius-conversation: var(--radius-panel);
   --radius-xl: 24px;
   --radius-round: 50%;
   --radius-message: var(--radius-conversation);

@@ -81,3 +81,11 @@ test('AgentRuntime starts and continues a draft with one stable ID without autom
  await runtime.stop(first.id);
  assert.equal((await workspace.resolveConversation(d.conversationId)).recordId,first.id);
 });
+
+test('layout preference persists with settings revisions and rejects invalid values',async t=>{
+ const f=await fixture(t);const before=await f.read();
+ const result=await f.patch([{kind:'settings',action:'patch',expectedRevision:before.settingsRevision??0,value:{layoutMode:'activity'}}]);
+ assert.equal(result.layoutMode,'activity');await f.restart();assert.equal((await f.read()).layoutMode,'activity');
+ await assert.rejects(f.patch([{kind:'settings',action:'patch',expectedRevision:result.settingsRevision,value:{layoutMode:'invalid'}}]),/INVALID_ARGUMENT/);
+ assert.equal((await f.read()).layoutMode,'activity');
+});

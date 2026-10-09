@@ -10,9 +10,12 @@ import { BookOpen, Folder, Search, ListCollapse, Activity, Brain, Terminal, Glob
 import type { ConversationTurn } from './conversation-turns';
 const statusText:Record<string,string>={inProgress:'进行中',running:'进行中',completed:'已完成',failed:'失败',declined:'已拒绝',pending:'待处理'};
 export function TurnProgress({turn,status,duration,onToggle,paused=false}:{paused?:boolean;onToggle():void;turn:ConversationTurn;status:string;duration:ReactNode}) {
- const [expanded,setExpanded]=useState(turn.outcome!=='completed');
- useEffect(()=>setExpanded(turn.outcome!=='completed'),[turn.outcome]);
- return <div className="turn-progress"><Button variant="ghost" size="sm" className="turn-progress-toggle" aria-expanded={expanded} onClick={()=>{onToggle();setExpanded(!expanded);}}><ChevronRight size={14} className={expanded?'expanded':''}/><span>{t(turn.active?status:turn.outcome==='completed'?'本轮已结束':turn.outcome==='failed'?'执行失败':'已中断')}</span>{duration}{!turn.active&&turn.tools.length>0&&<small>{turn.tools.length} {t('次工具调用')}</small>}</Button>{expanded&&<ProcessPanel turn={turn} paused={paused}/>}</div>;
+ const hasFailure=turn.outcome==='failed'||turn.tools.some(tool=>tool.status==='failed');
+ const [expanded,setExpanded]=useState(turn.active||hasFailure);
+ useEffect(()=>{setExpanded(turn.active||hasFailure);},[turn.active,hasFailure,turn.outcome]);
+ const step=turn.plan?.steps.find(step=>step.status==='inProgress');
+ const completed=turn.plan?.steps.filter(step=>step.status==='completed').length||0;
+ return <div className="turn-progress"><Button variant="ghost" size="sm" className="turn-progress-toggle" aria-expanded={expanded} onClick={()=>{onToggle();setExpanded(!expanded);}}><ChevronRight size={14} className={expanded?'expanded':''}/><span>{t(turn.active?status:turn.outcome==='completed'?'本轮已结束':turn.outcome==='failed'?'执行失败':'已中断')}</span>{turn.active&&step&&<span className="turn-step-summary">{step.step}</span>}{turn.active&&!!turn.plan?.steps.length&&<small>{completed}/{turn.plan.steps.length}</small>}{duration}{!turn.active&&turn.tools.length>0&&<small>{turn.tools.length} {t('次工具调用')}</small>}</Button>{expanded&&<ProcessPanel turn={turn} paused={paused}/>}</div>;
 }
 function ThinkingWindow({text,title,live}:{text:string;title:string;live:boolean}) {
  const viewport=useRef<HTMLDivElement>(null);

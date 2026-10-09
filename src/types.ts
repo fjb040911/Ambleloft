@@ -34,8 +34,8 @@ export interface AgentRun {
 }
 export interface Task { conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
 export interface Project { revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
-export interface Workspace { revision?:number;settingsRevision?:number; tasks: Task[]; projects: Project[]; theme: Theme; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
-export interface WorkspaceChange {kind:'project'|'draft'|'settings';action:'put'|'delete'|'patch';id?:string;expectedRevision:number|null;value?:Project|Task|Partial<Pick<Workspace,'theme'|'language'|'fontScale'>>}
+export interface Workspace { revision?:number;settingsRevision?:number; tasks: Task[]; projects: Project[]; theme: Theme; layoutMode?: 'classic'|'activity'; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
+export interface WorkspaceChange {kind:'project'|'draft'|'settings';action:'put'|'delete'|'patch';id?:string;expectedRevision:number|null;value?:Project|Task|Partial<Pick<Workspace,'theme'|'language'|'fontScale'|'layoutMode'>>}
 export interface Device { name: string; chip: string; memoryGB: number | null; freeMemoryGB: number | null; platform: string; arch: string; mode: 'desktop' | 'preview' }
 export interface Capability { id: string; name: string; category: string; description: string; icon: 'folder' | 'pen' | 'research'; color: string; prompt: string; permissions: string[] }
 declare global {

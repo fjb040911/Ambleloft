@@ -1,3 +1,4 @@
+import {Button} from './components/ui/button';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {t} from './i18n';
 export default function ExtensionSurface({extensionId,revision,visible}:{extensionId:string;revision?:string;visible:boolean}){
@@ -11,5 +12,5 @@ export default function ExtensionSurface({extensionId,revision,visible}:{extensi
   setError('');void api.open({extensionId,slotId}).then(()=>{if(disposed)void api.close({slotId});else update();}).catch(e=>{if(!disposed)setError(e.message);});
   return()=>{disposed=true;cancelAnimationFrame(frame);observer.disconnect();off();window.removeEventListener('resize',update);window.removeEventListener('scroll',update,true);void api.close({slotId}).catch(()=>{});};
  },[extensionId,revision,retry]);
- return <div ref={slot} className="extension-surface" aria-label={t('扩展页面')}>{error&&<div><p role="alert" className="error-banner">{error}</p><button className="secondary-button" onClick={()=>setRetry(n=>n+1)}>{t("重新打开")}</button></div>}</div>;
+ return <div ref={slot} className="extension-surface" aria-label={t('扩展页面')}>{error&&<div><p role="alert" className="error-banner">{error}</p><Button variant="outline" onClick={()=>setRetry(n=>n+1)}>{t("重新打开")}</Button></div>}</div>;
 }

@@ -159,10 +159,12 @@ function Sidebar({
   className,
   children,
   dir,
+  contentClassName,
   ...props
 }: React.ComponentProps<"div"> & {
   side?: "left" | "right"
   variant?: "sidebar" | "floating" | "inset"
+  contentClassName?: string
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
@@ -184,8 +186,11 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
+          {...props}
+          role="dialog"
+          keepMounted
           dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"
@@ -199,10 +204,10 @@ function Sidebar({
           side={side}
         >
           <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetTitle>{props["aria-label"] || "Sidebar"}</SheetTitle>
+
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          <div className={cn("flex h-full w-full flex-col",contentClassName)}>{children}</div>
         </SheetContent>
       </Sheet>
     )
@@ -230,6 +235,8 @@ function Sidebar({
         )}
       />
       <div
+        inert={state === "collapsed"}
+        aria-hidden={state === "collapsed"}
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
@@ -245,7 +252,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+          className={cn("flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border",contentClassName)}
         >
           {children}
         </div>

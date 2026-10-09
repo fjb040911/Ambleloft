@@ -83,7 +83,7 @@ h1 { font-size: calc(30px * var(--font-scale, 1)); font-weight: 600; letter-spac
 .model-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 8px; background: var(--hover); border-radius: var(--radius-sm); font-size: calc(12px * var(--font-scale, 1)); }
 .model-dot { width: 6px; height: 6px; border-radius: var(--radius-round); background: #5a82dd; }
 .pill-location { font-size: calc(9px * var(--font-scale, 1)); color: var(--muted); border-left: 1px solid var(--border); padding-left: 7px; }
-.new-task-composer { margin-top: 30px; border-radius: var(--radius-composer); background: var(--hover); }
+.new-task-composer { margin-top: 30px; }
 .new-task-composer > .composer { margin-top: 0; position: relative; }
 .composer-project-bar { padding: 7px 14px 9px; display: flex; align-items: center; min-height: 40px; }
 @supports(corner-shape:squircle) { .new-task-composer { corner-shape: squircle; } }
@@ -232,7 +232,7 @@ h1 { font-size: calc(30px * var(--font-scale, 1)); font-weight: 600; letter-spac
 .error-banner { background: var(--orange-bg); color: var(--orange-text); padding: 13px 24px; font-size: calc(12px * var(--font-scale, 1)); }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 10; background: var(--text); color: var(--surface); border-radius: var(--radius-card); padding: 13px 18px; box-shadow: 0 5px 20px #0002; display: flex; gap: 10px; align-items: center; font-size: calc(12px * var(--font-scale, 1)); line-height: 1.8; max-width: min(650px,90vw); }
 .sidebar-hidden { grid-template-columns: minmax(0,1fr); }
-.sidebar-hidden .sidebar { display: none; }
+
 .sidebar-hidden.desktop .toolbar-left { padding-left: 75px; }
 @media (max-width: 1050px) {
   .home-page { padding: 48px 32px 25px; }
@@ -294,7 +294,7 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; }
 
 /* Continuous corners where supported; radius tokens remain the fallback. */
 @supports (corner-shape: squircle) {
-  .message.user, .composer, .modal, .settings-group, .model-card, .project-card, .plugin-card { corner-shape: squircle; }
+  .modal, .settings-group, .model-card, .project-card, .plugin-card { corner-shape: squircle; }
 }
 .turn-duration { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: calc(11px * var(--font-scale, 1)); margin: 22px 0 6px; }
 .turn-duration::after { content: ''; flex: 1; height: 1px; background: var(--border-soft); margin-left: 7px; }
