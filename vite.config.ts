@@ -7,5 +7,6 @@ export default defineConfig({
   base: './',
   resolve: {alias: {'@':fileURLToPath(new URL('./src',import.meta.url))}},
   plugins: [react(),tailwindcss()],
+  optimizeDeps: { entries: ['index.html'] },
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
 });

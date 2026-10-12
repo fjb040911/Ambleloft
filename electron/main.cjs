@@ -40,9 +40,10 @@ function createWindow() {
     width: 1240, height: 840, minWidth: 760, minHeight: 560,
     title: 'Ambleloft', backgroundColor: '#f8f9fb',
     icon: path.join(__dirname, '../dist/brand/icon-512.png'),
-    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 },
+    ...(process.platform === 'win32' ? {titleBarStyle: 'hidden', titleBarOverlay: {color: '#e9ecf0', symbolColor: '#262c35', height: 38}, autoHideMenuBar: true} : {titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 }}),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  if (process.platform === 'win32') window.setMenuBarVisibility(false);
   const record=windows.add(window,profileId);
   window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
   window.once('closed',()=>{pageHost?.resetOwner(record);taskApps?.closeOwner(record);});
@@ -131,6 +132,8 @@ app.whenReady().then(async () => {
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
   services.extensions.options.pageChanged=(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
+  ipcMain.handle('window:menu',event=>{const owner=authorize(event);if(process.platform==='win32')Menu.getApplicationMenu()?.popup({window:owner.window,x:12,y:38});});
+  ipcMain.handle('window:chrome',(event,input)=>{const owner=authorize(event);if(process.platform!=='win32')return;if(!/^#[0-9a-f]{6}$/i.test(input?.color)||!/^#[0-9a-f]{6}$/i.test(input?.symbolColor))throw new Error('Invalid chrome colors');owner.window.setTitleBarOverlay({color:input.color,symbolColor:input.symbolColor,height:38});});
   ipcMain.handle('window:new',event=>{authorize(event);createWindow();return true;});
   ipcMain.handle('extensions:development',(event,input)=>pageHost.configureDevelopment(event,input,async(owner,origin)=>(await hostDialog('showMessageBox',owner,{type:'warning',message:'允许本地开发页面访问此扩展的页面桥？',detail:origin+'\n只在本次应用会话中启用，请确保该端口由你控制。',buttons:['取消','允许'],defaultId:0,cancelId:0})).response===1));
   ipcMain.handle('extension-page:open',(event,input)=>pageHost.open(event,input));
