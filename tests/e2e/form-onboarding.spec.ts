@@ -1,0 +1,19 @@
+import {test,expect} from '@playwright/test';
+test('compact boolean fields, mixed state, descriptions, conditional visibility and final single click',async({page})=>{
+ await page.goto('/tests/fixtures/declarative-ui.html');await page.evaluate(async()=>{
+  await import('/src/shadcn.css');await import('/src/tokens.css');await import('/src/styles.css');
+  const React=await import('/node_modules/.vite/deps/react.js'),ReactDOM=await import('/node_modules/.vite/deps/react-dom_client.js'),{default:Forms}=await import('/src/TaskForms.tsx');
+  let flow:any={id:'onboarding',runId:'r',turnKey:'t',revision:0,status:'editing',step:0,drafts:{first:{kind:'front',group:'mixed',enabled:false,accepted:false,note:''},last:{root:'src'}},template:{title:'项目配置',description:'设置项目的检查规范',steps:[{id:'first',title:'技术栈',description:'选择项目类型和规则组',fields:[{name:'kind',label:'项目类型',type:'select',options:[{label:'前端',value:'front'},{label:'后端',value:'back'}]},{name:'group',label:'规则组',type:'group-toggle'},{name:'enabled',label:'持续检查',type:'switch'},{name:'accepted',label:'确认规则',type:'checkbox'},{name:'note',label:'组件说明',type:'text',placeholder:'输入组件说明',visibleWhen:{field:'first.kind',equals:'front'}}]},{id:'last',title:'路径',fields:[{name:'root',label:'代码目录',type:'text'}]}],submit:{kind:'chat',label:'生成配置',confirmation:'onSubmit'}}};
+  (window as any).calls=[];(window as any).desktop={forms:{action:async(i:any)=>{(window as any).calls.push(i);flow=structuredClone(flow);flow.revision++;if(i.action==='save')flow.drafts[flow.template.steps[flow.step].id]=i.values;if(i.action==='next'){if(flow.step===0)flow.step++;else flow.status='pending';}if(i.action==='previous')flow.step--;return structuredClone(flow);}}};
+  (ReactDOM.createRoot||ReactDOM.default.createRoot)(document.getElementById('preview')!).render((React.createElement||React.default.createElement)(Forms,{flows:[flow],archived:false}));
+ });
+ await expect(page.getByText('选择项目类型和规则组',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'上一步',exact:true})).toHaveCount(0);
+ const group=page.getByRole('checkbox',{name:'规则组',exact:true});await expect(group).toHaveAttribute('aria-checked','mixed');
+ for(const name of ['规则组','确认规则']){const box=await page.getByRole('checkbox',{name,exact:true}).boundingBox();expect(box!.width).toBeLessThanOrEqual(20);expect(box!.height).toBeLessThanOrEqual(20);}
+ await expect(page.getByRole('switch',{name:'持续检查',exact:true})).not.toBeChecked();await page.screenshot({path:'test-results/form-onboarding-light.png',animations:'disabled'});await page.getByRole('checkbox',{name:'确认规则',exact:true}).check();await expect(page.getByRole('checkbox',{name:'确认规则',exact:true})).toBeChecked();
+ await expect(page.getByPlaceholder('输入组件说明')).toBeVisible();await page.getByRole('combobox',{name:'项目类型',exact:true}).selectOption('back');await expect(page.getByPlaceholder('输入组件说明')).toHaveCount(0);
+ await page.getByRole('button',{name:'下一步',exact:true}).click();await expect(page.getByLabel('代码目录',{exact:true})).toBeVisible();expect((await page.evaluate(()=>(window as any).calls)).filter((c:any)=>c.action==='next')).toHaveLength(1);
+ await page.getByRole('button',{name:'上一步',exact:true}).click();await expect(group).toHaveAttribute('aria-checked','mixed');await page.getByRole('button',{name:'下一步',exact:true}).click();await page.getByRole('button',{name:'生成配置',exact:true}).click();await expect(page.getByText('答案已保存，正在送达。你可以继续其他操作。')).toBeVisible();
+ expect((await page.evaluate(()=>(window as any).calls)).filter((c:any)=>c.action==='save')[0].values.group).toBe('mixed');
+ await page.setViewportSize({width:360,height:800});await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

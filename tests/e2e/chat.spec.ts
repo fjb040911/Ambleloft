@@ -10,7 +10,7 @@ async function prepare(page: import('@playwright/test').Page, text = rich) {
     (window as any).__emit = () => callback(structuredClone(run));
     (window as any).desktop = {
       getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),
-      getDevice:async()=>({name:'Test Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),
+      getDevice:async()=>({name:'Test Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),
       listRuns:async()=>[structuredClone(run)],onRun:(fn:any)=>{callback=fn;return()=>{}},onCommand:()=>()=>{},
       approveRun:async(input:any)=>{(window as any).__decision=input;run.approvals=[];run.status='completed';callback(structuredClone(run));},
       forms:{list:async()=>{(window as any).__formReads++;return[];},onChanged:(fn:any)=>{(window as any).__formsChanged=fn;(window as any).__formSubscriptions++;return()=>{(window as any).__formSubscriptions--;};}},
@@ -551,7 +551,7 @@ test('parallel streaming keeps sidebar order and selection stable after pointer 
   const runs=[make('A','2026-09-24T00:00:00Z'),make('B','2026-09-24T00:01:00Z')];
   let emit:any;const w=window as any;
   w.__stream=(id:string,index:number)=>{const run=runs.find(r=>r.id===id)!;run.updatedAt=new Date(Date.UTC(2026,8,24,0,2,index)).toISOString();run.messages[1].text+='更新';emit(structuredClone(run));};
-  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
+  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
  });
  await page.goto('/');
  const rows=page.locator('.tree-task > button:first-child');
@@ -830,7 +830,7 @@ test('queued execution follows application language',async({page})=>{
 
 test('project execution status and empty description are translated',async({page})=>{
  await prepare(page);
- await page.addInitScript(()=>{const api=(window as any).desktop;api.readWorkspace=async()=>({theme:'light',language:'en',tasks:[],projects:[{id:'p',name:'Demo',path:'/fixture',createdAt:new Date().toISOString()}]});const run=(window as any).__demoRun;run.projectId='p';run.status='completed';run.approvals=[];});
+ await page.addInitScript(()=>{const api=(window as any).desktop;api.readWorkspace=async()=>({layoutMode:'classic',theme:'light',language:'en',tasks:[],projects:[{id:'p',name:'Demo',path:'/fixture',createdAt:new Date().toISOString()}]});const run=(window as any).__demoRun;run.projectId='p';run.status='completed';run.approvals=[];});
  await page.reload();await page.locator('.project-tree-name').click();
  await expect(page.locator('.project-task-list small')).toHaveText('Turn ended');
  await expect(page.locator('.page-description')).toHaveText('Add a description to share context across project tasks.');

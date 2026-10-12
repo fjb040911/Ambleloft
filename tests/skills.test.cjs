@@ -34,12 +34,12 @@ test('rejects malformed skills and symlinks without writing a database record',a
 });
 test('execution sends current catalog and explicit workflow while a follow-up does not reselect it',async()=>{
  const calls=[];const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};
- const run={messages:[{role:'user',text:'Summarize this'}],cwd:'/tmp',permission:'default'};
+ const run={messages:[{id:'first',role:'user',text:'Summarize this'}],cwd:'/tmp',permission:'default'};
  const rpc={send(){},async call(method,params){calls.push({method,params});return method==='turn/start'?{turn:{id:'turn'}}:{thread:{id:'thread'}};}};
- await runtime.execute({rpc,run,config:{model:'test'},skills:{instructions:'CATALOG ONLY',explicit:'WORKFLOW BODY'}});
+ await runtime.execute({rpc,run,turnKey:'first',config:{model:'test'},skills:{instructions:'CATALOG ONLY',explicit:'WORKFLOW BODY'}});
  assert.match(calls.find(c=>c.method==='thread/start').params.developerInstructions,/CATALOG ONLY/);assert.match(calls.find(c=>c.method==='turn/start').params.input[0].text,/WORKFLOW BODY/);
- calls.length=0;run.messages.push({role:'user',text:'Shorten it'});
- await runtime.execute({rpc,run,config:{model:'test'},skills:{instructions:'CURRENT CATALOG',explicit:''}});
+ calls.length=0;run.messages.push({id:'second',role:'user',text:'Shorten it'});
+ await runtime.execute({rpc,run,turnKey:'second',config:{model:'test'},skills:{instructions:'CURRENT CATALOG',explicit:''}});
  assert.equal(calls.find(c=>c.method==='turn/start').params.input[0].text,'Shorten it');assert.match(calls.find(c=>c.method==='thread/resume').params.developerInstructions,/CURRENT CATALOG/);
 });
 
@@ -53,4 +53,17 @@ test('skill previews read owned files and reject traversal and symlinks',async t
  await assert.rejects(skills.readFile({id:skill.id,file:'../SKILL.md'}),/路径/);
  const target=path.join(path.dirname(skill.path),'references/format.md');await fs.unlink(target);await fs.symlink(path.join(source,'SKILL.md'),target);
  await assert.rejects(skills.readFile({id:skill.id,file:'references/format.md'}),/符号链接/);
+});
+
+test('repository installation preserves complete resources, provenance and disabled state',async t=>{
+ const {skills,source}=await fixture(t);let cleaned=0;
+ const checkout=async()=>({source,provenance:{kind:'github',repository:'https://github.com/example/rules',directory:'skills/rules',requestedRef:'main',commit:'a'.repeat(40)},cleanup:async()=>cleaned++});
+ const spec={repository:'https://github.com/example/rules',directory:'skills/rules',ref:'main'};
+ const first=await skills.installRepository(spec,{checkout});assert.equal(first.skill.provenance.commit,'a'.repeat(40));assert.ok(first.skill.files.includes('references/format.md'));assert.match(first.visibility,/下一次/);
+ const duplicate=await skills.installRepository(spec,{checkout});assert.equal(duplicate.duplicate.id,first.skill.id);
+ await skills.update({id:first.skill.id,enabled:false});const updated=await skills.installRepository({...spec,replaceId:first.skill.id},{checkout});assert.equal(updated.skill.enabled,false);assert.equal(updated.skill.version,2);assert.equal(cleaned,3);
+});
+test('repository install rejects untrusted hosts, invalid refs and escaping paths before checkout',async t=>{
+ const {skills}=await fixture(t);let called=false;const checkout=async()=>{called=true;throw Error('unexpected');};
+ for(const spec of [{repository:'https://example.com/a/b',directory:'skills/rules'},{repository:'https://github.com/a/b',directory:'../rules'},{repository:'https://github.com/a/b',directory:'skills/rules',ref:'--upload-pack=bad'}])await assert.rejects(skills.installRepository(spec,{checkout}));assert.equal(called,false);
 });

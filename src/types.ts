@@ -1,9 +1,11 @@
-export interface Skill {id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;createdAt:string;updatedAt:string}
+export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
+export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
+export interface Skill {id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
 export interface SkillDetail extends Skill {body:string}
 export interface SkillSnapshot {id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
 export interface SkillImportResult {skill?:Skill;duplicate?:Skill;token?:string}
 export interface SkillFilePreview {path:string;size:number;kind:'markdown'|'text'|'image'|'unsupported';text?:string;dataUrl?:string;reason?:string}
-export interface SkillsAPI {readFile(input:{id:string;file:string}):Promise<SkillFilePreview>;list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}
+export interface SkillsAPI {onChanged?(listener:()=>void):()=>void;readFile(input:{id:string;file:string}):Promise<SkillFilePreview>;list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}
 export type Page = 'home' | 'messages' | 'projects' | 'extension-view' | 'plugins' | 'devices' | 'settings';
 export type Theme = 'system' | 'light' | 'dark';
 export interface ModelLimits {contextWindow?:number;autoCompactTokenLimit?:number;maxOutputTokens?:number}
@@ -72,7 +74,7 @@ declare global {
         onInteraction(listener:(data:ExtensionInteractionRequest)=>void):()=>void;
         onInteractionClose(listener:(id:string)=>void):()=>void;
       };
-      extensions?: {details?(id:string):Promise<{readme:string;publisher:string;size:number|null}>;configuration(input:{id:string;action?:'get'|'save'|'reset';generation?:number;expectedRevision?:number;value?:unknown}):Promise<ExtensionConfiguration>;resetConfirmations(input:{id:string}):Promise<ExtensionSnapshot>;development(input:{id:string;url:string}):Promise<boolean>;onChanged?(listener:()=>void):()=>void;activate(id:string):Promise<ExtensionSnapshot>;list():Promise<ExtensionSnapshot>;install(input?:{development?:boolean}):Promise<ExtensionSnapshot>;rollback(input:{id:string;digest:string}):Promise<ExtensionSnapshot>;grants(input:{id:string;revoke?:boolean;projectId?:string;capabilities?:string[]}):Promise<ExtensionSnapshot>;enable(input:{id:string;enabled:boolean}):Promise<ExtensionSnapshot>;remove(id:string):Promise<ExtensionSnapshot>;command(id:string):Promise<{extensionId:string;viewId:string;when?:string;visible?:boolean}>};
+      extensions?: {automation?(input:{id:string;action?:'get'|'policy'|'retry'|'discard'|'deleteJob'|'retryJob'|'cleanupJobs';policy?:AutomationPolicy;eventId?:string;jobId?:string}):Promise<AutomationState>;details?(id:string):Promise<{readme:string;publisher:string;size:number|null}>;configuration(input:{id:string;action?:'get'|'save'|'reset';generation?:number;expectedRevision?:number;value?:unknown}):Promise<ExtensionConfiguration>;resetConfirmations(input:{id:string}):Promise<ExtensionSnapshot>;development(input:{id:string;url:string}):Promise<boolean>;onChanged?(listener:()=>void):()=>void;activate(id:string):Promise<ExtensionSnapshot>;list():Promise<ExtensionSnapshot>;install(input?:{development?:boolean}):Promise<ExtensionSnapshot>;rollback(input:{id:string;digest:string}):Promise<ExtensionSnapshot>;grants(input:{id:string;revoke?:boolean;projectId?:string;capabilities?:string[]}):Promise<ExtensionSnapshot>;enable(input:{id:string;enabled:boolean}):Promise<ExtensionSnapshot>;remove(id:string):Promise<ExtensionSnapshot>;command(id:string):Promise<{extensionId:string;viewId:string;when?:string;visible?:boolean}>};
       skills?: SkillsAPI;
       projectFiles?: ProjectFilesAPI;
       selectAttachments(): Promise<{name:string;path:string}[]>;
@@ -111,7 +113,7 @@ export interface FileContext {projectId?:string;runId?:string;artifactId?:string
 export interface FileEntry {name:string;path:string;directory:boolean}
 export interface FileListing {entries:FileEntry[];truncated:boolean}
 export interface FilePreview {path:string;name:string;size:number;version:string;kind:'markdown'|'html'|'image'|'pdf'|'code'|'spreadsheet'|'presentation'|'unsupported';text?:string;truncated:boolean;reason?:string;unchanged?:false}
-export interface FileApplication {id:string;name:string}
+export interface FileApplication {id:string;name:string;icon?:string;isDefault?:boolean;applicationId?:string;recommended?:boolean}
 export type OfficePreview = {version:string;asset:string}&({kind:'spreadsheet';sheets:{name:string;rows:string[][];columns:number;truncated:boolean}[];truncated:boolean}|{kind:'presentation';slides:{number:number;notes:string}[];legacy?:boolean});
 export interface ProjectFilesAPI {
  office(input:FileContext&{path:string;version?:string}):Promise<OfficePreview>;

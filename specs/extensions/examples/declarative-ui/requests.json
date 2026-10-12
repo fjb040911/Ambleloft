@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "id": "requests",
+  "type": "collection",
+  "title": "服务请求",
+  "description": "选择需要跟进的请求，或查看每项的处理记录。",
+  "rows": {
+    "key": "id",
+    "fields": [
+      {
+        "name": "id",
+        "label": "编号",
+        "type": "text"
+      },
+      {
+        "name": "subject",
+        "label": "请求",
+        "type": "text"
+      },
+      {
+        "name": "description",
+        "label": "说明",
+        "type": "textarea"
+      },
+      {
+        "name": "status",
+        "label": "状态",
+        "type": "text"
+      },
+      {
+        "name": "owner",
+        "label": "负责人",
+        "type": "text"
+      },
+      {
+        "name": "notes",
+        "label": "处理记录",
+        "type": "textarea"
+      }
+    ],
+    "layout": "cards",
+    "card": {
+      "titleField": "subject",
+      "descriptionField": "description",
+      "badgeFields": [
+        "status"
+      ],
+      "metadataFields": [
+        "id",
+        "owner"
+      ]
+    },
+    "columns": [
+      "subject",
+      "status",
+      "owner"
+    ],
+    "detailFields": [
+      "notes"
+    ],
+    "filterFields": [
+      "status"
+    ],
+    "valueLabels": {
+      "status": {
+        "open": "待处理",
+        "closed": "已完成"
+      }
+    }
+  },
+  "actions": [
+    {
+      "id": "follow-up",
+      "label": "跟进",
+      "kind": "chat",
+      "scope": "row",
+      "eligible": {
+        "field": "status",
+        "notEquals": "closed"
+      },
+      "prompt": "跟进此服务请求。",
+      "input": {
+        "request": {
+          "from": "row"
+        }
+      }
+    },
+    {
+      "id": "follow-selected",
+      "label": "跟进所选",
+      "kind": "chat",
+      "scope": "selection",
+      "prompt": "跟进所选服务请求。",
+      "input": {
+        "ids": {
+          "from": "selection.id"
+        }
+      }
+    }
+  ]
+}

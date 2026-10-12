@@ -22,9 +22,9 @@ class ExtensionService {
  commandVisible(item,command,projectId){if(!command.when)return true;const types={'project.exists':'boolean'},values={'project.exists':!!projectId};for(const key of item.manifest.contextKeys||[]){types[key.key]=key.type;values[key.key]=this.hosts?.entries.get(item.id)?.context[key.key]??key.default;}try{return require('./condition.cjs').compileCondition(command.when,types)(values);}catch{return false;}}
  attachHosts(hosts){this.hosts=hosts;this.options.stop=async id=>{this.options.invalidatePages?.(id);await hosts.stop(id);};}
  startHost(id){return this.serial(async()=>{await this.hosts.activate(id,{manual:true});return this.snapshot();});}
- async shutdown(){this.closed=true;await this.hosts?.shutdown();await this.queue;}
+ async shutdown(){this.closed=true;await Promise.all([this.automation?.shutdown(),this.hosts?.shutdown()]);await this.queue;}
  serial(action){if(this.closed)return Promise.reject(Error('HOST_UNAVAILABLE: Application is shutting down'));const result=this.queue.then(()=>{if(this.closed)throw Error('HOST_UNAVAILABLE: Application is shutting down');return action();});this.queue=result.catch(()=>{});return result;}
- async change(input){this.items=await this.database.call('extensionMutation',input);if(input.id&&input.action!=='stage'){this.options.pageChanged?.(input.id,input.action);this.hosts?.reconcile(input.id);}this.options.publish?.();return this.snapshot();}
+ async change(input){this.items=await this.database.call('extensionMutation',input);await this.automation?.reconcile();if(input.id&&input.action!=='stage'){this.options.pageChanged?.(input.id,input.action);this.hosts?.reconcile(input.id);}this.options.publish?.();return this.snapshot();}
  install(input){const manifest=validate(input);return this.serial(()=>this.change({action:'legacy',id:manifest.id,item:{id:manifest.id,kind:'legacy',manifest,enabled:true,trusted:false,generation:0}}));}
  installPackage(source,mode,confirm){return this.serial(async()=>{
   if(!this.packages)throw Error('Package store unavailable');const revision=await this.packages.prepare(source,mode);

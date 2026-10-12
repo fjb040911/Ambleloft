@@ -1,0 +1,44 @@
+version: 1
+id: project-onboarding
+title: 项目检查配置
+description: 完成配置后，将交给当前聊天中的 Agent 处理。
+steps:
+  - id: stack
+    title: 技术栈
+    description: 选择项目的主要类型。
+    fields:
+      - name: kind
+        type: select
+        label: 项目类型
+        required: true
+        options:
+          - {label: 前端, value: frontend}
+          - {label: 后端, value: backend}
+  - id: paths
+    title: 检查路径
+    fields:
+      - name: root
+        type: text
+        label: 代码目录
+        placeholder: 例如 src
+        required: true
+        dependsOn: [stack.kind]
+      - name: components
+        type: text
+        label: 组件目录
+        dependsOn: [stack.kind]
+        visibleWhen: {field: stack.kind, equals: frontend}
+  - id: rules
+    title: 规范开关
+    fields:
+      - name: style
+        type: group-toggle
+        label: 代码风格规则组
+        help: 部分启用时，保持不变会保留各条规则的选择。
+      - name: enabled
+        type: switch
+        label: 启用检查
+submit:
+  kind: chat
+  label: 生成项目配置
+  confirmation: onSubmit

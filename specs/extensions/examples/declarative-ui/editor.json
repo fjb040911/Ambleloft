@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "id": "rules-editor",
+  "type": "editor",
+  "title": "编辑规则草稿",
+  "description": "在此编辑，点击保存并发送后由 Agent 检查并写入项目文件。",
+  "fields": [
+    {
+      "name": "title",
+      "label": "规则库名称",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "rows": {
+    "key": "row-id",
+    "fields": [
+      {
+        "name": "rule-id",
+        "label": "规则编号",
+        "type": "text",
+        "required": true
+      },
+      {
+        "name": "severity",
+        "label": "严重程度",
+        "type": "select",
+        "options": [
+          {
+            "label": "高",
+            "value": "high"
+          },
+          {
+            "label": "低",
+            "value": "low"
+          }
+        ]
+      },
+      {
+        "name": "description",
+        "label": "规则说明",
+        "type": "textarea",
+        "required": true
+      }
+    ],
+    "unique": [
+      "rule-id"
+    ]
+  },
+  "actions": [
+    {
+      "id": "save-rules",
+      "label": "保存并发送",
+      "kind": "chat",
+      "scope": "data",
+      "prompt": "请读取本次结构化提交，校验规则库后按用户授权保存到所属项目。高级字段保持不变。",
+      "input": {
+        "metadata": {
+          "from": "values"
+        },
+        "rules": {
+          "from": "all"
+        }
+      }
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 function summary(run) {
  const {messages,tools,plans,fileChanges,artifacts,taskApps,approvals,questions,...meta}=run;
- return {...meta,lastTurnStartedAt:messages?.findLast(message=>message.role==='user')?.timing?.startedAt||run.createdAt,messages:[],tools:[],approvals:[],summaryOnly:true};
+ return {...meta,lastTurnStartedAt:messages?.findLast(message=>message.role==='user'&&!message.turnKey)?.timing?.startedAt||run.createdAt,messages:[],tools:[],approvals:[],summaryOnly:true};
 }
 function pageRun(run,before,limit=30) {
  if(!run)throw new Error('会话不存在');
  if(!Number.isInteger(limit)||limit<1||limit>100)throw new Error('分页大小无效');
- const users=run.messages.filter(m=>m.role==='user');
+ const users=run.messages.filter(m=>m.role==='user'&&!m.turnKey);
  const end=before===undefined?users.length:users.findIndex(m=>m.id===before);
  if(end<0)throw new Error('历史分页位置已失效');
  const start=Math.max(0,end-limit);const first=users[start];const last=users[end];

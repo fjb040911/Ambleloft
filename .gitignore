@@ -62,3 +62,5 @@ coverage/
 /design-previews/
 /videos/
 /.github/media/*.mp4
+
+/build/ui-template.cjs

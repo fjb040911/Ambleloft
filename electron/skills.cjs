@@ -47,7 +47,7 @@ function createSkills(directory,database) {
   const serial=fn=>{const result=queue.then(fn);queue=result.catch(()=>{});return result;};
   const summary=({body,frontmatter,...record})=>record;
   const get=async id=>{const record=(await readAll()).find(s=>s.id===id);if(!record)throw new Error('技能不存在或已删除');return record;};
-  const publish=async (old, fields, source, sourcePath, enabled=true)=>{
+  const publish=async (old, fields, source, sourcePath, enabled=true,provenance)=>{
     const id=old?.id||randomUUID(),revision=randomUUID(),destination=path.join(root,id,revision);
     try {
       const files=await copyBundle(source,destination);
@@ -55,7 +55,7 @@ function createSkills(directory,database) {
       const content=`---\n${frontmatter}\n---\n\n${fields.body}\n`;
       await fs.writeFile(path.join(destination,'SKILL.md'),content);
       const now=new Date().toISOString();
-      const record={id,...fields,enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,createdAt:old?.createdAt||now,updatedAt:now};
+      const record={id,...fields,enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,...((provenance||old?.provenance)?{provenance:provenance||old.provenance}:{}),createdAt:old?.createdAt||now,updatedAt:now};
       await database.call('putSkill',record);return summary(record);
     } catch(error) {await fs.rm(destination,{recursive:true,force:true});throw error;}
   };
@@ -94,6 +94,19 @@ function createSkills(directory,database) {
       const old=options.replaceId?await get(options.replaceId):null;
       return {skill:await publish(old,fields,resolved,resolved,old?.enabled??true)};
     });},
+    async installRepository(input,options={}){
+      const spec=require('./skill-repository.cjs').validate(input);
+      const bundle=await (options.checkout||require('./skill-repository.cjs').checkout)(spec,{signal:options.signal});
+      try{return await serial(async()=>{
+        if(options.signal?.aborted)throw Error('安装已取消');const file=path.join(bundle.source,'SKILL.md');if((await fs.lstat(file)).isSymbolicLink()||(await fs.stat(file)).size>MAX_BODY+10000)throw Error('SKILL.md 无效或过大');const fields=parseSkill(await fs.readFile(file,'utf8'));
+        const existing=(await readAll()).find(s=>s.name===fields.name);
+        if(existing&&!spec.replaceId&&!spec.asNew)return {duplicate:summary(existing),provenance:bundle.provenance};
+        const old=spec.replaceId?await get(spec.replaceId):null;
+        if(old&&old.name!==fields.name)throw Error('只能更新同名技能');
+        const result={skill:await publish(old,fields,bundle.source,bundle.provenance.repository,old?.enabled??true,bundle.provenance)};
+        return {...result,visibility:'下一次模型请求可见；当前请求可读取返回的技能路径。'};
+      });}finally{await bundle.cleanup();}
+    },
     update(input){return serial(async()=>{
       const old=await get(input?.id);
       if(input.enabled!==undefined){if(typeof input.enabled!=='boolean')throw new Error('技能状态无效');const next={...old,enabled:input.enabled,updatedAt:new Date().toISOString()};await database.call('putSkill',next);return summary(next);}

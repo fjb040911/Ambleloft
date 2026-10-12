@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+// These legacy workflow cases exercise the grouped sidebar explicitly.
+test.use({storageState:{cookies:[],origins:[{origin:'http://127.0.0.1:5173',localStorage:[{name:'atelier.workspace.v1',value:JSON.stringify({tasks:[],projects:[],theme:'light',layoutMode:'classic'})}]}]}});
+
 test('projects organize drafts, preview details, edit and detach safely',async({page})=>{
  await page.goto('/');
  await expect(page.getByText('最近的任务',{exact:true})).toHaveCount(0);
@@ -55,7 +58,7 @@ test('sidebar component preserves project and task pagination and keyboard acces
  await page.addInitScript(()=>{
  const projects=Array.from({length:32},(_,i)=>({id:'p'+i,name:'项目 '+i,path:'/tmp/project'+i,createdAt:'2026-09-30'}));
  const runs=Array.from({length:35},(_,i)=>({id:'r'+i,title:'任务 '+i,projectId:null,status:'completed',createdAt:new Date(Date.UTC(2026,8,i+1)).toISOString(),messages:[],tools:[],approvals:[]}));
- (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({projects,tasks:[],theme:'light'}),listRuns:async()=>runs,onRun:()=>()=>{},onCommand:()=>()=>{}};
+ (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects,tasks:[],theme:'light'}),listRuns:async()=>runs,onRun:()=>()=>{},onCommand:()=>()=>{}};
  });
  await page.goto('/');
  const projects=page.getByRole('region',{name:'我的项目'});const tasks=page.getByRole('region',{name:'任务',exact:true});
@@ -70,7 +73,7 @@ test('sidebar component preserves project and task pagination and keyboard acces
 
 test('project task and extension selection is mutually exclusive',async({page})=>{
  await page.addInitScript(()=>{
- (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({projects:[{id:'p',name:'测试项目',path:'/tmp',createdAt:'2026-09-30'}],tasks:[],theme:'light'}),listRuns:async()=>[{id:'r',title:'测试任务',projectId:'p',status:'completed',createdAt:'2026-09-30',messages:[],tools:[],approvals:[]}],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed:[{manifest:{id:'ext',name:'测试扩展',description:'',contributes:{}},enabled:true}],capabilities:{}})}};
+ (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[{id:'p',name:'测试项目',path:'/tmp',createdAt:'2026-09-30'}],tasks:[],theme:'light'}),listRuns:async()=>[{id:'r',title:'测试任务',projectId:'p',status:'completed',createdAt:'2026-09-30',messages:[],tools:[],approvals:[]}],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed:[{manifest:{id:'ext',name:'测试扩展',description:'',contributes:{}},enabled:true}],capabilities:{}})}};
  });
  await page.goto('/');
  const nav=page.locator('.workspace-navigation');

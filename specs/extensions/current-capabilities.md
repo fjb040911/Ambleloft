@@ -1,6 +1,6 @@
 # 当前扩展能力与契约来源
 
-核对日期：2026-10-08。下列“预览”表示当前源码存在公开扩展入口，不表示稳定 API、npm 已发布或任意安装包均支持。历史设计中的目标不能覆盖本表的实现边界。
+核对日期：2026-10-10。下列“预览”表示当前源码存在公开扩展入口，不表示稳定 API、npm 已发布或任意安装包均支持。历史设计中的目标不能覆盖本表的实现边界。
 
 机器清单：[host-capabilities.json](contracts/host-capabilities.json)。这是源码能力清单，不是运行时协商接口，不授予任何权限。
 
@@ -13,7 +13,9 @@
 | mcpApps | 有限预览；contributes.mcpApps + Operation UI 元数据，包内任务 UI | extension.schema.json；mcp-apps 测试及 test:extensions:apps |
 | extensionAuthentication | 预览；资源声明、交互式 OIDC 连接、静默会话查询、宿主 HTTPS 代理 | sdk.d.ts；extension-auth、oidc、extension-hosts 测试 |
 | messageActions | 预览；Operation 按钮、持久执行状态、幂等结果回报与重启恢复 | messages-preview.d.ts；action-journal、message-service、extension-hosts 测试 |
-| agentHooks | 未开放公共 Agent hook SDK | 不从设计稿生成运行时代理 |
+| agentHooks | 预览；manifest.hooks → context.hooks.register，项目授权、持久投递与死信 | [M2 接入指南](background-automation-guide.md)；automation 测试 |
+| conversationTurns | 预览；context.conversations.getTurn，冻结版本文本 | sdk.d.ts；automation 测试 |
+| backgroundJobs | 预览；context.jobs.submit/get，无工具摘要、模型与额度授权、未知结果不自动重试 | [M2 接入指南](background-automation-guide.md)；automation 测试 |
 | formResumeApi | 未开放 forms_resume / SDK 直接展示或迁移 API | 已有实例保存与显示不等于新增公开 API |
 
 本地消息提供 Operation actions，但尚不提供账号作用域投递或系统通知实际送达保证。认证首版不提供 refresh token、全局账号选择器和 WebSocket 凭据，详见 [接入规范](message-actions-auth-guide.md)。表单限静态字段与线性步骤；MCP Apps 不等于任意远程 MCP 或完整 ChatGPT Apps 兼容。宿主内部模块的存在不是能力开放证据。
@@ -45,3 +47,21 @@ check:upstream 对照同步契约和验证器；doctor 对照已记录的宿主�
 - [图标规范](icons.md)
 - [消息操作与认证接入规范](message-actions-auth-guide.md)
 - [v0.5.0 增量交接与验收清单](../../tooling-report/requirement/v0.5.0/README.md)
+
+## 异步宿主表单（源码预览）
+
+声明式 `submit.kind: chat` 已接入持久投递：展示立即返回，运行中 steer、空闲 start，结果未知仅核实不重发；运行中答案归入原轮次。macOS 原生集成已验证，Windows/Linux 后续验证。详见 [异步宿主表单](./async-host-forms.md)。
+
+## 声明式任务 UI 源码预览（2026-10-10）
+
+新增独立 `amble-ui` / `amble-ui-ref` v1，支持规则编辑器、结果集合、用户单击 chat 动作、SQLite 提交与队列原子持久化。普通 skill 与扩展内 skill 共用；旧表单 v1 保持兼容。运行时以 `ui_capabilities` 为准。`skills_install` 支持 GitHub 子目录完整技能安装及不可变 commit 来源记录。详见 [契约与边界](declarative-ui-guide.md)。逐行业务回写、项目修复互斥队列与跨平台发行验收未交付；SDK/CLI 由独立项目按 tooling-report/requirement/v0.6.0 对接。
+
+2026-10-10 UI 展示增量：集合列/详情/筛选支持 `rows.valueLabels`，select 字段复用 options 标签；运行时需 `collectionValueLabels=1`。已优化长路径、固定操作列、自适应筛选与空状态。原始数据和投递状态语义保持不变；详见 tooling-report/requirement/v0.6.1。
+
+文件引用展示后续方案见 [长路径设计](file-reference-design.md)：沿用 `rows.location.pathField`，由宿主内部组件统一渲染，skill 无需导入组件。H09a 的缩略、完整路径浮层、复制和绑定定位已接入正式 TaskUi 路径列及路径详情字段，同名消歧按全实例计算；当前 capability 清单不因此增加新能力。
+
+2026-10-10 三步表单增量：`forms_capabilities`、最终 chat 单击提交 opt-in、之前字段依赖/条件展示、混合组开关、紧凑 Switch 和 `forms_read_submission` 已接入源码预览。依赖变化保留旧值并要求确认，不自动重算推荐。详见 [表单指南](declarative-forms-guide.md) 与 tooling-report/requirement/v0.6.3；独立 SDK/CLI 尚需同步实现。
+
+- 集合双布局：运行时 `ui_capabilities.collectionLayouts: 1`，collection 可用 `rows.layout` 与 `rows.card` 显式映射，在正式任务中切换 table/cards，共享筛选、分页、选择和操作权限。详见 [声明式 UI 指南](declarative-ui-guide.md#集合双布局2026-10-12)。
+
+- 自动交付文件卡片仅根据当前轮次 added/modified 文件快照或已完成文件写入工具收集；最终答复中的普通路径/链接不再作为产物证据。shell 输出通过轮次快照识别，基准不足时不猜测。历史卡片不自动迁移，显式交付已有文件协议仍待定义。

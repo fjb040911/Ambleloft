@@ -20,7 +20,7 @@ Ambleloft is an open-source platform for connecting your apps to AI agents. Buil
 
 Present a form or custom interface when a user asks to do something. They can enter details, review choices, and confirm the next step in the conversation. Use declarative forms for linear, multi-step flows, or the supported MCP Apps subset for custom HTML/JS.
 
-[Explore in-chat forms](specs/extensions/declarative-forms-guide.md)
+[Explore in-chat forms](specs/extensions/declarative-forms-guide.md). Source-preview templates can opt into single-click chat submission, dependent and conditional fields, mixed group toggles, and frozen answer reads; probe `forms_capabilities` before using these increments.
 
 ### Let the Agent call your app
 
@@ -34,7 +34,7 @@ Subscribe to events from your business service and publish updates in the messag
 
 [Explore service events](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.md) · [Add message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md)
 
-*These are events from your own service. Public subscriptions to chat turns and Agent lifecycle hooks are not available yet.*
+*Service-event examples use your own backend. The current source also includes a separate [preview of turn-completion hooks and background jobs](specs/extensions/background-automation-guide.md), gated by project permissions and user-enabled automation. Previously published SDK/CLI packages may not support it.*
 
 ## Build your first extension
 
@@ -59,7 +59,7 @@ In a compatible host, open **Settings → Extensions → Install**, select the p
 
 ![Extension overview: interactive interfaces and operations shared by users and agents](.github/assets/extension-platform-en.png)
 
-Use a Skill to describe when the Agent should use your capability, a form or page to collect input, and an operation to execute business logic. See the [current capabilities and contracts](specs/extensions/current-capabilities.md).
+Use a Skill to describe when the Agent should use your capability, a form or page to collect input, and an operation to execute business logic. See the [current capabilities and contracts](specs/extensions/current-capabilities.md). Ordinary skills can also declare deterministic editors and result collections with single-click chat actions; see the [declarative UI v1 guide](specs/extensions/declarative-ui-guide.md) and [complete sample skill](specs/extensions/examples/declarative-ui/SKILL.md). Collections support explicit table/card layouts with shared filtering, selection, pagination, and actions (`ui_capabilities.collectionLayouts: 1`); see the [business-neutral service request example](specs/extensions/examples/declarative-ui/requests.json). These features are source previews. A [host-rendered file reference design](specs/extensions/file-reference-design.md) reuses `rows.location.pathField` without requiring skills to import UI components; compact file references are integrated into task UI with directory hints, full-path details, copying, and host-authorized file location (source preview).
 
 </details>
 
@@ -107,7 +107,7 @@ Ambleloft provides model connections, project files, conversation history, and e
 
 *Application UI with synthetic project content and a simulated desktop bridge.*
 
-Switch layouts in **Settings → General → Navigation layout**. The grouped sidebar is the default. Switching layouts or activity groups keeps your current conversation and draft. The activity bar uses icons with tooltips and separate project, task, and extension entry points. Standalone tasks are grouped by time. Narrow windows use a sidebar drawer with Escape-to-close and focus restoration.
+Switch layouts in **Settings → General → Navigation layout**. The activity bar is the default. Switching layouts or activity groups keeps your current conversation and draft. The activity bar uses icons with tooltips and separate project, task, and extension entry points. Standalone tasks are grouped by time. Narrow windows use a sidebar drawer with Escape-to-close and focus restoration.
 
 File diffs compare directory snapshots before and after a turn. They may include external edits and have size and count limits. They support review, not Git commits or rollback.
 
@@ -115,11 +115,11 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.3.1 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
+**0.4.0 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
 
 - **Platforms:** validated on macOS Apple Silicon. Windows and Linux are targets; packages are not available yet.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
-- **Tooling:** samples pin published SDK/CLI **0.1.0-alpha.7**. This repository's alpha.1 reference SDK is maintained separately. APIs are not stable; a marketplace and public Agent hook SDK are not available.
+- **Tooling:** samples pin published SDK/CLI **0.1.0-alpha.7**. This repository's alpha.1 reference SDK is maintained separately. APIs are not stable and a marketplace is not available. Turn-completion hooks, versioned turn reads, and background jobs are a new source preview; see the [automation guide](specs/extensions/background-automation-guide.md) for permissions, quotas, and SDK compatibility.
 
 Ambleloft connects to existing model endpoints. Model downloads and inference-runtime management are outside the current scope. Model and external service charges are separate.
 

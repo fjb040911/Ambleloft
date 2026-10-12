@@ -7,7 +7,7 @@ const CONTRACT_REVISION = 'm1-a1-r1';
 const MAX_JSON_BYTES = 256 * 1024;
 const ajv = new Ajv({ strict: false, allErrors: true, ownProperties: true, coerceTypes: false, useDefaults: false, removeAdditional: false });
 const structural = ajv.compile(schema);
-const projectCapabilities = new Set(['projects.read', 'projects.path.read', 'conversations.create', 'conversations.open']);
+const projectCapabilities = new Set(['projects.read', 'projects.path.read', 'conversations.create', 'conversations.open','agent.hooks','conversations.read','background.jobs']);
 const own = (object, key) => Object.hasOwn(object, key);
 function jsonGuard(value, maxDepth = 32) {
   const active = new Set(); let nodes = 0;
@@ -113,6 +113,12 @@ function validateManifest(manifest, { defaultMessages = {} } = {}) {
     validateValueSchema(op.outputSchema, `${location}/outputSchema`, errors);
     condition(op.enablement, `${location}/enablement`);
   }
+  const hookEvents=new Set();
+  for(const hook of manifest.hooks||[]){
+    if(!permissions.has('agent.hooks'))add('/hooks','agent.hooks permission required');
+    if(hookEvents.has(hook.event)||handlers.has(hook.handler))add('/hooks','Duplicate hook event or handler');
+    hookEvents.add(hook.event);handlers.add(hook.handler);
+  }
   for (const command of manifest.contributes?.commands || []) {
     contribution(command, '/contributes/commands');
     if (!manifest.contributes.home) add('/contributes/commands', 'openHome requires home');
@@ -189,7 +195,7 @@ function validatePackage(directory) {
   } catch (error) { return { ok: false, errors: [{ path: '/package', message: error.code ? `Package file error: ${error.code}` : error.message }] }; }
 }
 function validateHandlerBindings(manifest, names) {
-  const expected = (manifest.operations || []).map(op => op.handler);
+  const expected = [...(manifest.operations || []),...(manifest.hooks || [])].map(op => op.handler);
   return names.length === new Set(names).size && names.length === expected.length && names.every(name => expected.includes(name));
 }
 function compileValueValidator(valueSchema) {

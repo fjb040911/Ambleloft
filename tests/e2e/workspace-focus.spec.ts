@@ -1,4 +1,7 @@
 import {test,expect} from '@playwright/test';
+// These legacy workflow cases exercise the grouped sidebar explicitly.
+test.use({storageState:{cookies:[],origins:[{origin:'http://127.0.0.1:5173',localStorage:[{name:'atelier.workspace.v1',value:JSON.stringify({tasks:[],projects:[],theme:'light',layoutMode:'classic'})}]}]}});
+
 
 test('unconfigured tasks explicitly save drafts and reopen directly for editing',async({page})=>{
  await page.goto('/');const input=page.getByRole('textbox',{name:'任务内容',exact:true});

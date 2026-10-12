@@ -1,8 +1,8 @@
-/** M1 developer preview, SDK 0.1.0-alpha.1. Not a stable 1.0 contract. */
+/** Source developer preview (M1 + M2 automation). Not a stable 1.0 contract or published SDK version. */
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
 export type Capability = 'projects.read' | 'projects.path.read' | 'conversations.create'
-  | 'conversations.open' | 'storage' | 'configuration' | 'secrets';
+  | 'conversations.open' | 'agent.hooks' | 'conversations.read' | 'background.jobs' | 'storage' | 'configuration' | 'secrets';
 export type ErrorCode = 'INVALID_ARGUMENT' | 'INVALID_OUTPUT' | 'NOT_FOUND' | 'UNSUPPORTED'
   | 'UNTRUSTED' | 'DISABLED' | 'FORBIDDEN' | 'GRANT_REQUIRED' | 'INTERACTION_REQUIRED'
   | 'CANCELLED' | 'TIMEOUT' | 'OUTCOME_UNKNOWN' | 'BUSY' | 'CONFLICT'
@@ -48,7 +48,19 @@ export interface InvocationContext {
   readonly authentication: {requestSession(resourceId:string):Promise<AuthenticationSession>};
 }
 export type OperationHandler = (input: JsonObject, context: InvocationContext) => Promise<JsonObject>;
+export interface TurnReference {conversationId:string;turnId:string;version:number}
+export interface TurnSnapshot extends TurnReference {projectId:string;status:string;messages:{id:string;role:string;text:string}[]}
+export type HookEvent = (TurnReference & {type:'conversation.turn.completed'}) | {type:'background.job.completed';jobId:string;status:BackgroundJob['status']};
+export type HookEnvelope = HookEvent & {eventId:string;projectId:string;occurredAt:string};
+export interface BackgroundJob {id:string;eventKey:string;projectId:string;status:'queued'|'running'|'succeeded'|'failed'|'unknown'|'cancelled';providerId:string;model:string;createdAt:number;result?:Json;error?:string}
+export interface BackgroundJobInput {projectId:string;eventKey:string;prompt:string;turns:TurnReference[];outputSchema:JsonObject}
 export interface ExtensionContext {
+  /** Synchronous registration during activate; returning resolves the durable delivery (ACK).
+   * At least once: deduplicate effects with eventId. Maximum duration 30 seconds. */
+  hooks:{register(handler:string,callback:(event:HookEnvelope,context:{signal:AbortSignal;projectId:string;requestId:string})=>void|Promise<void>):Disposable};
+  conversations:{getTurn(reference:TurnReference):Promise<TurnSnapshot>};
+  /** eventKey is scoped to this installation; reuse with identical input returns the same job. */
+  jobs:{submit(input:BackgroundJobInput):Promise<BackgroundJob>;get(jobId:string):Promise<BackgroundJob>};
   readonly extensionId: string;
   readonly packageRevision: string;
   /** Registration is synchronous during activate; only manifest handler names are valid. */
@@ -105,4 +117,25 @@ export interface ExtensionAuthentication {
  getSession(resourceId:string):Promise<AuthenticationSession|null>;
  disconnect(resourceId:string):Promise<void>;
  request(input:{sessionId:string;path:string;method?:'GET'|'POST'|'PUT'|'PATCH'|'DELETE'|'HEAD';body?:string}):Promise<{status:number;body:string;contentType:string}>;
+}
+
+/** Source-preview skill UI contract; not an ExtensionContext execution API. */
+export interface DeclarativeUiData { values?: Record<string, unknown>; rows: Record<string, unknown>[]; state?: 'ready'|'empty'|'incomplete'|'failed'|'uninitialized'; summary?: string; coverage?: string }
+export interface DeclarativeUiBinding { from?: string; value?: unknown }
+export interface DeclarativeUiAction { id: string; label: string; kind: 'chat'; scope: 'data'|'row'|'selection'|'all'; prompt: string; input?: Record<string, DeclarativeUiBinding>; eligible?: {field: string; notEquals: unknown} }
+export interface DeclarativeUiTemplate { version: 1; id: string; type: 'editor'|'collection'; title: string; description?: string; fields?: Record<string, unknown>[]; rows: { key: string; fields: Record<string, unknown>[]; layout?: 'table'|'cards'; card?: {titleField: string; descriptionField?: string; badgeFields?: string[]; metadataFields?: string[]}; columns?: string[]; detailFields?: string[]; unique?: string[]; filterFields?: string[]; location?: {pathField: string}; valueLabels?: Record<string, Record<string, string>> }; actions: DeclarativeUiAction[] }
+
+/** Optional amble-form v1 increments; probe forms_capabilities at runtime. */
+export interface DeclarativeFormCapabilities {declarativeForms:1;singleClickChat:1;fieldDependencies:1;conditionalFields:1;groupToggle:1;switch:1;readSubmission:1}
+export interface DeclarativeFormField {
+ name:string;label:string;type:'text'|'textarea'|'number'|'money'|'date'|'select'|'checkbox'|'switch'|'group-toggle';
+ required?:boolean;help?:string;placeholder?:string;options?:{label:string;value:string}[];
+ dependsOn?:string[];visibleWhen?:{field:string;equals:string|number|boolean};
+ minLength?:number;maxLength?:number;minimum?:number|string;maximum?:number|string;integer?:boolean;currency?:string;scale?:number;
+}
+export interface DeclarativeFormChatSubmit {kind:'chat';label:string;confirmation?:'always'|'onSubmit'}
+export interface DeclarativeFormSubmission {
+ submissionId:string;instanceId:string;runId:string;conversationId:string;projectId?:string;source:string;sourceRevision:string|number;templateDigest:string;
+ values:Record<string,Record<string,string|number|boolean>>;initialValues:Record<string,Record<string,string|number|boolean>>;touched:Record<string,boolean>;
+ template:JsonObject;deliveryStatus:string;
 }
