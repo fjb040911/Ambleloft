@@ -20,7 +20,9 @@ Ambleloft 是连接应用与 AI Agent 的开源平台。通过插件，让用户
 
 用户提出需求后，展示表单或自定义界面，让他们直接填写信息、核对选项并确认下一步。线性多步骤流程可以使用声明式表单；自定义 HTML/JS 界面可使用当前支持的 MCP Apps 协议子集。
 
-[查看表单开发指南](specs/extensions/declarative-forms-guide.md)
+[查看表单开发指南](specs/extensions/declarative-forms-guide.md) · [声明式编辑器与结果集合](specs/extensions/declarative-ui-guide.md)
+
+当前源码预览支持依赖字段、条件显示、异步聊天提交，以及带筛选、选择和分页的表格/卡片集合。使用前请探测宿主能力。
 
 ### 让 Agent 调用你的应用
 
@@ -34,7 +36,7 @@ Ambleloft 是连接应用与 AI Agent 的开源平台。通过插件，让用户
 
 [查看服务事件案例](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.zh-CN.md) · [添加消息操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.zh-CN.md)
 
-*这里订阅的是自有业务服务事件。聊天轮次内容订阅和公共 Agent 生命周期 Hook 尚未开放。*
+*服务事件案例订阅自有业务服务。当前源码还提供独立的[轮次完成 Hook 与后台作业预览](specs/extensions/background-automation-guide.md)，需要项目权限和用户开启自动化；旧版已发布 SDK/CLI 不一定支持。*
 
 ## 开发第一个扩展
 
@@ -107,7 +109,7 @@ Ambleloft 提供模型连接、项目文件、会话历史和执行审批。选�
 
 *应用界面使用虚构项目内容和模拟桌面接口。*
 
-在「**设置 → 通用 → 导航布局**」切换布局，默认使用分组侧栏。切换布局或活动栏分组会保留当前聊天和输入草稿。活动栏采用图标及悬浮提示，分别提供项目、任务和扩展入口；独立任务按时间分组。窄窗口使用侧栏抽屉，支持 Escape 关闭和焦点恢复。
+在「**设置 → 通用 → 导航布局**」切换布局，默认使用活动栏。切换布局或活动栏分组会保留当前聊天和输入草稿。活动栏采用图标及悬浮提示，分别提供项目、任务和扩展入口；独立任务按时间分组。窄窗口使用侧栏抽屉，支持 Escape 关闭和焦点恢复。
 
 文件差异通过比较本轮执行前后的目录快照生成，可能包含外部修改，并有大小和数量限制。它用于审阅，不执行 Git 提交或回滚。
 
@@ -115,11 +117,11 @@ Ambleloft 提供模型连接、项目文件、会话历史和执行审批。选�
 
 ## 当前预览范围
 
-**0.3.1 开发预览。** 本文描述当前源码能力，早期 0.2.1 安装包可能不包含这些功能。
+**0.4.0 开发预览。** 本文描述当前源码能力，早期 0.2.1 安装包可能不包含这些功能。
 
 - **平台：**已验证 macOS Apple Silicon；Windows 和 Linux 为目标平台，尚未提供安装包。
 - **扩展：**表单、操作、隔离页面、设置、消息操作及 OIDC 认证均处于开发者预览。MCP Apps 支持有限子集，不代表兼容完整 ChatGPT Apps 或任意远程 MCP。
-- **工具：**示例固定使用已发布的 SDK/CLI **0.1.0-alpha.7**；本仓库的 alpha.1 参考 SDK 独立维护。API 尚未稳定，商城与公共 Agent Hook SDK 尚未开放。
+- **工具：**示例固定使用已发布的 SDK/CLI **0.1.0-alpha.7**；本仓库的 alpha.1 参考 SDK 独立维护。API 尚未稳定，商城尚未开放。轮次完成 Hook、明确版本的轮次读取和后台作业为新增源码预览，权限、额度与 SDK 兼容范围见[自动化指南](specs/extensions/background-automation-guide.md)。
 
 Ambleloft 连接已有模型端点，不负责模型下载和推理运行时管理。模型及外部服务费用另计。
 

@@ -9,7 +9,7 @@ test('search opens from sidebar, filters content and pages through results',asyn
  await expect(dialog.locator('.search-result:not(.search-action)')).toHaveCount(20);await expect(dialog.locator('.search-result:not(.search-action)').first()).toContainText('任务 24');
  await dialog.getByRole('option',{name:'加载更多'}).click();await expect(dialog.locator('.search-result:not(.search-action)')).toHaveCount(25);
  await search.fill('历史 关键词');await expect(dialog.locator('.search-result:not(.search-action)')).toHaveCount(20);
- await search.fill('不存在的关键词');await expect(dialog).toContainText('没有找到相关结果');
+ await search.fill('不存在的关键词');await expect(dialog).toContainText('没有找到相关任务');
  await dialog.getByRole('tab',{name:'项目',exact:true}).click();
  await search.fill('产品空间');await expect(dialog.locator('.search-result:not(.search-action)')).toHaveCount(1);
  await dialog.getByRole('tab',{name:'扩展',exact:true}).click();
@@ -79,24 +79,20 @@ test('server content matches remain visible and quick actions execute',async({pa
  await expect(page.locator('.settings-workspace')).toBeVisible();
 });
 
-test('settings shares global search and messages actions at the same sidebar position',async({page})=>{
+test('settings shares global search and opens messages without leaving settings',async({page})=>{
  await page.goto('/');
- const searchButton=page.getByRole('button',{name:'搜索工作台',exact:true});
- const homeBox=await searchButton.boundingBox();
  await page.getByRole('button',{name:'设置',exact:true}).click();
  const settings=page.getByLabel('设置工作区');
- const settingsSearch=settings.getByRole('button',{name:'搜索工作台',exact:true});
- const box=await settingsSearch.boundingBox();
- expect(box!.y).toBe(homeBox!.y);expect(box!.x).toBe(homeBox!.x);
- await settingsSearch.click();
+ const settingsSearch=settings.getByRole('button',{name:'搜索工作台',exact:true}); await settingsSearch.click();
  const dialog=page.getByRole('dialog',{name:'搜索工作台'});
  await expect(dialog.getByRole('combobox')).toBeFocused();
  await page.keyboard.press('Escape');
  await expect(dialog).toHaveCount(0);await expect(settings).toBeVisible();
  await expect(settingsSearch).toBeFocused();
  await settings.getByRole('button',{name:'消息中心',exact:true}).click();
- await expect(settings).toHaveCount(0);
- await expect(page.getByRole('button',{name:'消息中心',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(settings).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'消息中心',exact:true})).toBeVisible();
+ await expect(settings.getByRole('button',{name:'消息中心',exact:true,includeHidden:true})).toHaveAttribute('aria-pressed','true');
 });
 
 test('categorized search pages tasks separately and opens a matching skill',async({page})=>{
@@ -119,7 +115,7 @@ test('categorized search pages tasks separately and opens a matching skill',asyn
  await dialog.getByRole('option',{name:'加载更多'}).click();await expect(dialog.locator('.search-result')).toHaveCount(25);
  await dialog.getByRole('combobox').fill('产品');
  await dialog.getByRole('tab',{name:'项目',exact:true}).click();await expect(dialog.locator('.search-result')).toHaveCount(1);await expect(dialog.locator('.search-result')).toContainText('产品项目');
- await dialog.getByRole('tab',{name:'扩展',exact:true}).click();await expect(dialog).toContainText('没有找到相关结果');
+ await dialog.getByRole('tab',{name:'扩展',exact:true}).click();await expect(dialog).toContainText('没有找到相关扩展');
  await dialog.getByRole('tab',{name:'快捷操作',exact:true}).click();await dialog.getByRole('combobox').fill('');await expect(dialog.locator('.search-action')).toHaveCount(4);
  await dialog.getByRole('tab',{name:'技能',exact:true}).click();await expect(dialog.locator('.search-result')).toContainText('产品分析技能');
  expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);
@@ -139,7 +135,7 @@ test('skills use the installed list even when global search returns no skills; e
  await expect(dialog.locator('[data-slot=command-item].search-result')).toHaveCount(20);
  await dialog.getByRole('option',{name:'加载更多'}).click();await expect(dialog.locator('.search-result')).toHaveCount(25);
  await dialog.getByRole('combobox').fill('没有这个技能');
- await expect(dialog.locator('[data-slot=empty-title]')).toHaveText('没有找到相关结果');
+ await expect(dialog.locator('[data-slot=empty-title]')).toHaveText('没有找到相关技能');
  await expect(dialog.getByRole('alert')).toHaveCount(0);
  await page.screenshot({path:'test-results/search-empty.png'});
  await dialog.getByRole('button',{name:'清除搜索'}).click();await expect(dialog.locator('.search-result')).toHaveCount(20);
@@ -187,4 +183,52 @@ test('skill preview tolerates a stale main process without hiding real read erro
  await page.evaluate(()=>(window as any).__readError='文件读取失败');
  await dialog.getByRole('button',{name:'SKILL.md',exact:true}).click();
  await expect(dialog.getByRole('alert')).toContainText('文件读取失败');
+});
+
+test('search shows recent tasks, project context and matching excerpts within each tab',async({page})=>{
+ await page.addInitScript(()=>{
+  if(localStorage.getItem('atelier.workspace.v1'))return;
+  const tasks=[0,1].map(i=>({id:'draft'+i,title:'设计讨论 '+i,prompt:'背景说明。'.repeat(80)+'验收关键词：侧栏交互',projectId:i?'p':null,status:'draft',modelId:'',createdAt:`2026-01-0${i+1}T00:00:00.000Z`}));
+  localStorage.setItem('atelier.workspace.v1',JSON.stringify({tasks,projects:[{id:'p',name:'工作台项目',path:'/tmp/project',createdAt:'2026-01-01'}],theme:'light',language:'zh-CN'}));
+  localStorage.setItem('atelier.task-recency.v1',JSON.stringify({draft0:Date.now()}));
+ });
+ await page.goto('/');await page.getByRole('button',{name:'搜索工作台',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'搜索工作台'});const input=dialog.getByRole('combobox');const rows=dialog.locator('.search-result');
+ await expect(input).toHaveAttribute('placeholder','搜索任务名称或对话内容');
+ await expect(dialog.locator('[cmdk-group-heading]')).toHaveText('最近使用');
+ await expect(rows.first()).toContainText('设计讨论 0');
+ await expect(rows.first()).toContainText('未关联项目');await expect(rows.nth(1)).toContainText('工作台项目');
+ await expect(rows.first()).not.toContainText('背景说明');
+ await input.fill('验收关键词');await expect(rows).toHaveCount(2);
+ await expect(rows.first().locator('mark')).toHaveText('验收关键词');
+ await page.screenshot({path:'test-results/search-context-light.png',animations:'disabled'});
+ await input.fill('找不到');await expect(dialog).toContainText('没有找到相关任务');
+ for(const [name,placeholder,missing] of [['项目','搜索项目名称或说明','没有找到相关项目'],['扩展','搜索扩展名称或说明','没有找到相关扩展'],['技能','搜索技能名称或说明','没有找到相关技能'],['快捷操作','搜索快捷操作','没有找到相关快捷操作']]){
+  await dialog.getByRole('tab',{name,exact:true}).click();await expect(input).toHaveAttribute('placeholder',placeholder);await expect(input).toHaveValue('找不到');await expect(dialog).toContainText(missing);
+ }
+ await page.keyboard.press('Escape');
+ await page.evaluate(()=>{const state=JSON.parse(localStorage.getItem('atelier.workspace.v1')!);state.language='en';state.theme='dark';localStorage.setItem('atelier.workspace.v1',JSON.stringify(state));});
+ await page.reload();await page.getByRole('button',{name:'Search workspace',exact:true}).click();
+ await expect(page.getByRole('combobox')).toHaveAttribute('placeholder','Search task names or conversations');
+ await page.screenshot({path:'test-results/search-context-dark.png',animations:'disabled'});
+});
+
+test('task search ignores thinking and progress in fallback history',async({page})=>{
+ await page.addInitScript(()=>{
+  (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light',language:'zh-CN'}),listRuns:async()=>[{id:'r',title:'搜索范围验证',status:'completed',createdAt:'2026-01-01',messages:[
+   {id:'u',role:'user',text:'用户提问词'},
+   {id:'thought',role:'assistant',kind:'reasoning',text:'思考专属词'},
+   {id:'progress',role:'assistant',phase:'commentary',text:'进度专属词'},
+   {id:'intermediate',role:'assistant',text:'旧版中间词'},
+   {id:'final',role:'assistant',phase:'final_answer',text:'最终结论词'},
+  ],tools:[{id:'tool',detail:'工具日志词'}],approvals:[]}],onRun:()=>()=>{},onCommand:()=>()=>{}};
+ });
+ await page.goto('/');await page.getByRole('button',{name:'搜索工作台',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'搜索工作台'});const input=dialog.getByRole('combobox');const rows=dialog.locator('.search-result');
+ for(const word of ['思考专属词','进度专属词','旧版中间词','工具日志词']){
+  await input.fill(word);await expect(dialog).toContainText('没有找到相关任务');await expect(rows).toHaveCount(0);
+ }
+ for(const word of ['用户提问词','最终结论词','搜索范围验证']){
+  await input.fill(word);await expect(rows).toHaveCount(1);await expect(rows).toContainText('用户提问词');await expect(rows).toContainText('最终结论词');await expect(rows).not.toContainText('思考专属词');await expect(rows).not.toContainText('进度专属词');
+ }
 });

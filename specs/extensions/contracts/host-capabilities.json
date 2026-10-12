@@ -38,7 +38,8 @@
     },
     {
       "id": "agentHooks",
-      "status": "unavailable"
+      "status": "preview",
+      "source": "core/automation/service.cjs"
     },
     {
       "id": "formResumeApi",
@@ -48,12 +49,50 @@
       "id": "messageActions",
       "status": "preview",
       "source": "core/extensions/action-journal.cjs"
+    },
+    {
+      "id": "conversationTurns",
+      "status": "preview",
+      "source": "core/automation/persistence.cjs"
+    },
+    {
+      "id": "backgroundJobs",
+      "status": "preview",
+      "source": "core/automation/service.cjs"
+    },
+    {
+      "id": "declarativeUi",
+      "status": "preview",
+      "source": "core/ui/service.cjs"
+    },
+    {
+      "id": "skillRepositoryInstall",
+      "status": "preview",
+      "source": "electron/skill-repository.cjs"
+    },
+    {
+      "id": "declarativeUiValueLabels",
+      "status": "preview",
+      "source": "core/ui/template.cjs"
+    },
+    {
+      "id": "declarativeFormOnboarding",
+      "status": "preview",
+      "source": "core/forms/service.cjs"
+    },
+    {
+      "id": "declarativeUiCollectionLayouts",
+      "status": "preview",
+      "source": "core/ui/template.cjs"
     }
   ],
   "limits": {
     "localMessages": "Local messages and persistent Operation actions; account-scoped message delivery remains unavailable.",
-    "declarativeForms": "Static fields and linear steps; no dynamic choices, template migration or SDK presentation API.",
+    "declarativeForms": "Linear steps with opt-in single-click chat, prior-field dependencies, conditional visibility, mixed group toggles and frozen submission reads; no scripts, remote dynamic choices or automatic recommendation recalculation. Probe forms_capabilities.",
     "mcpApps": "Packaged task UI only; not arbitrary remote MCP or full ChatGPT Apps compatibility.",
-    "extensionAuthentication": "OIDC resource grants and host HTTPS requests. Interactive reconnect on expiry; no refresh tokens, raw tokens or WebSocket credentials."
-  }
+    "extensionAuthentication": "OIDC resource grants and host HTTPS requests. Interactive reconnect on expiry; no refresh tokens, raw tokens or WebSocket credentials.",
+    "backgroundJobs": "Opt-in, project-scoped, no-tool jobs; count budget, one request, no automatic retry after unknown outcomes. Source preview only.",
+    "declarativeUi": "Editor/collection snapshots and user-click chat delivery; no project repair mutex or per-row business status updates. Runtime ui_capabilities is authoritative."
+  },
+  "uiVersion": 1
 }

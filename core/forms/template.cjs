@@ -14,17 +14,19 @@ function parse(source){
 function decimal(value,scale=2){if(typeof value!=='string'||! /^-?\d+(?:\.\d+)?$/.test(value)||value.length>80)throw error('请输入有效金额');let [a,b='']=value.split('.');if(b.length>scale)throw error(`金额最多 ${scale} 位小数`);const negative=a.startsWith('-');a=a.replace(/^-/,'').replace(/^0+(?=\d)/,'');b=b.padEnd(scale,'0');const units=BigInt((negative?'-':'')+a+b);return {units,value:(units<0?'-':'')+a+(scale?'.'+b:'')};}
 function date(value){return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;}
 function fieldValue(field,value,partial=false){
- if(value===undefined||value===''){if(field.type==='checkbox'&&!field.required)return false;if(field.required&&!partial)throw error('此项为必填');return undefined;}
- if(field.type==='checkbox'){if(typeof value!=='boolean')throw error('请选择有效选项');if(field.required&&!value&&!partial)throw error('请勾选后继续');return value;}
+ if(value===undefined||value===''){if(['checkbox','switch'].includes(field.type)&&!field.required)return false;if(field.required&&!partial)throw error('此项为必填');return undefined;}
+ if(field.type==='group-toggle'){if(![true,false,'mixed'].includes(value))throw error('请选择组开关状态');return value;}
+ if(['checkbox','switch'].includes(field.type)){if(typeof value!=='boolean')throw error('请选择有效选项');if(field.type==='checkbox'&&field.required&&!value&&!partial)throw error('请勾选后继续');return value;}
  if(['text','textarea'].includes(field.type)){if(typeof value!=='string')throw error('请输入文字');if(field.required&&!value.trim()&&!partial)throw error('此项为必填');if(value.length<(field.minLength||0)||value.length>(field.maxLength??(field.type==='text'?2000:20000)))throw error('文字长度不符合要求');return value;}
  if(field.type==='select'){if(!field.options.some(o=>o.value===value))throw error('请选择列表中的选项');return value;}
  if(field.type==='number'){if(typeof value!=='number'||!Number.isFinite(value)||(field.integer&&!Number.isSafeInteger(value)))throw error('请输入有效数字');if(value<(field.minimum??-Infinity)||value>(field.maximum??Infinity))throw error('数字超出允许范围');return value;}
  if(field.type==='date'){if(!date(value))throw error('请输入有效日期');if(field.minimum&&value<field.minimum||field.maximum&&value>field.maximum)throw error('日期超出允许范围');return value;}
  if(field.type==='money'){const n=decimal(value,field.scale);if(field.minimum!==undefined&&n.units<decimal(field.minimum,field.scale).units||field.maximum!==undefined&&n.units>decimal(field.maximum,field.scale).units)throw error('金额超出允许范围');return n.value;}
 }
-function validateValues(step,input,{partial=false,raw=false}={}){
+function visible(field,answers){return !field.visibleWhen||answers[field.visibleWhen.field]===field.visibleWhen.equals;}
+function validateValues(step,input,{partial=false,raw=false,answers={}}={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw error('表单数据无效');for(const key of Object.keys(input))if(!step.fields.some(f=>f.name===key))throw error('表单包含未定义的字段');const values={},errors={};
- for(const field of step.fields){let v=input[field.name];if(raw&&field.type==='number'&&typeof v==='string'&&v.trim()!=='')v=Number(v);try{const value=fieldValue(field,v,partial);if(value!==undefined)values[field.name]=value;}catch(e){errors[field.name]=e.message;}}
+ for(const field of step.fields){if(!visible(field,answers))continue;let v=input[field.name];if(raw&&field.type==='number'&&typeof v==='string'&&v.trim()!=='')v=Number(v);try{const value=fieldValue(field,v,partial);if(value!==undefined)values[field.name]=value;}catch(e){errors[field.name]=e.message;}}
  return {values,errors};
 }
 function normalize(source){
@@ -33,13 +35,18 @@ function normalize(source){
  for(const [i,s]of m.steps.entries()){
   if(ids.has(s.id))throw error('重复步骤 '+s.id);ids.add(s.id);if(s.next&&i===m.steps.length-1)throw error('最后一步不能定义 next');const names=new Set();
   for(const f of s.fields){if(++total>100||names.has(f.name))throw error('字段过多或重名');names.add(f.name);
-   const common=['name','type','label','required','help'],extra={text:['placeholder','minLength','maxLength'],textarea:['placeholder','minLength','maxLength'],number:['minimum','maximum','integer'],money:['minimum','maximum','currency','scale'],date:['minimum','maximum'],select:['options'],checkbox:[]}[f.type];for(const k of Object.keys(f))if(![...common,...extra].includes(k))throw error(`${s.id}.${f.name}: 不支持 ${k}`);
+   const common=['name','type','label','required','help','dependsOn','visibleWhen'],extra={text:['placeholder','minLength','maxLength'],textarea:['placeholder','minLength','maxLength'],number:['minimum','maximum','integer'],money:['minimum','maximum','currency','scale'],date:['minimum','maximum'],select:['options'],checkbox:[],switch:[],'group-toggle':[]}[f.type];for(const k of Object.keys(f))if(![...common,...extra].includes(k))throw error(`${s.id}.${f.name}: 不支持 ${k}`);
    if(f.type==='select'&&(!f.options||new Set(f.options.map(o=>o.value)).size!==f.options.length))throw error('选项缺失或重复');
    if(f.type==='money'){if(!f.currency)throw error('金额必须声明币种');f.scale??=2;for(const k of ['minimum','maximum'])if(f[k]!==undefined)decimal(f[k],f.scale);if(f.minimum!==undefined&&f.maximum!==undefined&&decimal(f.minimum,f.scale).units>decimal(f.maximum,f.scale).units)throw error('金额范围错误');}
    if(f.type==='date')for(const k of ['minimum','maximum'])if(f[k]!==undefined&&!date(f[k]))throw error('日期范围无效');
    if(f.type==='number')for(const k of ['minimum','maximum'])if(f[k]!==undefined&&typeof f[k]!=='number')throw error('数值范围类型错误');
    if(f.type!=='money'&&f.minimum!==undefined&&f.maximum!==undefined&&f.minimum>f.maximum||f.minLength!==undefined&&f.maxLength!==undefined&&f.minLength>f.maxLength)throw error('范围无效');
   }
+ }
+ const seen=new Set();
+ for(const step of m.steps)for(const field of step.fields){
+  for(const ref of [...(field.dependsOn||[]),...(field.visibleWhen?[field.visibleWhen.field]:[])])if(!seen.has(ref))throw error('依赖或条件必须引用之前声明的字段：'+ref);
+  seen.add(step.id+'.'+field.name);
  }
  for(const [i,a]of [...m.steps.map((s,i)=>[i,s.next]),[m.steps.length-1,m.submit]])if(a?.kind==='operation')for(const b of Object.values(a.input))if(b.from&&b.from!=='context.projectId'){
   const [kind,sid,key]=b.from.split('.'),j=m.steps.findIndex(s=>s.id===sid);if(j<0||j>i)throw error('引用了不存在或尚未到达的步骤');if(kind==='steps'&&!m.steps[j].fields.some(f=>f.name===key)||kind==='results'&&(j>=i||!m.steps[j].next))throw error('无效数据引用 '+b.from);
@@ -48,4 +55,4 @@ function normalize(source){
 }
 async function safeRead(root,relative){if(typeof relative!=='string'||path.isAbsolute(relative)||relative.includes('\\')||relative.split('/').some(v=>!v||v==='.'||v==='..'))throw error('非法表单路径');let file=root;for(const part of relative.split('/')){file=path.join(file,part);if((await fs.lstat(file)).isSymbolicLink())throw error('不允许符号链接');}const stat=await fs.stat(file);if(!stat.isFile()||stat.size>200000)throw error('表单文件过大或无效');return fs.readFile(file,'utf8');}
 async function discover(body,root){const {fromMarkdown}=await import('mdast-util-from-markdown');const forms=[],errors=[];for(const node of fromMarkdown(body).children){if(node.type!=='code'||!['amble-form','amble-form-ref'].includes(node.lang))continue;try{let source=node.value;if(node.lang==='amble-form-ref'){const ref=parse(source);if(!ref||Object.keys(ref).join()!=='path')throw error('引用只允许 path');source=await safeRead(root,ref.path);}const template=normalize(source);if(forms.some(f=>f.id===template.id))throw error('重复表单 '+template.id);forms.push(template);}catch(e){errors.push({line:node.position.start.line,message:e.message});}}if(errors.length)return {forms:[],errors};return {forms,errors};}
-module.exports={parse,normalize,discover,safeRead,validateValues,hash,error,decimal};
+module.exports={parse,normalize,discover,safeRead,validateValues,visible,hash,error,decimal};

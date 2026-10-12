@@ -13,10 +13,10 @@ export function useGlobalActions(){
  if(!actions)throw new Error('Global actions require GlobalActionsProvider');
  return actions;
 }
-export function GlobalSidebarActions({beforeNavigate}:{beforeNavigate?:(action:()=>void)=>void}){
+export function GlobalSidebarActions(){
  const {openSearch,openMessages,messagesActive}=useGlobalActions();
  return <div className="window-space global-sidebar-actions"><div className="sidebar-top-actions">
  <button className="icon-button sidebar-search" title={t('搜索工作台')} aria-label={t('搜索工作台')} onClick={openSearch}><Search size={18}/></button>
- <button className={`icon-button sidebar-messages ${messagesActive?'active':''}`} title={t('消息中心')} aria-label={t('消息中心')} aria-pressed={messagesActive} onClick={()=>beforeNavigate?beforeNavigate(openMessages):openMessages()}><Bell size={18}/><MessageBadge/></button>
+ <button className={`icon-button sidebar-messages ${messagesActive?'active':''}`} title={t('消息中心')} aria-label={t('消息中心')} aria-pressed={messagesActive} aria-haspopup="dialog" aria-expanded={messagesActive} onClick={openMessages}><Bell size={18}/><MessageBadge/></button>
  </div></div>;
 }

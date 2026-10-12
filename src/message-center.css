@@ -27,3 +27,27 @@
 .sidebar-top-actions .icon-button:focus-visible{outline:2px solid var(--accent,#397bec);outline-offset:3px}
 .sidebar-top-actions .icon-button:active{background:var(--hover,rgba(128,128,128,.12))}
 .connection-form select,.connection-form textarea{padding:10px 12px;border:1px solid var(--border);border-radius:9px;color:inherit;background:var(--surface,transparent);font:inherit}.connection-form textarea{min-height:120px;resize:vertical;font-family:monospace}.connection-form label small{color:var(--secondary);line-height:1.5}.connection-form input[type=checkbox]{align-self:flex-start;width:18px;height:18px;accent-color:var(--accent)}
+
+.message-center-drawer .section-heading { margin:0; }
+.message-center-drawer .message-actions { gap:8px; }
+.message-center-drawer .message-filters { gap:8px; margin-top:16px; }
+.message-center-drawer .message-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
+.message-center-drawer .message-detail { grid-row:1; padding:16px; }
+.message-center-drawer .message-detail > * + * { margin-top:12px; }
+.message-drawer { -webkit-app-region:no-drag; }
+
+/* Quiet list hierarchy inside the floating notification surface. */
+.message-center-drawer .message-filters { margin:0; padding-bottom:8px; }
+.message-center-drawer .message-actions { gap:2px; }
+.message-center-drawer .message-list { display:flex; flex-direction:column; gap:0; }
+.message-center-drawer .message-list[hidden] { display:none; }
+.message-center-drawer .message-row { align-items:flex-start; padding:16px 0; gap:4px; border:0; border-bottom:1px solid var(--border); border-radius:0; }
+.message-center-drawer .message-row:last-child { border-bottom:0; }
+.message-center-drawer .message-row.selected { background:transparent; }
+.message-center-drawer .message-open { padding:8px; gap:7px; }
+.message-row-footer { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.message-dismiss { margin-top:8px; }
+@media(hover:hover) { .message-dismiss { opacity:0; } .message-row:hover .message-dismiss,.message-row:focus-within .message-dismiss { opacity:1; } }
+.message-center-drawer .message-detail { border:0; padding:4px 0; border-radius:0; }
+.message-source-filter { display:flex; justify-content:flex-end; }
+body:has(.message-drawer) { position:relative; }

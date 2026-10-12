@@ -71,6 +71,7 @@ app.whenReady().then(async () => {
   }
   const services=require('../core/services.cjs').createCoreServices({
     directory:app.getPath('userData'),database,encryption:createSecureStorage(app,safeStorage),
+    fileApplications:require('./file-applications.cjs').createFileApplications({getIcon:async file=>(await app.getFileIcon(file,{size:'small'})).toDataURL()}),
     publish:run=>windows.broadcast(profileId,'agent:event',pageRun(run))
   });
   store=services.workspace;runtime=services.tasks;
@@ -104,7 +105,7 @@ app.whenReady().then(async () => {
   const extensionHosts=new HostManager({service:services.extensions,adapter:createProcessAdapter(require('electron').utilityProcess,app.getLocale()),publish:()=>windows.broadcast(profileId,'extensions:event')});
   powerMonitor.on('suspend',()=>extensionHosts.suspend());
   powerMonitor.on('resume',()=>extensionHosts.resume());
-  services.extensions.attachHosts(extensionHosts);extensionServiceForShutdown=services.extensions;
+  services.extensions.attachHosts(extensionHosts);await services.automation.initialize();extensionServiceForShutdown=services.extensions;
   const {PageHost}=require('./extensions/page-host.cjs');
   pageHost=new PageHost({electron:require('electron'),registry:windows,service:services.extensions,workspace:store,locale:app.getLocale(),external:async(owner,url)=>{try{const target=new URL(url);if(!['https:','http:'].includes(target.protocol)||target.username||target.password)return;const answer=await hostDialog('showMessageBox',owner,{type:'question',message:'在系统浏览器打开链接？',detail:target.href,buttons:['取消','打开'],defaultId:0,cancelId:0});if(answer.response===1)await shell.openExternal(target.href);}catch{}}});
   const {OperationRouter}=require('../core/extensions/operations.cjs');
@@ -117,8 +118,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('messages:execute',(event,input)=>services.messages.execute(input,authorize(event)));
   pageHost.router=operationRouter;runtime.extensionRouter=operationRouter;
   const forms=new (require('../core/forms/service.cjs').FormService)({database,skills:services.skills,extensions:services.extensions,runtime,router:operationRouter,publish:()=>windows.broadcast(profileId,'forms:event'),confirm:async(owner,title,text)=>(await hostDialog('showMessageBox',owner.window,{type:'question',message:'发送填写的表单？',detail:title+'\n\n'+text,buttons:['取消','发送到当前聊天'],defaultId:0,cancelId:0})).response===1});runtime.forms=forms;
+  const chatInputs=new (require('../core/forms/chat-inputs.cjs').ChatInputs)({database,runtime,validate:item=>forms.validateInput(item),publish:()=>windows.broadcast(profileId,'forms:event')});forms.chatInputs=chatInputs;runtime.chatInputs=chatInputs;
   ipcMain.handle('forms:list',(event,input)=>{authorize(event);return forms.list(input.runId);});
-  ipcMain.handle('forms:action',(event,input)=>forms.action(input,authorize(event)));
+  ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return (await forms.ui.list(input.runId)).find(f=>f.id===input.id);}try{return await forms.action(input,owner);}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
 
   const {McpApps}=require('../core/extensions/mcp-apps.cjs');
   taskApps=new McpApps({service:services.extensions,router:operationRouter,runtime,locale:()=>services.extensions.options.locale,theme:()=>nativeTheme.shouldUseDarkColors?'dark':'light'});runtime.mcpApps=taskApps;
@@ -141,6 +143,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('extension:interaction-response',(event,input)=>pageHost.interactions.respond(event,input));
   nativeTheme.on('updated',()=>{taskApps.contextChanged();for(const p of pageHost.owners.values())p.view?.webContents.send('extension-page:context',pageHost.context(p));});
   ipcMain.handle('extensions:activate',async(event,id)=>{authorize(event);return extensionService().startHost(id);});
+  ipcMain.handle('extensions:automation',(event,input)=>{authorize(event);return services.automation.manage(input);});
   ipcMain.handle('extensions:configuration',(event,input)=>{authorize(event);return extensionService().configuration(input);});
   ipcMain.handle('extensions:details',(event,id)=>{authorize(event);return require('../core/extensions/details.cjs').extensionDetails(extensionService(),id);});
   ipcMain.handle('extensions:list',event=>{const owner=authorize(event);return extensionService().snapshot(pageHost.contexts.get(owner.id)?.projectId);});
@@ -180,6 +183,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('extensions:command',(event,id)=>{const owner=authorize(event);return extensionService().execute(id,pageHost.contexts.get(owner.id)?.projectId);});
 
   for (const action of ['list','detail','readFile','update','remove']) ipcMain.handle('skills:'+action,(event,input)=>{authorize(event);return skills[action](input);});
+  runtime.installSkill=async(input,owner,signal)=>{
+    const spec=require('./skill-repository.cjs').validate(input);
+    if(!owner?.window||owner.window.isDestroyed())throw Error('请在当前窗口重新发起安装');
+    const result=await hostDialog('showMessageBox',owner.window,{type:'question',message:'安装技能？',detail:spec.repository+'\n'+spec.directory+'\n版本：'+(spec.ref||'默认分支')+'\n'+(spec.replaceId?'将更新同名技能。':'安装后，AI 可以按需读取它的说明和资源。'),buttons:['取消','安装'],defaultId:0,cancelId:0});
+    if(result.response!==1)throw Error('用户取消安装');
+    const installed=await skills.installRepository(spec,{signal});windows.broadcast(profileId,'skills:event');return installed;
+  };
   const skillImports=new Map();
   ipcMain.handle('skills:import',async(event,options={})=>{
     const window=authorize(event).window;let source;
@@ -195,7 +205,7 @@ app.whenReady().then(async () => {
   for (const action of ['context','list','search','read','office','apps']) ipcMain.handle('files:'+action,(event,input)=>{authorize(event);return files[action](input);});
   ipcMain.handle('files:open',(event,input)=>{const window=authorize(event).window;return files.open(input,{shell,dialog:{showOpenDialog:(owner,options)=>hostDialog('showOpenDialog',owner,options)},window});});
   let runtimeError = '';
-  try { await runtime.init(); } catch (error) { runtimeError = error.message; }
+  try { await runtime.init(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
   const checkRuntime = () => { if (runtimeError) throw new Error(runtimeError); };
   ipcMain.handle('clipboard:write-text', (event, value) => {
     authorize(event);
@@ -313,7 +323,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', event => {
   if (!runtime || quitting) return;
-  event.preventDefault(); quitting = true;
+  event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();
   authenticationForShutdown?.close();
   Promise.resolve().then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))

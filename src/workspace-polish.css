@@ -525,7 +525,7 @@ body { font-optical-sizing: auto; }
 .app-shell.activity-layout { --navigation-width:256px; grid-template-columns:60px var(--navigation-width) minmax(0,1fr); }
 .app-shell.activity-layout > .main-shell { grid-column:3; }
 .app-shell.activity-layout.sidebar-hidden { grid-template-columns:60px 0 minmax(0,1fr); }
-.activity-rail { grid-column:1; grid-row:1; display:flex; flex-direction:column; align-items:center; gap:24px; padding:20px 5px 12px; background:var(--sidebar); border-right:1px solid var(--border); min-height:0; }
+.activity-rail { grid-column:1; grid-row:1; display:flex; flex-direction:column; align-items:center; gap:24px; padding:20px 5px 12px; background:var(--activity-rail); border-right:1px solid var(--border); min-height:0; }
 .desktop .activity-rail { padding-top:64px; -webkit-app-region:drag; }
 .activity-rail button { -webkit-app-region:no-drag; }
 .activity-brand { width:44px; height:44px; }
@@ -533,7 +533,6 @@ body { font-optical-sizing: auto; }
 .activity-groups { display:flex; flex-direction:column; gap:8px; width:100%; }
 .activity-group { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:60px; border-radius:8px; color:var(--secondary); font-size:11px; }
 .activity-group svg { width:20px; height:20px; }
-.activity-group[aria-pressed=true]::before { content:''; position:absolute; left:-5px; height:22px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
 .activity-footer { margin-top:auto; display:flex; flex-direction:column; gap:10px; }
 .activity-layout .sidebar { grid-column:2; grid-row:1; }
 .activity-layout .workspace-navigation { padding-top:10px; }
@@ -553,13 +552,11 @@ body { font-optical-sizing: auto; }
 
 /* A continuous titlebar keeps the macOS window controls in one visual region. */
 .activity-rail { position:relative; border-right:0; }
-.activity-rail::after { content:''; position:absolute; right:0; top:60px; bottom:0; width:1px; background:var(--border); pointer-events:none; }
-.activity-group { min-height:48px; }
+.activity-group { min-height:40px; }
 .activity-group svg { width:26px; height:26px; }
-.activity-group[data-active]::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); height:22px; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
 .activity-footer svg { width:22px; height:22px; }
 .nav-date-heading { margin:18px 8px 6px; font-size:11px; font-weight:500; color:var(--muted); }
-.activity-layout .workspace-navigation { padding-top:14px; }
+.activity-layout .workspace-navigation { padding:6px 12px 16px; }
 
 /* Sidebar owns its desktop gap and mobile Sheet; the activity rail is independent. */
 .app-shell, .app-shell.activity-layout, .app-shell.sidebar-hidden { display:flex; min-width:0; transition:none; }
@@ -568,9 +565,10 @@ body { font-optical-sizing: auto; }
 .workspace-sidebar-container { background:var(--sidebar); }
 .workspace-sidebar-container [data-slot="sidebar-inner"] { background:var(--sidebar); border-right:0; }
 @media(min-width:768px) {
- .app-shell.activity-layout > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:256px; }
- .app-shell:not(.activity-layout) > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:224px; }
+ .app-shell.activity-layout > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:var(--sidebar-width); }
+ .app-shell:not(.activity-layout) > [data-slot="sidebar"] [data-slot="sidebar-gap"] { width:var(--sidebar-width); }
  .app-shell > [data-slot="sidebar"][data-collapsible="offcanvas"] { pointer-events:none; }
+ .app-shell > [data-slot="sidebar"][data-collapsible="offcanvas"] [data-slot="sidebar-gap"] { width:0; }
 }
 
 /* Keep the task input dominant; examples remain quiet shortcuts. */
@@ -580,3 +578,25 @@ body { font-optical-sizing: auto; }
 .home-page .starter-section { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem .75rem; margin-top:1.25rem; }
 .starter-suggestions { display:flex; flex-wrap:wrap; gap:.25rem; }
 .turn-step-summary { max-width:40ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* The window chrome spans all columns; content starts beneath native controls. */
+.app-shell.activity-layout { position:relative; padding:59px 6px 6px 0; box-sizing:border-box; background:var(--activity-rail); }
+.activity-layout > .toolbar { position:absolute; inset:0 0 auto; height:59px; padding-inline:20px; border-bottom:0; background:var(--activity-rail); }
+.activity-layout.desktop > .toolbar .toolbar-left { padding-left:92px; }
+.activity-layout > .activity-rail { padding-top:12px; }
+.activity-layout .workspace-sidebar-container [data-slot="sidebar-inner"] { border-top-left-radius:16px; border-bottom-left-radius:16px; }
+.activity-layout > .main-shell { background:var(--surface); border-top-right-radius:16px; border-bottom-right-radius:16px; }
+.activity-layout.sidebar-hidden > .main-shell { border-top-left-radius:16px; border-bottom-left-radius:16px; }
+.activity-layout > .toolbar .global-sidebar-actions { min-height:0; padding:0; }
+.activity-layout > .toolbar .sidebar-top-actions { padding:0; }
+.activity-layout .workspace-sidebar-container { background:var(--activity-rail); }
+
+/* Settings shares the window titlebar and the inset content surface. */
+.settings-workspace { grid-template-rows:59px minmax(0,1fr); padding:0 6px 6px 0; background:var(--activity-rail); }
+.settings-window-toolbar { grid-column:1 / -1; grid-row:1; padding-inline:20px; border-bottom:0; }
+.settings-workspace.desktop .settings-window-toolbar .toolbar-left { padding-left:92px; }
+.settings-window-toolbar .global-sidebar-actions { min-height:0; padding:0; }
+.settings-window-toolbar .sidebar-top-actions { padding:0; }
+.settings-workspace .settings-sidebar { grid-column:1; grid-row:2; background:var(--activity-rail); border-right:0; border-radius:0; overflow:hidden; }
+.settings-workspace > .settings-main { grid-column:2; grid-row:2; background:var(--surface); border-radius:16px; overflow:hidden; }
+.settings-workspace .settings-sidebar nav { padding-top:12px; }

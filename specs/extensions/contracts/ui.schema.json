@@ -1,0 +1,498 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ambleloft.dev/contracts/ui.schema.json",
+  "title": "Ambleloft declarative UI v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "id",
+    "type",
+    "title",
+    "rows",
+    "actions"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    },
+    "type": {
+      "enum": [
+        "editor",
+        "collection"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "rows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "fields"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "columns": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          }
+        },
+        "detailFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          }
+        },
+        "unique": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          }
+        },
+        "filterFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          }
+        },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pathField"
+          ],
+          "properties": {
+            "pathField": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            }
+          }
+        },
+        "valueLabels": {
+          "type": "object",
+          "maxProperties": 50,
+          "additionalProperties": {
+            "type": "object",
+            "maxProperties": 100,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        },
+        "layout": {
+          "enum": [
+            "table",
+            "cards"
+          ]
+        },
+        "card": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "titleField"
+          ],
+          "properties": {
+            "titleField": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "descriptionField": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "badgeFields": {
+              "type": "array",
+              "maxItems": 3,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              }
+            },
+            "metadataFields": {
+              "type": "array",
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "layout"
+            ],
+            "properties": {
+              "layout": {
+                "const": "cards"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "card"
+            ]
+          }
+        }
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "scope",
+          "prompt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "kind": {
+            "const": "chat"
+          },
+          "scope": {
+            "enum": [
+              "data",
+              "row",
+              "selection",
+              "all"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "input": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "pattern": "^(values|row|selection|all)(\\.[A-Za-z][\\w-]*)?$|^context\\.(projectId|instanceId)$"
+                },
+                "value": {}
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "from"
+                  ],
+                  "not": {
+                    "required": [
+                      "value"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "value"
+                  ],
+                  "not": {
+                    "required": [
+                      "from"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "eligible": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "notEquals"
+            ],
+            "properties": {
+              "field": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+              },
+              "notEquals": {}
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,79}$"
+        },
+        "type": {
+          "enum": [
+            "text",
+            "textarea",
+            "number",
+            "money",
+            "date",
+            "select",
+            "checkbox"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "placeholder": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "minimum": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "maximum": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "integer": {
+          "type": "boolean"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "label",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "action": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "operation"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+\\.[A-Za-z][A-Za-z0-9_-]*$",
+          "maxLength": 180
+        },
+        "input": {
+          "type": "object",
+          "maxProperties": 100,
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "pattern": "^(steps\\.[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*|results\\.[a-z][a-z0-9-]*\\.[A-Za-z][A-Za-z0-9_-]*|context\\.projectId)$"
+                  }
+                },
+                "required": [
+                  "from"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+\\.[A-Za-z][A-Za-z0-9_-]*$",
+              "maxLength": 180
+            }
+          },
+          "required": [
+            "operation"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "operation",
+        "input"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "editor"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "rows": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "layout"
+                  ]
+                },
+                {
+                  "required": [
+                    "card"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

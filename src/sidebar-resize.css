@@ -1,0 +1,14 @@
+.workspace-sidebar-container [data-slot="sidebar-inner"],.settings-workspace .settings-sidebar { position:relative; }
+.sidebar-resize-handle { position:absolute; inset-block:0; right:0; width:6px; cursor:col-resize; touch-action:none; -webkit-app-region:no-drag; outline:none; }
+.sidebar-resize-handle::after { content:""; position:absolute; inset-block:8px; right:0; width:2px; border-radius:2px; background:transparent; }
+.sidebar-resize-handle:hover::after,.sidebar-resize-handle:focus-visible::after,.sidebar-resizing .sidebar-resize-handle:focus::after { background:var(--focus); }
+.sidebar-resizing,.sidebar-resizing * { cursor:col-resize!important; user-select:none!important; }
+/* Tailwind utilities are imported as !important. Match their layer and priority
+   so direct manipulation cannot be delayed by Sidebar's width transitions. */
+@layer utilities {
+ .sidebar-resizing :is([data-slot="sidebar-gap"],[data-slot="sidebar-container"],[data-slot="sidebar-menu-button"]) { transition:none!important; }
+}
+@media(min-width:768px) {
+ .settings-workspace:has(.sidebar-resize-handle) { grid-template-columns:var(--resizable-sidebar-width,224px) minmax(0,1fr); }
+}
+@media(max-width:767px) { .sidebar-resize-handle { display:none; } }

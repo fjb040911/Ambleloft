@@ -1,10 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const os = require('node:os');
-const {execFile} = require('node:child_process');
-const {promisify} = require('node:util');
-const exec = promisify(execFile);
 const TEXT_LIMIT = 1024 * 1024;
 const MEDIA_LIMIT = 32 * 1024 * 1024;
 const omitted = new Set(['node_modules','dist','build','coverage','__pycache__','target']);
@@ -15,9 +11,10 @@ const inside = (root, file) => {const relative=path.relative(root,file);return r
 const visible = (name,hidden) => hidden||(!name.startsWith('.')&&!omitted.has(name));
 const CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' atelier-preview:; style-src 'self' 'unsafe-inline' atelier-preview:; img-src atelier-preview: data: blob:; font-src atelier-preview: data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
 
-function createProjectFiles({cacheDirectory,getWorkspace,getRuns,getApprovedApps=async()=>[],setApprovedApps=async()=>{}}) {
+function createProjectFiles({cacheDirectory,getWorkspace,getRuns,getApprovedApps=async()=>[],setApprovedApps=async()=>{},applications=require('./file-applications.cjs').createFileApplications()}) {
  const officeService=require('./office-preview.cjs').createOfficePreview({directory:cacheDirectory});
  const approvedApps=new Set();
+ const approvedRecords=async()=> (await getApprovedApps()).map(value=>typeof value==='string'?{id:value,extensions:[]}:value).filter(value=>value&&typeof value.id==='string'&&Array.isArray(value.extensions));
  const contexts = new Map();
  async function rootFor(input) {
   if(!input||(!input.projectId&&(!input.runId||!input.artifactId)))throw new Error('请选择项目');
@@ -113,29 +110,27 @@ function createProjectFiles({cacheDirectory,getWorkspace,getRuns,getApprovedApps
   }catch{return new Response('File unavailable',{status:404});}
  }
  async function apps(input) {
-  await resolve(input);
-  if(process.platform!=='darwin')return [];
-  const ext=extension(input.path), office=/^(docx?|rtf|odt)$/.test(ext)?['Microsoft Word']: /^(xlsx?|csv|ods)$/.test(ext)?['Microsoft Excel']:/^(pptx?|odp)$/.test(ext)?['Microsoft PowerPoint']:[];
-  const names=['Visual Studio Code',...office,...(/^(docx?|xlsx?|pptx?|pdf|txt|csv|rtf|od[tps])$/.test(ext)?['wpsoffice','WPS Office']:[])];
-  const found=[];
-  for(const name of names)for(const dir of ['/Applications',path.join(os.homedir(),'Applications')]){const app=path.join(dir,name+'.app');try{if((await fs.stat(app)).isDirectory()){found.push({id:app,name:name==='wpsoffice'?'WPS Office':name});break;}}catch{}}
-  return found;
+  const {full}=await resolve(input);
+  const found=await applications.list(full);
+  const extras=[];
+  for(const {id,extensions} of await approvedRecords()){if(!extensions.includes(extension(full))||found.some(app=>app.id===id||app.applicationId===id))continue;if(await applications.validApplication(id))extras.push(await applications.describe(id));}
+  return [...found,...extras];
  }
  async function open(input,{shell,dialog,window}) {
   const {full,stat}=await resolve(input);if(!stat.isFile())throw new Error('仅支持普通文件');
   if(input.action==='reveal'){shell.showItemInFolder(full);return null;}
   let application=input.application;
   if(application==='choose'){
-   if(process.platform!=='darwin')throw new Error('当前平台请使用系统默认应用');
-   const selected=await dialog.showOpenDialog(window,{title:'选择打开此文件的应用',defaultPath:'/Applications',properties:['openFile'],filters:[{name:'应用',extensions:['app']}]});
-   if(selected.canceled)return null;application=selected.filePaths[0];
-   if(!application.endsWith('.app')||!(await fs.stat(application)).isDirectory())throw new Error('请选择应用程序');
-   approvedApps.add(application);await setApprovedApps([...new Set([...await getApprovedApps(),application])]);
+   application=await applications.choose(dialog,window);if(!application)return null;
+   approvedApps.add(application);
+   const records=await approvedRecords(),saved=records.find(record=>record.id===application);
+   if(saved)saved.extensions=[...new Set([...saved.extensions,extension(full)])];else records.push({id:application,extensions:[extension(full)]});
+   await setApprovedApps(records);
   }else if(application&&application!=='default'){
-   if(!approvedApps.has(application)&&!(await getApprovedApps()).includes(application)&&!(await apps(input)).some(a=>a.id===application))throw new Error('应用已不可用，请重新选择打开方式');
+   if(!approvedApps.has(application)&&!(await approvedRecords()).some(record=>record.id===application)&&!(await apps(input)).some(a=>a.id===application||a.applicationId===application))throw new Error('应用已不可用，请重新选择打开方式');
   }
-  if(application&&application!=='default'){await exec('/usr/bin/open',['-a',application,full]);return {id:application,name:path.basename(application,'.app')};}
-  const error=await shell.openPath(full);if(error)throw new Error(error);return {id:'default',name:'系统默认应用'};
+  if(application&&application!=='default')return applications.open(full,application);
+  const error=await shell.openPath(full);if(error)throw new Error(error);return (await applications.list(full)).find(app=>app.id==='default')||{id:'default',name:'系统默认应用'};
  }
  return {context,list,search,read,office,resolve,resource,apps,open};
 }

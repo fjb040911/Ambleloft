@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('layout preference persists and group switching preserves draft and navigation state',async({page})=>{
+ await page.addInitScript(()=>{if(!localStorage.getItem('atelier.workspace.v1'))localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'light',layoutMode:'classic',projects:[],tasks:[]}));});
  await page.goto('/');
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('布局切换保留输入');
  await page.getByRole('button',{name:'设置',exact:true}).click();
@@ -21,7 +22,7 @@ test('activity navigation exposes contextual actions, tooltips and date sections
  const rail=page.locator('.activity-rail');await rail.getByRole('button',{name:'任务',exact:true}).hover();await expect(page.locator('[data-slot=tooltip-content]')).toContainText('任务');await rail.getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['今天','昨天']);await expect(page.locator('.workspace-navigation .nav-caption:visible')).toHaveCount(0);
  await rail.getByRole('button',{name:'扩展',exact:true}).click();await expect(page.getByRole('button',{name:'管理扩展',exact:true})).toBeVisible();await expect(page.getByText('暂无可用扩展',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'管理扩展',exact:true}).click();await expect(page.getByRole('complementary').filter({has:page.getByRole('button',{name:'返回应用'})})).toBeVisible();
+ await page.getByRole('button',{name:'管理扩展',exact:true}).click();await expect(page.locator('.settings-sidebar')).toBeVisible();await expect(page.locator('.settings-window-toolbar').getByRole('button',{name:'返回应用',exact:true})).toBeVisible();
 });
 
 test('mobile Sidebar sheet dismisses with Escape and preserves the composer',async({page})=>{
@@ -64,3 +65,9 @@ test('activity task date groups and navigation labels follow interface language'
  await page.getByLabel('界面语言').selectOption('en');await page.getByRole('button',{name:'Back to app',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['Today','Yesterday','Previous 7 days','Earlier']);
 });
+
+ test('fresh workspaces default to activity navigation',async({page})=>{
+ await page.goto('/');await expect(page.locator('.activity-rail')).toBeVisible();
+ await page.locator('.activity-rail').getByRole('button',{name:'设置',exact:true}).click();
+ await expect(page.getByRole('button',{name:'活动栏 按项目、任务、扩展分别浏览。',exact:true})).toHaveAttribute('aria-pressed','true');
+ });

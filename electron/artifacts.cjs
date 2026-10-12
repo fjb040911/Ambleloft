@@ -14,15 +14,16 @@ async function verifiedFile(cwd, candidate) {
 async function collectArtifacts(run, turnKey) {
   const candidates = new Set();
   for(const tool of run.tools.filter(t=>t.turnKey===turnKey&&t.type==='fileChange'&&t.status==='completed')) {
-    try { for(const change of JSON.parse(tool.detail)) if(typeof change.path==='string')candidates.add(change.path); } catch {}
+    try { for(const change of JSON.parse(tool.detail)) if(typeof change.path==='string'&&!['delete','deleted'].includes(typeof change.kind==='string'?change.kind:change.kind?.type))candidates.add(change.path); } catch {}
   }
-  const messages=run.messages.filter(m=>m.turnKey===turnKey&&m.role==='assistant'&&!m.kind);
-  const final=messages.findLast(m=>m.phase==='final_answer')||messages.findLast(m=>!m.phase);
-  for(const match of (final?.text||'').matchAll(/\[[^\]]*\]\((?:<([^>]+)>|([^\s)]+))\)|`([^`\n]+\.[a-zA-Z0-9]{1,10})`/g)) {
-    let value=match[1]||match[2]||match[3];
-    if(/^[a-zA-Z]+:/.test(value))continue;
-    try {value=decodeURIComponent(value);} catch {}
-    candidates.add(value);
+  // Mentions and ordinary links are references, not evidence of delivery.
+  // The runtime records its before/after comparison before collecting artifacts.
+  // This also captures shell writes without interpreting arbitrary command text.
+  for (const batch of run.fileChanges || []) {
+    if (batch.turnKey !== turnKey) continue;
+    for (const file of batch.files || []) {
+      if (typeof file.path === 'string' && ['added', 'modified'].includes(file.status)) candidates.add(file.path);
+    }
   }
   const artifacts=[];
   for(const candidate of [...candidates].slice(0,50)) {

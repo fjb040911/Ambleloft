@@ -1,5 +1,16 @@
 # Preview notes / 预览版说明
 
+## v0.4.0 — Declarative UI and extension automation preview
+
+- Adds declarative editors and result collections with table/card layouts, filtering, selection, pagination, and chat actions with frozen submissions.
+- Extends forms with dependent/conditional fields and asynchronous chat submission.
+- Adds project-scoped turn-completion hooks, versioned turn reads, and background jobs gated by user-enabled automation and quotas. This is a source preview; external SDK/CLI compatibility requires separate verification.
+- Improves file references, file-panel interactions and application opening, sidebar resizing, project-task pagination, message drawers, and search indexing.
+- macOS Apple Silicon DMG/ZIP with checksums; ad-hoc signed, not Apple-notarized. Release source is the PR head and does not imply a merge.
+- 新增声明式编辑器和表格/卡片结果集合、依赖及条件字段、异步聊天提交。
+- 新增项目授权范围内的轮次完成 Hook、版本化轮次读取和后台作业；需用户开启自动化并设置额度，外部 SDK/CLI 兼容性需单独验证。
+- 改进文件引用与打开方式、文件面板、侧栏拖动、项目任务分页、消息抽屉和搜索索引。
+
 ## v0.3.1 — Workspace navigation and app-in-chat introduction
 
 - Adds persistent grouped-sidebar / activity-bar layouts, with narrow-window drawers, keyboard dismissal, and focus restoration.

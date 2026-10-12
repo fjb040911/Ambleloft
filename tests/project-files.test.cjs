@@ -66,3 +66,19 @@ test('file browser requires a project even for a valid standalone conversation',
   await assert.rejects(f.api.context({...input,projectId:'p'}));
  } finally {await fs.rm(f.temp,{recursive:true,force:true});}
 });
+
+test('platform adapter opens opaque native IDs and custom choices are listed only for their file type',async t=>{
+ const {root,state,runs,input}=await fixture(t);await fs.writeFile(path.join(root,'image.png'),'image');
+ let approved=[],chosen=null;const launches=[];
+ const api=createProjectFiles({getWorkspace:async()=>state,getRuns:()=>runs,getApprovedApps:async()=>approved,setApprovedApps:async value=>{approved=value;},applications:{
+  list:async()=>[{id:'default',applicationId:'windows:Browser',name:'Browser'},{id:'windows:Editor',name:'Editor'}],
+  validApplication:async id=>id==='C:\\Editor.exe',describe:async id=>({id,name:'Custom editor'}),choose:async()=>chosen,
+  open:async(file,id)=>{launches.push({file,id});return {id,name:'Editor'};}
+ }});
+ await api.open({...input,path:'docs/readme.md',application:'windows:Editor'},{});assert.equal(launches[0].id,'windows:Editor');
+ await api.open({...input,path:'docs/readme.md',application:'windows:Browser'},{});assert.equal(launches[1].id,'windows:Browser');
+ await assert.rejects(api.open({...input,path:'docs/readme.md',application:'windows:Unregistered'},{}),/应用已不可用/);
+ assert.equal(await api.open({...input,path:'docs/readme.md',application:'choose'},{}),null);assert.equal(approved.length,0);
+ chosen='C:\\Editor.exe';await api.open({...input,path:'docs/readme.md',application:'choose'},{});
+ assert.deepEqual(approved,[{id:chosen,extensions:['md']}]);assert.ok((await api.apps({...input,path:'docs/readme.md'})).some(a=>a.id===chosen));assert.ok(!(await api.apps({...input,path:'image.png'})).some(a=>a.id===chosen));
+});

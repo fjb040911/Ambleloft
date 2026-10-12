@@ -1,7 +1,7 @@
 import type { Device, Workspace, WorkspaceChange } from './types';
 
 const key = 'atelier.workspace.v1';
-export const emptyWorkspace = (): Workspace => ({ tasks: [], projects: [], theme: 'system' });
+export const emptyWorkspace = (): Workspace => ({ tasks: [], projects: [], theme: 'system', layoutMode: 'activity' });
 export function workspaceChanges(before:Workspace, after:Workspace):WorkspaceChange[] {
   const changes:WorkspaceChange[]=[],deletes:WorkspaceChange[]=[];
   for(const [kind,key] of [['project','projects'],['draft','tasks']] as const){

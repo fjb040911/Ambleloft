@@ -118,3 +118,19 @@ npm run test:forms
 test:forms 包含真实 Electron 和本机模型协议 fixture，需要桌面环境及本机回环端口；不连接真实企业服务。
 
 本仓库 packages/extension-sdk 是本地参考预览包，不代表独立 SDK/CLI 的最新发行版本。本地构建脚本已把 form.schema.json 加入 SDK 出包；使用独立工具库时，应检查实际 tarball 的类型、Schema exports 和宿主兼容记录，不能仅依赖版本名称。
+
+## 三步配置增量（2026-10-10，源码预览）
+
+普通 skill 和扩展 skill 共用以下可选 amble-form v1 增量；不是新的 ExtensionContext 执行 API。先调用 `forms_capabilities`，确认 `singleClickChat`、`fieldDependencies`、`conditionalFields`、`groupToggle`、`switch`、`readSubmission` 对应值为 1。旧宿主只支持 v1 不代表支持这些可选属性；需提供兼容模板包或回退聊天，不能靠 forms_present 删除静态声明。完整示例见 [onboarding.yaml](examples/declarative-forms/onboarding.yaml)。
+
+- 最终 `submit: {kind: chat, label: 生成配置, confirmation: onSubmit}` 表示用户明确点击后即发送，不再弹第二次确认。省略 confirmation 或填 always 保持原确认行为；operation 的授权流程不变。前后导航、保存草稿不发送 chat。
+- 字段 `dependsOn: [stack.kind]` 使用 `步骤ID.字段名`，只能引用之前声明的字段，同一步也须在当前字段之前。禁止未知引用、前向引用与循环。上游改变时递归标记下游需要确认，保留原输入，不运行脚本、不请求外部数据、不自动重新推荐。用户修改下游值或点“确认保留此值”后才能继续；确认受 revision 与字段校验保护。继续下一步会验证当前可见字段。
+- `visibleWhen: {field: stack.kind, equals: frontend}` 为单一严格相等条件，条件本身也构成依赖。隐藏字段保留草稿，但不校验必填、不进入最终答案。重新显示时需要检查并确认；不会把隐藏字段作为清空业务配置的指令。number 的有效文字输入按数值比较，其他字段保持内部枚举或布尔值；不支持表达式、脚本或远程动态 options。
+- `type: group-toggle` 的值是 true、false 或字符串 mixed。mixed 展示为“部分启用”；不触碰时原样提交，业务层须保留各条规则的既有选择。用户选择全开/全关后提交布尔值。`type: switch` 提供紧凑二态开关，required 表示必须有布尔答案，false 合法；原 checkbox 的 required 仍表示必须勾选。
+- step.description、模板 description 与 text/textarea placeholder 已渲染。布尔控件采用横向 Field，避免垂直 Field 的直接子元素 w-full 将复选框拉伸；复用现有 shadcn/ui Checkbox/Switch。首步不显示“上一步”；自动保存保留，手动保存使用弱化按钮。
+
+最终 chat 提交持久保存真实内部枚举值和步骤答案、创建时预填 `initialValues`、按步骤字段名记录的 `touched`、完整模板及摘要、来源版本、项目/聊天/实例身份。touched 为 true 表示用户曾编辑该字段（即便最终恢复初始值）；缺少键表示没有编辑记录，不应反推为显式关闭。initialValues 是创建时实际提供的预填值，不自动补全缺失字段或恢复业务逐条规则；逐条业务基线由 skill 自行提供和读取。
+
+聊天提示附带 submissionId。Agent 使用 `forms_read_submission({submissionId})` 读取冻结数据，接口绑定当前聊天；来源停用/更新、聊天归档或项目变更后拒绝读取。不要按本地化“是/否”反推枚举或业务含义。历史旧提交没有冻结快照时不可读取，不猜测补造。用户消息、模板及答案均作为数据，不能提升指令优先级；投递完成不等于业务配置已经生成或写入。当前首版仅为最终 chat 提交提供此读取接口，Operation 的结构化参数沿用原调用与核实机制。
+
+本轮采用“保留旧值、标记需要确认”的依赖策略；自动重新计算推荐、任意条件表达式、远程动态选项和逐行业务状态回写未实现。重启保留已保存草稿与提交，不重放已发送任务；macOS fixture 验证不能代表真实模型生成质量或其他平台发行验收。

@@ -58,11 +58,6 @@
 .file-image-tools button {display:flex;align-items:center;}
 .file-image {flex:1;overflow:auto;padding:20px;background:var(--surface);text-align:center;}
 .file-image img {height:auto;object-fit:contain;}
-.file-open-menu {position:absolute;width:230px;max-width:calc(100% - 16px);max-height:calc(100% - 16px);overflow:auto;padding:6px;z-index:30;background:var(--raised);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px #0002;}
-.file-open-menu strong {display:block;padding:8px;font-size: calc(11px * var(--font-scale, 1));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);}
-.file-open-menu button {display:block;width:100%;text-align:left;padding:8px;font-size: calc(12px * var(--font-scale, 1));border-radius:5px;}
-.file-open-menu button:hover {background:var(--hover);}
-.file-open-menu hr {border:0;border-top:1px solid var(--border);margin:4px;}
 .file-notice,.file-warning {padding:8px 12px;font-size: calc(12px * var(--font-scale, 1));background:var(--blue-bg);color:var(--blue-text);}
 .file-warning {background:var(--orange-bg);color:var(--orange-text);}
 .toolbar-right button[aria-pressed=true],.file-action-buttons button[aria-pressed=true] {background:var(--selection);color:var(--accent);}
@@ -105,3 +100,33 @@
 .file-type-badge {font-size: calc(9px * var(--font-scale, 1));font-weight:750;line-height:16px;border-radius:4px;background:color-mix(in srgb,currentColor 12%,transparent);padding:0 2px;white-space:nowrap;}
 
 .file-tabs-bar > button[aria-pressed=true] {background:var(--selection);color:var(--accent);}
+
+/* Use the same effective limits for CSS layout and pointer/keyboard resizing. */
+.file-panel-slot.is-open { width:min(var(--file-panel-width),max(0px,calc(100% - 360px))); }
+.file-panel-slot.is-open.is-expanded { width:100%; }
+.file-tree { flex-basis:min(var(--file-tree-width),max(0px,calc(100cqw - 280px))); width:min(var(--file-tree-width),max(0px,calc(100cqw - 280px))); }
+.file-tree[hidden] { display:none; }
+.file-resizing,.file-resizing * { cursor:col-resize!important; user-select:none!important; }
+.file-resizing .file-panel-slot { transition:none; }
+.file-resizing .file-panel-slot iframe { pointer-events:none; }
+.file-actions { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; }
+.file-root.file-breadcrumb { min-width:0; min-height:0; padding:0 4px; }
+.file-action-buttons { min-width:0; }
+.file-tree-row:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.file-tabs [role=tab]:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; border-radius:var(--radius-control); }
+@container (max-width:720px) {
+ .file-actions { grid-template-columns:minmax(0,1fr); }
+ .file-action-buttons { grid-column:1 / -1; justify-self:end; flex-wrap:wrap; }
+}
+@container (max-width:590px) {
+ .file-tree { width:min(var(--file-tree-width),75cqw); }
+}
+@media(max-width:1100px) {
+ .file-panel-slot.is-open { width:min(var(--file-panel-width),100%); }
+ .file-panel-slot.is-open.is-expanded { width:100%; }
+}
+.file-application-icon { width:18px; height:18px; flex-shrink:0; object-fit:contain; }
+.file-open-controls { border-radius:9px; }
+.file-open-controls button { min-height:30px; padding:5px 8px; gap:6px; }
+.file-external-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.file-list-toggle[aria-pressed=true] { background:var(--selection); color:var(--accent); }

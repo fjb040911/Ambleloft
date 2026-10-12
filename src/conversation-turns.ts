@@ -13,7 +13,7 @@ export interface ConversationTurn {
 export function conversationTurns(run: AgentRun): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
   for (const message of run.messages) {
-    if (message.role === 'user') turns.push({ user: message, messages: [], tools: [], active: false, artifacts:[] });
+    if (message.role === 'user'&&!message.turnKey) turns.push({ user: message, messages: [], tools: [], active: false, artifacts:[] });
     else if (turns.length) turns[turns.length - 1].messages.push(message);
   }
   const byId = new Map(turns.map(turn => [turn.user.id, turn]));

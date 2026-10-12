@@ -67,7 +67,7 @@ class HostManager{
   if(e.token!==token||!m||m.token!==token||e.blocked)return;
   if(m.type==='pong'){e.lastPong=this.clock();return;}
   if(m.type==='ready'&&e.state==='starting'){
-   const expected=(e.item.manifest.operations||[]).map(op=>op.handler);
+   const expected=[...(e.item.manifest.operations||[]),...(e.item.manifest.hooks||[])].map(op=>op.handler);
    if(!Array.isArray(m.handlers)||m.handlers.length!==expected.length||new Set(m.handlers).size!==expected.length||!expected.every(name=>m.handlers.includes(name))){this.fail(e,token,'扩展 handler 注册不完整');return;}
    e.ready?.resolve();e.ready=null;return;
   }
@@ -93,6 +93,9 @@ class HostManager{
     }else if(m.method==='authentication'){
      if(!this.service.authentication)throw failure('UNSUPPORTED','Authentication unavailable');
      value=await this.service.authentication.forExtension(context,m.params?.method,m.params?.input);
+    }else if(m.method==='automation'){
+     if(!this.service.automation)throw failure('UNSUPPORTED','Automation unavailable');
+     value=await this.service.automation.forExtension(context,m.params?.method,m.params?.input);
     }else if(m.method==='messages'){
      if(!this.service.messages)throw failure('UNSUPPORTED','Message service unavailable');
      value=await this.service.messages.forExtension(context,m.params?.method,m.params?.input);
@@ -108,15 +111,16 @@ class HostManager{
   }
  }
  finish(call,error,value){if(call.done)return;call.done=true;clearTimeout(call.timer);call.signal?.removeEventListener('abort',call.abort);error?call.reject(error):call.resolve(value);}
- async invoke(id,operationId,input,{signal,caller='page',projectId,form,message,timeout=this.limits.operation,guard,onDispatch,resources}={}){
+ async invokeHook(id,hook,event,guard){return this.invoke(id,null,event,{caller:'hook',projectId:event.projectId,guard,hook});}
+ async invoke(id,operationId,input,{signal,caller='page',projectId,form,message,timeout=this.limits.operation,guard,onDispatch,resources,hook}={}){
   if(signal?.aborted)throw failure('CANCELLED','请求已取消');const e=await this.activate(id),token=e.token;
-  const operation=e.item.manifest.operations?.find(op=>op.id===operationId);if(!operation)throw failure('NOT_FOUND','未声明此操作');
+  const operation=hook&&e.item.manifest.hooks?.some(h=>h.event===hook.event&&h.handler===hook.handler)?{handler:hook.handler,inputSchema:{type:'object',additionalProperties:true},outputSchema:{type:'null'}}:e.item.manifest.operations?.find(op=>op.id===operationId);if(!operation)throw failure('NOT_FOUND','未声明此操作');
   // Internal transport only. A6 must authorize/confirm before calling this method.
   if(e.token!==token||e.state!=='active'||e.blocked)throw failure('CANCELLED','扩展状态已改变');
   if(signal?.aborted)throw failure('CANCELLED','请求已取消');if(e.running.size>=this.limits.concurrency&&e.queue.length>=this.limits.queue)throw failure('BUSY','扩展操作队列已满');
   if(!Number.isFinite(timeout)||timeout<=0||timeout>this.limits.maximumOperation)throw failure('INVALID_ARGUMENT','操作超时无效');
   return new Promise((resolve,reject)=>{
-   const call={id:randomUUID(),operation,input,caller,projectId,form,message,signal,resolve,reject,guard,onDispatch,resources,done:false};
+   const call={id:randomUUID(),operation,input,hook,caller,projectId,form,message,signal,resolve,reject,guard,onDispatch,resources,done:false};
    const cancel=code=>{this.finish(call,failure(code,code==='TIMEOUT'?'操作超时':'操作已取消',call.started?'unknown':'notStarted'));e.queue=e.queue.filter(c=>c!==call);if(call.started)this.send(e,{type:'cancel',id:call.id});this.changed(e);};
    call.abort=()=>cancel('CANCELLED');signal?.addEventListener('abort',call.abort,{once:true});call.timer=setTimeout(()=>cancel('TIMEOUT'),timeout);e.queue.push(call);this.drain(e);
   });
@@ -128,7 +132,7 @@ class HostManager{
  }
  async dispatch(e,call,token){
   try{
-   const valid=await this.service.packages.validateValue(call.operation.inputSchema,call.input);
+   const valid=call.hook?true:await this.service.packages.validateValue(call.operation.inputSchema,call.input);
    if(call.done||e.token!==token||e.blocked||e.state!=='active')return;
    if(!valid){this.finish(call,failure('INVALID_ARGUMENT','操作输入不符合契约'));return;}
    await call.guard?.();if(call.done||e.token!==token||e.blocked)return;

@@ -9,7 +9,7 @@ import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
 import {Separator} from './components/ui/separator';
 import type {ExtensionSnapshot,Project} from './types';
 import {t} from './i18n';
-const permissionName=(key:string)=>t(({'projects.read':'读取项目信息','projects.path.read':'读取项目路径','files.read':'读取项目文件','files.write':'修改项目文件','tasks.read':'读取任务','tasks.write':'管理任务','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
+const permissionName=(key:string)=>t(({'agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'读取项目信息','projects.path.read':'读取项目路径','files.read':'读取项目文件','files.write':'修改项目文件','tasks.read':'读取任务','tasks.write':'管理任务','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
 export default function ExtensionPermissionsDialog({item,projects,projectId,setProjectId,busy,error,close,grant,revoke}:{item:ExtensionSnapshot['installed'][number];projects:Project[];projectId:string;setProjectId(id:string):void;busy:boolean;error:string;close():void;grant():void;revoke():void}){
  const projectControl=useId();
  const permissions=item.permissions||[],grants=item.grants||[];

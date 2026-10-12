@@ -13,10 +13,13 @@ import {Popover,PopoverContent} from './components/ui/popover';
 import { ChevronRight, Folder, SquarePen, MoreHorizontal, Plus, MessageCircle, Settings } from 'lucide-react';
 import type { AgentRun, Project, Task } from './types';
 import { runStatus } from './Conversation';
+import { useTaskRecency } from './use-task-recency';
+const PROJECT_TASK_PAGE_SIZE = 5;
+const CHAT_PAGE_SIZE = 30;
 export type NavTask = {revision?:number;unread?:boolean;queued?:boolean;questions?:AgentRun["questions"];archivedAt?:string|null;id:string; title:string; projectId:string|null; createdAt:string; updatedAt?:string; status:string; draft?:boolean};
 export function workspaceTasks(runs:AgentRun[], drafts:Task[], projects:Project[]):NavTask[] {
  // Streaming updates change updatedAt on every event; only a new turn should reorder tasks.
- const orderedRuns=runs.map(run=>({...run,updatedAt:run.messages?.findLast(message=>message.role==='user')?.timing?.startedAt||run.lastTurnStartedAt||run.createdAt}));
+ const orderedRuns=runs.map(run=>({...run,updatedAt:run.messages?.findLast(message=>message.role==='user'&&!message.turnKey)?.timing?.startedAt||run.lastTurnStartedAt||run.createdAt}));
  return [...orderedRuns,...drafts.map(task=>({...task,draft:true}))].map<NavTask>(task=>({...task,projectId:projects.some(p=>p.id===task.projectId)?task.projectId:null})).sort((a,b)=>(b.updatedAt||b.createdAt).localeCompare(a.updatedAt||a.createdAt));
 }
 export default function WorkspaceNavigation({hasExtensions=true,activeGroup,extensionsContent,manageExtensions,projects,tasks,selected,projectId,open,newTask,openProject,editProject,editTask,addProject}:{hasExtensions?:boolean;activeGroup?:'projects'|'chats'|'extensions';extensionsContent?:ReactNode;manageExtensions():void;projects:Project[];tasks:NavTask[];selected:string|null;projectId:string;open(task:NavTask):void;newTask(project?:string):void;openProject(id:string):void;editProject(project:Project):void;editTask(task:NavTask):void;addProject():void}) {
@@ -24,11 +27,31 @@ export default function WorkspaceNavigation({hasExtensions=true,activeGroup,exte
  const scrollPositions=useRef<Record<string,number>>({});
  const contentRef=useRef<HTMLDivElement>(null);
  useLayoutEffect(()=>{const el=contentRef.current;if(el)el.scrollTop=scrollPositions.current[activeGroup||'all']||0;},[activeGroup]);
+ const recency=useTaskRecency(selected);
  const [limits,setLimits]=useState<Record<string,number>>({});
  const [projectLimit,setProjectLimit]=useState(30);
  const dateGroup=(task:NavTask)=>{const date=new Date(task.updatedAt||task.createdAt);const today=new Date();today.setHours(0,0,0,0);const yesterday=new Date(today);yesterday.setDate(yesterday.getDate()-1);const week=new Date(today);week.setDate(week.getDate()-6);return date>=today?'今天':date>=yesterday?'昨天':date>=week?'近 7 天':'更早';};
  const empty=(Icon:typeof MessageCircle,title:string,description:string)=><Empty className="border-0 px-3 py-9"><EmptyHeader><EmptyMedia variant="icon"><Icon aria-hidden="true"/></EmptyMedia><EmptyTitle>{t(title)}</EmptyTitle><EmptyDescription>{t(description)}</EmptyDescription></EmptyHeader></Empty>;
- const taskRows=(key:string)=>{const items=tasks.filter(task=>key==='chats'?!task.projectId:task.projectId===key);const limit=limits[key]||30;return <SidebarMenu>{items.slice(0,limit).map((task,index)=><SidebarMenuItem key={task.id}>{activeGroup==='chats'&&key==='chats'&&(index===0||dateGroup(items[index-1])!==dateGroup(task))&&<h3 className="nav-date-heading">{t(dateGroup(task))}</h3>}<VirtualBlock enabled={limit>30}>{row(task)}</VirtualBlock></SidebarMenuItem>)}{items.length>limit&&<SidebarMenuItem><Button variant="ghost" onClick={()=>setLimits(old=>({...old,[key]:limit+30}))}>{t('加载更多')} · {items.length-limit}</Button></SidebarMenuItem>}</SidebarMenu>;};
+ const taskRows=(key:string)=>{
+  const isProject=key!=='chats';
+  const items=tasks.filter(task=>isProject?task.projectId===key:!task.projectId);
+  if(isProject) {
+   const lastUsed=(task:NavTask)=>Math.max(recency[task.id]||0,Date.parse(task.updatedAt||task.createdAt)||0);
+   items.sort((a,b)=>lastUsed(b)-lastUsed(a));
+  }
+  const pageSize=isProject?PROJECT_TASK_PAGE_SIZE:CHAT_PAGE_SIZE;
+  const limit=limits[key]||pageSize;
+  const expanded=limit>pageSize;
+  return <SidebarMenu id={`nav-task-list-${key}`}>
+   {items.slice(0,limit).map((task,index)=><SidebarMenuItem key={task.id}>{activeGroup==='chats'&&!isProject&&(index===0||dateGroup(items[index-1])!==dateGroup(task))&&<h3 className="nav-date-heading">{t(dateGroup(task))}</h3>}<VirtualBlock enabled={limit>30}>{row(task)}</VirtualBlock></SidebarMenuItem>)}
+   {(items.length>limit||(isProject&&expanded))&&<SidebarMenuItem>
+    {isProject?<div className="project-task-pagination">
+     {items.length>limit&&<Button variant="ghost" size="sm" className="justify-start" aria-label={`${t('展开显示')}：${projects.find(project=>project.id===key)?.name}`} aria-controls={`nav-task-list-${key}`} onClick={()=>setLimits(old=>({...old,[key]:(old[key]||pageSize)+pageSize}))}>{t('展开显示')}</Button>}
+     {expanded&&<Button variant="ghost" size="sm" className="justify-start" aria-label={`${t('收起显示')}：${projects.find(project=>project.id===key)?.name}`} aria-controls={`nav-task-list-${key}`} onClick={()=>setLimits(old=>({...old,[key]:pageSize}))}>{t('收起显示')}</Button>}
+    </div>:<Button variant="ghost" onClick={()=>setLimits(old=>({...old,[key]:(old[key]||pageSize)+pageSize}))}>{t('加载更多')} · {items.length-limit}</Button>}
+   </SidebarMenuItem>}
+  </SidebarMenu>;
+ };
  const [collapsed,setCollapsed]=useState<Set<string>>(new Set());
  const [groups,setGroups]=useState({projects:false,chats:false,extensions:false});
  const previewRef=useRef<HTMLDivElement>(null);
@@ -50,7 +73,7 @@ export default function WorkspaceNavigation({hasExtensions=true,activeGroup,exte
    <SidebarMenuButton isActive={projectId===project.id} aria-current={projectId===project.id?'page':undefined} className="project-tree-name min-w-0 flex-1 pr-0 group-has-data-[sidebar=menu-action]/menu-item:pr-0 data-active:bg-transparent data-active:hover:bg-transparent data-active:text-inherit" onClick={()=>openProject(project.id)} onFocus={e=>show(e.currentTarget,project)} onBlur={leave} onKeyDown={e=>{if(e.key==='ArrowRight'&&preview){e.preventDefault();previewRef.current?.querySelector('button')?.focus();}}}><span>{project.name}</span></SidebarMenuButton>
    <span className="tree-row-actions"><SidebarMenuAction className="icon-button row-menu shrink-0 static h-8 w-7 after:inset-0" aria-label={`${t("管理项目：")}${project.name}`} onClick={event=>{event.stopPropagation();hide();editProject(project);}}><MoreHorizontal size={15}/></SidebarMenuAction>
    <SidebarMenuAction className="icon-button row-menu shrink-0 static h-8 w-7 after:inset-0" aria-label={`${t("在项目中新建任务：")}${project.name}`} onClick={event=>{event.stopPropagation();hide();newTask(project.id);}}><SquarePen size={15}/></SidebarMenuAction></span>
-  </div><Collapsible open={!collapsed.has(project.id)}><CollapsibleContent id={`project-tasks-${project.id}`} keepMounted inert={collapsed.has(project.id)} aria-hidden={collapsed.has(project.id)}><div><SidebarMenuSub className="project-children ml-5 mr-0 pl-2 pr-0"><li>{taskRows(project.id)}</li></SidebarMenuSub></div></CollapsibleContent></Collapsible></SidebarMenuItem></SidebarMenu></VirtualBlock>)}{projects.length>projectLimit&&<Button variant="ghost" size="sm" onClick={()=>setProjectLimit(n=>n+30)}>{t('加载更多项目')}</Button>}
+  </div><Collapsible open={!collapsed.has(project.id)}><CollapsibleContent id={`project-tasks-${project.id}`} keepMounted inert={collapsed.has(project.id)} aria-hidden={collapsed.has(project.id)}><div><SidebarMenuSub className="project-children ml-4 mr-0 translate-x-0 border-l-0 pl-0 pr-0"><li>{taskRows(project.id)}</li></SidebarMenuSub></div></CollapsibleContent></Collapsible></SidebarMenuItem></SidebarMenu></VirtualBlock>)}{projects.length>projectLimit&&<Button variant="ghost" size="sm" onClick={()=>setProjectLimit(n=>n+30)}>{t('加载更多项目')}</Button>}
   {!projects.length&&(activeGroup?empty(Folder,"还没有项目","新建项目，将工作目录和相关任务整理在一起。"): <p className="nav-empty">{t("添加项目，整理相关任务。")}</p>)}</SidebarGroupContent></CollapsibleContent></Collapsible></SidebarGroup>
   <SidebarGroup className={activeGroup&&activeGroup!=='chats'?'p-0 hidden':'p-0'} role="region" aria-label={t("任务")}>{heading('chats','任务','新建任务',()=>newTask())}<Collapsible open={!!activeGroup||!groups.chats}><CollapsibleContent keepMounted id="nav-chats" inert={!activeGroup&&groups.chats} aria-hidden={!activeGroup&&groups.chats}><SidebarGroupContent>{taskRows('chats')}{!tasks.some(t=>!t.projectId)&&(activeGroup?empty(MessageCircle,"还没有独立任务","点击新建任务开始。项目内的任务请在项目中查看。"):<p className="nav-empty">{t("你的任务会显示在这里。")}</p>)}</SidebarGroupContent></CollapsibleContent></Collapsible></SidebarGroup>
   <SidebarGroup className={activeGroup&&activeGroup!=='extensions'?'p-0 hidden':'p-0'} role="region" aria-label={t("扩展")}>{heading('extensions','扩展','管理扩展',manageExtensions)}<Collapsible open={!!activeGroup||!groups.extensions}><CollapsibleContent keepMounted id="nav-extensions" inert={!activeGroup&&groups.extensions} aria-hidden={!activeGroup&&groups.extensions}><SidebarGroupContent>{extensionsContent}{activeGroup&&!hasExtensions&&empty(Settings,"暂无可用扩展","前往管理扩展，安装或启用你需要的扩展。")}</SidebarGroupContent></CollapsibleContent></Collapsible></SidebarGroup>

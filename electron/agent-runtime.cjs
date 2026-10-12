@@ -37,7 +37,7 @@ class AgentRuntime {
       if (!Array.isArray(this.runs)) throw new Error('invalid conversations');
       for (const run of this.runs) if (BUSY.includes(run.status)) {
         run.queued=false; run.status = 'interrupted'; run.error = '上次应用退出时任务未完成。请核实工具结果后再继续，不会自动重试。'; run.approvals = []; run.questions=[]; run.retrying=false;
-        const timing = run.messages?.findLast(message => message.role === 'user')?.timing;
+        const timing = run.messages?.findLast(message => message.role === 'user'&&!message.turnKey)?.timing;
         if (timing && !timing.outcome) timing.outcome = 'interrupted';
       }
       await this.persist();
@@ -84,8 +84,8 @@ class AgentRuntime {
     }
     finally { this.editing = false; }
   }
-  persist() {
-    const operation = this.writes.then(() => {const snapshot=structuredClone(this.runs);return this.database ? this.database.call('saveRuns', snapshot) : writeJSON(this.file, snapshot);});
+  persist(terminal) {
+    const operation = this.writes.then(() => {const snapshot=structuredClone(this.runs);return this.database ? this.database.call(terminal?'commitTurn':'saveRuns', terminal?{runs:snapshot,...terminal}:snapshot) : writeJSON(this.file, snapshot);});
     this.writes = operation.catch(() => {});
     return operation;
   }
@@ -109,12 +109,55 @@ class AgentRuntime {
     this.writes=operation.catch(()=>{});
     try{return await operation;}finally{this.editing=false;}
   }
+  recordFormInput(run,item,turnKey) {
+    const existing=run.messages.find(m=>m.formSubmissionId===item.id);
+    if(existing){existing.inputDeliveryState='delivered';return;}
+    const message={id:randomUUID(),role:'user',text:item.text,turnKey,order:run.nextEventOrder=(run.nextEventOrder||0)+1,formSubmissionId:item.id,inputDeliveryState:'delivered'};
+    const root=run.messages.findIndex(m=>m.id===turnKey),next=run.messages.findIndex((m,i)=>i>root&&m.role==='user'&&!m.turnKey);
+    run.messages.splice(next<0?run.messages.length:next,0,message);this.changed(run);
+  }
+  async deliverFormInput(item, {owner,onDispatch}) {
+    const busy=()=>Object.assign(Error('BUSY'),{code:'BUSY'});
+    if(this.closing||this.editing)throw busy();
+    const run=this.runs.find(r=>r.id===item.runId);
+    if(!run||run.archivedAt)throw Error('聊天不可用');
+    const context=[...this.contexts.values()].find(c=>c.requestRunId===run.id||c.run?.id===run.id);
+    if(context){
+      if(context.done||context.cancelled||!context.rpc||context.rpc.closed||!run.turnId||!['running','waiting'].includes(run.status))throw busy();
+      const target={threadId:run.threadId,turnId:run.turnId,turnKey:context.turnKey,mode:'steer'};
+      await onDispatch(target);
+      if(context.done||context.cancelled||context.rpc.closed||run.turnId!==target.turnId)throw Object.assign(busy(),{rpcRejected:true,turnBoundary:true});
+      context.formInputs ||= new Map();context.formInputs.set(item.id,item);
+      try{await context.rpc.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,clientUserMessageId:item.id,input:[{type:'text',text:item.text}]});}
+      catch(error){if(error.rpcRejected&&/no active turn|expected.*turn|turn.*mismatch/i.test(error.message))error.turnBoundary=true;throw error;}finally{context.formInputs.delete(item.id);}
+      this.recordFormInput(run,item,context.turnKey);
+      this.changed(run);await this.persist();return;
+    }
+    if(BUSY.includes(run.status))throw busy();
+    let resolve,reject;const receipt=new Promise((yes,no)=>{resolve=yes;reject=no;});receipt.catch(()=>{});
+    await this.start({runId:run.id,prompt:item.text},{owner,formSubmissionId:item.id,inputDelivery:{id:item.id,onDispatch,resolve,reject}});
+    await receipt;
+  }
+  async hasFormInput(item) {
+    const run=this.runs.find(r=>r.id===item.runId);
+    if(run?.messages.some(m=>m.formSubmissionId===item.id&&m.inputDeliveryState==='delivered'))return true;
+    const threadId=item.target?.threadId;if(!threadId||!run)return false;
+    const active=[...this.contexts.values()].find(c=>c.run?.id===run.id&&!c.done&&!c.rpc?.closed);
+    let rpc=active?.rpc,owned=false;
+    try{
+      if(!rpc){const config=await this.provider.secret(run.providerId,run.model);rpc=this.rpcFactory({executable:await findCodex(config.executable),config,home:await prepareEngineHome(this.directory),cwd:run.cwd,notification:()=>{},request:()=>{},exit:()=>{}});owned=true;
+        await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}});rpc.send({method:'initialized',params:{}});}
+      const result=await rpc.call('thread/read',{threadId,includeTurns:true});
+      const found=result.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId===item.id));
+      if(found){this.recordFormInput(run,item,item.target.turnKey);await this.persist();}return found;
+    }finally{if(owned)rpc?.close();}
+  }
   async start(input, hostContext={}) {
     if (this.closing || this.editing) throw new Error('请等待当前操作结束');
-    if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?c.requestRunId===input.runId:c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
+    if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?(c.requestRunId===input.runId||c.run?.id===input.runId):c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
     if (!input || typeof input.prompt !== 'string' || (!input.prompt.trim() && !input.selectedSkillIds?.length) || input.prompt.length > 20000) throw new Error('请输入 1–20000 字的任务内容');
     // Reserve before any await so two windows/rapid clicks cannot start two processes.
-    const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.owner=hostContext.owner;context.key=randomUUID();context.requestRunId=input.runId;context.draftId=input.draftId;this.contexts.set(context.key,context);
+    const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.inputDelivery=hostContext.inputDelivery;context.owner=hostContext.owner;context.key=randomUUID();context.requestRunId=input.runId;context.draftId=input.draftId;this.contexts.set(context.key,context);
     try {
       context.skills = this.skills ? await this.skills.prepare(input.selectedSkillIds) : {instructions:'',snapshots:[],explicit:''};
       if(!this.skills && input.selectedSkillIds?.length)throw new Error('技能服务不可用');
@@ -161,7 +204,7 @@ class AgentRuntime {
       run.status = 'preparing'; run.error = ''; run.retrying=false; run.questions=[]; run.approvals = []; run.turnId = null;
       context.timing = { startedAt: context.startedAt };
       context.turnKey = randomUUID();
-      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.formSubmissionId?{formSubmissionId:hostContext.formSubmissionId}:{}), model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
+      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.formSubmissionId?{formSubmissionId:hostContext.formSubmissionId,...(hostContext.inputDelivery?{inputDeliveryState:'queued'}:{})}:{}), model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
       context.config = config;
       if (!previous && this.database) {
         const operation=this.writes.then(async()=>{
@@ -185,13 +228,13 @@ class AgentRuntime {
       if(context.cancelled||context.done){context.bridge?.close();return structuredClone(run);}
       if(this.extensionRouter){const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
        const extensionContext=signal=>({caller:'agent',projectId:run.projectId,owner:context.owner,signal,validate:()=>{if(context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});}});
-       context.extensionChannel=await createAgentChannel({forms:this.forms?{list:async()=>{const c=await this.forms.catalog();return {templates:c.entries.map(e=>({key:e.key,template:e.template})),instances:(await this.forms.list(run.id)).map(f=>({id:f.id,key:f.key,step:f.step,status:f.status})),errors:c.errors};},present:(args)=>this.forms.present(run,context.turnKey,args.key,args.prefill)}:undefined,list:signal=>this.extensionRouter.list(extensionContext(signal)),invoke:(id,input,signal)=>this.mcpApps?this.mcpApps.invokeTask(id,input,extensionContext(signal),run,context.turnKey):this.extensionRouter.invoke(id,input,extensionContext(signal)),...(this.mcpApps?{tools:signal=>this.mcpApps.tools(extensionContext(signal)),resource:(uri,signal)=>this.mcpApps.resourceForAgent(uri,extensionContext(signal))}:{})});
+       context.extensionChannel=await createAgentChannel({ui:this.forms?.ui?{list:async()=>{const c=await this.forms.ui.catalog();return {templates:c.entries.map(e=>({key:e.key,template:e.template})),errors:c.errors,instances:(await this.forms.ui.list(run.id)).map(f=>({id:f.id,key:f.key,revision:f.revision,readOnly:f.readOnly,replacedBy:f.replacedBy}))};},present:args=>this.forms.ui.present(run,context.turnKey,args),update:args=>this.forms.ui.update(run,context.turnKey,args),read:id=>this.forms.ui.read(run,id)}:undefined,skills:this.installSkill?{install:(args,signal)=>this.installSkill(args,context.owner,signal)}:undefined,forms:this.forms?{list:async()=>{const c=await this.forms.catalog();return {templates:c.entries.map(e=>({key:e.key,template:e.template})),instances:(await this.forms.list(run.id)).map(f=>({id:f.id,key:f.key,step:f.step,status:f.status})),errors:c.errors};},read:id=>this.forms.read(run,id),present:(args)=>this.forms.present(run,context.turnKey,args.key,args.prefill)}:undefined,list:signal=>this.extensionRouter.list(extensionContext(signal)),invoke:(id,input,signal)=>this.mcpApps?this.mcpApps.invokeTask(id,input,extensionContext(signal),run,context.turnKey):this.extensionRouter.invoke(id,input,extensionContext(signal)),...(this.mcpApps?{tools:signal=>this.mcpApps.tools(extensionContext(signal)),resource:(uri,signal)=>this.mcpApps.resourceForAgent(uri,extensionContext(signal))}:{})});
        if(context.done||context.cancelled){context.extensionChannel.close();return;}
       }
       context.rpc = this.rpcFactory({ executable, config:context.bridge?.config||config, home, cwd, extensionMcp:context.extensionChannel?.config,
         notification: message => this.notification(context, message), request: message => this.request(context, message),
         exit: error => { if (!context.done) void this.finish(context, 'failed', redact(error.message, config.apiKey)); } });
-      void this.execute(context).catch(error => { if (!context.done) void this.finish(context, context.cancelled ? 'interrupted' : 'failed', redact(error.message, config.apiKey)); });
+      void this.execute(context).catch(error => { context.inputDelivery?.reject(error); if (!context.done) void this.finish(context, context.cancelled ? 'interrupted' : 'failed', redact(error.message, config.apiKey)); });
       };
       run.queued=true;this.pendingStarts.push(context);this.drain();this.changed(run);
       return structuredClone(run);
@@ -206,7 +249,9 @@ class AgentRuntime {
     const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId } : {}) });
     if (context.done || context.cancelled) return;
     run.threadId = thread.thread.id; run.status = 'running'; this.changed(run);
-    const turn = await rpc.call('turn/start', { threadId: run.threadId, input: [{ type: 'text', text: run.messages.at(-1).text + (context.skills?.explicit ? '\n\nThe user explicitly selected these workflows for this request:\n' + context.skills.explicit : '') }] });
+    if(context.inputDelivery)await context.inputDelivery.onDispatch({threadId:run.threadId,mode:'start',turnKey:context.turnKey});
+    const turn = await rpc.call('turn/start', { threadId: run.threadId,...(context.inputDelivery?{clientUserMessageId:context.inputDelivery.id}:{}), input: [{ type: 'text', text: run.messages.find(m=>m.id===context.turnKey).text + (context.skills?.explicit ? '\n\nThe user explicitly selected these workflows for this request:\n' + context.skills.explicit : '') }] });
+    if(context.inputDelivery){const message=run.messages.find(m=>m.id===context.turnKey);message.inputDeliveryState='delivered';context.inputDelivery.resolve();await this.persist();}
     if (context.done) return;
     run.turnId = turn.turn.id; this.changed(run);
     if (context.cancelled) await this.stop(run.id);
@@ -219,7 +264,7 @@ class AgentRuntime {
     const clean = value => redact(value || '', context.config.apiKey);
     run.lastEventAt=new Date().toISOString();
     const stamp = () => ({ turnKey: context.turnKey, order: run.nextEventOrder = (run.nextEventOrder || 0) + 1 });
-    if (method === 'turn/started') { run.turnId = params.turn.id; if (!context.cancelled) run.status = 'running'; }
+    if (method === 'turn/started') { if(context.inputDelivery){const m=run.messages.find(m=>m.id===context.turnKey);m.inputDeliveryState='delivered';context.inputDelivery.resolve();} run.turnId = params.turn.id; if (!context.cancelled) run.status = 'running'; }
     else if (method === 'turn/plan/updated') {
       const plan={turnKey:context.turnKey,explanation:clean(params.explanation),steps:(params.plan||[]).filter(step=>typeof step.step==='string'&&['pending','inProgress','completed'].includes(step.status)).map(step=>({step:clean(step.step),status:step.status}))};
       run.plans=[...(run.plans||[]).filter(p=>p.turnKey!==context.turnKey),plan];
@@ -240,6 +285,7 @@ class AgentRuntime {
       }
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = params.item;
+      if(item.type==='userMessage'&&context.formInputs?.has(item.clientId))this.recordFormInput(run,context.formInputs.get(item.clientId),context.turnKey);
       if (item.type === 'reasoning') {
         let existing = run.messages.find(message => message.id === item.id);
         if (!existing) { existing = { id: item.id, role: 'assistant', kind: 'reasoning', text: '', summary: [], content: [], ...stamp() }; run.messages.push(existing); }
@@ -333,7 +379,7 @@ class AgentRuntime {
   }
   async finish(context, status, error = '') {
     if (context.done) return;
-    context.done = true;
+    context.done = true;context.inputDelivery?.reject(Object.assign(Error(error||'任务已停止'),{code:'CANCELLED'}));
     context.extensionChannel?.close();context.rpc?.close(); context.bridge?.close();
     const diagnostic=context.lastModelDiagnostic;
     if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
@@ -358,10 +404,10 @@ class AgentRuntime {
       context.fileBaseline=null;
       try { context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
     }
-    if (context.run) { context.run.queued=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
-    try { await this.persist(); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publish(structuredClone(context.run)); } }
+    if (context.run) { if(context.turnKey)context.run.terminalTurnId=context.turnKey; context.run.queued=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
+    try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publish(structuredClone(context.run)); } }
     this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);this.drain();
   }
-  async shutdown() { if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id)));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist(); }
+  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id)));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown(); }
 }
 module.exports = { AgentRuntime };

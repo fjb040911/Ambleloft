@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "id": "review-cards",
+  "type": "collection",
+  "title": "代码审查",
+  "rows": {
+    "key": "id",
+    "fields": [
+      {
+        "name": "id",
+        "type": "text",
+        "label": "问题编号",
+        "required": true
+      },
+      {
+        "name": "severity",
+        "type": "select",
+        "label": "严重程度",
+        "options": [
+          {
+            "label": "高",
+            "value": "high"
+          },
+          {
+            "label": "低",
+            "value": "low"
+          }
+        ]
+      },
+      {
+        "name": "status",
+        "type": "text",
+        "label": "处理状态"
+      },
+      {
+        "name": "file",
+        "type": "text",
+        "label": "文件"
+      },
+      {
+        "name": "details",
+        "type": "textarea",
+        "label": "详情"
+      },
+      {
+        "name": "title",
+        "label": "问题",
+        "type": "text"
+      }
+    ],
+    "columns": [
+      "title",
+      "severity",
+      "file",
+      "status"
+    ],
+    "detailFields": [
+      "details"
+    ],
+    "filterFields": [
+      "severity",
+      "status"
+    ],
+    "location": {
+      "pathField": "file"
+    },
+    "valueLabels": {
+      "status": {
+        "open": "待处理",
+        "resolved": "已处理"
+      }
+    },
+    "layout": "cards",
+    "card": {
+      "titleField": "title",
+      "badgeFields": [
+        "severity",
+        "status"
+      ],
+      "metadataFields": [
+        "file",
+        "id"
+      ]
+    }
+  },
+  "actions": [
+    {
+      "id": "fix-one",
+      "kind": "chat",
+      "label": "修复",
+      "scope": "row",
+      "prompt": "使用当前技能修复所列问题。",
+      "input": {
+        "issueIds": {
+          "from": "row.id"
+        }
+      }
+    },
+    {
+      "id": "fix-selected",
+      "kind": "chat",
+      "label": "修复所选",
+      "scope": "selection",
+      "prompt": "使用当前技能修复所选问题。",
+      "input": {
+        "issueIds": {
+          "from": "selection.id"
+        }
+      }
+    },
+    {
+      "id": "fix-all",
+      "kind": "chat",
+      "label": "全部修复",
+      "scope": "all",
+      "eligible": {
+        "field": "status",
+        "notEquals": "resolved"
+      },
+      "prompt": "修复这份报告的全部未解决问题，完成后重新检查。",
+      "input": {
+        "issueIds": {
+          "from": "all.id"
+        }
+      }
+    }
+  ]
+}

@@ -87,3 +87,7 @@ A2 和 A5 必须一起关闭旧的无版本整份 workspace 写入口。单独�
 ## 5. M2 衔接
 
 M1 只预留身份、授权及提交边界。M2 另行设计：终态与 outbox 同事务、重投 ACK、快照保留、提示词预算与 outcomeUnknown、站内消息持久化和账号过滤。M2 不应复用 250ms UI publish 冒充可靠事件；已有数据库迁移需顺序升级。
+
+## 2026-10-10：M2 Hooks / 轮次 / 后台作业增量
+
+这三项进入源码预览；具体契约、默认额度和恢复边界见 [后台自动化指南](background-automation-guide.md)。源码预览不代表外部 SDK/CLI 已同步发布，也不代替 A8 Windows/macOS/Linux 安装包验收。

@@ -8,7 +8,7 @@ import {Alert,AlertTitle,AlertDescription} from './components/ui/alert';
 import {Separator} from './components/ui/separator';
 import {t} from './i18n';
 import type {ExtensionInteractionRequest} from './types';
-const capabilityNames:Record<string,string>={'projects.read':'查看项目名称和说明','projects.path.read':'查看项目文件夹的位置','conversations.create':'创建聊天草稿','conversations.open':'打开项目中的聊天','storage':'查看和更新这个扩展保存的内容','configuration':'查看这个扩展的设置','secrets':'使用为这个扩展保存的登录信息'};
+const capabilityNames:Record<string,string>={'agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'查看项目名称和说明','projects.path.read':'查看项目文件夹的位置','conversations.create':'创建聊天草稿','conversations.open':'打开项目中的聊天','storage':'查看和更新这个扩展保存的内容','configuration':'查看这个扩展的设置','secrets':'使用为这个扩展保存的登录信息'};
 const impactNames:Record<string,string>={external:'向其他服务发送或公开发布内容',destructive:'删除内容，或进行无法撤销的修改',bulk:'一次修改多项内容',permissions:'更改谁可以查看或修改内容'};
 export default function ExtensionOperationDialog({request,remember,setRemember,busy,error,submit}:{request:ExtensionInteractionRequest;remember:boolean;setRemember(value:boolean):void;busy:boolean;error:string;submit(cancel?:boolean):Promise<void>}){
  const rememberId=useId();
