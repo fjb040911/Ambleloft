@@ -13,7 +13,7 @@
 .conversation-page { max-width: 960px; margin: auto; padding: 30px 40px 40px; }
 .conversation-scope { font-size: calc(11px * var(--font-scale, 1)); color: var(--secondary); display: flex; gap: 6px; align-items: center; margin: 22px 0; overflow-wrap: anywhere; }
 .message { margin: 18px 0; padding: 18px 20px; border-radius: var(--radius-card); background: var(--raised); border: 1px solid var(--border-soft); }
-.message.user { background: var(--selection); border: 0; }
+.message.user { border: 0; }
 .message strong { font-size: inherit; color: inherit; font-weight: 600; }
 .message > div { white-space: pre-wrap; overflow-wrap: anywhere; font-size: calc(15px * var(--font-scale, 1)); line-height: 1.85; margin-top: 10px; }
 .message.assistant { margin-top: 0; padding-top: 0;}
@@ -195,7 +195,7 @@ h1 { font-size: calc(30px * var(--font-scale, 1)); font-weight: 600; letter-spac
 .device-runtime { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding: 17px 0; text-align: left; color: var(--secondary); font-size: calc(11px * var(--font-scale, 1)); }
 .device-runtime .badge { margin-left: auto; }
 .settings-page { max-width: 820px; }
-.settings-group { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 23px; margin-top: 24px; background: var(--raised); }
+.settings-group { border: 1px solid var(--border); border-radius: var(--radius-surface-card); padding: var(--surface-padding); margin-top: 24px; background: var(--raised); }
 .settings-group h2 { font-size: var(--content-font-size); font-weight: 550; }
 .settings-group p { color: var(--secondary); font-size: calc(12px * var(--font-scale, 1)); line-height: 1.9; margin-top: 10px; }
 .theme-options { display: flex; gap: 12px; margin-top: 20px; }
@@ -282,7 +282,7 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; }
 .markdown p { margin: 9px 0; }.markdown h1,.markdown h2,.markdown h3,.markdown h4 { color: var(--text); margin: 22px 0 10px; letter-spacing: 0; line-height: 1.4; }.markdown h1 { font-size: calc(23px * var(--font-scale, 1)); }.markdown h2 { font-size: calc(19px * var(--font-scale, 1)); }.markdown h3 { font-size: calc(16px * var(--font-scale, 1)); }
 .markdown strong { font-size: inherit; font-weight: 650; color: inherit; }.markdown ul,.markdown ol { padding-left: 24px; margin: 10px 0; }.markdown li { margin: 5px 0; }.markdown blockquote { border-left: 3px solid var(--accent); padding-left: 15px; margin: 12px 0; color: var(--secondary); }
 .markdown code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--selection); border-radius: var(--radius-xs); padding: 2px 5px; }.markdown pre code { background: transparent; padding: 0; white-space: pre; }
-.code-block,.artifact { margin: 16px 0; border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; background: var(--raised); }
+.code-block,.artifact { margin: 16px 0; border: 1px solid var(--border); border-radius: var(--radius-surface-card); overflow: hidden; background: var(--raised); }
 .artifact-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; gap: 10px; background: var(--sidebar); border-bottom: 1px solid var(--border-soft); font-size: calc(11px * var(--font-scale, 1)); }.artifact-toolbar > div { display: flex; gap: 10px; }.artifact-toolbar button { border: 0; background: none; color: var(--secondary); font-size: calc(11px * var(--font-scale, 1)); padding: 4px; }.artifact-toolbar strong { font-size: calc(11px * var(--font-scale, 1)); }
 .code-block pre,.artifact > pre { margin: 0; padding: 14px; overflow: auto; max-height: 420px; font-size: calc(12px * var(--font-scale, 1)); white-space: pre; }
 .artifact-preview { background: #fff; color: #243246; padding: 16px; overflow: auto; }.diagram-svg,.drawio-canvas { display: block; width: 100%; max-height: 440px; min-height: 80px; object-fit: contain; }.artifact-expanded .diagram-svg,.artifact-expanded .drawio-canvas { max-height: none; min-height: 500px; }.chart-canvas { height: 340px; width: 100%; min-width: 200px; }.artifact-expanded .chart-canvas { height: 560px; }.artifact-error { font-size: calc(12px * var(--font-scale, 1)); color: #925b22; padding: 10px; }
@@ -436,7 +436,7 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; }
 .thinking-window pre { margin:0; color:var(--secondary); font-size: calc(13px * var(--font-scale, 1)); line-height:1.8; }
 .process-entry.reasoning.is-live .process-entry-title { color:var(--muted); }
 .question-queue { max-height:40vh; overflow:auto; }
-.question-card { padding:16px; margin:8px 0; border:1px solid var(--border); border-radius:var(--radius-card); background:var(--raised); }
+.question-card { padding:var(--surface-padding); margin:8px 0; border:1px solid var(--border); border-radius:var(--radius-surface-card); background:var(--raised); }
 .question-card h2 { font-size: calc(14px * var(--font-scale, 1)); margin-bottom:12px; }
 .question-card fieldset { border:0; padding:0; margin:12px 0; min-width:0; }
 .question-card legend { font-weight:550; margin-bottom:10px; }

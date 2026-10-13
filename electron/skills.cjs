@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 
+const L=require('../core/localization/index.cjs');
 const MAX_BODY = 200000;
 function validateFields(value) {
   for (const [key, max] of [['name',120],['description',2000],['body',MAX_BODY]]) {
@@ -45,7 +46,8 @@ function createSkills(directory,database) {
   const root=path.join(directory,'skills');let queue=Promise.resolve();
   const readAll=()=>database.call('listSkills');
   const serial=fn=>{const result=queue.then(fn);queue=result.catch(()=>{});return result;};
-  const summary=({body,frontmatter,...record})=>record;
+  const display=({displayMessages,...record})=>({...record,...(record.displayName?{displayName:L.text(displayMessages||{},record.displayName,api.locale)}:{}),...(record.displayDescription?{displayDescription:L.text(displayMessages||{},record.displayDescription,api.locale)}:{})});
+  const summary=({body,frontmatter,...record})=>display(record);
   const get=async id=>{const record=(await readAll()).find(s=>s.id===id);if(!record)throw new Error('技能不存在或已删除');return record;};
   const publish=async (old, fields, source, sourcePath, enabled=true,provenance)=>{
     const id=old?.id||randomUUID(),revision=randomUUID(),destination=path.join(root,id,revision);
@@ -54,14 +56,15 @@ function createSkills(directory,database) {
       const frontmatter=fields.frontmatter || `name: ${JSON.stringify(fields.name)}\ndescription: ${JSON.stringify(fields.description)}`;
       const content=`---\n${frontmatter}\n---\n\n${fields.body}\n`;
       await fs.writeFile(path.join(destination,'SKILL.md'),content);
+      const localized=await require('../core/localization/skill.cjs').validateSkillLocalization(destination);
       const now=new Date().toISOString();
-      const record={id,...fields,enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,...((provenance||old?.provenance)?{provenance:provenance||old.provenance}:{}),createdAt:old?.createdAt||now,updatedAt:now};
+      const record={id,...fields,...localized,enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,...((provenance||old?.provenance)?{provenance:provenance||old.provenance}:{}),createdAt:old?.createdAt||now,updatedAt:now};
       await database.call('putSkill',record);return summary(record);
     } catch(error) {await fs.rm(destination,{recursive:true,force:true});throw error;}
   };
-  return {
+  const api={locale:'en',
     async list(){await queue;return (await readAll()).map(summary);},
-    async detail(id){await queue;return get(id);},
+    async detail(id){await queue;return display(await get(id));},
     async readFile({id,file}){
       await queue;const record=await get(id);
       if(typeof file!=='string'||!file||file.includes('\\')||path.isAbsolute(file)||file.split('/').some(part=>!part||part==='.'||part==='..')||!record.files.includes(file))throw new Error('技能文件路径无效');
@@ -130,6 +133,6 @@ function createSkills(directory,database) {
       const snapshots=selected.map(({id,name,description,version,hash,path,body})=>({id,name,description,version,hash,path,body}));
       return {instructions,snapshots,explicit:selected.map(s=>`\nSelected skill ${JSON.stringify(s.name)} (resources: ${JSON.stringify(path.dirname(s.path))}):\n${s.body}`).join('\n')};
     },
-  };
+  };return api;
 }
 module.exports={createSkills,parseSkill};

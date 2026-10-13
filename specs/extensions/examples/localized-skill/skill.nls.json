@@ -1,0 +1,10 @@
+{
+  "skill.name": "双语申请示例",
+  "skill.description": "根据 Ambleloft 的语言展示申请表单。",
+  "form.title": "创建申请",
+  "field.region": "地区",
+  "field.note": "说明",
+  "region.shanghai": "上海",
+  "region.beijing": "北京",
+  "action.submit": "提交申请"
+}

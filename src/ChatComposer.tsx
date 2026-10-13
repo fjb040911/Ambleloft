@@ -3,9 +3,9 @@ import {ArrowUp,Square,Save} from 'lucide-react';
 import {InputGroup,InputGroupAddon,InputGroupButton,InputGroupTextarea} from './components/ui/input-group';
 import {t} from './i18n';
 
-export default function ChatComposer({value,onChange,onSubmit,disabled,active=false,stopping=false,onStop,canSend,label,placeholder,sendLabel,saveDraft=false,skills,controls,followup=false,inputRef}: {
+export default function ChatComposer({value,onChange,onSubmit,disabled,active=false,stopping=false,onStop,canSend,label,placeholder,sendLabel,saveDraft=false,skills,controls,followup=false,inputRef,footer}: {
  value:string;onChange(value:string):void;onSubmit():void;disabled?:boolean;active?:boolean;stopping?:boolean;onStop?():void;canSend:boolean;
- label:string;placeholder:string;sendLabel:string;saveDraft?:boolean;skills:ReactNode;controls:ReactNode;followup?:boolean;inputRef?:RefObject<HTMLTextAreaElement|null>;
+ label:string;placeholder:string;sendLabel:string;saveDraft?:boolean;skills:ReactNode;controls:ReactNode;followup?:boolean;inputRef?:RefObject<HTMLTextAreaElement|null>;footer?:ReactNode;
 }){
  const localRef=useRef<HTMLTextAreaElement>(null),ref=inputRef||localRef;
  const hintId=useId();const [draftNotice,setDraftNotice]=useState(false);
@@ -16,17 +16,18 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,active=fa
   const observer=new ResizeObserver(()=>{if(el.clientWidth!==width){width=el.clientWidth;resize();}});
   observer.observe(el);return()=>observer.disconnect();
  },[value,ref]);
- return <form className={`composer${followup?' followup':''}`} aria-busy={disabled} onSubmit={e=>{e.preventDefault();if(active){setDraftNotice(true);return;}if(!disabled&&canSend)onSubmit();}}>
-  <InputGroup className="rounded-2xl">
+ return <form className={`@container/composer composer${followup?' followup':''}`} aria-busy={disabled} onSubmit={e=>{e.preventDefault();if(active){setDraftNotice(true);return;}if(!disabled&&canSend)onSubmit();}}>
+  <InputGroup className="rounded-3xl bg-background shadow-sm has-[[data-slot=input-group-control]:focus-visible]:border-input has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot=input-group-control]:focus-visible]:ring-transparent">
    <InputGroupTextarea ref={ref} aria-label={label} aria-describedby={hintId} placeholder={placeholder} disabled={disabled} value={value} maxLength={20000} rows={followup?2:3}
-    className={`chat-composer-input field-sizing-fixed flex-none max-h-[200px] ${followup?'min-h-[72px]':'min-h-[112px]'}`} onChange={e=>{setDraftNotice(false);onChange(e.target.value);}}
+    className={`chat-composer-input field-sizing-fixed flex-none max-h-[200px] px-3.5 pt-3.5 pb-2 focus-visible:outline-none ${followup?'min-h-[80px]':'min-h-[112px]'}`} onChange={e=>{setDraftNotice(false);onChange(e.target.value);}}
     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&e.nativeEvent.keyCode!==229){e.preventDefault();if(active)setDraftNotice(true);else if(!disabled&&canSend)onSubmit();}}}/>
    <InputGroupAddon align="block-start" className="empty:hidden">{skills}</InputGroupAddon>
-   <InputGroupAddon align="block-end" className="composer-bottom">{controls}
-    {active?<InputGroupButton size="icon-sm" variant="secondary" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><Square size={13} fill="currentColor"/></InputGroupButton>
-     :<InputGroupButton size={saveDraft?"sm":"icon-sm"} variant="default" type="submit" aria-label={sendLabel} title={sendLabel} disabled={!canSend||disabled}>{saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:<ArrowUp size={17}/>}</InputGroupButton>}
+   <InputGroupAddon align="block-end" className="composer-bottom px-2.5 pt-1 pb-2.5">{controls}
+    {active?<InputGroupButton className="rounded-full" size="icon-sm" variant="secondary" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><Square size={13} fill="currentColor"/></InputGroupButton>
+     :<InputGroupButton className="rounded-full" size={saveDraft?"sm":"icon-sm"} variant="default" type="submit" aria-label={sendLabel} title={sendLabel} disabled={!canSend||disabled}>{saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:<ArrowUp size={17}/>}</InputGroupButton>}
    </InputGroupAddon>
   </InputGroup>
-  <p id={hintId} className="composer-hint" role="status">{disabled?t(saveDraft?'正在保存…':'正在发送…'):active?t(draftNotice?'草稿尚未发送，请在本轮结束后发送。':'可先编辑草稿，本轮结束后发送'):t(saveDraft?'Enter 保存草稿 · Shift+Enter 换行':'Enter 发送 · Shift+Enter 换行')}</p>
+  <div className={footer?"composer-footer":"composer-hint-wrapper"}>{footer}
+  <p id={hintId} className="composer-hint" role="status">{disabled?t(saveDraft?'正在保存…':'正在发送…'):active?t(draftNotice?'草稿尚未发送，请在本轮结束后发送。':'可先编辑草稿，本轮结束后发送'):t(saveDraft?'Enter 保存草稿 · Shift+Enter 换行':'Enter 发送 · Shift+Enter 换行')}</p></div>
  </form>;
 }

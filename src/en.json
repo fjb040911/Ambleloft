@@ -1,4 +1,6 @@
 {
+  "添加你的模型服务，连接后即可开始对话。请准备好服务地址、模型名称和 API 密钥。": "Connect a model service to start a conversation. Have your service URL, model name, and API key ready.",
+  "图形页面": "Diagram page",
   "窗口工具栏": "Window toolbar",
   "应用菜单": "Application menu",
   "显示 / 隐藏侧栏": "Toggle sidebar",
@@ -479,6 +481,8 @@
   "交付文件": "Delivered files",
   "在访达中显示": "Show in Finder",
   "打开所在文件夹": "Show in folder",
+  "描述你想完成的事，或添加文件作为参考…": "Describe your task, or add files for context…",
+  "连接模型后即可开始，当前可保存草稿。": "Connect a model to get started. You can save a draft for now.",
   "更多应用": "More applications",
   "请在桌面应用中查看文件": "View files in the desktop app",
   "已中断": "Interrupted",

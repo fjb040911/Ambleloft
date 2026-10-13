@@ -1,3 +1,4 @@
+import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
 import {useEffect,useRef,useState} from 'react';
 import {ChevronLeft,ChevronRight,PanelLeft,StickyNote} from 'lucide-react';
 import {getDocument,GlobalWorkerOptions,type PDFDocumentProxy} from 'pdfjs-dist';
@@ -39,7 +40,7 @@ export default function PresentationPreview({url,slides,legacy}:{url:string;slid
  return <div className="presentation-viewer"><div className="presentation-toolbar">
   <button className="icon-button" aria-label={t('显示/隐藏幻灯片缩略图')} aria-pressed={tree} onClick={()=>setTree(!tree)}><PanelLeft size={16}/></button>
   <button className="icon-button" aria-label={t('上一页')} disabled={page<=1} onClick={()=>setPage(n=>n-1)}><ChevronLeft size={16}/></button><span>{page} / {document?.numPages||'—'}</span><button className="icon-button" aria-label={t('下一页')} disabled={!document||page>=document.numPages} onClick={()=>setPage(n=>n+1)}><ChevronRight size={16}/></button>
-  <select aria-label={t('幻灯片缩放')} value={zoom} onChange={e=>setZoom(e.target.value)}><option value="fit">{t('适应窗口')} ({Math.round(fit*100)}%)</option>{[.25,.5,1,2].map(n=><option value={n} key={n}>{n*100}%</option>)}</select>
+  <NativeSelect aria-label={t('幻灯片缩放')} value={zoom} onChange={e=>setZoom(e.target.value)}><NativeSelectOption value="fit">{t('适应窗口')} ({Math.round(fit*100)}%)</NativeSelectOption>{[.25,.5,1,2].map(n=><NativeSelectOption value={n} key={n}>{n*100}%</NativeSelectOption>)}</NativeSelect>
   <button className="icon-button" aria-label={t('显示/隐藏演讲者备注')} aria-pressed={notes} onClick={()=>setNotes(!notes)}><StickyNote size={16}/></button>
  </div>{error&&<p className="file-warning" role="alert">{error}</p>}
  <div className="presentation-body">{tree&&<nav className="slide-thumbnails" aria-label={t('幻灯片导航')}>{document&&Array.from({length:document.numPages},(_,i)=><Thumbnail key={url+':'+i} document={document} page={i+1} width={size.width} selected={page===i+1} onClick={()=>setPage(i+1)}/>)}</nav>}

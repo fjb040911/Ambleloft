@@ -13,7 +13,7 @@ test('unconfigured tasks explicitly save drafts and reopen directly for editing'
  await page.locator('.tree-task [data-slot=sidebar-menu-button]').click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(input).toHaveValue('需要恢复编辑的草稿');await expect(input).toBeFocused();
  await input.fill('更新后的草稿');await input.press('Enter');await expect(page.locator('.tree-task')).toHaveCount(1);await expect(page.locator('.tree-task')).toContainText('更新后的草稿');
- await page.getByRole('button',{name:'配置模型服务',exact:true}).click();await expect(page.locator('.settings-content h1')).toHaveText('模型提供商');
+ await page.getByRole('button',{name:'选择模型',exact:true}).click();await page.getByRole('button',{name:'配置模型服务',exact:true}).click();await expect(page.locator('.settings-content h1')).toHaveText('模型提供商');
 });
 
 test('project disclosure and navigation are independent and draft keyboard navigation works',async({page})=>{

@@ -40,11 +40,12 @@ function copy(source,relative=''){
  else {if(stat.size>MAX-total)throw Error('Package size exceeded');write(relative,fs.readFileSync(source));}
 }
 if(workerData.valueSchema){try{parentPort.postMessage({valid:require(workerData.validator).compileValueValidator(workerData.valueSchema)(workerData.value)});}catch(error){parentPort.postMessage({error:error.message});}}else{
-try{
+(async()=>{try{
  fs.mkdirSync(workerData.stage,{recursive:true});if(workerData.mode==='directory')copy(workerData.source);else unzip(workerData.source);
  const validator=require(workerData.validator);const result=validator.validatePackage(workerData.stage);if(!result.ok)throw Error(result.errors.map(e=>e.path+': '+e.message).join('\n'));
+ for(const skill of result.manifest.skills||[])await validator.validateSkillLocalization(path.join(workerData.stage,skill));
  const hash=crypto.createHash('sha256');
  function hashFiles(dir,base=''){for(const name of fs.readdirSync(dir).sort()){const file=path.join(dir,name),rel=base+name;const stat=fs.statSync(file);if(stat.isDirectory())hashFiles(file,rel+'/');else {hash.update(JSON.stringify([rel,stat.size]));hash.update(fs.readFileSync(file));}}}hashFiles(workerData.stage);
  parentPort.postMessage({icons:result.icons,manifest:result.manifest,dictionaries:result.dictionaries,id:result.extensionId,digest:hash.digest('hex')});
-}catch(error){parentPort.postMessage({error:error.message});}
+}catch(error){parentPort.postMessage({error:error.message});}})();
 }

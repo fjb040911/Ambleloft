@@ -62,7 +62,7 @@ handler 必须在 activate 的同步部分注册，名称与清单精确一致�
 - `permissions` 声明申请资格；操作的 `requiredPermissions` 声明本次 handler 需要的权限。两者都不能代替用户授权。
 - `operations` 声明 ID、handler、输入/输出 Schema、exposeTo、effect 和项目作用域。项目操作的 inputSchema 必须要求 string projectId。
 - `effect:write` 由宿主确认；risk 中的重要影响不可通过普通免确认设置绕过。页面按钮点击本身不代表审批。
-- `%key%` 显示文案从 `extension.nls.json` 以及语言文件解析；ID、handler、路径和权限不翻译。
+- `%key%` 显示文案从 `extension.nls.json` 以及语言文件解析；ID、handler、路径和权限不翻译。Skill 词典与完整语言切换的目标流程见 [多语言设计](localization-design.md)，尚未全部实现，不能仅据现有 Extension 本地化推断支持。
 - `when` / `enablement` 使用受限条件语言，不是 JavaScript。只读已声明的 contextKeys 及宿主内置键。
 
 安装目录通常包含：

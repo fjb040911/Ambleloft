@@ -1,16 +1,22 @@
 :root {
   /* Ambleloft radius scale: shared values, with semantic aliases for conversation surfaces. */
-  --radius-micro: 2px;
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-panel: 16px;
-  --radius-surface-card: var(--radius-panel);
+  --radius-micro: .125rem;
+  --radius-xs: .25rem;
+  --radius-sm: .375rem;
+  --radius-control: .5rem;
+  --radius-card: .75rem;
+  --radius-panel: 1rem;
+  --radius-list: .625rem;
+  --radius-activity: .75rem;
+  --radius-surface-card: clamp(.875rem, calc(.75rem + .75cqi), 1.25rem);
+  --surface-padding: clamp(1rem, calc(1rem + .5cqi), 1.5rem);
   --radius-conversation: var(--radius-panel);
-  --radius-xl: 24px;
+  --radius-xl: 1.5rem;
   --radius-round: 50%;
-  --radius-message: var(--radius-conversation);
+  /* Scale with text and the conversation width, not the number of message lines. */
+  --radius-message: clamp(1rem, calc(.875rem + .5cqi), 1.25rem);
+  --message-padding-inline: clamp(.875rem, 3cqi, 1rem);
+  --message-padding-block: .625rem;
   --radius-composer: var(--radius-conversation);
 
   color-scheme: light;
@@ -20,6 +26,10 @@
   --sidebar: #f2f4f7;
   --activity-rail: #e9ecf0;
   --text: #262c35;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --message-background: var(--primary);
+  --message-foreground: #ffffff;
   --secondary: #606773;
   --muted: #737b88;
   --border: #e3e6ec;
@@ -39,10 +49,18 @@
   --green-bg: #eaf5ef;
   --green-text: #397c58;
 
+  /* Semantic accent pair for highlighted surfaces; follows the active palette. */
+  --accent-surface: var(--hover);
+  --accent-foreground: var(--text);
+
   --content-font-size: calc(14px * var(--font-scale, 1));
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --primary: var(--text);
+  --primary-foreground: var(--surface);
+  --message-background: #303030;
+  --message-foreground: #ffffff;
   --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
   --activity-rail: #191b20; --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
   --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;
@@ -53,6 +71,10 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
+    --primary: var(--text);
+    --primary-foreground: var(--surface);
+    --message-background: #303030;
+    --message-foreground: #ffffff;
     --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
     --activity-rail: #191b20; --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
     --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;

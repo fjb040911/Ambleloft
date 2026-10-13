@@ -1,0 +1,7 @@
+const fs=require('node:fs'),path=require('node:path'),L=require('./index.cjs');
+function modules(){const base=process.resourcesPath&&path.join(process.resourcesPath,'tools');return {T:base&&fs.existsSync(path.join(base,'form-template.cjs'))?require(path.join(base,'form-template.cjs')):require('../forms/template.cjs'),U:base&&fs.existsSync(path.join(base,'ui-template.cjs'))?require(path.join(base,'ui-template.cjs')):require('../ui/template.cjs')};}
+async function validateSkillLocalization(root){const {T,U}=modules(),body=await T.safeRead(root,'SKILL.md'),dictionaries=L.load(root);const header=body.replace(/^\uFEFF/,'').match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);const meta=header?T.parse(header[1]):{},display={};for(const [key,max]of [['displayName',120],['displayDescription',2000]])if(meta[key]!==undefined){if(typeof meta[key]!=='string')throw Error('Invalid skill '+key);display[key]=meta[key];for(const locale of ['und',...Object.keys(dictionaries).filter(k=>k!=='default')]){const value=L.text(dictionaries,meta[key],locale,true);if(!value.trim()||value.length>max)throw Error('Invalid skill '+key);}}
+ const displayMessages=L.prepare(display,dictionaries,v=>v);
+ for(const [parser,list]of [[T,'forms'],[U,'templates']]){const found=await parser.discover(body,root);if(found.errors.length)throw Error(found.errors.map(e=>e.message).join('; '));for(const template of found[list])L.prepare(template,dictionaries,parser.normalize);}
+ return {...display,displayMessages};}
+module.exports={validateSkillLocalization};

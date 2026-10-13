@@ -107,3 +107,10 @@ test('real extension process completes notification action and enterprise authen
  const after=(await messages.list()).items.find(m=>m.id===message.id);assert.equal(after.businessState,'resolved');assert.equal(after.executions[0].state,'completed');
  await assert.rejects(messages.execute({messageId:message.id,actionId:'complete',expectedRevision:after.revision},{}),/FORBIDDEN/);
 });
+
+test('locale updates keep the same extension process and invocation language is captured',async t=>{
+ const f=await fixture(t,{source:`exports.activate=c=>{let changes=0,calls=0;const subscription=c.l10n.onDidChangeLocale(()=>changes++);c.subscriptions.push(subscription);c.operations.register('echo',async(input,inv)=>{if(++calls===3)subscription.dispose();const before=inv.locale;await new Promise(r=>setTimeout(r,80));return {value:JSON.stringify({before,after:inv.locale,live:c.l10n.locale,changes,pid:process.pid})};});};`});
+ f.hosts.setLocale('en');const initial=JSON.parse((await f.hosts.invoke(f.id,f.id+'.echo',{})).value);
+ const pending=f.hosts.invoke(f.id,f.id+'.echo',{});await until(()=>[...f.hosts.entry(f.id).running.values()].some(c=>c.started));f.hosts.setLocale('zh-CN');const result=JSON.parse((await pending).value);assert.equal(result.before,'en');assert.equal(result.after,'en');assert.equal(result.live,'zh-CN');assert.equal(result.pid,initial.pid);assert.equal(result.changes,1);
+ await f.hosts.invoke(f.id,f.id+'.echo',{});f.hosts.setLocale('en');const last=JSON.parse((await f.hosts.invoke(f.id,f.id+'.echo',{})).value);assert.equal(last.changes,1);assert.equal(last.live,'en');assert.equal(last.pid,initial.pid);
+});

@@ -1,0 +1,10 @@
+{
+  "skill.name": "Bilingual request demo",
+  "skill.description": "Display a request form in the Ambleloft interface language.",
+  "form.title": "Create request",
+  "field.region": "Region",
+  "field.note": "Notes",
+  "region.shanghai": "Shanghai",
+  "region.beijing": "Beijing",
+  "action.submit": "Submit request"
+}

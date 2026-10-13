@@ -1,8 +1,8 @@
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
-export interface Skill {id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
+export interface Skill {displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
 export interface SkillDetail extends Skill {body:string}
-export interface SkillSnapshot {id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
+export interface SkillSnapshot {displayName?:string;displayDescription?:string;id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
 export interface SkillImportResult {skill?:Skill;duplicate?:Skill;token?:string}
 export interface SkillFilePreview {path:string;size:number;kind:'markdown'|'text'|'image'|'unsupported';text?:string;dataUrl?:string;reason?:string}
 export interface SkillsAPI {onChanged?(listener:()=>void):()=>void;readFile(input:{id:string;file:string}):Promise<SkillFilePreview>;list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}

@@ -35,7 +35,10 @@ export interface ProjectResources {
   /** Page invocation only; Agent gets INTERACTION_REQUIRED. Creating a draft does not open or run it. */
   openConversation(conversationId: string): Promise<void>;
 }
+export type LocalizedText = string | {key:string;args?:Record<string,string|number|boolean>};
 export interface InvocationContext {
+  /** Effective UI language captured before dispatch. */
+  readonly locale: string;
   /** Host-owned form identity; never supplied by extension page input. */
   form?: FormInvocationContext;
   message?: {invocationId:string;messageId:string;actionId:string};
@@ -55,9 +58,11 @@ export type HookEnvelope = HookEvent & {eventId:string;projectId:string;occurred
 export interface BackgroundJob {id:string;eventKey:string;projectId:string;status:'queued'|'running'|'succeeded'|'failed'|'unknown'|'cancelled';providerId:string;model:string;createdAt:number;result?:Json;error?:string}
 export interface BackgroundJobInput {projectId:string;eventKey:string;prompt:string;turns:TurnReference[];outputSchema:JsonObject}
 export interface ExtensionContext {
+  /** Probe before using optional localization increments on older hosts. */
+  readonly capabilities: {skillLocalization:1;templateLocalization:1;notificationLocalization:1;liveLocalization:1};
   /** Synchronous registration during activate; returning resolves the durable delivery (ACK).
    * At least once: deduplicate effects with eventId. Maximum duration 30 seconds. */
-  hooks:{register(handler:string,callback:(event:HookEnvelope,context:{signal:AbortSignal;projectId:string;requestId:string})=>void|Promise<void>):Disposable};
+  hooks:{register(handler:string,callback:(event:HookEnvelope,context:{signal:AbortSignal;projectId:string;requestId:string;locale:string})=>void|Promise<void>):Disposable};
   conversations:{getTurn(reference:TurnReference):Promise<TurnSnapshot>};
   /** eventKey is scoped to this installation; reuse with identical input returns the same job. */
   jobs:{submit(input:BackgroundJobInput):Promise<BackgroundJob>;get(jobId:string):Promise<BackgroundJob>};
@@ -77,7 +82,7 @@ export interface ExtensionContext {
     delete(key: string): Promise<void>;
   };
   context: { set(key: string, value: boolean | string | number): Promise<void> };
-  l10n: { t(key: string, args?: Record<string, string | number>): string };
+  l10n: { readonly locale:string; onDidChangeLocale(listener:(locale:string)=>void):Disposable; t(key: string, args?: Record<string, string | number | boolean>): string };
   subscriptions: Disposable[];
 }
 /** Export these functions from manifest main. */

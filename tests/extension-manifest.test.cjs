@@ -66,7 +66,7 @@ test('typed condition precedence, parentheses, context scoping, strict values', 
 });
 test('localization exact locale then base language then default, no identity translation', () => {
   const m = fresh(); m.displayName = '%title%'; m.description = '%description%'; m.operations[0].title = '%operation%';
-  const dictionaries = { default: { title: 'Default', description: 'Description', operation: 'Read' }, zh: { title: '中文', operation: '读取' }, 'zh-cn': { title: '简体' } };
+  const dictionaries = { default: { title: 'Default', description: 'Description', operation: 'Read' }, 'zh-Hans': { title: '中文', operation: '读取' }, 'zh-cn': { title: '简体' } };
   assert.equal(validateManifest(m, { defaultMessages: dictionaries.default }).ok, true);
   const localized = localizeManifest(m, dictionaries, 'zh-CN');
   assert.equal(localized.displayName, '简体'); assert.equal(localized.description, 'Description'); assert.equal(localized.operations[0].title, '读取'); assert.equal(localized.operations[0].id, m.operations[0].id);
@@ -94,7 +94,7 @@ test('package checks real files, symlink components, home entry, skills and loca
   fs.writeFileSync(path.join(root, 'extension.nls.zh-CN.json'), '{"title":"中文"}');
   fs.writeFileSync(path.join(root, 'dist/extension.mjs'), 'throw new Error("must never execute")');
   fs.writeFileSync(path.join(root, 'web/index.html'), '<html></html>'); fs.writeFileSync(path.join(root, 'skills/demo/SKILL.md'), '# Demo');
-  assert.equal(validatePackage(root).ok, true); assert.equal(validatePackage(root).dictionaries['zh-cn'].title, '中文');
+  assert.equal(validatePackage(root).ok, true); assert.equal(validatePackage(root).dictionaries['zh-CN'].title, '中文');
   fs.rmSync(path.join(root, 'skills/demo/SKILL.md')); assert.equal(validatePackage(root).ok, false);
   fs.writeFileSync(path.join(root, 'skills/demo/SKILL.md'), '# Demo');
   fs.rmSync(path.join(root, 'dist/extension.mjs')); fs.symlinkSync(path.join(root, 'web/index.html'), path.join(root, 'dist/extension.mjs')); assert.equal(validatePackage(root).ok, false);

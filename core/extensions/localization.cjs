@@ -1,6 +1,3 @@
-function localized(item,value,locale='en'){
- const match=/^%(.+)%$/.exec(value||'');if(!match)return value;
- const dictionaries=item.dictionaries||{},key=locale.toLowerCase().replaceAll('_','-');
- return dictionaries[key]?.[match[1]]||dictionaries[key.split('-')[0]]?.[match[1]]||dictionaries.default?.[match[1]]||match[1];
-}
+const L=require('../localization/index.cjs');
+function localized(item,value,locale='en'){return L.text(item.dictionaries||{},value,locale);}
 module.exports={localized};

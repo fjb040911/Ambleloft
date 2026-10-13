@@ -120,7 +120,7 @@ class HostManager{
   if(signal?.aborted)throw failure('CANCELLED','请求已取消');if(e.running.size>=this.limits.concurrency&&e.queue.length>=this.limits.queue)throw failure('BUSY','扩展操作队列已满');
   if(!Number.isFinite(timeout)||timeout<=0||timeout>this.limits.maximumOperation)throw failure('INVALID_ARGUMENT','操作超时无效');
   return new Promise((resolve,reject)=>{
-   const call={id:randomUUID(),operation,input,hook,caller,projectId,form,message,signal,resolve,reject,guard,onDispatch,resources,done:false};
+   const call={id:randomUUID(),locale:this.adapter.locale||'en',operation,input,hook,caller,projectId,form,message,signal,resolve,reject,guard,onDispatch,resources,done:false};
    const cancel=code=>{this.finish(call,failure(code,code==='TIMEOUT'?'操作超时':'操作已取消',call.started?'unknown':'notStarted'));e.queue=e.queue.filter(c=>c!==call);if(call.started)this.send(e,{type:'cancel',id:call.id});this.changed(e);};
    call.abort=()=>cancel('CANCELLED');signal?.addEventListener('abort',call.abort,{once:true});call.timer=setTimeout(()=>cancel('TIMEOUT'),timeout);e.queue.push(call);this.drain(e);
   });
@@ -136,10 +136,11 @@ class HostManager{
    if(call.done||e.token!==token||e.blocked||e.state!=='active')return;
    if(!valid){this.finish(call,failure('INVALID_ARGUMENT','操作输入不符合契约'));return;}
    await call.guard?.();if(call.done||e.token!==token||e.blocked)return;
-   await call.onDispatch?.();if(call.done||e.token!==token||e.blocked||e.state!=='active')return;call.started=true;this.send(e,{type:'invoke',id:call.id,handler:call.operation.handler,input:call.input,caller:call.caller,form:call.form,message:call.message,projectId:call.projectId});
+   await call.onDispatch?.();if(call.done||e.token!==token||e.blocked||e.state!=='active')return;call.started=true;this.send(e,{type:'invoke',id:call.id,handler:call.operation.handler,locale:call.locale,input:call.input,caller:call.caller,form:call.form,message:call.message,projectId:call.projectId});
   }catch(error){this.finish(call,error.code?error:failure('INVALID_ARGUMENT','操作输入校验失败'));}
   finally{if(!call.started){e.running.delete(call.id);this.drain(e);}}
  }
+ setLocale(locale){const next=require('../localization/index.cjs').canonical(locale);if(next===this.adapter.locale)return;this.adapter.locale=next;for(const e of this.entries.values())if(e.child&&!e.blocked)this.send(e,{type:'localeChanged',locale:this.adapter.locale});}
  authenticationChanged(){for(const e of this.entries.values())if(e.state==='active'&&!e.blocked)this.send(e,{type:'authenticationChanged'});}
  configurationChanged(id,value){const e=this.entries.get(id);if(e?.state==='active'&&!e.blocked)this.send(e,{type:'configurationChanged',value});}
  clearTimers(e){for(const key of ['activationTimer','heartbeat','stableTimer','retry']){clearTimeout(e[key]);e[key]=null;}}
