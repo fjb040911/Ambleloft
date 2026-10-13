@@ -98,6 +98,8 @@ declare global {
       answerRun(input:{runId:string;requestId:string;answers:Record<string,string>}):Promise<void>;
       approveRun(input: { runId: string; approvalId: string; decision: 'accept' | 'decline' }): Promise<void>;
       onRun(callback: (run: AgentRun) => void): () => void;
+      openWindowMenu?(): Promise<void>;
+      setWindowChrome?(input:{color:string;symbolColor:string}): Promise<void>;
       getDevice(): Promise<Device>;
       readWorkspace(): Promise<Workspace>;
       saveWorkspace(state: Workspace): Promise<void>;

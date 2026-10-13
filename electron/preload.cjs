@@ -43,6 +43,8 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
     return () => ipcRenderer.removeListener('agent:event', listener);
   },
   onOpenConversation:callback=>{const listener=(_event,ref)=>callback(ref);ipcRenderer.on('extension:open-conversation',listener);return()=>ipcRenderer.removeListener('extension:open-conversation',listener);},
+  openWindowMenu: () => ipcRenderer.invoke('window:menu'),
+  setWindowChrome: input => ipcRenderer.invoke('window:chrome',input),
   getDevice: () => ipcRenderer.invoke('device:get'),
   readWorkspace: () => ipcRenderer.invoke('workspace:read'),
   saveWorkspace: (state) => ipcRenderer.invoke('workspace:save', state),

@@ -6,5 +6,6 @@ import './shadcn.css';
 import './shimmer.css';
 import './styles.css';
 import './workspace-polish.css';
+import './windows-layout.css';
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><ConfirmationProvider><App /></ConfirmationProvider></React.StrictMode>);

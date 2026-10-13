@@ -7,7 +7,7 @@ const { ENGINE_VERSION, probeVersion } = require('../electron/engine.cjs');
 const root = path.resolve(__dirname, '..');
 
 async function prepare() {
-  if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) throw new Error('当前发布流程仅支持在对应架构的 macOS 构建');
+  if (!['darwin', 'win32'].includes(process.platform) || !['arm64', 'x64'].includes(process.arch)) throw new Error('引擎准备仅支持 macOS / Windows 的 arm64 / x64 架构');
   const platform = `${process.platform}-${process.arch}`;
   const packageName = `@openai/codex-${platform}`;
   const packageRoot = path.dirname(require.resolve(`${packageName}/package.json`));
@@ -15,7 +15,7 @@ async function prepare() {
   const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json')));
   const source = lock.packages[`node_modules/${packageName}`];
   if (pkg.version !== `${ENGINE_VERSION}-${platform}` || source.version !== pkg.version || !source.integrity?.startsWith('sha512-') || !source.resolved.startsWith('https://registry.npmjs.org/@openai/codex/')) throw new Error('Codex 包与固定版本锁不一致');
-  const target = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
+  const target = `${process.arch === 'arm64' ? 'aarch64' : 'x86_64'}-${process.platform === 'win32' ? 'pc-windows-msvc' : 'apple-darwin'}`;
   const input = path.join(packageRoot, 'vendor', target);
   const parent = path.join(root, 'vendor/engine');
   await fs.mkdir(parent, { recursive: true });
@@ -23,7 +23,7 @@ async function prepare() {
   try {
     await fs.cp(input, stage, { recursive: true });
     await fs.cp(path.join(root, 'build/licenses/codex'), path.join(stage, 'licenses'), { recursive: true });
-    await probeVersion(path.join(stage, 'bin/codex'));
+    await probeVersion(path.join(stage, 'bin', process.platform === 'win32' ? 'codex.exe' : 'codex'));
     const files = {};
     async function hashes(directory) {
       for (const entry of await fs.readdir(directory, { withFileTypes: true })) {

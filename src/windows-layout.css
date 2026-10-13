@@ -1,0 +1,34 @@
+/* Windows desktop only. macOS and browser layouts keep their existing rules. */
+.windows-chrome {position:fixed;inset:0 0 auto;height:38px;display:flex;align-items:center;gap:2px;padding:0 12px;background:var(--activity-rail);color:var(--secondary);z-index:41;app-region:drag;padding-right:150px;}
+.windows-chrome button,.windows-chrome .global-sidebar-actions {app-region:no-drag;}
+.windows-chrome button {width:30px;height:30px;min-height:30px;}
+.windows-chrome .global-sidebar-actions {height:auto;min-height:0;padding:0;}
+.windows-chrome .sidebar-top-actions {padding:0;}
+.app-shell.windows-desktop {padding:38px 6px 6px 0;box-sizing:border-box;background:var(--activity-rail);}
+.app-shell.windows-desktop .workspace-sidebar-container {top:38px;height:calc(100svh - 44px);}
+.app-shell.windows-desktop:not(.activity-layout) .workspace-sidebar-container {background:var(--activity-rail);}
+.app-shell.windows-desktop .workspace-sidebar-container [data-slot="sidebar-inner"] {border-radius:12px 0 0 12px;}
+.app-shell.windows-desktop > .main-shell {background:var(--surface);border-radius:0 12px 12px 0;}
+.app-shell.windows-desktop.sidebar-hidden > .main-shell {border-radius:12px;}
+.app-shell.windows-desktop .toolbar {height:48px;min-height:48px;padding:0 20px;border-bottom:0;background:var(--surface);}
+.app-shell.windows-desktop .toolbar-left {padding-left:0;}
+.app-shell.windows-desktop .toolbar-title {font-size:14px;font-weight:500;}
+.windows-sidebar-heading {height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px;color:var(--text);font-size:14px;font-weight:600;}
+.windows-sidebar-heading .global-sidebar-actions {min-height:0;height:auto;padding:0;}
+.windows-sidebar-heading .sidebar-top-actions {padding:0;gap:2px;}
+.windows-sidebar-heading .icon-button {width:32px;height:32px;}
+.windows-desktop .windows-sidebar-heading + [data-slot="sidebar-header"] {padding-top:0;}
+.windows-desktop .activity-rail {padding-top:10px;gap:20px;}
+.windows-rail-actions {display:flex;flex-direction:column;align-items:center;gap:4px;}
+.windows-rail-actions .global-sidebar-actions {min-height:0;padding:0;}
+.windows-rail-actions .sidebar-top-actions {flex-direction:column;padding:0;gap:6px;}
+.windows-desktop .brand {display:none;}
+.settings-workspace.windows-desktop {padding-top:38px;grid-template-rows:minmax(0,1fr);}
+.settings-workspace.windows-desktop .settings-sidebar {grid-row:1;padding-top:12px;}
+.settings-workspace.windows-desktop .settings-sidebar-actions {height:44px;min-height:44px;flex-shrink:0;padding:0 12px;border:0;app-region:no-drag;}
+.settings-workspace.windows-desktop .settings-sidebar-actions .toolbar-left {padding-left:0;gap:4px;}
+.settings-workspace.windows-desktop .settings-sidebar-actions .global-sidebar-actions {min-height:0;height:auto;padding:0;}
+.settings-workspace.windows-desktop .settings-sidebar-actions .sidebar-top-actions {padding:0;gap:2px;}
+.settings-workspace.windows-desktop .settings-main {grid-row:1;border-radius:12px;}
+.settings-workspace.windows-desktop .settings-content {padding-top:28px;}
+@media(max-width:767px){.app-shell.windows-desktop{padding-right:4px}.windows-sidebar-heading{height:48px}.windows-chrome{padding-left:8px}}

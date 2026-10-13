@@ -23,6 +23,8 @@
     "predev:web": "node scripts/prepare-pdf-assets.mjs",
     "engine:prepare": "node scripts/prepare-engine.cjs",
     "package:mac": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.cjs --mac --dir",
+    "package:win": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.win.cjs --win --x64 --dir",
+    "dist:win": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.win.cjs --win zip --x64",
     "dist:mac": "npm run package:mac && node scripts/create-mac-artifacts.cjs",
     "release:mac": "ATELIER_RELEASE=1 npm run dist:mac",
     "test:packaged": "node scripts/test-packaged.mjs",
