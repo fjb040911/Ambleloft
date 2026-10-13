@@ -15,9 +15,9 @@ test('failed persistence does not expose uncommitted contributions',async()=>{
 
 test('extension snapshots resolve description localization with locale and default fallback',()=>{
  const service=new ExtensionService({}, {locale:'zh-CN'});
- service.items=[{id:'demo',kind:'package',manifest:{displayName:'Demo',description:'%description%',version:'1.0.0'},dictionaries:{default:{description:'Default description'},zh:{description:'本地化描述'}}}];
+ service.items=[{id:'demo',kind:'package',manifest:{displayName:'Demo',description:'%description%',version:'1.0.0'},dictionaries:{default:{description:'Default description'},'zh-Hans':{description:'本地化描述'}}}];
  assert.equal(service.snapshot().installed[0].manifest.description,'本地化描述');
- delete service.items[0].dictionaries.zh;
+ delete service.items[0].dictionaries['zh-Hans'];
  assert.equal(service.snapshot().installed[0].manifest.description,'Default description');
  service.items[0].manifest.description='Plain description';
  assert.equal(service.snapshot().installed[0].manifest.description,'Plain description');

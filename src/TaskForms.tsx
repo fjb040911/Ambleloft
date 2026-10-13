@@ -12,7 +12,7 @@ import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 type Values=Record<string,string|number|boolean>;
 type FieldDef={name:string;label:string;type:string;required?:boolean;help?:string;placeholder?:string;dependsOn?:string[];visibleWhen?:{field:string;equals:string|number|boolean};currency?:string;options?:{label:string;value:string}[]};
-type Flow={id:string;runId:string;turnKey:string;revision:number;status:string;step:number;error?:string;staleFields?:string[];results?:Record<string,unknown>;drafts:Record<string,Values>;template:{title:string;description?:string;steps:{id:string;title:string;description?:string;fields:FieldDef[];next?:{label:string}}[];submit:{label:string;kind?:string}}};
+type Flow={displayTemplate?:Flow['template'];displayLocale?:string;id:string;runId:string;turnKey:string;revision:number;status:string;step:number;error?:string;staleFields?:string[];results?:Record<string,unknown>;drafts:Record<string,Values>;template:{title:string;description?:string;steps:{id:string;title:string;description?:string;fields:FieldDef[];next?:{label:string}}[];submit:{label:string;kind?:string}}};
 type Api={list:(p:{runId:string})=>Promise<Flow[]>;action:(p:object)=>Promise<Flow|{flow:Flow;errors:Record<string,string>}>;onChanged:(fn:()=>void)=>()=>void};
 const pendingDrafts=new Map<string,{values:Values;flow:Flow;touched?:string[]}>();
 const api=()=> (window.desktop as unknown as {forms?:Api})?.forms;
@@ -43,7 +43,8 @@ function FormCard({flow,archived}:{flow:Flow;archived:boolean}){
  const [current,setCurrent]=useState(pendingDrafts.get(flow.id)?.flow||flow),[values,setValues]=useState<Values>(pendingDrafts.get(flow.id)?.values||flow.drafts[flow.template.steps[flow.step].id]||{}),[dirty,setDirty]=useState(pendingDrafts.has(flow.id)),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[errors,setErrors]=useState<Record<string,string>>({});
  const touchedFields=useRef(new Set(pendingDrafts.get(flow.id)?.touched||[]));
  const editingVersion=useRef(0),inFlight=useRef(false),latestValues=useRef(values);
- const step=current.template.steps[current.step],locked=archived||current.status!=='editing'||busy;
+ const template=(flow.revision===current.revision?flow.displayTemplate:current.displayTemplate)||current.template;
+ const step=template.steps[current.step],locked=archived||current.status!=='editing'||busy;
  useEffect(()=>{
   // A broadcast may arrive before the save response. Never replace a local edit
   // or apply an older snapshot after our own successful save.
@@ -83,8 +84,8 @@ function FormCard({flow,archived}:{flow:Flow;archived:boolean}){
  }
  const answers=Object.fromEntries(current.template.steps.flatMap(s=>s.fields.map(f=>{const v=s.id===step.id?values[f.name]:current.drafts[s.id]?.[f.name];return [s.id+'.'+f.name,f.type==='number'&&typeof v==='string'&&v.trim()!==''?Number(v):v];})));
  const visibleFields=step.fields.filter(f=>!f.visibleWhen||answers[f.visibleWhen.field]===f.visibleWhen.equals);
- return <Card className="my-4" aria-label={current.template.title}>
-  <CardHeader><CardTitle>{current.template.title}</CardTitle><CardDescription aria-live="polite">{current.status==='completed'?(current.template.submit.kind==='chat'?t('已发送'):t('已提交')):current.status==='unknown'?t('提交结果待核实，请勿重复提交'):current.status==='pending'?t('答案已保存，正在送达。你可以继续其他操作。'):t('第 {current} / {total} 步 · {title}').replace('{current}',String(current.step+1)).replace('{total}',String(current.template.steps.length)).replace('{title}',step.title)}</CardDescription>{current.template.description&&<CardDescription>{current.template.description}</CardDescription>}{step.description&&step.description!==current.template.description&&<CardDescription>{step.description}</CardDescription>}</CardHeader>
+ return <Card className="my-4" aria-label={template.title}>
+  <CardHeader><CardTitle>{template.title}</CardTitle><CardDescription aria-live="polite">{current.status==='completed'?(current.template.submit.kind==='chat'?t('已发送'):t('已提交')):current.status==='unknown'?t('提交结果待核实，请勿重复提交'):current.status==='pending'?t('答案已保存，正在送达。你可以继续其他操作。'):t('第 {current} / {total} 步 · {title}').replace('{current}',String(current.step+1)).replace('{total}',String(current.template.steps.length)).replace('{title}',step.title)}</CardDescription>{template.description&&<CardDescription>{template.description}</CardDescription>}{step.description&&step.description!==template.description&&<CardDescription>{step.description}</CardDescription>}</CardHeader>
   <CardContent><FieldGroup>{visibleFields.map(f=>{
    const id=current.id+'-'+f.name,boolean=['checkbox','switch','group-toggle'].includes(f.type),stale=current.staleFields?.includes(step.id+'.'+f.name);
    const control=f.type==='select'?<NativeSelect id={id} disabled={locked} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}><NativeSelectOption value="">{t('请选择')}</NativeSelectOption>{f.options?.map(o=><NativeSelectOption key={o.value} value={o.value}>{o.label}</NativeSelectOption>)}</NativeSelect>:f.type==='switch'?<Switch id={id} size="sm" disabled={locked} checked={values[f.name]===true} onCheckedChange={v=>change(f.name,v)} aria-invalid={!!errors[f.name]}/>:boolean?<Checkbox id={id} disabled={locked} checked={values[f.name]===true} indeterminate={f.type==='group-toggle'&&values[f.name]==='mixed'} onCheckedChange={v=>change(f.name,v===true)} aria-invalid={!!errors[f.name]}/>:f.type==='textarea'?<Textarea id={id} disabled={locked} placeholder={f.placeholder} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}/>:<Input id={id} disabled={locked} placeholder={f.placeholder} type={f.type==='date'?'date':'text'} inputMode={['number','money'].includes(f.type)?'decimal':undefined} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}/>;
@@ -101,7 +102,7 @@ function FormCard({flow,archived}:{flow:Flow;archived:boolean}){
   <CardFooter className="gap-2 flex-wrap border-border">{current.status==='unknown'&&<Button variant="outline" disabled={busy||archived} onClick={()=>void act('reconcile')}>{t('核实提交结果')}</Button>}{current.status==='editing'&&<>
    {!!current.step&&<Button variant="outline" disabled={locked||saving} onClick={()=>void act('previous')}>{t('上一步')}</Button>}
    <Button variant="ghost" size="sm" disabled={locked||saving||!dirty} onClick={()=>void act('save')}>{saving?t('正在保存…'):t('保存草稿')}</Button>
-   <Button disabled={locked||saving} onClick={()=>void act('next')}>{busy?t('正在处理…'):current.step===current.template.steps.length-1?current.template.submit.label:step.next?.label||t('下一步')}</Button>
+   <Button disabled={locked||saving} onClick={()=>void act('next')}>{busy?t('正在处理…'):current.step===current.template.steps.length-1?template.submit.label:step.next?.label||t('下一步')}</Button>
   </>}{error&&<Button variant="outline" disabled={busy||saving} onClick={()=>{pendingDrafts.delete(flow.id);setCurrent(flow);latestValues.current=flow.drafts[flow.template.steps[flow.step].id]||{};setValues(latestValues.current);setDirty(false);setError('');}}>{t('放弃当前修改并重新载入')}</Button>}</CardFooter>
  </Card>;
 }

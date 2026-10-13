@@ -1,3 +1,5 @@
+import {t} from '../i18n';
+import {NativeSelect,NativeSelectOption} from '../components/ui/native-select';
 import { useId, useMemo, useState } from 'react';
 import { Inflate } from 'pako';
 function parse(source: string) {
@@ -53,7 +55,7 @@ export default function Drawio({ source }: { source: string }) {
     } catch(error) { return { error:(error as Error).message }; }
   }, [source,page]);
   if ('error' in result) return <p className="artifact-error">{result.error}。可切换源码或下载。</p>;
-  return <>{result.pages.length > 1 && <select aria-label="图形页面" value={Math.min(page,result.pages.length-1)} onChange={e=>setPage(Number(e.target.value))}>{result.pages.map((name,i)=><option key={i} value={i}>{name}</option>)}</select>}
+  return <>{result.pages.length > 1 && <NativeSelect aria-label={t('图形页面')} value={Math.min(page,result.pages.length-1)} onChange={e=>setPage(Number(e.target.value))}>{result.pages.map((name,i)=><NativeSelectOption key={i} value={i}>{name}</NativeSelectOption>)}</NativeSelect>}
     <svg className="drawio-canvas" viewBox={result.viewBox} role="img" aria-label="draw.io 基础图形"><defs><marker id={id} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#68778d" /></marker></defs>
       {result.edges.map(e=><g key={e.id}><line x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke="#68778d" strokeWidth="1.5" markerEnd={`url(#${id})`} /><text x={(e.x1+e.x2)/2} y={(e.y1+e.y2)/2-8} textAnchor="middle" fontSize="12" fill="#334155">{e.text}</text></g>)}
       {result.cells.map(c=><g key={c.id} transform={`translate(${c.x} ${c.y})`}>

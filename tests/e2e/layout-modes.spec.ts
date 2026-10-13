@@ -52,7 +52,8 @@ test('activity task date groups and navigation labels follow interface language'
  });
  await page.goto('/');const rail=page.locator('.activity-rail');
  await expect(page.getByRole('button',{name:'New project',exact:true})).toBeVisible();
- await expect(page.locator('.composer-status')).toHaveText('Connect a model service to run tasks. You can save a draft for now.');
+ await expect(page.getByRole('button',{name:'Save task draft',exact:true})).toBeVisible();
+ await expect(page.locator('.composer-hint')).toHaveText('Enter to save draft · Shift+Enter for a new line');
  await rail.getByRole('button',{name:'Tasks',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['Today','Yesterday','Previous 7 days','Earlier']);
  await expect(page.locator('.tree-task .task-status-label')).toHaveText(['Draft','Draft','Draft','Draft']);

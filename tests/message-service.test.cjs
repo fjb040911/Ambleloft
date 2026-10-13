@@ -40,3 +40,14 @@ test('message buttons route durable identity, atomically report and reject repla
  await assert.rejects(s.forExtension(context,'reportActionResult',report),/CONFLICT/);assert.equal((await s.forExtension(context,'listActionInvocations'))[0].state,'accepted');
  report.messageUpdate.expectedRevision=1;const result=await s.forExtension(context,'reportActionResult',report);assert.equal(result.message.businessState,'resolved');assert.deepEqual(await s.forExtension(context,'reportActionResult',report),result);assert.equal((await s.list()).items[0].executions[0].state,'completed');
 });
+
+test('localized notifications survive update/uninstall and language switches never republish or revive',async t=>{
+ const {db,service:s,context:[a]}=await fixture(t);const store=await db.call('extensionState');const item=store.find(i=>i.id===a.id);
+ // Install an immutable dictionary revision using the normal persistence boundary.
+ await db.call('extensionMutation',{action:'stage',id:a.id,revision:{id:a.id,digest:'localized',manifest:item.manifest,dictionaries:{default:{title:'{name} 已准备',body:'说明'},en:{title:'{name} ready',body:'Details'}}}});await db.call('extensionMutation',{action:'commit',id:a.id,digest:'localized'});a.generation=(await db.call('extensionState')).find(i=>i.id===a.id).generation;
+ await db.call('writeSetting',{key:'workspace',value:{language:'en'}});let reminders=0;s.notify=()=>reminders++;
+ const result=await s.forExtension(a,'publish',{eventKey:'localized',title:{key:'title',args:{name:'客户门户'}},body:{key:'body'},category:'notice'});assert.equal(reminders,1);assert.equal((await s.list()).items[0].title,'客户门户 ready');assert.equal((await s.forExtension(a,'getByEventKey',{eventKey:'localized'})).body,'Details');
+ await s.markRead({id:result.id});await db.call('writeSetting',{key:'workspace',value:{language:'zh-CN'}});let view=(await s.list()).items[0];assert.equal(view.title,'客户门户 已准备');assert.equal(view.revision,1);assert.equal((await s.list()).unread,0);assert.equal(reminders,1);
+ await s.forExtension(a,'update',{id:result.id,patch:{body:'Business %body% unchanged'},expectedRevision:1});await db.call('extensionMutation',{action:'remove',id:a.id});await db.call('writeSetting',{key:'workspace',value:{language:'en'}});view=(await s.list()).items[0];assert.equal(view.title,'客户门户 ready');assert.equal(view.body,'Business %body% unchanged');assert.equal(Object.hasOwn(view,'_localization'),false);
+ await s.dismiss({id:result.id});assert.equal((await s.list()).items.length,0);assert.equal(reminders,1);
+});

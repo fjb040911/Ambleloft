@@ -136,8 +136,7 @@ function localizeManifest(manifest, dictionaries, locale) {
   for (const dictionary of Object.values(dictionaries)) validateDictionary(dictionary);
   const result = validateManifest(manifest, { defaultMessages: dictionaries.default || {} });
   if (!result.ok) throw new Error('Invalid manifest localization');
-  const normalized = locale.toLowerCase().replaceAll('_', '-');
-  const messages = { ...dictionaries.default, ...dictionaries[normalized.split('-')[0]], ...dictionaries[normalized] };
+  const messages = require('../localization/index.cjs').messages(dictionaries,locale);
   const copy = structuredClone(manifest);
   for (const [object, key] of displayFields(copy)) { const match = /^%([^%]+)%$/.exec(object[key] || ''); if (match) object[key] = messages[match[1]]; }
   return copy;
@@ -158,13 +157,12 @@ function validatePackage(directory) {
     if (fs.lstatSync(directory).isSymbolicLink()) throw new Error('Package root symlink is forbidden');
     const root = fs.realpathSync(directory);
     const manifest = readJson(safePath(root, 'extension.json', 'file'));
-    const dictionaries = {};
-    for (const name of fs.readdirSync(root)) if (/^extension\.nls(?:\.[A-Za-z0-9-]+)?\.json$/.test(name)) {
-      const locale = name === 'extension.nls.json' ? 'default' : name.slice(14, -5).toLowerCase();
-      if (own(dictionaries, locale)) throw new Error('Duplicate localization locale');
-      const dictionary = readJson(safePath(root, name, 'file')); validateDictionary(dictionary); dictionaries[locale] = dictionary;
-    }
+    const dictionaries = require('../localization/index.cjs').load(root,'extension');
     const result = validateManifest(manifest, { defaultMessages: dictionaries.default || {} }); if (!result.ok) return result;
+    const L=require('../localization/index.cjs');
+    for(const [owner,key] of displayFields(manifest)){const ref=L.reference(owner[key]);if(ref&&L.params(dictionaries.default[ref]).length)throw Error('Static display text cannot require arguments: '+ref);}
+    for(const locale of ['und',...Object.keys(dictionaries).filter(k=>k!=='default')]){const translated=localizeManifest(manifest,dictionaries,locale);const checked=validateManifest(translated,{defaultMessages:dictionaries.default||{}});if(!checked.ok)throw Error('Invalid translated manifest: '+locale+' '+checked.errors.map(e=>e.path+': '+e.message).join('; '));}
+
     let icons;
     if(manifest.icon){
       const variants=typeof manifest.icon==='string'?{light:manifest.icon,dark:manifest.icon}:manifest.icon;
@@ -206,4 +204,4 @@ function compileValueValidator(valueSchema) {
   const check = ajv.compile(valueSchema);
   return value => { try { jsonGuard(value); return check(value); } catch { return false; } };
 }
-module.exports = { CONTRACT_REVISION, validateManifest, validatePackage, localizeManifest, validateHandlerBindings, compileValueValidator };
+module.exports = { validateSkillLocalization:require('../localization/skill.cjs').validateSkillLocalization, CONTRACT_REVISION, validateManifest, validatePackage, localizeManifest, validateHandlerBindings, compileValueValidator };

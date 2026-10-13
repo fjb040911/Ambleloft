@@ -22,10 +22,12 @@
  --color-card-foreground: var(--text);
  --color-muted: var(--hover);
  --color-muted-foreground: var(--secondary);
- --color-accent: var(--hover);
- --color-accent-foreground: var(--text);
- --color-primary: var(--text);
- --color-primary-foreground: var(--surface);
+ --color-accent: var(--accent-surface);
+ --color-accent-foreground: var(--accent-foreground);
+ --color-message: var(--message-background);
+ --color-message-foreground: var(--message-foreground);
+ --color-primary: var(--primary);
+ --color-primary-foreground: var(--primary-foreground);
  --color-secondary: var(--hover);
  --color-secondary-foreground: var(--text);
  --color-border: var(--border);
@@ -48,7 +50,7 @@
 .task-questionnaire [data-slot] { border-style: solid; border-width: 0; }
 .task-questionnaire [data-slot=questionnaire-item], .task-questionnaire [data-slot=questionnaire-title] { margin: 0; }
 .task-questionnaire [data-slot=questionnaire-item][hidden] { display: none !important; }
-.task-questionnaire { padding: 16px; margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--raised); }
+.task-questionnaire { padding: var(--surface-padding); margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-surface-card); background: var(--raised); }
 .questionnaire-body { max-height: 24vh; overflow-y: auto; overscroll-behavior: contain; }
 @layer utilities {
   .task-questionnaire [hidden] { display: none !important; }

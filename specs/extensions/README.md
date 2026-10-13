@@ -15,7 +15,8 @@ Windows、macOS、Linux 均为正式发行目标；通用核心与平台适配�
 5. [开发入门](./developer-guide.md) 与 [示例](./examples/README.md)：SDK、本地安装包和页面/Agent 操作闭环。
 6. [消息中心设计](./message-center-design.md)：M2 已确认的数据与交互规则、动作状态机、31 项验收标准，以及尚待评审的 SDK 草案。
 7. [声明式表单与多步骤流程](./declarative-forms-design.md)：YAML 定义、shadcn/ui 渲染、实例、提交与恢复；基础能力已实现，完整目标和当前边界分别标注；使用方式见[表单开发指南](./declarative-forms-guide.md)。
-8. [开发任务与验收](./implementation-plan.md)：依赖、探针、验收及进入开发条件。
+8. [Skill / Extension 多语言设计](./localization-design.md)：自动发现词典、宿主语言渲染、动态通知与历史快照；方案已确认，增量待实现。
+9. [开发任务与验收](./implementation-plan.md)：依赖、探针、验收及进入开发条件。
 
 消息宿主实现进展见 [开发记录](./message-center-progress.md)；企业身份接入方向与待评审协议见 [认证设计草案](./authentication-design.md)。
 

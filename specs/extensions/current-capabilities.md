@@ -65,3 +65,7 @@ check:upstream 对照同步契约和验证器；doctor 对照已记录的宿主�
 - 集合双布局：运行时 `ui_capabilities.collectionLayouts: 1`，collection 可用 `rows.layout` 与 `rows.card` 显式映射，在正式任务中切换 table/cards，共享筛选、分页、选择和操作权限。详见 [声明式 UI 指南](declarative-ui-guide.md#集合双布局2026-10-12)。
 
 - 自动交付文件卡片仅根据当前轮次 added/modified 文件快照或已完成文件写入工具收集；最终答复中的普通路径/链接不再作为产物证据。shell 输出通过轮次快照识别，基准不足时不猜测。历史卡片不自动迁移，显式交付已有文件协议仍待定义。
+
+## 多语言目标与当前边界
+
+宿主已实现 [统一多语言设计](localization-design.md)：Skill 根目录词典、显示元信息、表单/集合显示白名单投影、通知 LocalizedText、后台 locale 热切换及持久翻译快照。运行时探测 skillLocalization/templateLocalization/liveLocalization/notificationLocalization，具体入口与限制见设计文档和机器能力清单。独立 SDK/CLI 按 v0.6.7 要求对接，不代表其 npm 包已经发布。

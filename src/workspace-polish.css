@@ -200,8 +200,8 @@ body { font-optical-sizing: auto; }
 .conversation-content, .conversation-dock { max-width: 840px; }
 .conversation-content { padding: .5rem 1.75rem 1.5rem; }
 .conversation-content .markdown { font-size: .9375rem; line-height: 1.8; }
-.message.user { width: fit-content; max-width: 90%; margin-left: auto; padding: .75rem 1rem; overflow-wrap: anywhere; }
-.message > .user-text { font-size: .9375rem; line-height: 1.75; }
+.message.user { width: fit-content; max-width: 90%; margin-left: auto; padding: var(--message-padding-block) var(--message-padding-inline); overflow-wrap: anywhere; }
+.message > .user-text { font-size: .9375rem; line-height: 1.5; font-weight: 500; }
 .conversation-dock::before {
   content: ''; position: absolute; inset: -16px 0 auto; height: 16px; pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--surface));
@@ -228,7 +228,7 @@ body { font-optical-sizing: auto; }
 .project-file-panel { transition-timing-function: var(--motion-settle); }
 .file-tabs-bar { height: 59px; min-height: 59px; }
 .file-tab.active { box-shadow: inset 0 -2px var(--accent); }
-.file-tree-row { min-height: 32px; border-radius: var(--radius-control); }
+.file-tree-row { min-height: 32px; border-radius: var(--radius-list); }
 .file-tree-tools { flex-wrap: wrap; }
 .file-tree-tools label, .file-root, .file-breadcrumb, .file-mode button, .file-open-controls button { font-size: var(--text-caption); }
 .file-mode button, .file-open-controls button { min-height: 28px; }
@@ -531,7 +531,7 @@ body { font-optical-sizing: auto; }
 .activity-brand { width:44px; height:44px; }
 .activity-brand img { width:36px; height:36px; }
 .activity-groups { display:flex; flex-direction:column; gap:8px; width:100%; }
-.activity-group { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:60px; border-radius:8px; color:var(--secondary); font-size:11px; }
+.activity-group { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:60px; border-radius:var(--radius-activity); color:var(--secondary); font-size:11px; }
 .activity-group svg { width:20px; height:20px; }
 .activity-footer { margin-top:auto; display:flex; flex-direction:column; gap:10px; }
 .activity-layout .sidebar { grid-column:2; grid-row:1; }
@@ -598,5 +598,13 @@ body { font-optical-sizing: auto; }
 .settings-window-toolbar .global-sidebar-actions { min-height:0; padding:0; }
 .settings-window-toolbar .sidebar-top-actions { padding:0; }
 .settings-workspace .settings-sidebar { grid-column:1; grid-row:2; background:var(--activity-rail); border-right:0; border-radius:0; overflow:hidden; }
-.settings-workspace > .settings-main { grid-column:2; grid-row:2; background:var(--surface); border-radius:16px; overflow:hidden; }
+.settings-workspace > .settings-main { container-type:inline-size; grid-column:2; grid-row:2; background:var(--surface); border-radius:var(--radius-panel); overflow:hidden; }
 .settings-workspace .settings-sidebar nav { padding-top:12px; }
+
+/* Keep composer actions on one line; model names yield space before controls do. */
+.composer { min-width:min(300px,100%); }
+.composer .composer-option-row { flex-wrap:nowrap; gap:4px; }
+.composer .composer-option-row > button { flex-shrink:0; }
+.composer .composer-model-anchor { flex:1; min-width:0; display:flex; justify-content:flex-end; }
+.composer .composer-model-anchor > button { min-width:0; max-width:100%; }
+.composer .composer-bottom > button { flex-shrink:0; }

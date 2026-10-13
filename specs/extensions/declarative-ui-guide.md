@@ -93,3 +93,5 @@ rows:
 ### 卡片视觉层级
 
 正式卡片通过 CollectionItemCard 组合既有 shadcn/ui 组件：条目标题优先，徽章保留字段语义并弱化标签，辅助元信息使用次级文字；详情入口与行操作合并在底部一行，不再使用独立底栏色块。展开详情在当前卡片内显示，选中态用主题强调色描边，同时保留 checkbox 状态。窄屏允许内容及操作自然换行，减弱动画偏好下禁用过渡。此为宿主统一呈现，不增加模板配置或业务字段约定。
+
+多语言规范见 [Skill / Extension 多语言设计](localization-design.md)：模板自动使用所属 Skill 根目录的 skill.nls.*.json。此增量已实现，使用前探测 templateLocalization=1，显示文案可使用完整的 %key% 引用，普通字符串仍受支持。

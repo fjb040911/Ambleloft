@@ -7,6 +7,7 @@ const {schema:messageSchema,createMessageStore}=require('../core/extensions/mess
 const {schema:chatInputSchema,handlers:chatInputHandlers}=require('../core/forms/chat-inputs.cjs');
 const {schema:automationSchema,automationPersistence}=require('../core/automation/persistence.cjs');
 const {schema:actionSchema,createActionJournal}=require('../core/extensions/action-journal.cjs');
+const {schema:localizationSchema,createLocalizationStore}=require('../core/localization/store.cjs');
 let db;let resources;
 try{
  fs.mkdirSync(path.dirname(workerData.file),{recursive:true});
@@ -30,6 +31,7 @@ try{
  CREATE TABLE IF NOT EXISTS conversation_identities(id TEXT PRIMARY KEY,kind TEXT NOT NULL,record_id TEXT NOT NULL,project_id TEXT,UNIQUE(kind,record_id));
  ${extensionSchema}
  ${messageSchema}
+ ${localizationSchema}
  ${actionSchema}
  ${automationSchema}
  ${chatInputSchema}
@@ -76,6 +78,7 @@ if(actions)actions.recover();
 const extensionHandlers=extensionPersistence(db,transaction);
 const automation=automationPersistence(db,transaction,extensionHandlers.extensionCheck);
 const handlers={
+ localizationSnapshot:createLocalizationStore(db),
  ...automation.handlers,
  ...chatInputHandlers(db,transaction),
  commitTurn({runs,runId,turnId}){return transaction(()=>{saveRunRows(runs);const run=runs.find(r=>r.id===runId);if(run)automation.capture({...run,conversationId:resources.identify('run',run.id,run.projectId)},turnId);});},

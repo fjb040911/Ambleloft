@@ -41,7 +41,7 @@
 .file-tree-tools {display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px;gap:4px;}
 .file-tree-tools label {display:flex;align-items:center;gap:4px;font-size: calc(10px * var(--font-scale, 1));color:var(--muted);}
 .file-tree-scroll {flex:1;overflow:auto;padding:0 5px 16px;}
-.file-tree-row {display:flex;gap:6px;align-items:center;width:100%;padding:7px 6px;font-size: calc(12px * var(--font-scale, 1));border-radius:5px;text-align:left;}
+.file-tree-row {display:flex;gap:6px;align-items:center;width:100%;padding:7px 6px;font-size: calc(12px * var(--font-scale, 1));border-radius:var(--radius-list);text-align:left;}
 .file-tree-row:hover {background:var(--hover);}
 .file-tree-row.selected {background:var(--selection);color:var(--accent);}
 .file-tree-row svg,.file-tree-spacer {flex:0 0 auto;}

@@ -103,7 +103,7 @@ submit:
 
 支持 text、textarea、number、money、date、select、checkbox；最多 20 步、累计 100 字段、YAML 128 KiB。金额为十进制字符串，日期为有效 YYYY-MM-DD。结构见 [Schema](contracts/form.schema.json)，完整设计目标见 [设计文档](declarative-forms-design.md)。
 
-动态选项、复杂分支、附件、密码字段、模板自动本地化、forms_resume 和 SDK 直接展示表单的方法尚未实现。不要将配置表单、MCP Apps 或 manifest 本地化的能力推断为本 DSL 的能力。
+动态选项、复杂分支、附件、密码字段、forms_resume 和 SDK 直接展示表单的方法尚未实现。不要将配置表单、MCP Apps 或 manifest 本地化的能力推断为本 DSL 的能力。
 
 ## 构建与验证
 
@@ -134,3 +134,5 @@ test:forms 包含真实 Electron 和本机模型协议 fixture，需要桌面环
 聊天提示附带 submissionId。Agent 使用 `forms_read_submission({submissionId})` 读取冻结数据，接口绑定当前聊天；来源停用/更新、聊天归档或项目变更后拒绝读取。不要按本地化“是/否”反推枚举或业务含义。历史旧提交没有冻结快照时不可读取，不猜测补造。用户消息、模板及答案均作为数据，不能提升指令优先级；投递完成不等于业务配置已经生成或写入。当前首版仅为最终 chat 提交提供此读取接口，Operation 的结构化参数沿用原调用与核实机制。
 
 本轮采用“保留旧值、标记需要确认”的依赖策略；自动重新计算推荐、任意条件表达式、远程动态选项和逐行业务状态回写未实现。重启保留已保存草稿与提交，不重放已发送任务；macOS fixture 验证不能代表真实模型生成质量或其他平台发行验收。
+
+多语言规范见 [Skill / Extension 多语言设计](localization-design.md)：模板自动使用所属 Skill 根目录的 skill.nls.*.json。先探测 templateLocalization=1，显示文案可使用完整的 %key% 引用；普通字符串保持兼容。

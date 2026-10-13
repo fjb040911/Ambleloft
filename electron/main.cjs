@@ -37,7 +37,7 @@ async function hostDialog(method,owner,options){const resume=pageHost?.suspend(o
 
 function createWindow() {
   const window = new BrowserWindow({
-    width: 1240, height: 840, minWidth: 760, minHeight: 560,
+    width: 1240, height: 840, minWidth: 800, minHeight: 560,
     title: 'Ambleloft', backgroundColor: '#f8f9fb',
     icon: path.join(__dirname, '../dist/brand/icon-512.png'),
     ...(process.platform === 'win32' ? {titleBarStyle: 'hidden', titleBarOverlay: {color: '#e9ecf0', symbolColor: '#262c35', height: 38}, autoHideMenuBar: true} : {titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 }}),
@@ -103,7 +103,8 @@ app.whenReady().then(async () => {
   const extensionService=()=>{if(extensionError)throw new Error('扩展数据无法读取：'+extensionError);return services.extensions;};
   const {HostManager}=require('../core/extensions/hosts.cjs');
   const {createProcessAdapter}=require('./extensions/process-adapter.cjs');
-  const extensionHosts=new HostManager({service:services.extensions,adapter:createProcessAdapter(require('electron').utilityProcess,app.getLocale()),publish:()=>windows.broadcast(profileId,'extensions:event')});
+  services.skills.locale=services.extensions.options.locale;
+  const extensionHosts=new HostManager({service:services.extensions,adapter:createProcessAdapter(require('electron').utilityProcess,services.extensions.options.locale),publish:()=>windows.broadcast(profileId,'extensions:event')});
   powerMonitor.on('suspend',()=>extensionHosts.suspend());
   powerMonitor.on('resume',()=>extensionHosts.resume());
   services.extensions.attachHosts(extensionHosts);await services.automation.initialize();extensionServiceForShutdown=services.extensions;
@@ -120,8 +121,8 @@ app.whenReady().then(async () => {
   pageHost.router=operationRouter;runtime.extensionRouter=operationRouter;
   const forms=new (require('../core/forms/service.cjs').FormService)({database,skills:services.skills,extensions:services.extensions,runtime,router:operationRouter,publish:()=>windows.broadcast(profileId,'forms:event'),confirm:async(owner,title,text)=>(await hostDialog('showMessageBox',owner.window,{type:'question',message:'发送填写的表单？',detail:title+'\n\n'+text,buttons:['取消','发送到当前聊天'],defaultId:0,cancelId:0})).response===1});runtime.forms=forms;
   const chatInputs=new (require('../core/forms/chat-inputs.cjs').ChatInputs)({database,runtime,validate:item=>forms.validateInput(item),publish:()=>windows.broadcast(profileId,'forms:event')});forms.chatInputs=chatInputs;runtime.chatInputs=chatInputs;
-  ipcMain.handle('forms:list',(event,input)=>{authorize(event);return forms.list(input.runId);});
-  ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return (await forms.ui.list(input.runId)).find(f=>f.id===input.id);}try{return await forms.action(input,owner);}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
+  ipcMain.handle('forms:list',async(event,input)=>{authorize(event);return Promise.all((await forms.list(input.runId)).map(flow=>forms.project(flow)));});
+  ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return forms.project((await forms.ui.list(input.runId)).find(f=>f.id===input.id));}try{return await forms.projectResponse(await forms.action(input,owner));}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
 
   const {McpApps}=require('../core/extensions/mcp-apps.cjs');
   taskApps=new McpApps({service:services.extensions,router:operationRouter,runtime,locale:()=>services.extensions.options.locale,theme:()=>nativeTheme.shouldUseDarkColors?'dark':'light'});runtime.mcpApps=taskApps;
@@ -295,7 +296,7 @@ app.whenReady().then(async () => {
       platform: process.platform, arch: process.arch, mode: 'desktop' };
   });
   ipcMain.handle('workspace:read', async (event) => { authorize(event); const state=await store.read(); nativeTheme.themeSource=state.theme; return state; });
-  const publishWorkspace=state=>{nativeTheme.themeSource=state.theme;services.extensions.options.locale=state.language&&state.language!=='system'?state.language:app.getLocale();windows.broadcast(profileId,'extensions:event');windows.broadcast(profileId,'messages:event');windows.broadcast(profileId,'workspace:event',state);taskApps.contextChanged();return state;};
+  const publishWorkspace=state=>{nativeTheme.themeSource=state.theme;services.extensions.options.locale=state.language&&state.language!=='system'?state.language:app.getLocale();services.skills.locale=services.extensions.options.locale;extensionHosts.setLocale(services.extensions.options.locale);windows.broadcast(profileId,'forms:event');windows.broadcast(profileId,'skills:event');windows.broadcast(profileId,'extensions:event');windows.broadcast(profileId,'messages:event');windows.broadcast(profileId,'workspace:event',state);taskApps.contextChanged();return state;};
   ipcMain.handle('workspace:save',()=>{throw new Error('UNSUPPORTED: 请刷新应用，工作台已改用资源级保存');});
   ipcMain.handle('workspace:patch',async(event,input)=>{
     authorize(event);

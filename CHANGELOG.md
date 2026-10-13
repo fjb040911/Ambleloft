@@ -1,5 +1,14 @@
 # Preview notes / 预览版说明
 
+## v0.4.1 — Localization and conversation polish
+
+- Adds shared localization for extensions, skills, forms, declarative interfaces, and messages, with locale fallback and localized skill examples.
+- Refines the new-chat screen, responsive composer controls, theme colors, and adaptive surface spacing and corner radii.
+- Preserves the Windows desktop chrome and bundled-engine improvements merged after v0.4.0.
+- Ships a macOS Apple Silicon preview with DMG, ZIP, and SHA-256 checksums; ad-hoc signed, not Apple-notarized.
+
+扩展、技能、表单、声明式界面和消息新增统一多语言支持；优化新对话页面、输入区响应式布局、主题配色及自适应间距与圆角。源码包含此前合并的 Windows 窗口与内置引擎改进。本次提供 macOS Apple Silicon 预览安装包，尚未经过 Apple 公证。
+
 ## v0.4.0 — Declarative UI and extension automation preview
 
 - Adds declarative editors and result collections with table/card layouts, filtering, selection, pagination, and chat actions with frozen submissions.

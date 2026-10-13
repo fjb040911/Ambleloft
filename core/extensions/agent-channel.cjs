@@ -18,13 +18,13 @@ async function createAgentChannel({list,invoke,tools,resource,forms,skills,ui}){
    else if(m.method==='resources/read'&&resource)result=await resource(m.params?.uri,abort.signal);
    else if(m.method==='tools/call'){
     const args=m.params?.arguments||{};let value,direct=false;
-    if(ui&&m.params.name==='ui_capabilities'&&Object.keys(args).length===0)value={declarativeUi:1,types:['editor','collection'],chatActions:1,collectionValueLabels:1,collectionLayouts:1,businessStatus:false,limits:{templateBytes:131072,instanceBytes:196608,rows:500,actions:8}};
+    if(ui&&m.params.name==='ui_capabilities'&&Object.keys(args).length===0)value={skillLocalization:1,templateLocalization:1,liveLocalization:1,declarativeUi:1,types:['editor','collection'],chatActions:1,collectionValueLabels:1,collectionLayouts:1,businessStatus:false,limits:{templateBytes:131072,instanceBytes:196608,rows:500,actions:8}};
     else if(ui&&m.params.name==='ui_list'&&Object.keys(args).length===0)value=await ui.list();
     else if(ui&&m.params.name==='ui_present'&&Object.keys(args).every(k=>['key','data'].includes(k)))value=await ui.present(args);
     else if(ui&&m.params.name==='ui_update'&&Object.keys(args).every(k=>['id','expectedRevision','data'].includes(k)))value=await ui.update(args);
     else if(ui&&m.params.name==='ui_read_submission'&&typeof args.submissionId==='string'&&Object.keys(args).length===1)value=await ui.read(args.submissionId);
     else if(skills&&m.params.name==='skills_install')value=await skills.install(args,abort.signal);
-    else if(forms&&m.params.name==='forms_capabilities'&&Object.keys(args).length===0)value={declarativeForms:1,singleClickChat:1,fieldDependencies:1,conditionalFields:1,groupToggle:1,switch:1,readSubmission:1};
+    else if(forms&&m.params.name==='forms_capabilities'&&Object.keys(args).length===0)value={skillLocalization:1,templateLocalization:1,liveLocalization:1,declarativeForms:1,singleClickChat:1,fieldDependencies:1,conditionalFields:1,groupToggle:1,switch:1,readSubmission:1};
     else if(forms&&m.params.name==='forms_read_submission'&&typeof args.submissionId==='string'&&Object.keys(args).length===1)value=await forms.read(args.submissionId);
     else if(forms&&m.params.name==='forms_list')value=await forms.list();
     else if(forms&&m.params.name==='forms_present'&&typeof args.key==='string')value=await forms.present(args);

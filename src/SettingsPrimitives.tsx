@@ -1,5 +1,5 @@
 import type {ReactNode} from 'react';
 import {Card,CardHeader,CardTitle,CardContent} from './components/ui/card';
-import {Empty,EmptyHeader,EmptyMedia,EmptyTitle,EmptyDescription} from './components/ui/empty';
+import {Empty,EmptyHeader,EmptyMedia,EmptyTitle,EmptyDescription,EmptyContent} from './components/ui/empty';
 export function SettingsCard({title,children}:{title:ReactNode;children:ReactNode}){return <Card className="mb-4"><CardHeader><CardTitle role="heading" aria-level={2}>{title}</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">{children}</CardContent></Card>;}
-export function SettingsEmpty({icon,title,description}:{icon:ReactNode;title:ReactNode;description?:ReactNode}){return <Empty><EmptyHeader><EmptyMedia variant="icon">{icon}</EmptyMedia><EmptyTitle>{title}</EmptyTitle>{description&&<EmptyDescription>{description}</EmptyDescription>}</EmptyHeader></Empty>;}
+export function SettingsEmpty({icon,title,description,action,spacious=false}:{icon:ReactNode;title:ReactNode;description?:ReactNode;action?:ReactNode;spacious?:boolean}){return <Empty className={spacious?"min-h-72 gap-6 border-0 px-6 py-12 sm:min-h-88 sm:py-16":undefined}><EmptyHeader className={spacious?"max-w-md gap-3":undefined}><EmptyMedia variant="icon" className={spacious?"mb-3 size-12 rounded-2xl [&_svg]:size-6":undefined}>{icon}</EmptyMedia><EmptyTitle className={spacious?"text-lg":undefined}>{title}</EmptyTitle>{description&&<EmptyDescription>{description}</EmptyDescription>}</EmptyHeader>{action&&<EmptyContent>{action}</EmptyContent>}</Empty>;}

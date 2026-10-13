@@ -12,7 +12,7 @@ export default function CollectionItemCard({title,selection,selected,badges,desc
  metadata?:{id:string;label:string;content:ReactNode;location:boolean}[];details?:ReactNode;actions?:ReactNode;
 }){
  const [open,setOpen]=useState(false);
- return <Card role="listitem" className="collection-item gap-3 [--card-spacing:--spacing(5)]" data-selected={selected}>
+ return <Card role="listitem" className="collection-item [--card-radius:var(--radius-card)] gap-3 [--card-spacing:--spacing(5)]" data-selected={selected}>
   <CardHeader>
    <div className="collection-item-heading"><div className="collection-item-select">{selection}</div><div className="collection-item-heading-copy"><CardTitle className="collection-item-title">{title}</CardTitle>{badges&&<div className="collection-item-badges">{badges}</div>}</div></div>
   </CardHeader>

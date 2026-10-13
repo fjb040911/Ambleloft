@@ -13,7 +13,7 @@
 .nav-group-toggle > svg { flex:none; width:16px; height:16px; padding:0; }
 .nav-group-toggle > svg:last-child { width:12px; height:12px; }
 .nav-empty { color:var(--muted); font-size:.75rem; line-height:1.5; margin:6px 10px 8px; }
-.project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:36px; border-radius:var(--radius-control); }
+.project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:36px; border-radius:var(--radius-list); }
 .project-tree-row:hover,.tree-task:hover { background:var(--hover); }
 .sidebar :is(.project-tree-row,.tree-task,.extension-nav-row).selected { background:var(--selection); color:var(--accent); }
 .project-tree-name,.tree-task > button:first-child { min-height:36px; min-width:0; flex:1; background:transparent; color:inherit; }
@@ -34,7 +34,7 @@
 .sidebar .nav-group-add { opacity:0; }
 .caption-action:is(:hover,:focus-within) .nav-group-add { opacity:1; }
 .sidebar button:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
-.sidebar .extension-nav-row { border-radius:var(--radius-control); }
+.sidebar .extension-nav-row { border-radius:var(--radius-list); }
 @media (hover:none) {
  .sidebar .row-menu,.sidebar .nav-group-add { opacity:1; }
  .project-tree-row { padding-right:60px; }

@@ -1,0 +1,40 @@
+/* Task launch: a focused input surface, with project context outside it. */
+.home-page.home-start {
+ width:100%; max-width:900px; margin:0 auto;
+ padding:clamp(56px,18vh,172px) 32px 40px;
+}
+.home-start-heading { display:flex; flex-direction:column; align-items:center; gap:20px; }
+.home-start-mark { width:48px; height:48px; object-fit:contain; }
+.home-page.home-start h1 { text-align:center; font-size:clamp(24px,3cqi,30px); font-weight:550; line-height:1.4; letter-spacing:-.025em; }
+.home-page.home-start .new-task-composer { margin-top:36px; }
+.home-start .composer-option-row { gap:8px; }
+.home-start .composer-model-name { max-width:200px; }
+.home-start .composer-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 16px; min-height:44px; padding:6px 10px 0; }
+.home-project-context { min-width:0; max-width:100%; }
+.home-start .project-picker-trigger { max-width:260px; font-weight:400; color:var(--secondary); }
+.home-start .composer-hint { margin:0; text-align:right; opacity:0; }
+.home-start .composer:focus-within .composer-hint,
+.home-start .composer[aria-busy=true] .composer-hint { opacity:1; }
+.home-page.home-start .composer-note { display:flex; justify-content:center; align-items:center; gap:4px 8px; padding:0; margin-top:8px; }
+.home-start .composer-note .composer-status { flex:0 1 auto; }
+.home-page.home-start .starter-section { justify-content:center; margin-top:28px; }
+.home-start .starter-suggestions { justify-content:center; gap:8px; }
+.home-start .starter-suggestions button { font-weight:400; }
+.home-start .draft-context-bar { margin-bottom:12px; }
+@media(max-height:740px) {
+ .home-page.home-start { padding-top:40px; }
+ .home-start-heading { gap:14px; }
+ .home-page.home-start .new-task-composer { margin-top:24px; }
+}
+@media(max-width:700px) {
+ .home-page.home-start { padding:48px 20px 28px; }
+ .home-start .composer-model-name { max-width:150px; }
+ .home-start .composer-footer { gap:2px 8px; padding-inline:4px; }
+ .home-start .composer-hint { font-size:.625rem; }
+}
+@media(max-width:460px) {
+ .home-page.home-start { padding:32px 12px 24px; }
+ .home-start .composer-option-row { gap:4px; }
+ .home-start .composer-model-name { max-width:100px; }
+ .home-start .composer-hint { text-align:left; }
+}
