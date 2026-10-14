@@ -6,6 +6,19 @@ Windows、macOS、Linux 均为正式发行目标；通用核心与平台适配�
 
 优先阅读[当前可用能力与契约来源](current-capabilities.md)，再查设计目标；未开放能力不能仅凭设计稿生成 SDK。
 
+## 运行中补充信息（U0–U6 已完成，待补充区已接入）
+
+- [产品需求](user-input-requirements.md)：两种表单来源、待补充区与已讨论边界。
+- [技术设计](user-input-design.md)：请求生命周期、投递、内置 Skill 和后续局部等待。
+- [U0 契约冻结与探针结果](user-input-u0-results.md)：已完成；新运行时工具尚未开放。
+- [U1 持久输入通道结果](user-input-u1-results.md)：普通文字 IPC、停止暂停、选择性继续与回归结果。
+- [U6 正式任务待补充区](user-input-u6-results.md)：固定表单区、草稿、提交恢复、历史与原生问题适配。
+- [U5 模型工具与运行时绑定](user-input-u5-results.md)：受控模型投影、静态模板 opt-in、文字来源与编辑保护；U6 已接入。
+- [U4 动态表单与共享字段渲染](user-input-u4-results.md)：严格定义校验、预填、受控渲染与兼容性验证。
+- [U3 持久补充请求结果](user-input-u3-results.md)：草稿 CAS、原子答案与投递、生命周期和迁移。
+- [U2 正式聊天框结果](user-input-u2-results.md)：补充发送、独立停止、继续选择、投递状态及视觉验收。
+- [基于当前代码的实施任务](user-input-implementation-plan.md)：复用范围、缺口、依赖与验收。
+
 ## 阅读顺序
 
 1. [首版范围与已确认决策](./scope.md)：M1/M2 的产品边界。
@@ -70,3 +83,9 @@ scope 的已确认产品边界优先。设计与契约相互约束，冲突必�
 - [图标规范](icons.md)
 - [消息操作与认证接入规范](message-actions-auth-guide.md)
 - [v0.5.0 增量交接与验收清单](../../tooling-report/requirement/v0.5.0/README.md)
+
+- [U7：补充请求生命周期、提案确认与恢复](user-input-u7-results.md)
+
+- [U8：内置补充信息 Skill 分发与发现](user-input-u8-results.md)
+
+- [U9：本地集成验收与 SDK/CLI 交接](user-input-u9-results.md)

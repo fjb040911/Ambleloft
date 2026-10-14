@@ -2,16 +2,9 @@ import TaskUi,{type UiFlow} from './TaskUi';
 import {t} from './i18n';
 import {useEffect,useRef,useState} from 'react';
 import {Card,CardHeader,CardTitle,CardDescription,CardContent,CardFooter} from './components/ui/card';
-import {Field,FieldGroup,FieldLabel,FieldDescription} from './components/ui/field';
-import {Input} from './components/ui/input';
-import {Textarea} from './components/ui/textarea';
-import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
-import {Switch} from './components/ui/switch';
-import {Checkbox} from './components/ui/checkbox';
 import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
-type Values=Record<string,string|number|boolean>;
-type FieldDef={name:string;label:string;type:string;required?:boolean;help?:string;placeholder?:string;dependsOn?:string[];visibleWhen?:{field:string;equals:string|number|boolean};currency?:string;options?:{label:string;value:string}[]};
+import FormFields,{type FormValues as Values,type FormFieldDefinition as FieldDef} from './FormFields';
 type Flow={displayTemplate?:Flow['template'];displayLocale?:string;id:string;runId:string;turnKey:string;revision:number;status:string;step:number;error?:string;staleFields?:string[];results?:Record<string,unknown>;drafts:Record<string,Values>;template:{title:string;description?:string;steps:{id:string;title:string;description?:string;fields:FieldDef[];next?:{label:string}}[];submit:{label:string;kind?:string}}};
 type Api={list:(p:{runId:string})=>Promise<Flow[]>;action:(p:object)=>Promise<Flow|{flow:Flow;errors:Record<string,string>}>;onChanged:(fn:()=>void)=>()=>void};
 const pendingDrafts=new Map<string,{values:Values;flow:Flow;touched?:string[]}>();
@@ -86,17 +79,7 @@ function FormCard({flow,archived}:{flow:Flow;archived:boolean}){
  const visibleFields=step.fields.filter(f=>!f.visibleWhen||answers[f.visibleWhen.field]===f.visibleWhen.equals);
  return <Card className="my-4" aria-label={template.title}>
   <CardHeader><CardTitle>{template.title}</CardTitle><CardDescription aria-live="polite">{current.status==='completed'?(current.template.submit.kind==='chat'?t('已发送'):t('已提交')):current.status==='unknown'?t('提交结果待核实，请勿重复提交'):current.status==='pending'?t('答案已保存，正在送达。你可以继续其他操作。'):t('第 {current} / {total} 步 · {title}').replace('{current}',String(current.step+1)).replace('{total}',String(current.template.steps.length)).replace('{title}',step.title)}</CardDescription>{template.description&&<CardDescription>{template.description}</CardDescription>}{step.description&&step.description!==template.description&&<CardDescription>{step.description}</CardDescription>}</CardHeader>
-  <CardContent><FieldGroup>{visibleFields.map(f=>{
-   const id=current.id+'-'+f.name,boolean=['checkbox','switch','group-toggle'].includes(f.type),stale=current.staleFields?.includes(step.id+'.'+f.name);
-   const control=f.type==='select'?<NativeSelect id={id} disabled={locked} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}><NativeSelectOption value="">{t('请选择')}</NativeSelectOption>{f.options?.map(o=><NativeSelectOption key={o.value} value={o.value}>{o.label}</NativeSelectOption>)}</NativeSelect>:f.type==='switch'?<Switch id={id} size="sm" disabled={locked} checked={values[f.name]===true} onCheckedChange={v=>change(f.name,v)} aria-invalid={!!errors[f.name]}/>:boolean?<Checkbox id={id} disabled={locked} checked={values[f.name]===true} indeterminate={f.type==='group-toggle'&&values[f.name]==='mixed'} onCheckedChange={v=>change(f.name,v===true)} aria-invalid={!!errors[f.name]}/>:f.type==='textarea'?<Textarea id={id} disabled={locked} placeholder={f.placeholder} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}/>:<Input id={id} disabled={locked} placeholder={f.placeholder} type={f.type==='date'?'date':'text'} inputMode={['number','money'].includes(f.type)?'decimal':undefined} value={String(values[f.name]??'')} onChange={e=>change(f.name,e.target.value)} aria-invalid={!!errors[f.name]}/>;
-   const label=<FieldLabel htmlFor={id}>{f.label}{f.required?' *':''}{f.currency?'（'+f.currency+'）':''}</FieldLabel>;
-   return <Field key={f.name} data-invalid={!!errors[f.name]} data-disabled={locked}>
-    {boolean?<Field orientation="horizontal">{control}{label}</Field>:<>{label}{control}</>}
-    {(errors[f.name]||f.help)&&<FieldDescription role={errors[f.name]?'alert':undefined}>{errors[f.name]||f.help}</FieldDescription>}
-    {f.type==='group-toggle'&&values[f.name]==='mixed'&&<FieldDescription>{t('部分启用；保持不变会保留各项原来的选择。')}</FieldDescription>}
-    {stale&&<Alert><AlertDescription>{t('前面的选择已变化，请检查此项。')}<Button size="sm" variant="outline" disabled={locked||saving} onClick={()=>void act('confirmField',f.name)}>{t('确认保留此值')}</Button></AlertDescription></Alert>}
-   </Field>;
-  })}</FieldGroup>
+  <CardContent><FormFields fields={visibleFields} values={values} change={change} locked={locked} errors={errors} renderAfterField={f=>current.staleFields?.includes(step.id+'.'+f.name)?<Alert><AlertDescription>{t('前面的选择已变化，请检查此项。')}<Button size="sm" variant="outline" disabled={locked||saving} onClick={()=>void act('confirmField',f.name)}>{t('确认保留此值')}</Button></AlertDescription></Alert>:null}/>
   {current.status==='completed'&&current.results?.[step.id]!==undefined&&<section className="mt-4 flex flex-col gap-2" aria-label={t('提交结果')}><h4 className="text-sm font-medium">{t('提交结果')}</h4><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 text-xs" tabIndex={0}>{JSON.stringify(current.results[step.id],null,2)}</pre></section>}
   {(error||current.error)&&<Alert className="mt-4" variant="destructive"><AlertDescription>{error||current.error}</AlertDescription></Alert>}</CardContent>
   <CardFooter className="gap-2 flex-wrap border-border">{current.status==='unknown'&&<Button variant="outline" disabled={busy||archived} onClick={()=>void act('reconcile')}>{t('核实提交结果')}</Button>}{current.status==='editing'&&<>

@@ -1,0 +1,15 @@
+{
+ "requestKey":"travel-preferences-1",
+ "reason":"确认目的地、日期和预算后，可以安排更合适的行程。",
+ "source":{"kind":"dynamic","definition":{"title":"补充出行计划","description":"填写你已经确定的信息，其余偏好可以稍后讨论。","fields":[
+  {"name":"destination","type":"select","label":"目的地","required":true,"options":[{"label":"上海","value":"shanghai"},{"label":"北京","value":"beijing"}]},
+  {"name":"date","type":"date","label":"出发日期","required":true},
+  {"name":"days","type":"number","label":"出行天数","integer":true,"minimum":1,"maximum":30},
+  {"name":"budget","type":"money","label":"总预算","currency":"CNY","scale":2,"minimum":"0"},
+  {"name":"name","type":"text","label":"称呼","maxLength":40},
+  {"name":"notes","type":"textarea","label":"行程偏好","help":"例如慢节奏、看展览，或需要无障碍路线。"},
+  {"name":"flexible","type":"switch","label":"日期可以调整"},
+  {"name":"walking","type":"checkbox","label":"愿意安排步行路线"}
+ ]}},
+ "prefill":{"days":3}
+}

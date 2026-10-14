@@ -45,7 +45,9 @@
     "test:extensions:demo": "node scripts/test-extension-demo.mjs",
     "test:extensions:sdk-package": "node scripts/test-extension-sdk-package.cjs",
     "test:extensions:apps": "node scripts/test-mcp-apps.mjs",
-    "test:forms": "node --test tests/forms.test.cjs && node scripts/test-declarative-forms.mjs"
+    "test:forms": "node --test tests/forms.test.cjs && node scripts/test-declarative-forms.mjs",
+    "test:inputs:engine": "node scripts/probes/async-input-engine.cjs",
+    "test:inputs:desktop": "node scripts/test-user-input.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

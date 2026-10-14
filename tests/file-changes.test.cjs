@@ -37,8 +37,24 @@ test('runtime finish stores changes on the correct turn only once',async()=>{
  try{
   const {AgentRuntime}=require('../electron/agent-runtime.cjs');
   const runtime=new AgentRuntime({directory:root,publish(){}});runtime.changed=()=>{};runtime.persist=async()=>{};
-  const run={cwd:root,messages:[],tools:[]};const context={run,turnKey:'one',fileBaseline:await snapshot(root)};
+  const run={cwd:root,messages:[],tools:[{turnKey:'one',type:'fileChange',status:'completed',detail:JSON.stringify([{path:'report.json',kind:{type:'add'}}])}]};const context={run,turnKey:'one',fileBaseline:await snapshot(root)};
   await fs.writeFile(path.join(root,'report.json'),'{}\n');await runtime.finish(context,'completed');await runtime.finish(context,'completed');
   assert.equal(run.fileChanges.length,1);assert.equal(run.fileChanges[0].turnKey,'one');assert.equal(run.fileChanges[0].files[0].status,'added');assert.equal(context.fileBaseline,null);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+
+
+test('a read-only turn never claims concurrent workspace edits or existing dirty files',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'changes-read-'));
+ try{
+  const {AgentRuntime}=require('../electron/agent-runtime.cjs');
+  const runtime=new AgentRuntime({directory:root,publish(){}});runtime.changed=()=>{};runtime.persist=async()=>{};
+  await fs.writeFile(path.join(root,'dirty.js'),'already dirty');
+  const run={cwd:root,messages:[],tools:[{turnKey:'read',type:'commandExecution',status:'completed',label:'cat dirty.js',detail:'already dirty'}]};
+  const context={run,turnKey:'read',fileBaseline:await snapshot(root)};
+  await fs.writeFile(path.join(root,'dirty.js'),'another session edit');
+  await fs.writeFile(path.join(root,'external.md'),'another editor');
+  await runtime.finish(context,'completed');
+  assert.deepEqual(run.fileChanges[0].files,[]);assert.deepEqual(run.artifacts,[]);
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });

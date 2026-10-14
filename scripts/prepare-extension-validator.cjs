@@ -4,3 +4,5 @@ require('esbuild').buildSync({ entryPoints: [path.join(__dirname, '../core/exten
 require('esbuild').buildSync({entryPoints:[path.join(__dirname,'../core/forms/template.cjs')],bundle:true,platform:'node',target:'node22',format:'cjs',outfile:path.join(__dirname,'../build/form-template.cjs')});
 
 require('esbuild').buildSync({entryPoints:[path.join(__dirname,'../core/ui/template.cjs')],bundle:true,platform:'node',target:'node22',format:'cjs',outfile:path.join(__dirname,'../build/ui-template.cjs')});
+
+require('esbuild').buildSync({entryPoints:[path.join(__dirname,'../core/inputs/definition.cjs')],bundle:true,platform:'node',target:'node22',format:'cjs',outfile:path.join(__dirname,'../build/input-definition.cjs')});

@@ -13,10 +13,10 @@
 .nav-group-toggle > svg { flex:none; width:16px; height:16px; padding:0; }
 .nav-group-toggle > svg:last-child { width:12px; height:12px; }
 .nav-empty { color:var(--muted); font-size:.75rem; line-height:1.5; margin:6px 10px 8px; }
-.project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:36px; border-radius:var(--radius-list); }
+.project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:32px; border-radius:var(--radius-list); }
 .project-tree-row:hover,.tree-task:hover { background:var(--hover); }
-.sidebar :is(.project-tree-row,.tree-task,.extension-nav-row).selected { background:var(--selection); color:var(--accent); }
-.project-tree-name,.tree-task > button:first-child { min-height:36px; min-width:0; flex:1; background:transparent; color:inherit; }
+.sidebar :is(.project-tree-row,.tree-task,.extension-nav-row).selected { background:var(--navigation-selected); color:var(--text); }
+.project-tree-name,.tree-task > button:first-child { min-height:32px; min-width:0; flex:1; background:transparent; color:inherit; }
 .project-tree-name span,.tree-task > button > span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sidebar .tree-toggle { display:flex; align-items:center; justify-content:center; flex:none; width:28px; min-width:28px; height:32px; padding:4px; }
 .tree-row-actions { position:absolute; inset-block:0; right:2px; display:flex; align-items:center; }
@@ -24,11 +24,11 @@
 :is(.project-tree-row,.tree-task):is(:hover,:focus-within) .row-menu { opacity:1; }
 .project-tree-row:is(:hover,:focus-within) { padding-right:60px; }
 .tree-task:is(:hover,:focus-within) { padding-right:30px; }
-.sidebar .project-children { margin-block:2px 10px; padding-block:0; }
-.project-tree-name { font-weight:500; }
-.tree-task:not(.selected) > button:first-child { color:var(--secondary); }
-.tree-task .task-state:not(.running):not(.preparing):not(.waiting):not(.failed) { visibility:hidden; }
-.tree-task > button > span:nth-child(2) { font-size:.8125rem; }
+.sidebar .project-children { margin-block:2px 6px; padding-block:0; }
+.project-tree-name { font-weight:400; }
+.tree-task:not(.selected) > button:first-child { color:var(--text); }
+.tree-task .task-state:not(.running):not(.preparing):not(.waiting):not(.failed) { display:none; }
+.tree-task > button > span:nth-child(2) { font-size:.875rem; }
 .sidebar .new-task:hover { border-color:var(--border); }
 .tree-task small { flex:none; font-size:.6875rem; color:var(--muted); }
 .sidebar .nav-group-add { opacity:0; }
@@ -47,3 +47,7 @@
 @media (prefers-contrast:more) { .sidebar :is(.project-tree-row,.tree-task).selected { outline:1px solid currentColor; outline-offset:-1px; } }
 
 .project-task-pagination { display:flex; flex-wrap:wrap; gap:4px; padding:2px 0 2px 12px; color:var(--muted-foreground); }
+
+/* Status belongs in the gutter; idle tasks keep the same text alignment. */
+.tree-task .task-state { position:absolute; left:-8px; top:calc(50% - 2.5px); }
+.sidebar .tree-toggle { color:var(--text); }

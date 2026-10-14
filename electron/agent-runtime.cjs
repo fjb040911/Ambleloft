@@ -6,7 +6,7 @@ const { randomUUID } = require('node:crypto');
 const { CodexRPC, findCodex } = require('./codex-rpc.cjs');
 const { writeJSON, fingerprint, redact } = require('./provider.cjs');
 const { prepareEngineHome, engineRuntime } = require('./engine.cjs');
-const {validPlan} = require(engineRuntime().packaged ? path.join(process.resourcesPath, 'tools/plan-server.cjs') : './plan-server.cjs');
+const {validPlan,validDelivery} = require(engineRuntime().packaged ? path.join(process.resourcesPath, 'tools/plan-server.cjs') : './plan-server.cjs');
 const {snapshot,compare}=require('./file-changes.cjs');
 const {collectArtifacts} = require('./artifacts.cjs');
 const {startChatBridge,usesChat} = require('./chat-bridge.cjs');
@@ -40,6 +40,7 @@ class AgentRuntime {
         const timing = run.messages?.findLast(message => message.role === 'user'&&!message.turnKey)?.timing;
         if (timing && !timing.outcome) timing.outcome = 'interrupted';
       }
+      for(const run of this.runs)run.questions=[]; // Old RPC requests never survive a process restart.
       await this.persist();
     } catch (error) { if (error.code !== 'ENOENT') throw new Error('对话记录无法读取，未覆盖原始数据'); }
     this.initialized = true;
@@ -59,6 +60,7 @@ class AgentRuntime {
       else {
         if (input.archived !== undefined) {
           if (typeof input.archived !== 'boolean') throw new Error('归档状态无效');
+          if(input.archived)await this.chatInputs?.pause(run.id);
           run.archivedAt = input.archived ? new Date().toISOString() : null;
           if (!input.archived && run.projectId) { const state=await this.workspace.read(); if(!state.projects.some(p=>p.id===run.projectId))run.projectId=null; }
         }
@@ -109,14 +111,21 @@ class AgentRuntime {
     this.writes=operation.catch(()=>{});
     try{return await operation;}finally{this.editing=false;}
   }
+  supplementalTools(context) {
+    // U6 enables discovery only after the task dock can render these requests.
+    if(!this.inputToolsEnabled||!this.inputRequests)return undefined;
+    return require('../core/inputs/model.cjs').bindModelInputs(this.inputRequests,context.run.id,{forms:this.forms,validate:()=>{
+      if(this.contexts.get(context.key)!==context||context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});
+    }});
+  }
   recordFormInput(run,item,turnKey) {
-    const existing=run.messages.find(m=>m.formSubmissionId===item.id);
+    const existing=run.messages.find(m=>(m.userInputId||m.formSubmissionId)===item.id);
     if(existing){existing.inputDeliveryState='delivered';return;}
-    const message={id:randomUUID(),role:'user',text:item.text,turnKey,order:run.nextEventOrder=(run.nextEventOrder||0)+1,formSubmissionId:item.id,inputDeliveryState:'delivered'};
+    const message={id:randomUUID(),role:'user',text:item.text,turnKey,order:run.nextEventOrder=(run.nextEventOrder||0)+1,...(item.source==='user'?{userInputId:item.id,inputSource:'user'}:{formSubmissionId:item.id}),inputDeliveryState:'delivered'};
     const root=run.messages.findIndex(m=>m.id===turnKey),next=run.messages.findIndex((m,i)=>i>root&&m.role==='user'&&!m.turnKey);
     run.messages.splice(next<0?run.messages.length:next,0,message);this.changed(run);
   }
-  async deliverFormInput(item, {owner,onDispatch}) {
+  async deliverFormInput(item, {owner,onDispatch,dispatch}) {
     const busy=()=>Object.assign(Error('BUSY'),{code:'BUSY'});
     if(this.closing||this.editing)throw busy();
     const run=this.runs.find(r=>r.id===item.runId);
@@ -125,22 +134,22 @@ class AgentRuntime {
     if(context){
       if(context.done||context.cancelled||!context.rpc||context.rpc.closed||!run.turnId||!['running','waiting'].includes(run.status))throw busy();
       const target={threadId:run.threadId,turnId:run.turnId,turnKey:context.turnKey,mode:'steer'};
-      await onDispatch(target);
-      if(context.done||context.cancelled||context.rpc.closed||run.turnId!==target.turnId)throw Object.assign(busy(),{rpcRejected:true,turnBoundary:true});
+
       context.formInputs ||= new Map();context.formInputs.set(item.id,item);
-      try{await context.rpc.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,clientUserMessageId:item.id,input:[{type:'text',text:item.text}]});}
+      try{const send=()=>{if(context.done||context.cancelled||context.rpc.closed||run.turnId!==target.turnId)throw Object.assign(busy(),{rpcRejected:true,turnBoundary:true});return context.rpc.call('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,clientUserMessageId:item.id,input:[{type:'text',text:item.text}]});};if(dispatch){const sent=await dispatch(target,send);await sent.receipt;}else{await onDispatch(target);await send();}}
       catch(error){if(error.rpcRejected&&/no active turn|expected.*turn|turn.*mismatch/i.test(error.message))error.turnBoundary=true;throw error;}finally{context.formInputs.delete(item.id);}
       this.recordFormInput(run,item,context.turnKey);
       this.changed(run);await this.persist();return;
     }
+    if(item.activeOnly&&!item.allowIdle)throw Object.assign(busy(),{holdInput:true});
     if(BUSY.includes(run.status))throw busy();
     let resolve,reject;const receipt=new Promise((yes,no)=>{resolve=yes;reject=no;});receipt.catch(()=>{});
-    await this.start({runId:run.id,prompt:item.text},{owner,formSubmissionId:item.id,inputDelivery:{id:item.id,onDispatch,resolve,reject}});
+    await this.start({runId:run.id,prompt:item.text},{owner,...(item.source==='user'?{userInputId:item.id}:{formSubmissionId:item.id}),inputDelivery:{id:item.id,onDispatch,dispatch,resolve,reject}});
     await receipt;
   }
   async hasFormInput(item) {
     const run=this.runs.find(r=>r.id===item.runId);
-    if(run?.messages.some(m=>m.formSubmissionId===item.id&&m.inputDeliveryState==='delivered'))return true;
+    if(run?.messages.some(m=>(m.userInputId||m.formSubmissionId)===item.id&&m.inputDeliveryState==='delivered'))return true;
     const threadId=item.target?.threadId;if(!threadId||!run)return false;
     const active=[...this.contexts.values()].find(c=>c.run?.id===run.id&&!c.done&&!c.rpc?.closed);
     let rpc=active?.rpc,owned=false;
@@ -159,7 +168,7 @@ class AgentRuntime {
     // Reserve before any await so two windows/rapid clicks cannot start two processes.
     const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.inputDelivery=hostContext.inputDelivery;context.owner=hostContext.owner;context.key=randomUUID();context.requestRunId=input.runId;context.draftId=input.draftId;this.contexts.set(context.key,context);
     try {
-      context.skills = this.skills ? await this.skills.prepare(input.selectedSkillIds) : {instructions:'',snapshots:[],explicit:''};
+      context.skills = this.skills ? await this.skills.prepare(input.selectedSkillIds,{inputToolsEnabled:!!this.inputToolsEnabled&&!!this.inputRequests}) : {instructions:'',snapshots:[],explicit:''};
       if(!this.skills && input.selectedSkillIds?.length)throw new Error('技能服务不可用');
       const prompt = input.prompt.trim() || '请执行所选技能的工作流程。';
       const previous = input.runId ? this.runs.find(run => run.id === input.runId) : null;
@@ -204,7 +213,11 @@ class AgentRuntime {
       run.status = 'preparing'; run.error = ''; run.retrying=false; run.questions=[]; run.approvals = []; run.turnId = null;
       context.timing = { startedAt: context.startedAt };
       context.turnKey = randomUUID();
-      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.formSubmissionId?{formSubmissionId:hostContext.formSubmissionId,...(hostContext.inputDelivery?{inputDeliveryState:'queued'}:{})}:{}), model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
+      // A stopped preparation may have left an unsent placeholder. Retrying the
+      // same durable input must not create a second visible user message.
+      if(hostContext.inputDelivery)run.messages=run.messages.filter(message=>
+        (message.userInputId||message.formSubmissionId)!==hostContext.inputDelivery.id||message.inputDeliveryState==='delivered');
+      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.userAuthored&&!draft?{inputSource:'user',inputDeliveryState:'queued'}:{}), ...((hostContext.formSubmissionId||hostContext.userInputId)?{...(hostContext.userInputId?{userInputId:hostContext.userInputId,inputSource:'user'}:{formSubmissionId:hostContext.formSubmissionId}),...(hostContext.inputDelivery?{inputDeliveryState:'queued'}:{})}:{}), model: config.model, modelChange, skills: context.skills.snapshots, text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
       context.config = config;
       if (!previous && this.database) {
         const operation=this.writes.then(async()=>{
@@ -228,7 +241,7 @@ class AgentRuntime {
       if(context.cancelled||context.done){context.bridge?.close();return structuredClone(run);}
       if(this.extensionRouter){const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
        const extensionContext=signal=>({caller:'agent',projectId:run.projectId,owner:context.owner,signal,validate:()=>{if(context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});}});
-       context.extensionChannel=await createAgentChannel({ui:this.forms?.ui?{list:async()=>{const c=await this.forms.ui.catalog();return {templates:c.entries.map(e=>({key:e.key,template:this.forms.displayEntry(e)})),errors:c.errors,instances:(await this.forms.ui.list(run.id)).map(f=>({id:f.id,key:f.key,revision:f.revision,readOnly:f.readOnly,replacedBy:f.replacedBy}))};},present:args=>this.forms.ui.present(run,context.turnKey,args),update:args=>this.forms.ui.update(run,context.turnKey,args),read:id=>this.forms.ui.read(run,id)}:undefined,skills:this.installSkill?{install:(args,signal)=>this.installSkill(args,context.owner,signal)}:undefined,forms:this.forms?{list:async()=>{const c=await this.forms.catalog();return {templates:c.entries.map(e=>({key:e.key,template:this.forms.displayEntry(e)})),instances:(await this.forms.list(run.id)).map(f=>({id:f.id,key:f.key,step:f.step,status:f.status})),errors:c.errors};},read:id=>this.forms.read(run,id),present:(args)=>this.forms.present(run,context.turnKey,args.key,args.prefill)}:undefined,list:signal=>this.extensionRouter.list(extensionContext(signal)),invoke:(id,input,signal)=>this.mcpApps?this.mcpApps.invokeTask(id,input,extensionContext(signal),run,context.turnKey):this.extensionRouter.invoke(id,input,extensionContext(signal)),...(this.mcpApps?{tools:signal=>this.mcpApps.tools(extensionContext(signal)),resource:(uri,signal)=>this.mcpApps.resourceForAgent(uri,extensionContext(signal))}:{})});
+       context.extensionChannel=await createAgentChannel({inputs:this.supplementalTools(context),ui:this.forms?.ui?{list:async()=>{const c=await this.forms.ui.catalog();return {templates:c.entries.map(e=>({key:e.key,template:this.forms.displayEntry(e)})),errors:c.errors,instances:(await this.forms.ui.list(run.id)).map(f=>({id:f.id,key:f.key,revision:f.revision,readOnly:f.readOnly,replacedBy:f.replacedBy}))};},present:args=>this.forms.ui.present(run,context.turnKey,args),update:args=>this.forms.ui.update(run,context.turnKey,args),read:id=>this.forms.ui.read(run,id)}:undefined,skills:this.installSkill?{install:(args,signal)=>this.installSkill(args,context.owner,signal)}:undefined,forms:this.forms?{list:async()=>{const c=await this.forms.catalog();return {templates:c.entries.map(e=>({key:e.key,template:this.forms.displayEntry(e)})),instances:(await this.forms.list(run.id)).map(f=>({id:f.id,key:f.key,step:f.step,status:f.status})),errors:c.errors};},read:id=>this.forms.read(run,id),present:(args)=>this.forms.present(run,context.turnKey,args.key,args.prefill)}:undefined,list:signal=>this.extensionRouter.list(extensionContext(signal)),invoke:(id,input,signal)=>this.mcpApps?this.mcpApps.invokeTask(id,input,extensionContext(signal),run,context.turnKey):this.extensionRouter.invoke(id,input,extensionContext(signal)),...(this.mcpApps?{tools:signal=>this.mcpApps.tools(extensionContext(signal)),resource:(uri,signal)=>this.mcpApps.resourceForAgent(uri,extensionContext(signal))}:{})});
        if(context.done||context.cancelled){context.extensionChannel.close();return;}
       }
       context.rpc = this.rpcFactory({ executable, config:context.bridge?.config||config, home, cwd, extensionMcp:context.extensionChannel?.config,
@@ -249,9 +262,11 @@ class AgentRuntime {
     const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId } : {}) });
     if (context.done || context.cancelled) return;
     run.threadId = thread.thread.id; run.status = 'running'; this.changed(run);
-    if(context.inputDelivery)await context.inputDelivery.onDispatch({threadId:run.threadId,mode:'start',turnKey:context.turnKey});
-    const turn = await rpc.call('turn/start', { threadId: run.threadId,...(context.inputDelivery?{clientUserMessageId:context.inputDelivery.id}:{}), input: [{ type: 'text', text: run.messages.find(m=>m.id===context.turnKey).text + (context.skills?.explicit ? '\n\nThe user explicitly selected these workflows for this request:\n' + context.skills.explicit : '') }] });
-    if(context.inputDelivery){const message=run.messages.find(m=>m.id===context.turnKey);message.inputDeliveryState='delivered';context.inputDelivery.resolve();await this.persist();}
+    const send=()=>{if(context.done||context.cancelled)throw Object.assign(Error('已停止'),{code:'CANCELLED',rpcRejected:true,turnBoundary:true});return rpc.call('turn/start', { threadId: run.threadId,...(context.inputDelivery?{clientUserMessageId:context.inputDelivery.id}:{}), input: [{ type: 'text', text: run.messages.find(m=>m.id===context.turnKey).text + (context.skills?.explicit ? '\n\nThe user explicitly selected these workflows for this request:\n' + context.skills.explicit : '') }] });};
+    let turn;const target={threadId:run.threadId,mode:'start',turnKey:context.turnKey};
+    if(context.inputDelivery?.dispatch){const sent=await context.inputDelivery.dispatch(target,send);turn=await sent.receipt;}
+    else{if(context.inputDelivery)await context.inputDelivery.onDispatch(target);turn=await send();}
+    {const message=run.messages.find(m=>m.id===context.turnKey);if(message?.inputSource==='user'||context.inputDelivery){message.inputDeliveryState='delivered';context.inputDelivery?.resolve();await this.persist();}}
     if (context.done) return;
     run.turnId = turn.turn.id; this.changed(run);
     if (context.cancelled) await this.stop(run.id);
@@ -264,7 +279,11 @@ class AgentRuntime {
     const clean = value => redact(value || '', context.config.apiKey);
     run.lastEventAt=new Date().toISOString();
     const stamp = () => ({ turnKey: context.turnKey, order: run.nextEventOrder = (run.nextEventOrder || 0) + 1 });
-    if (method === 'turn/started') { if(context.inputDelivery){const m=run.messages.find(m=>m.id===context.turnKey);m.inputDeliveryState='delivered';context.inputDelivery.resolve();} run.turnId = params.turn.id; if (!context.cancelled) run.status = 'running'; }
+    if(method==='serverRequest/resolved'){
+      run.questions=(run.questions||[]).filter(q=>q.rpcId!==params.requestId);
+      if(!context.cancelled&&['waiting','running'].includes(run.status))run.status=run.approvals.length||run.questions.some(q=>q.blocking)?'waiting':'running';
+    }
+    else if (method === 'turn/started') { if(context.inputDelivery){const m=run.messages.find(m=>m.id===context.turnKey);m.inputDeliveryState='delivered';context.inputDelivery.resolve();} run.turnId = params.turn.id; if (!context.cancelled) run.status = 'running'; }
     else if (method === 'turn/plan/updated') {
       const plan={turnKey:context.turnKey,explanation:clean(params.explanation),steps:(params.plan||[]).filter(step=>typeof step.step==='string'&&['pending','inProgress','completed'].includes(step.status)).map(step=>({step:clean(step.step),status:step.status}))};
       run.plans=[...(run.plans||[]).filter(p=>p.turnKey!==context.turnKey),plan];
@@ -301,6 +320,12 @@ class AgentRuntime {
         if (['commentary', 'final_answer'].includes(item.phase)) existing.phase = item.phase;
         existing.status = method === 'item/completed' ? 'completed' : 'running';
       } else if (['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch', 'plan', 'contextCompaction'].includes(item.type)) {
+        if(item.type==='mcpToolCall'&&item.server==='atelier_progress'&&item.tool==='register_deliverable') {
+          if(method==='item/completed'&&item.status==='completed'&&!item.result?.isError&&!item.error&&validDelivery(item.arguments)) {
+            run.tools=[...run.tools.filter(tool=>tool.id!==item.id),{id:item.id,...stamp(),type:'deliverable',label:'交付成果',status:'completed',detail:JSON.stringify(item.arguments)}];
+          }
+          this.changed(run);return;
+        }
         if(item.type==='mcpToolCall'&&item.server==='atelier_progress'&&item.tool==='update_plan') {
           if(method==='item/completed'&&item.status==='completed'&&validPlan(item.arguments)) {
             run.plans=[...(run.plans||[]).filter(plan=>plan.turnKey!==context.turnKey),{turnKey:context.turnKey,explanation:clean(item.arguments.explanation),steps:item.arguments.plan.map(step=>({step:clean(step.step),status:step.status==='in_progress'?'inProgress':step.status}))}];
@@ -370,7 +395,8 @@ class AgentRuntime {
     context.run.messages.push({id:randomUUID(),role:'assistant',phase:'commentary',text:request.questions.map(q=>q.question+'\n\n'+(q.isSecret?'[私密回答已提交]':answers[q.id].trim())).join('\n\n'),turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1});
     context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(context.run);
   }
-  async stop(id) {
+  async stop(id,{pause=true}={}) {
+    if(pause&&this.chatInputs&&this.runs.some(r=>r.id===id))await this.chatInputs.pause(id);
     const context = [...this.contexts.values()].find(c=>c.run?.id===id);
     if (!context || context.run?.id !== id) return;
     context.cancelled = true;context.extensionChannel?.close(); context.run.status = 'stopping'; this.changed(context.run);
@@ -399,7 +425,8 @@ class AgentRuntime {
     if (context.run && context.turnKey) {
       try {
         const changes=context.fileBaseline?await compare(context.run.cwd,context.fileBaseline,context.turnKey):{turnKey:context.turnKey,files:[],notice:'本轮未能记录文件变更基准。'};
-        context.run.fileChanges=[...(context.run.fileChanges||[]),changes];
+        const {attributedChanges}=await import('./file-output-policy.mjs');
+        context.run.fileChanges=[...(context.run.fileChanges||[]),attributedChanges(context.run,changes)];
       } catch { context.run.fileChanges=[...(context.run.fileChanges||[]),{turnKey:context.turnKey,files:[],notice:'文件变更记录失败。'}]; }
       context.fileBaseline=null;
       try { context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
@@ -408,6 +435,6 @@ class AgentRuntime {
     try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publish(structuredClone(context.run)); } }
     this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);this.drain();
   }
-  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id)));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown(); }
+  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown(); }
 }
 module.exports = { AgentRuntime };

@@ -140,7 +140,7 @@ test('progress stays until completion and can be reopened alongside plans and fi
  await expect(panel).toBeVisible();await expect(page.locator('.markdown h2')).toHaveText('文档已完成');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.plans=[{turnKey:'u',explanation:'整理结果',steps:[{step:'调研资料',status:'completed'},{step:'撰写文档',status:'inProgress'}]}];(window as any).__emit();});
  await expect(page.getByLabel('任务清单')).toContainText('撰写文档');
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.artifacts=[{id:'file',turnKey:'u',name:'report.md',path:'/fixture/report.md',size:1024}];(window as any).desktop.accessArtifact=async()=>({name:'report.md',text:'# 可预览的结果'});(window as any).__emit();});
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.artifacts=[{id:'file',turnKey:'u',kind:'delivery',name:'report.md',path:'/fixture/report.md',size:1024}];(window as any).desktop.accessArtifact=async()=>({name:'report.md',text:'# 可预览的结果'});(window as any).__emit();});
  await expect(panel).toHaveCount(0);await expect(page.getByLabel('交付文件')).toContainText('report.md');
  await page.locator('.turn-progress-toggle').click();await expect(panel).toBeVisible();await expect(page.getByLabel('任务清单')).toContainText('未确认完成');await expect(panel.locator('.thinking-window')).toHaveCount(0);await expect(panel).not.toContainText('检查可用环境');
  await expect(panel.locator('summary')).toBeVisible();await expect(panel).toContainText('有个 Python 3.11 可用。');await expect(panel).toContainText('安装进行中，等待完成。');
@@ -317,7 +317,7 @@ test('delivered preview maximizes, zooms content and restores focus',async({page
  await prepare(page,'文档已生成');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
-  run.artifacts=[{id:'code',turnKey:'u',name:'sample.ts',path:'/fixture/sample.ts',size:100}];
+  run.artifacts=[{id:'code',turnKey:'u',kind:'delivery',name:'sample.ts',path:'/fixture/sample.ts',size:100}];
   (window as any).desktop.accessArtifact=async()=>({name:'sample.ts',text:Array.from({length:200},(_,i)=>`const value${i} = ${i};`).join('\n')});
   (window as any).__emit();
  });
@@ -350,7 +350,7 @@ test('preview eyes only appear for supported files within size limit and text fo
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
   const names=['report.md','data.json','notes.txt','table.csv','app.log','main.py','report.pdf','report.docx','image.png','archive.zip','large.txt'];
-  run.artifacts=names.map(name=>({id:name,turnKey:'u',name,path:'/fixture/'+name,size:name==='large.txt'?1048577:100}));
+  run.artifacts=names.map(name=>({id:name,turnKey:'u',kind:'delivery',name,path:'/fixture/'+name,size:name==='large.txt'?1048577:100}));
   (window as any).desktop.accessArtifact=async({id}:any)=>({name:id,text:id==='report.md'?'# Preview':'Preview content'});
   (window as any).__emit();
  });
@@ -366,7 +366,7 @@ test('markdown file dialog follows dark, light and system themes in both sizes',
  await prepare(page,'报告已生成');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
-  run.artifacts=[{id:'md',turnKey:'u',name:'theme.md',path:'/fixture/theme.md',size:100}];
+  run.artifacts=[{id:'md',turnKey:'u',kind:'delivery',name:'theme.md',path:'/fixture/theme.md',size:100}];
   (window as any).desktop.accessArtifact=async()=>({name:'theme.md',text:'# 主题预览\n\n正文与 **重点** 和 `inline`。\n\n> 引用文字\n\n| 项目 | 结果 |\n|---|---|\n| 主题 | 正常 |\n\n```js\nconst value = "hello";\n```'});
   (window as any).__emit();
  });
@@ -389,7 +389,7 @@ test('preview maximize motion reverses from its visible bounds and respects redu
  await prepare(page,'预览');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
-  run.artifacts=[{id:'md',turnKey:'u',name:'motion.md',path:'/fixture/motion.md',size:100}];
+  run.artifacts=[{id:'md',turnKey:'u',kind:'delivery',name:'motion.md',path:'/fixture/motion.md',size:100}];
   (window as any).desktop.accessArtifact=async()=>({name:'motion.md',text:'# 动效'});(window as any).__emit();
  });
  await page.getByRole('button',{name:'预览 motion.md',exact:true}).click();
@@ -437,7 +437,7 @@ test('nested Mermaid preview isolates document zoom and returns to the parent mo
  await prepare(page,'文档已生成');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
-  run.artifacts=[{id:'nested',turnKey:'u',name:'nested.md',path:'/fixture/nested.md',size:100}];
+  run.artifacts=[{id:'nested',turnKey:'u',kind:'delivery',name:'nested.md',path:'/fixture/nested.md',size:100}];
   (window as any).desktop.accessArtifact=async()=>({name:'nested.md',text:'# 嵌套预览\n\n'+('文档正文。\n\n'.repeat(12))+'```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```\n\n'+('后续内容。\n\n'.repeat(20))});
   (window as any).__emit();
  });
@@ -468,8 +468,8 @@ test('nested Mermaid preview isolates document zoom and returns to the parent mo
 
 test('turn file changes open a readonly panel with text diff and Office status',async({page})=>{
  await prepare(page,'文件已更新');
- await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.fileChanges=[{turnKey:'u',files:[{id:'md',path:'README.md',status:'modified',additions:1,deletions:1,hunks:[{oldStart:1,oldLines:1,newStart:1,newLines:1,lines:['-old heading','+new heading']}]},{id:'xlsx',path:'report.xlsx',status:'added',reason:'此文件类型仅展示变更状态'},{id:'pptx',path:'slides.pptx',status:'modified',reason:'此文件类型仅展示变更状态'}]}];w.__emit();});
- await page.getByRole('button',{name:'查看本轮变更 (3)'}).click();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.fileChanges=[{turnKey:'u',files:[{id:'md',path:'README.md',status:'modified',additions:1,deletions:1,hunks:[{oldStart:1,oldLines:1,newStart:1,newLines:1,lines:['-old heading','+new heading']}]},{id:'xlsx',path:'report.xlsx',status:'added',reason:'此文件类型仅展示变更状态'},{id:'pptx',path:'slides.pptx',status:'modified',reason:'此文件类型仅展示变更状态'}]}];w.__demoRun.tools.push({id:'writes',turnKey:'u',type:'fileChange',status:'completed',detail:JSON.stringify(['README.md','report.xlsx','slides.pptx'].map(path=>({path,kind:'update'})))});w.__emit();});
+ await page.getByRole('button',{name:'查看本轮变更',exact:true}).click();
  const panel=page.getByRole('complementary',{name:'本轮文件变更'});
  await expect(panel).toBeVisible();
  await panel.locator('summary').filter({hasText:'README.md'}).click();
@@ -539,7 +539,7 @@ test('archive confirmation stays usable while another task waits for approval',a
 
 test('standalone Office delivery previews use a scoped artifact and keep controls outside zoom',async({page})=>{
  await prepare(page,'表格已生成');
- await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.artifacts=[{id:'sheet',turnKey:'u',path:'/fixture/book.xlsx',name:'book.xlsx',size:2048,modifiedAt:'2026-09-24'}];w.desktop.projectFiles={context:async(input:any)=>{w.__officeContext=input;return {root:'/fixture',baseUrl:'atelier-preview://fixture/'};},read:async()=>({path:'book.xlsx',name:'book.xlsx',kind:'spreadsheet',size:2048,version:'v1',truncated:false}),office:async()=>({version:'v1',asset:'fixture',kind:'spreadsheet',truncated:false,sheets:[{name:'Overview',columns:2,rows:[['Name','Value'],['Alpha','42']],truncated:false}]})};w.__emit();});
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.artifacts=[{id:'sheet',turnKey:'u',kind:'delivery',path:'/fixture/book.xlsx',name:'book.xlsx',size:2048,modifiedAt:'2026-09-24'}];w.desktop.projectFiles={context:async(input:any)=>{w.__officeContext=input;return {root:'/fixture',baseUrl:'atelier-preview://fixture/'};},read:async()=>({path:'book.xlsx',name:'book.xlsx',kind:'spreadsheet',size:2048,version:'v1',truncated:false}),office:async()=>({version:'v1',asset:'fixture',kind:'spreadsheet',truncated:false,sheets:[{name:'Overview',columns:2,rows:[['Name','Value'],['Alpha','42']],truncated:false}]})};w.__emit();});
  await page.getByRole('button',{name:'预览 book.xlsx',exact:true}).click();const dialog=page.getByRole('dialog',{name:'book.xlsx',exact:true});await expect(dialog.getByRole('table',{name:'Overview'})).toContainText('Alpha');
  expect(await page.evaluate(()=>(window as any).__officeContext)).toEqual({runId:'demo',artifactId:'sheet'});
  await dialog.getByRole('button',{name:'最大化',exact:true}).click();await expect(dialog.getByRole('button',{name:'放大',exact:true})).toHaveCount(0);await expect(dialog.getByRole('button',{name:'刷新文件',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(dialog).toHaveCount(0);

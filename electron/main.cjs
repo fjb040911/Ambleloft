@@ -77,6 +77,7 @@ app.whenReady().then(async () => {
   });
   store=services.workspace;runtime=services.tasks;
   const skills=services.skills;
+  try{await skills.initializeBuiltins();}catch{console.warn('Built-in skill guidance is unavailable; ordinary chat remains available.');}
   let extensionError='';
   try{await services.extensions.initialize();}catch(error){extensionError=error.message;}
   profileId=await database.call('readSetting',{key:'extensions.profile'});
@@ -120,7 +121,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('messages:execute',(event,input)=>services.messages.execute(input,authorize(event)));
   pageHost.router=operationRouter;runtime.extensionRouter=operationRouter;
   const forms=new (require('../core/forms/service.cjs').FormService)({database,skills:services.skills,extensions:services.extensions,runtime,router:operationRouter,publish:()=>windows.broadcast(profileId,'forms:event'),confirm:async(owner,title,text)=>(await hostDialog('showMessageBox',owner.window,{type:'question',message:'发送填写的表单？',detail:title+'\n\n'+text,buttons:['取消','发送到当前聊天'],defaultId:0,cancelId:0})).response===1});runtime.forms=forms;
-  const chatInputs=new (require('../core/forms/chat-inputs.cjs').ChatInputs)({database,runtime,validate:item=>forms.validateInput(item),publish:()=>windows.broadcast(profileId,'forms:event')});forms.chatInputs=chatInputs;runtime.chatInputs=chatInputs;
+  const chatInputs=new (require('../core/forms/chat-inputs.cjs').ChatInputs)({database,runtime,validate:item=>item.source==='inputRequest'?inputRequests.validateInput(item):forms.validateInput(item),publish:runId=>{windows.broadcast(profileId,'forms:event');windows.broadcast(profileId,'input:event',{runId});}});forms.chatInputs=chatInputs;runtime.chatInputs=chatInputs;
+  const inputRequests=new (require('../core/inputs/service.cjs').InputRequests)({database,runtime,chatInputs,publish:runId=>windows.broadcast(profileId,'input:event',{runId}),validateSource:async request=>{if(!request.sourceKey)return request.originKey==='model';const entry=(await forms.catalog()).entries.find(e=>e.key===request.sourceKey);return !!entry&&entry.revision===request.sourceRevision&&entry.digest===request.sourceDigest;}});runtime.inputRequests=inputRequests;runtime.inputToolsEnabled=true;
+  ipcMain.handle('input:list',async(event,input)=>{authorize(event);const snapshot=await chatInputs.snapshot(input?.runId);return {...snapshot,requests:await inputRequests.list(input.runId)};});
+  ipcMain.handle('input:append',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw new Error('正在更新或测试模型配置');return chatInputs.append(input,owner);});
+  ipcMain.handle('input:action',async(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw new Error('正在更新或测试模型配置');if(input?.action==='resume'){const {action,...value}=input;return chatInputs.resume(value);}try{if(input?.action==='reconcile')return await inputRequests.reconcile(input);return await inputRequests.action(input,owner);}catch(error){return {inputValidationError:{code:error.code||'STORAGE_UNAVAILABLE',message:error.message,...(error.fields?{fields:error.fields}:{})}};}});
   ipcMain.handle('forms:list',async(event,input)=>{authorize(event);return Promise.all((await forms.list(input.runId)).map(flow=>forms.project(flow)));});
   ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return forms.project((await forms.ui.list(input.runId)).find(f=>f.id===input.id));}try{return await forms.projectResponse(await forms.action(input,owner));}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
 
@@ -131,7 +136,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('task-app:close',(event,input)=>taskApps.close(authorize(event),input.sessionId));
   ipcMain.handle('task-app:rpc',(event,input)=>taskApps.rpc(authorize(event),input.sessionId,input.message));
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
-  services.extensions.options.pageChanged=(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);};
+  services.extensions.options.pageChanged=async(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
   ipcMain.handle('window:menu',event=>{const owner=authorize(event);if(process.platform==='win32')Menu.getApplicationMenu()?.popup({window:owner.window,x:12,y:38});});
   ipcMain.handle('window:chrome',(event,input)=>{const owner=authorize(event);if(process.platform!=='win32')return;if(!/^#[0-9a-f]{6}$/i.test(input?.color)||!/^#[0-9a-f]{6}$/i.test(input?.symbolColor))throw new Error('Invalid chrome colors');owner.window.setTitleBarOverlay({color:input.color,symbolColor:input.symbolColor,height:38});});
@@ -186,13 +191,13 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('extensions:command',(event,id)=>{const owner=authorize(event);return extensionService().execute(id,pageHost.contexts.get(owner.id)?.projectId);});
 
-  for (const action of ['list','detail','readFile','update','remove']) ipcMain.handle('skills:'+action,(event,input)=>{authorize(event);return skills[action](input);});
+  for (const action of ['list','detail','readFile','update','remove']) ipcMain.handle('skills:'+action,async(event,input)=>{authorize(event);const result=await skills[action](input);if(['update','remove'].includes(action))await inputRequests.invalidateOrigin('skill:'+(typeof input==='string'?input:input.id));return result;});
   runtime.installSkill=async(input,owner,signal)=>{
     const spec=require('./skill-repository.cjs').validate(input);
     if(!owner?.window||owner.window.isDestroyed())throw Error('请在当前窗口重新发起安装');
     const result=await hostDialog('showMessageBox',owner.window,{type:'question',message:'安装技能？',detail:spec.repository+'\n'+spec.directory+'\n版本：'+(spec.ref||'默认分支')+'\n'+(spec.replaceId?'将更新同名技能。':'安装后，AI 可以按需读取它的说明和资源。'),buttons:['取消','安装'],defaultId:0,cancelId:0});
     if(result.response!==1)throw Error('用户取消安装');
-    const installed=await skills.installRepository(spec,{signal});windows.broadcast(profileId,'skills:event');return installed;
+    const installed=await skills.installRepository(spec,{signal});if(spec.replaceId)await inputRequests.invalidateOrigin('skill:'+spec.replaceId);windows.broadcast(profileId,'skills:event');return installed;
   };
   const skillImports=new Map();
   ipcMain.handle('skills:import',async(event,options={})=>{
@@ -201,7 +206,7 @@ app.whenReady().then(async () => {
     else {const result=await hostDialog('showOpenDialog',window,{title:'导入 Skill 文件夹',properties:['openDirectory']});if(result.canceled)return null;source=result.filePaths[0];}
     const result=await skills.importFolder(source,options);
     if(result.duplicate){const token=require('node:crypto').randomUUID();if(skillImports.size>=20)skillImports.delete(skillImports.keys().next().value);skillImports.set(token,source);return {...result,token};}
-    if(options.token)skillImports.delete(options.token);return result;
+    if(options.replaceId)await inputRequests.invalidateOrigin('skill:'+options.replaceId);if(options.token)skillImports.delete(options.token);return result;
   });
   const provider=services.providers;
   const files=services.files;
@@ -209,7 +214,7 @@ app.whenReady().then(async () => {
   for (const action of ['context','list','search','read','office','apps']) ipcMain.handle('files:'+action,(event,input)=>{authorize(event);return files[action](input);});
   ipcMain.handle('files:open',(event,input)=>{const window=authorize(event).window;return files.open(input,{shell,dialog:{showOpenDialog:(owner,options)=>hostDialog('showOpenDialog',owner,options)},window});});
   let runtimeError = '';
-  try { await runtime.init(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
+  try { await runtime.init(); await inputRequests.refreshSources(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
   const checkRuntime = () => { if (runtimeError) throw new Error(runtimeError); };
   ipcMain.handle('clipboard:write-text', (event, value) => {
     authorize(event);
@@ -277,7 +282,7 @@ app.whenReady().then(async () => {
     return {items:snapshot.items.slice(offset,offset+20),total:snapshot.items.length,next:offset+20<snapshot.items.length?snapshot.token+':'+(offset+20):null};
   });
   ipcMain.handle('agent:list', event => { authorize(event); checkRuntime(); return runtime.runs.map(summary); });
-  ipcMain.handle('agent:start', (event, input) => { authorize(event); checkRuntime(); if (configBusy) throw new Error('正在更新或测试模型配置'); return runtime.start(input,{owner:authorize(event)}).then(async run=>{if(input?.draftId){const state=await store.read();windows.broadcast(profileId,'workspace:event',state);}return pageRun(run);}); });
+  ipcMain.handle('agent:start', (event, input) => { authorize(event); checkRuntime(); if (configBusy) throw new Error('正在更新或测试模型配置'); return runtime.start(input,{owner:authorize(event),userAuthored:true}).then(async run=>{if(input?.draftId){const state=await store.read();windows.broadcast(profileId,'workspace:event',state);}return pageRun(run);}); });
   ipcMain.handle('artifact:access', async(event,input)=>{
     authorize(event);checkRuntime();
     const file=await accessArtifact(runtime.runs.find(run=>run.id===input?.runId),input?.id,input?.preview===true);

@@ -10,7 +10,7 @@ export default function FileChangesPanel({changes,close}:{changes:TurnFileChange
  return <aside className={`changes-panel${full?' expanded':''}`} aria-label={t('本轮文件变更')}>
   <header><strong>{t('本轮文件变更')}</strong><button className="icon-button" aria-label={t(full?'还原面板':'展开面板')} onClick={()=>setFull(!full)}>{full?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button><button className="icon-button" aria-label={t('关闭变更面板')} onClick={close}><PanelRight size={20}/></button></header>
   <div className="changes-scroll"><p>{changes.files.length} {t('个文件')} <span className="diff-added">+{additions}</span> <span className="diff-deleted">−{deletions}</span></p>
-   <p className="fine-print">{t('对比本轮执行前后工作目录中的文件；包含期间的外部修改。忽略依赖、构建和缓存目录。')}</p>
+   <p className="fine-print">{t('仅展示本轮有写入记录的文件，差异基于执行前后的内容对比。同一文件的并发编辑可能包含在内。')}</p>
    {changes.notice&&<p role="status" className="error-banner">{t(changes.notice)}</p>}
    {changes.files.map(file=><details className="file-diff" key={file.id}>
     <summary><FileTypeIcon name={file.path}/><span className="diff-path" title={file.path}>{file.path}</span><small>{t({added:'已新增',modified:'已修改',deleted:'已删除'}[file.status])}</small>{file.additions!==undefined&&<span className="diff-added">+{file.additions}</span>}{file.deletions!==undefined&&<span className="diff-deleted">−{file.deletions}</span>}</summary>

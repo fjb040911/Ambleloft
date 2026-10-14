@@ -1,0 +1,28 @@
+import {test,expect} from '@playwright/test';
+test('dynamic fields preserve values and focus, localize host chrome, show errors and lock expired requests',async({page})=>{
+ await page.goto('/tests/fixtures/input-request-fields.html');
+ await page.getByLabel('目的地').selectOption('beijing');
+ await page.getByLabel('出发日期').fill('2026-11-01');
+ await page.getByLabel('出行天数').fill('5');
+ await page.getByLabel('总预算').fill('1250.50');
+ await page.getByLabel('称呼').fill('访客');
+ await page.getByLabel('行程偏好').pressSequentially('慢节奏');
+ await expect(page.getByLabel('行程偏好')).toBeFocused();
+ await page.getByRole('switch').check();await page.getByRole('checkbox').check();
+ await expect(page.getByLabel('预览数据')).toContainText('"destination":"beijing"');
+ await page.getByRole('button',{name:'English',exact:true}).click();
+ await expect(page.getByLabel('行程偏好')).toHaveValue('慢节奏');
+ await page.getByRole('button',{name:'显示错误'}).click();
+ await expect(page.getByLabel('目的地')).toHaveAttribute('aria-invalid','true');
+ await expect(page.getByRole('alert')).toHaveText('请选择目的地');
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/input-request-fields-light.png',fullPage:true});
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});
+ await expect(page.getByLabel('称呼')).toHaveCSS('color','rgb(232, 234, 240)');
+ await expect(page.getByLabel('目的地')).toHaveCSS('color','rgb(232, 234, 240)');
+ await page.screenshot({path:'test-results/input-request-fields-dark.png',fullPage:true,animations:'disabled'});
+ await page.getByRole('button',{name:'切换只读'}).click();
+ await expect(page.getByLabel('目的地')).toBeDisabled();await expect(page.getByLabel('称呼')).toBeDisabled();
+ await expect(page.getByRole('switch')).toBeDisabled();await expect(page.getByRole('checkbox')).toBeDisabled();
+});

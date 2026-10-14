@@ -1,6 +1,6 @@
 # 对话内交互组件：方向与设计入口
 
-状态：YAML 声明式表单与线性多步骤已进入 [具体设计](./declarative-forms-design.md)，尚未实现；更高级交互仍是探索方向。2026-10-01 已先实现 [MCP Apps 隔离任务卡片](./mcp-apps-design.md)，复用现有操作和授权路由；本页其余设想不因此自动成为已实现能力。
+状态：YAML 声明式表单基础、线性多步骤和异步 chat 投递已实现，实际能力以 [表单指南](declarative-forms-guide.md) 与 [异步表单](async-host-forms.md) 为准；更高级交互仍是探索方向。2026-10-01 已先实现 [MCP Apps 隔离任务卡片](./mcp-apps-design.md)，复用现有操作和授权路由；本页其余设想不因此自动成为已实现能力。
 
 ## 目标与示例
 
@@ -28,6 +28,8 @@
 
 ## 具体设计与后续评审
 
-[声明式表单设计](./declarative-forms-design.md) 已给出内联/文件 YAML 定义、单步与多步骤、状态关联、数据映射、幂等和恢复、数据可见性、个人 Skill 绑定边界及验收矩阵。用户已确认“上一步不自动撤销业务操作”。DSL 字段与默认保存策略等仍标记为待评审，正式 Schema/SDK/数据库实现尚未开展。附件、复杂分支和脚本暂缓；现有 MCP Apps 卡片以其专题契约为准。
+[声明式表单设计](./declarative-forms-design.md) 已给出内联/文件 YAML 定义、单步与多步骤、状态关联、数据映射、幂等和恢复、数据可见性、个人 Skill 绑定边界及验收矩阵。用户已确认“上一步不自动撤销业务操作”。已实现字段、正式 Schema 与持久化边界以开发指南和当前契约为准，设计目标不等于全部已交付。附件、复杂分支和脚本暂缓；现有 MCP Apps 卡片以其专题契约为准。
 
 相关文档：[首版范围](./scope.md)、[消息中心设计](./message-center-design.md)。
+
+2026-10-14：新增 [运行中补充信息需求](user-input-requirements.md)、[技术设计](user-input-design.md)、[任务列表](user-input-implementation-plan.md)。动态补充表单、内置 Skill 和步骤级局部等待分别分阶段评审。

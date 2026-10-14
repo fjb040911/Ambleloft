@@ -3,7 +3,7 @@ import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
-import QuestionQueue from './QuestionQueue';
+import SupplementalInputDock,{InputRequestHistory} from './SupplementalInputDock';
 import { t } from './i18n';
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { ChevronUp, Clock3 } from 'lucide-react';
@@ -15,11 +15,12 @@ import TurnActions from './TurnActions';
 import { conversationTurns } from './conversation-turns';
 import {TurnProgress} from './ProcessPanel';
 import RunActivity from './RunActivity';
-import DeliveredFiles from './DeliveredFiles';
+import TurnFiles from './TurnFiles';
 import TurnNavigation from './TurnNavigation';
 import TaskForms, {useTaskForms} from './TaskForms';
 import {mergeHistory,groupByTurn} from './conversation-data';
 import ChatComposer from './ChatComposer';
+import InputDeliveryPanel,{useInputDeliveries} from './InputDeliveryPanel';
 import TaskAppCard from './TaskAppCard';
 
 export const runStatus = { preparing: '正在准备', running: '执行中', waiting: '等待审批', stopping: '正在停止', completed: '本轮已结束', failed: '执行失败', interrupted: '已停止 / 中断' };
@@ -29,11 +30,12 @@ function Duration({ timing }: { timing: TurnTiming }) {
   const seconds = typeof timing.durationMs === 'number' && Number.isFinite(timing.durationMs) ? Math.max(0, Math.floor(timing.durationMs / 1000)) : null;
   return <span className="turn-duration"><Clock3 size={13} /><span>{seconds === null ? t("用时未完整记录") : <>{t("用时")} <strong>{Math.floor(seconds / 60)}</strong> {t("分")} <strong>{seconds % 60}</strong> {t("秒")}</>}{timing.outcome === 'failed' ? t(" · 执行失败") : timing.outcome === 'interrupted' ? t(" · 已中断") : ''}</span></span>;
 }
-function ConversationBody({ onFollowingChange, visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openChanges }: {
+function ConversationBody({ onFollowingChange, visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openReference, openChanges }: {
   onFollowingChange(following:boolean):void;
   openChanges(changes:import('./types').TurnFileChanges):void;
   visible?:boolean;
   floatingHost?:HTMLElement|null;
+  openReference?(path:string):void;
   openFile?(file: import('./types').DeliveredFile): void;
   run: AgentRun; send(prompt: string,options:ComposerOptions): Promise<void>; catalog:ProviderCatalog;openSettings(section:string):void; stop(): void;
   approve(id: string, decision: 'accept' | 'decline'): Promise<void>; submitting: boolean;
@@ -43,6 +45,13 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
   const approvalLock=useRef(false);const [approvalError,setApprovalError]=useState<{id:string;message:string}|null>(null);
   const [recentOpen,setRecentOpen]=useState(false);
   const [sendError,setSendError]=useState('');
+  const [referenceError,setReferenceError]=useState('');
+  const openReferenceFile=(href:string)=>{
+    setReferenceError('');
+    if(openReference){openReference(href);return;}
+    let path=href.split('#')[0];try{path=decodeURIComponent(path);}catch{}
+    if(window.desktop?.projectFiles)void window.desktop.projectFiles.open({runId:run.id,path}).catch(error=>setReferenceError((error as Error).message));
+  };
   const scroll = useRef<HTMLDivElement>(null);
   const {scrollToEnd,scrollToMessage}=useMessageScroller();
   const following=useRef(true);
@@ -64,7 +73,6 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
   const forms=useTaskForms(run.id);
   const formsByTurn=useMemo(()=>groupByTurn(forms),[forms]);
   const appsByTurn=useMemo(()=>groupByTurn(merged.taskApps),[merged.taskApps]);
-  const changesByTurn=useMemo(()=>groupByTurn(merged.fileChanges),[merged.fileChanges]);
   const before=older?older.historyBefore:run.historyBefore;
   const loadOlder=async()=>{
    if(!before||!window.desktop?.getRunPage||loadingHistory)return;
@@ -85,8 +93,38 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
     if(following.current)scrollToEnd({behavior:'instant'});
     else if(scroll.current)scroll.current.scrollTop=savedTop.current;
   },[visible,floatingHost,recentOpen,scrollToEnd]);
+  const deliveries=useInputDeliveries(run.id);
+  const [inputSelection,setInputSelection]=useState<{id:string;key:number}>();
+  const [selectedInputs,setSelectedInputs]=useState<string[]>([]),[inputSending,setInputSending]=useState(false);
+  const draftVersion=useRef(0),mutation=useRef<{text:string;id:string}|null>(null);
+  const changePrompt=(value:string)=>{draftVersion.current++;setPrompt(value);};
+  const inputAPI=window.desktop?.inputs;
+  const resumeInputs=async()=>{
+    if(!inputAPI||!deliveries.snapshot)throw Error(t('暂时无法读取补充消息，请重试'));
+    await inputAPI.action({action:'resume',runId:run.id,clientMutationId:crypto.randomUUID(),expectedPolicyGeneration:deliveries.snapshot.policy.generation,deliveryIds:selectedInputs});
+    setSelectedInputs([]);await deliveries.refresh();
+  };
   const sending=useRef(false);
-  const submit = async () => { if ((!prompt.trim()&&!options.selectedSkillIds?.length) || active || submitting || sending.current) return; sending.current=true;try { setSendError('');await send(prompt,options); setPrompt(''); setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false})); jump(); } catch(error) { setSendError((error as Error).message); } finally {sending.current=false;} };
+  const continueSelected=async()=>{if(sending.current||submitting||!selectedInputs.length)return;sending.current=true;setInputSending(true);setSendError('');try{await resumeInputs();}catch(error){setSendError((error as Error).message);await deliveries.refresh();}finally{sending.current=false;setInputSending(false);}};
+  const submit = async () => {
+    if((!prompt.trim()&&!options.selectedSkillIds?.length)||submitting||sending.current||run.status==='stopping'||run.archivedAt)return;
+    if(active&&!inputAPI)return;
+    const supplemental=!!inputAPI&&(active||!!deliveries.snapshot?.policy.paused||mutation.current?.text===prompt);
+    if(supplemental&&(options.attachments?.length||options.selectedSkillIds?.length)){setSendError(t('补充消息暂只支持文字，请移除附件和技能后发送'));return;}
+    if(inputAPI&&(!deliveries.snapshot||deliveries.error)){setSendError(t('暂时无法读取补充消息，请重试'));return;}
+    sending.current=true;setInputSending(true);const text=prompt,version=draftVersion.current;
+    try{
+      setSendError('');
+      if(supplemental){
+        if(deliveries.snapshot?.policy.paused)await resumeInputs();
+        if(!mutation.current||mutation.current.text!==text)mutation.current={text,id:crypto.randomUUID()};
+        await inputAPI!.append({runId:run.id,clientMutationId:mutation.current.id,text});mutation.current=null;
+      }else await send(text,options);
+      if(draftVersion.current===version)setPrompt('');
+      if(!supplemental)setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false}));
+      jump();
+    }catch(error){setSendError((error as Error).message);}finally{sending.current=false;setInputSending(false);void deliveries.refresh();}
+  };
   const decide = async (id:string,decision:'accept'|'decline')=>{if(approvalLock.current)return;approvalLock.current=true;setPending({id,decision});setApprovalError(null);try{await approve(id,decision);}catch(e){setApprovalError({id,message:(e as Error).message});}finally{approvalLock.current=false;setPending(null);}};
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<button className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp size={16} aria-hidden="true"/></button>}
@@ -102,27 +140,30 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
           {(floatingHost?turns.slice(-3):turns).map(turn => <MessageScrollerItem scrollAnchor messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             <VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user bg-message text-message-foreground" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{turn.user.text}</div></article>
             <TurnProgress paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
-            {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'}/></article>}
+            {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></article>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
-            <DeliveredFiles openFile={openFile} runId={run.id} files={turn.artifacts}/>{(changesByTurn.get(turn.user.id)||[]).filter(change=>change.files.length||change.notice).map(change=><Button key={change.turnKey} variant="outline" className="turn-changes-button" onClick={()=>openChanges(change)}>{t('查看本轮变更')} ({change.files.length}){change.notice?' · '+t('记录不完整'):''}</Button>)}{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
+            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
 
           </MessageScrollerItem>)}
+          {referenceError&&<MessageScrollerItem messageId="reference-error" role="alert" className="error-banner">{referenceError}</MessageScrollerItem>}
           {run.error && <MessageScrollerItem messageId="error" className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button><Button type="button" variant="outline" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</Button></div>}</MessageScrollerItem>}
+        <InputRequestHistory requests={deliveries.snapshot?.requests||[]} onOpen={id=>setInputSelection({id,key:Date.now()})}/>
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
     </div>
     <div className="conversation-dock">
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
-      <QuestionQueue run={run}/>
+      <SupplementalInputDock run={run} requests={deliveries.snapshot?.requests||[]} policy={deliveries.snapshot?.policy} refresh={deliveries.refresh} selection={inputSelection}/>
       {run.approvals.length > 0 && <div className={`approval-queue${run.approvals.length>1?' is-multiple':''}`} aria-label={t("待处理授权")}><div className="sr-only" role="status">{t("待处理授权 ·")}{run.approvals.length}</div>{run.approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} disabled={!!pending} pending={pending?.id===approval.id?pending.decision:undefined} error={approvalError?.id===approval.id?approvalError.message:undefined} decide={decision => void decide(approval.id,decision)} />)}{run.tools.filter(tool=>tool.type==='fileChange').length > 0 && <details className="approval-diffs"><summary>{t("文件变更记录")}</summary>{run.tools.filter(tool=>tool.type==='fileChange').map(tool=><pre key={tool.id}>{tool.detail}</pre>)}</details>}</div>}
-      <ChatComposer followup value={prompt} onChange={setPrompt} onSubmit={()=>void submit()} disabled={submitting}
+      <InputDeliveryPanel snapshot={deliveries.snapshot} error={deliveries.error} selected={selectedInputs} onSelected={setSelectedInputs} onContinue={()=>void continueSelected()} busy={inputSending||submitting||run.status==='stopping'} onRefresh={()=>void deliveries.refresh()}/>
+      <ChatComposer followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending}
         label={t('继续对话')} placeholder={run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
-        canSend={!!prompt.trim()||!!options.selectedSkillIds?.length} sendLabel={t('发送后续消息')}
-        skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
-        controls={<ComposerControls catalog={catalog} value={options} onChange={setOptions} disabled={active||submitting} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
+        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
+        skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
+        controls={<ComposerControls catalog={catalog} value={options} onChange={setOptions} disabled={active||submitting||inputSending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 
     </div>
   </div>;

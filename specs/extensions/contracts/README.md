@@ -104,3 +104,7 @@ Schema 新增 `contributes.mcpApps`（uri/title/entry/mimeType）及 `operations
 - `messages-preview.d.ts`：七个方法，包含 listActionInvocations/reportActionResult；包装器保留基础五方法探测和新增方法逐调用拒绝。
 - `host-capabilities.json`：源码清单，不能代替运行时版本协商、授权或桌面联调。
 - 历史 A0–A7 结果和旧需求保留，不作为现行能力否定依据。后续独立 SDK/CLI 工作见 [v0.5.0 交接](../../../tooling-report/requirement/v0.5.0/README.md)。
+
+## User Input v1 施工契约
+
+[补充信息协议与工具 Schema](user-input/README.md) 已完成 U0 冻结，尚未接入运行时，不属于已发布 SDK 能力。不能仅凭契约文件存在就启用新工具。

@@ -43,14 +43,14 @@ async function copyBundle(source,target) {
   await visit(source,target);return files.sort();
 }
 function createSkills(directory,database) {
-  const root=path.join(directory,'skills');let queue=Promise.resolve();
+  const root=path.join(directory,'skills');let queue=Promise.resolve(),builtinsReady=false;
   const readAll=()=>database.call('listSkills');
   const serial=fn=>{const result=queue.then(fn);queue=result.catch(()=>{});return result;};
   const display=({displayMessages,...record})=>({...record,...(record.displayName?{displayName:L.text(displayMessages||{},record.displayName,api.locale)}:{}),...(record.displayDescription?{displayDescription:L.text(displayMessages||{},record.displayDescription,api.locale)}:{})});
   const summary=({body,frontmatter,...record})=>display(record);
   const get=async id=>{const record=(await readAll()).find(s=>s.id===id);if(!record)throw new Error('技能不存在或已删除');return record;};
-  const publish=async (old, fields, source, sourcePath, enabled=true,provenance)=>{
-    const id=old?.id||randomUUID(),revision=randomUUID(),destination=path.join(root,id,revision);
+  const publish=async (old, fields, source, sourcePath, enabled=true,provenance,builtIn)=>{
+    const id=old?.id||(builtIn?'builtin-'+builtIn.key:randomUUID()),revision=randomUUID(),destination=path.join(root,id,revision);
     try {
       const files=await copyBundle(source,destination);
       const frontmatter=fields.frontmatter || `name: ${JSON.stringify(fields.name)}\ndescription: ${JSON.stringify(fields.description)}`;
@@ -58,11 +58,26 @@ function createSkills(directory,database) {
       await fs.writeFile(path.join(destination,'SKILL.md'),content);
       const localized=await require('../core/localization/skill.cjs').validateSkillLocalization(destination);
       const now=new Date().toISOString();
-      const record={id,...fields,...localized,enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,...((provenance||old?.provenance)?{provenance:provenance||old.provenance}:{}),createdAt:old?.createdAt||now,updatedAt:now};
+      const record={id,...fields,...localized,...(builtIn?{builtIn}:{}),enabled,version:(old?.version||0)+1,revision,hash:createHash('sha256').update(content).digest('hex'),path:path.join(destination,'SKILL.md'),files,sourcePath,...((provenance||old?.provenance)?{provenance:provenance||old.provenance}:{}),createdAt:old?.createdAt||now,updatedAt:now};
       await database.call('putSkill',record);return summary(record);
     } catch(error) {await fs.rm(destination,{recursive:true,force:true});throw error;}
   };
   const api={locale:'en',
+    initializeBuiltins(options={}){return serial(async()=>{
+      builtinsReady=false;
+      const {builtins,builtinRoot}=require('./builtin-skills.cjs');
+      for(const entry of builtins){
+        const source=path.join(options.root||builtinRoot(),entry.key),files=[];
+        const collect=async(dir,relative='')=>{for(const name of (await fs.readdir(dir)).sort()){const file=path.join(dir,name),rel=path.posix.join(relative,name),stat=await fs.lstat(file);if(stat.isSymbolicLink())throw Error('内置技能不能包含符号链接');if(stat.isDirectory())await collect(file,rel);else if(stat.isFile())files.push([rel,createHash('sha256').update(await fs.readFile(file)).digest('hex')]);}};
+        await collect(source);const digest=createHash('sha256').update(JSON.stringify(files)).digest('hex');
+        const old=(await readAll()).find(s=>s.id==='builtin-'+entry.key);
+        if(old&&!old.builtIn)throw Error('内置技能标识被占用');
+        if(old?.builtIn?.digest===digest&&old.builtIn.version===entry.version){let intact=true;for(const [file,hash]of files){try{const target=path.join(path.dirname(old.path),file);if((await fs.lstat(target)).isSymbolicLink()||createHash('sha256').update(await fs.readFile(target)).digest('hex')!==hash)intact=false;}catch{intact=false;}}if(intact)continue;}
+        const fields=parseSkill(await fs.readFile(path.join(source,'SKILL.md'),'utf8'));
+        await publish(old,fields,source,'Ambleloft',old?.enabled??true,undefined,{...entry,digest});
+      }
+      builtinsReady=true;
+    });},
     async list(){await queue;return (await readAll()).map(summary);},
     async detail(id){await queue;return display(await get(id));},
     async readFile({id,file}){
@@ -94,7 +109,7 @@ function createSkills(directory,database) {
       const fields=parseSkill(await fs.readFile(file,'utf8'));
       const existing=(await readAll()).find(s=>s.name===fields.name);
       if(existing&&!options.replaceId&&!options.asNew)return {duplicate:summary(existing)};
-      const old=options.replaceId?await get(options.replaceId):null;
+      const old=options.replaceId?await get(options.replaceId):null;if(old?.builtIn)throw Error('内置技能随应用更新，不能覆盖');
       return {skill:await publish(old,fields,resolved,resolved,old?.enabled??true)};
     });},
     async installRepository(input,options={}){
@@ -104,7 +119,7 @@ function createSkills(directory,database) {
         if(options.signal?.aborted)throw Error('安装已取消');const file=path.join(bundle.source,'SKILL.md');if((await fs.lstat(file)).isSymbolicLink()||(await fs.stat(file)).size>MAX_BODY+10000)throw Error('SKILL.md 无效或过大');const fields=parseSkill(await fs.readFile(file,'utf8'));
         const existing=(await readAll()).find(s=>s.name===fields.name);
         if(existing&&!spec.replaceId&&!spec.asNew)return {duplicate:summary(existing),provenance:bundle.provenance};
-        const old=spec.replaceId?await get(spec.replaceId):null;
+        const old=spec.replaceId?await get(spec.replaceId):null;if(old?.builtIn)throw Error('内置技能随应用更新，不能覆盖');
         if(old&&old.name!==fields.name)throw Error('只能更新同名技能');
         const result={skill:await publish(old,fields,bundle.source,bundle.provenance.repository,old?.enabled??true,bundle.provenance)};
         return {...result,visibility:'下一次模型请求可见；当前请求可读取返回的技能路径。'};
@@ -113,6 +128,7 @@ function createSkills(directory,database) {
     update(input){return serial(async()=>{
       const old=await get(input?.id);
       if(input.enabled!==undefined){if(typeof input.enabled!=='boolean')throw new Error('技能状态无效');const next={...old,enabled:input.enabled,updatedAt:new Date().toISOString()};await database.call('putSkill',next);return summary(next);}
+      if(old.builtIn)throw Error('内置技能为只读，可停用其自动引导');
       if(input.version!==old.version)throw new Error('技能已更新，请重新打开后编辑');
       const fields=validateFields(input);
       // Rewrite only managed scalar fields; retain optional frontmatter metadata.
@@ -121,11 +137,11 @@ function createSkills(directory,database) {
       fields.frontmatter=`name: ${JSON.stringify(fields.name)}\ndescription: ${JSON.stringify(fields.description)}\n${extra.join('\n')}`.trim();
       return publish(old,fields,path.dirname(old.path),old.sourcePath,old.enabled);
     });},
-    remove(id){return serial(async()=>{await get(id);await database.call('deleteSkill',{id});/* Immutable bundles remain for historical turns. */});},
-    async prepare(ids=[]){
+    remove(id){return serial(async()=>{const old=await get(id);if(old.builtIn)throw Error('内置技能不能删除，可停用其自动引导');await database.call('deleteSkill',{id});/* Immutable bundles remain for historical turns. */});},
+    async prepare(ids=[],{inputToolsEnabled=true}={}){
       await queue;
       if(!Array.isArray(ids)||ids.length>20||ids.some(id=>typeof id!=='string'))throw new Error('最多选择 20 个技能');
-      const available=(await readAll()).filter(s=>s.enabled);
+      const available=(await readAll()).filter(s=>s.enabled&&(!s.builtIn||builtinsReady&&inputToolsEnabled));
       const selected=[...new Set(ids)].map(id=>{const skill=available.find(s=>s.id===id);if(!skill)throw new Error('选中的技能已停用或删除，请移除后重新选择');return skill;});
       for(const skill of selected)await fs.access(skill.path);
       const catalog=available.map(({id,name,description,path})=>({id,name,description,path}));

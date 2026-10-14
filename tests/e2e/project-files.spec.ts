@@ -80,7 +80,7 @@ for(const projectless of [false,true])test(`delivered filenames use the appropri
  await page.addInitScript(({projectless})=>{
   const desktop=(window as any).desktop;const list=desktop.listRuns;
   desktop.accessArtifact=async(input:any)=>{(window as any).__artifactAccess=input;return input.preview?{name:'README.md',text:'# 弹窗中的文档'}:null;};
-  desktop.listRuns=async()=>{const runs=await list();runs[0].artifacts=[{id:'doc',turnKey:'u',path:'/actual-task-root/README.md',name:'README.md',size:32,modifiedAt:''},{id:'office',turnKey:'u',path:'/actual-task-root/report.docx',name:'report.docx',size:64,modifiedAt:''}];if(projectless)runs[0].projectId=null;return runs;};
+  desktop.listRuns=async()=>{const runs=await list();runs[0].artifacts=[{id:'doc',turnKey:'u',kind:'delivery',path:'/actual-task-root/README.md',name:'README.md',size:32,modifiedAt:''},{id:'office',turnKey:'u',kind:'delivery',path:'/actual-task-root/report.docx',name:'report.docx',size:64,modifiedAt:''}];if(projectless)runs[0].projectId=null;return runs;};
   if(projectless)desktop.readWorkspace=async()=>({tasks:[],projects:[],theme:'light',layoutMode:'classic'});
  },{projectless});
  await page.reload();await page.locator('.tree-task > button:first-child').click();

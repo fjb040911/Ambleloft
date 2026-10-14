@@ -10,7 +10,9 @@ module.exports = {
   asar: true,
   files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', '!specs{,/**/*}', '!**/tooling-report{,/**/*}', '!**/outputs{,/**/*}', '!**/output{,/**/*}', '!**/test-results{,/**/*}', '!**/playwright-report{,/**/*}', '!**/coverage{,/**/*}', '!**/.cache{,/**/*}', '!docs{,/**/*}', '!tests{,/**/*}', '!scripts{,/**/*}', '!electron/office-worker.cjs', ...['openid-client','oauth4webapi','jose'].map(name=>({from:'node_modules/'+name,to:'node_modules/'+name,filter:['**/*']})), { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
   extraResources: [
+    { from: 'resources/skills', to: 'skills' },
     { from: 'build/form-template.cjs', to: 'tools/form-template.cjs' },
+    { from: 'build/input-definition.cjs', to: 'tools/input-definition.cjs' },
     { from: 'build/ui-template.cjs', to: 'tools/ui-template.cjs' },
     { from: 'build/extension-manifest.cjs', to: 'tools/extension-manifest.cjs' },
     { from: 'build/office-worker.cjs', to: 'tools/office-worker.cjs' },
