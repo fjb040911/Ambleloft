@@ -5,6 +5,7 @@ const {createWorkspaceResources}=require('../core/workspace-state.cjs');
 const {schema:extensionSchema,extensionPersistence}=require('../core/extensions/persistence.cjs');
 const {schema:messageSchema,createMessageStore}=require('../core/extensions/messages.cjs');
 const {schema:chatInputSchema,handlers:chatInputHandlers}=require('../core/forms/chat-inputs.cjs');
+const {schema:inputRequestSchema,handlers:inputRequestHandlers}=require('../core/inputs/store.cjs');
 const {schema:automationSchema,automationPersistence}=require('../core/automation/persistence.cjs');
 const {schema:actionSchema,createActionJournal}=require('../core/extensions/action-journal.cjs');
 const {schema:localizationSchema,createLocalizationStore}=require('../core/localization/store.cjs');
@@ -14,7 +15,7 @@ try{
  db=new DatabaseSync(workerData.file,{timeout:5000});
  db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
  const version=db.prepare('PRAGMA user_version').get().user_version;
- if(version>8)throw new Error('数据库版本高于当前应用，请升级应用');
+ if(version>10)throw new Error('数据库版本高于当前应用，请升级应用');
  db.exec(`BEGIN;
  CREATE TABLE IF NOT EXISTS skills(id TEXT PRIMARY KEY, data TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -35,7 +36,8 @@ try{
  ${actionSchema}
  ${automationSchema}
  ${chatInputSchema}
- PRAGMA user_version=8;
+ ${inputRequestSchema}
+ PRAGMA user_version=10;
  COMMIT;`);
  resources=createWorkspaceResources(db);
  db.exec('BEGIN IMMEDIATE');
@@ -69,10 +71,11 @@ function saveRunRows(runs){
   if(run.terminalTurnId&&run.terminalTurnId!==previous?.terminalTurnId)automation.capture({...run,conversationId},run.terminalTurnId);
   const del=db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?');for(const item of old.values())del.run(run.id,item.collection,item.item_key);
  }
- const del=db.prepare('DELETE FROM runs WHERE id=?');for(const id of existing.keys()){del.run(id);db.prepare("DELETE FROM form_instances WHERE run_id=?").run(id);db.prepare("DELETE FROM chat_inputs WHERE run_id=?").run(id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(id);}
+ const del=db.prepare('DELETE FROM runs WHERE id=?');for(const id of existing.keys()){del.run(id);db.prepare("DELETE FROM form_instances WHERE run_id=?").run(id);db.prepare("DELETE FROM chat_inputs WHERE run_id=?").run(id);db.prepare('DELETE FROM chat_input_policies WHERE run_id=?').run(id);db.prepare('DELETE FROM input_requests WHERE run_id=?').run(id);db.prepare('DELETE FROM input_mutations WHERE run_id=?').run(id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(id);}
 }
 function saveRuns(runs){return transaction(()=>saveRunRows(runs));}
 const messages=db?createMessageStore(db,transaction):null;
+const chatInputs=chatInputHandlers(db,transaction);
 const actions=db?createActionJournal(db,transaction):null;
 if(actions)actions.recover();
 const extensionHandlers=extensionPersistence(db,transaction);
@@ -80,9 +83,10 @@ const automation=automationPersistence(db,transaction,extensionHandlers.extensio
 const handlers={
  localizationSnapshot:createLocalizationStore(db),
  ...automation.handlers,
- ...chatInputHandlers(db,transaction),
+ ...chatInputs,
+ ...inputRequestHandlers(db,transaction,chatInputs.chatInput),
  commitTurn({runs,runId,turnId}){return transaction(()=>{saveRunRows(runs);const run=runs.find(r=>r.id===runId);if(run)automation.capture({...run,conversationId:resources.identify('run',run.id,run.projectId)},turnId);});},
- uiSubmit({flow,revision,item}){return transaction(()=>{const old=db.prepare('SELECT revision FROM form_instances WHERE id=?').get(flow.id);if(!old||old.revision!==revision)throw Error('CONFLICT');if(item.flowId!==flow.id||item.runId!==flow.runId||!flow.submissions.some(s=>s.id===item.id))throw Error('CONFLICT');const saved={...flow,revision:revision+1};db.prepare('UPDATE form_instances SET revision=?,data=? WHERE id=?').run(saved.revision,JSON.stringify(saved),saved.id);db.prepare('INSERT INTO chat_inputs VALUES (?,?,?,?)').run(item.id,item.runId,'queued',JSON.stringify({...item,state:'queued'}));return saved;});},
+ uiSubmit({flow,revision,item}){return transaction(()=>{const old=db.prepare('SELECT revision FROM form_instances WHERE id=?').get(flow.id);if(!old||old.revision!==revision)throw Error('CONFLICT');if(item.flowId!==flow.id||item.runId!==flow.runId||!flow.submissions.some(s=>s.id===item.id))throw Error('CONFLICT');const saved={...flow,revision:revision+1};db.prepare('UPDATE form_instances SET revision=?,data=? WHERE id=?').run(saved.revision,JSON.stringify(saved),saved.id);if(handlers.chatInput({action:'get',id:item.id}))throw Error('CONFLICT: input already exists');handlers.chatInput({action:'enqueue',item});return saved;});},
  formData({action,runId,flow,revision}){if(action==='list')return db.prepare('SELECT data FROM form_instances WHERE run_id=? ORDER BY rowid').all(runId).map(r=>JSON.parse(r.data));if(action!=='put')throw Error('Invalid form action');return transaction(()=>{const old=db.prepare('SELECT revision FROM form_instances WHERE id=?').get(flow.id);if(old?old.revision!==revision:revision!==null)throw Error('CONFLICT');const saved={...flow,revision:(revision??-1)+1};db.prepare('INSERT INTO form_instances(id,run_id,revision,data) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,data=excluded.data').run(saved.id,saved.runId,saved.revision,JSON.stringify(saved));return saved;});},
  ...require('../core/auth/connections.cjs').connectionHandlers(db,transaction),
  ...require('../core/extensions/message-handlers.cjs').createMessageHandlers(db,messages,actions,transaction),

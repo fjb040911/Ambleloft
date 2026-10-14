@@ -22,6 +22,8 @@ Present a form or custom interface when a user asks to do something. They can en
 
 [Explore in-chat forms](specs/extensions/declarative-forms-guide.md). Source-preview templates can opt into single-click chat submission, dependent and conditional fields, mixed group toggles, and frozen answer reads; probe `forms_capabilities` before using these increments.
 
+Source preview: the Agent can request [persistent supplemental forms](specs/extensions/user-input-u9-results.md) above the chat composer. Users can also add text while a task runs. The built-in guidance Skill is optional; probe `input_capabilities` before calling the internal model tools. This does not expose a new Node SDK API or independent execution-unit scheduling.
+
 ### Let the Agent call your app
 
 Wrap your existing APIs and business logic as extension operations. The same operation can serve your interface and the Agent. Ambleloft provides the runtime, permission checks, and confirmation interactions; your extension defines what the operation does.

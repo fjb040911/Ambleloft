@@ -38,6 +38,7 @@
   --hover: #f0f2f5;
   --accent: #416cc2;
   --selection: #e4ecfa;
+  --navigation-selected: color-mix(in srgb, var(--text) 8%, var(--sidebar));
   --focus: #7196da;
   --focus-soft: #7196da18;
   --blue-bg: #edf3ff;

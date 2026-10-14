@@ -32,7 +32,7 @@ export default memo(function Markdown({ text, resourceUrl, onFileLink }: { text:
   useLanguage();
   return <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { strict: false, trust: false }], [rehypeHighlight, { detect: false }]]} components={{
     pre: CodeBlock,
-    a: ({ children, href }) => /^https?:\/\//i.test(href || '') ? <a href={href} title={href} target="_blank" rel="noopener noreferrer" onClick={event => { if (window.desktop) { event.preventDefault(); void window.desktop.openLink(href!).catch(() => {}); } }}>{children}</a> : onFileLink && href ? <a href={href} onClick={event=>{event.preventDefault();onFileLink(href);}}>{children}</a> : <span title={href}>{children}</span>,
+    a: ({ children, href }) => /^https?:\/\//i.test(href || '') ? <a href={href} title={href} target="_blank" rel="noopener noreferrer" onClick={event => { if (window.desktop) { event.preventDefault(); void window.desktop.openLink(href!).catch(() => {}); } }}>{children}</a> : onFileLink && href ? <a href={href} title={href} onClick={event=>{event.preventDefault();onFileLink(href);}}>{children}</a> : <span title={href}>{children}</span>,
     img: ({ alt, src }) => resourceUrl && src && !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(src) ? <img src={resourceUrl(src)} alt={alt||''} loading="lazy"/> : <span className="image-placeholder">{t('图片：')}{alt || t('未命名')}{t('（外部图片暂不自动加载）')}</span>,
     table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,
   }}>{text}</ReactMarkdown></div>;

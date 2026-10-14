@@ -225,3 +225,5 @@ node scripts/capture-readme.mjs   # 使用已安装的 Chrome 和演示数据重
 Ambleloft 使用 [Apache-2.0](LICENSE) 许可证。第三方组件保留各自许可证，参见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 Ambleloft 是独立项目，并非 OpenAI 官方产品。项目使用 Codex 引擎、Electron、React、Vite、Lucide 等开源组件。
+
+源码预览：Agent 可以在聊天框上方请求[持久化补充表单](specs/extensions/user-input-u9-results.md)，用户也可在任务运行时追加文字。内置引导 Skill 可停用；模型调用前探测 `input_capabilities`。这不是新增 Node SDK API，也不代表已支持独立执行单元调度。

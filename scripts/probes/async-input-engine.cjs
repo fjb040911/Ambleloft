@@ -22,7 +22,7 @@ async function until(fn){for(let i=0;i<400;i++){if(fn())return;await sleep(25);}
  }catch(e){res.destroy(e);}});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const executable=await findCodex();console.log(JSON.stringify({engine:await probeVersion(executable),platform:process.platform,arch:process.arch}));
- try{for(mode of ['question','question-async','steer','form-responses','form-chat']){
+ try{for(mode of ['question','question-interrupt','question-async','steer','form-responses','form-chat']){
  requests=[];pending=[];events=[];held=null;formShown=false;independentDone=false;const home=path.join(root,mode);await fs.mkdir(home);
  bridge=await startChatBridge({baseUrl:`http://127.0.0.1:${server.address().port}/v1`,model:'fixture',protocol:mode==='form-chat'?'chat':'responses',apiKey:''},'async-probe',mode!=='form-chat');
  channel=mode.startsWith('form-')?await createAgentChannel({list:async()=>{assert.equal(formShown,true);independentDone=true;return 'INDEPENDENT_WORK_DONE';},invoke:async()=>{},forms:{list:async()=>[],present:async()=>{formShown=true;return {id:'form-request-1',status:'editing'};}}}):null;
@@ -30,8 +30,12 @@ async function until(fn){for(let i=0;i<400;i++){if(fn())return;await sleep(25);}
  await rpc.call('initialize',{clientInfo:{name:'amble_async_probe',version:'1'}});rpc.send({method:'initialized',params:{}});
  const {thread}=await rpc.call('thread/start',{model:'fixture',modelProvider:'atelier',cwd:root,sandbox:'read-only',approvalPolicy:'never'});
  const started=await rpc.call('turn/start',{threadId:thread.id,input:[{type:'text',text:'Probe asynchronous input.'}]});
- if(mode==='question'){
- await until(()=>pending.length);console.log(JSON.stringify({mode,request:pending[0]}));await sleep(2000);assert.equal(requests.length,1,'blocking question advanced without answer');rpc.send({id:pending[0].id,result:{answers:{choice:{answers:['ANSWER_SENTINEL']}}}});await until(()=>events.some(e=>e.method==='turn/completed'));assert.ok(JSON.stringify(requests.at(-1)).includes('ANSWER_SENTINEL'));console.log(JSON.stringify({mode,passed:true,requests:requests.length}));
+ if(mode==='question'||mode==='question-interrupt'){
+ await until(()=>pending.length);console.log(JSON.stringify({mode,request:pending[0]}));await sleep(200);assert.equal(requests.length,1,'native question advanced before answer in this probe');
+ if(mode==='question-interrupt'){await rpc.call('turn/interrupt',{threadId:thread.id,turnId:started.turn.id});await until(()=>events.some(e=>e.method==='turn/completed'));assert.equal(events.find(e=>e.method==='turn/completed').params.turn.status,'interrupted');assert.equal(requests.length,1);}
+ else{rpc.send({id:pending[0].id,result:{answers:{choice:{answers:['ANSWER_SENTINEL']}}}});await until(()=>events.some(e=>e.method==='turn/completed'));assert.ok(JSON.stringify(requests.at(-1)).includes('ANSWER_SENTINEL'));}
+ const resolved=events.filter(e=>e.method==='serverRequest/resolved');assert.equal(resolved.length,1,'native request must be resolved exactly once');for(const e of resolved){assert.equal(e.params.threadId,thread.id);assert.equal(String(e.params.requestId),String(pending[0].id));}
+ console.log(JSON.stringify({mode,passed:true,requests:requests.length,resolvedEvents:resolved.map(e=>e.params),completion:events.find(e=>e.method==='turn/completed').params.turn.status}));
  }else if(mode==='question-async'){
  await until(()=>pending.length||events.some(e=>e.method==='turn/completed'));
  if(pending.length){console.log(JSON.stringify({mode,request:pending[0]}));await until(()=>held);assert.equal(requests.length,2);rpc.send({id:pending[0].id,result:{answers:{choice:{answers:['ASYNC_ANSWER_SENTINEL']}}}});held();await until(()=>events.some(e=>e.method==='turn/completed'));console.log(JSON.stringify({mode,requests:requests.length,answerSeen:JSON.stringify(requests.at(-1)).includes('ASYNC_ANSWER_SENTINEL')}));}

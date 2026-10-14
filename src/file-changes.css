@@ -7,3 +7,7 @@
 @media(max-width:760px){.changes-panel{position:absolute;inset:0;width:100%;z-index:15;min-width:0}}
 
 :root[data-theme="dark"] .diff-added{color:#6bd390}:root[data-theme="dark"] .diff-deleted{color:#ff8e98}
+
+.change-file-link { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; color:inherit; border:0; background:transparent; padding:0; cursor:pointer; font:inherit; }
+.change-file-link:hover { text-decoration:underline; text-underline-offset:3px; }
+.change-file-link:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }

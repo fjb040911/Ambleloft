@@ -69,3 +69,8 @@ check:upstream 对照同步契约和验证器；doctor 对照已记录的宿主�
 ## 多语言目标与当前边界
 
 宿主已实现 [统一多语言设计](localization-design.md)：Skill 根目录词典、显示元信息、表单/集合显示白名单投影、通知 LocalizedText、后台 locale 热切换及持久翻译快照。运行时探测 skillLocalization/templateLocalization/liveLocalization/notificationLocalization，具体入口与限制见设计文档和机器能力清单。独立 SDK/CLI 按 v0.6.7 要求对接，不代表其 npm 包已经发布。
+
+
+## 运行中补充信息（源码预览）
+
+已实现固定待补充区、持久单页动态请求、运行中文字追加、文字回答关联、取消/替换提案及恢复核实。内置 supplemental-input Skill 可停用，第三方合法能力不受影响。模型探测 input_capabilities；七个 input_* 是当前聊天内部工具，不是扩展 Node SDK 新接口，executionUnitResume 仍为 0。macOS 本地双协议与打包验收及未覆盖发行项见 [U9 结果](user-input-u9-results.md)。

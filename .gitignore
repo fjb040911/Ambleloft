@@ -64,3 +64,5 @@ coverage/
 /.github/media/*.mp4
 
 /build/ui-template.cjs
+
+/build/input-definition.cjs

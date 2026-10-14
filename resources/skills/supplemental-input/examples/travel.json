@@ -1,0 +1,17 @@
+{
+  "requestKey": "trip-details-1",
+  "reason": "确认目的地、时间和预算后，可以安排适合你的行程。",
+  "source": {
+    "kind": "dynamic",
+    "definition": {
+      "title": "补充旅行信息",
+      "fields": [
+        {"name":"destination","type":"text","label":"目的地","required":true},
+        {"name":"departure","type":"date","label":"出发日期","required":true},
+        {"name":"days","type":"number","label":"出行天数","integer":true,"minimum":1},
+        {"name":"budget","type":"money","label":"总预算","currency":"CNY","scale":2,"minimum":"0"},
+        {"name":"pace","type":"select","label":"旅行节奏","options":[{"label":"轻松","value":"relaxed"},{"label":"紧凑","value":"busy"}]}
+      ]
+    }
+  }
+}

@@ -65,3 +65,70 @@ test('internal RPC errors remain uncertain while invalid requests are definitive
  await queue.enqueue(answer('internal'));await flush(queue);assert.equal((await queue.get('internal')).state,'unknown');
  await queue.enqueue(answer('invalid'));await flush(queue);assert.equal((await queue.get('invalid')).state,'failed');
 });
+
+test('ordinary text uses host identity, is idempotent and retains user provenance',async t=>{
+ const sent=[];const {queue}=await fixture(t,{runs:[{id:'run'},{id:'other'}],deliverFormInput:async(item,{dispatch})=>{const result=await dispatch({},()=>{sent.push(item);return Promise.resolve();});await result.receipt;}},()=>assert.fail('user input is not a form'));
+ const input={runId:'run',clientMutationId:'one',text:'预算 3000 元'};
+ const first=await queue.append(input);await flush(queue);await queue.append(input);await flush(queue);
+ assert.equal(sent.length,1);assert.equal(sent[0].source,'user');
+ await assert.rejects(queue.append({...input,text:'Changed'}),/CONFLICT/);
+ const other=await queue.append({...input,runId:'other'});await flush(queue);assert.notEqual(other.id,first.id);
+ await assert.rejects(queue.append({...input,source:'extension'}),{code:'INVALID_ARGUMENT'});
+ await assert.rejects(queue.append({...input,runId:'missing'}),{code:'NOT_FOUND'});
+});
+test('pause survives queue recreation and selective resume holds unselected inputs',async t=>{
+ const sent=[],runtime={runs:[{id:'run'}],deliverFormInput:async(item,{dispatch})=>{const result=await dispatch({},()=>{sent.push(item.id);return Promise.resolve();});await result.receipt;}};
+ const {database,queue}=await fixture(t,runtime);await queue.pause('run');
+ await queue.enqueue(answer('one'));await queue.enqueue(answer('two'));await flush(queue);assert.deepEqual(sent,[]);
+ await assert.rejects(queue.append({runId:'run',text:'Stop',clientMutationId:'stop'}),/任务已停止/);
+ await queue.shutdown();const restarted=new ChatInputs({database,runtime,validate:async()=>{},publish:()=>{}});t.after(()=>restarted.shutdown());
+ await restarted.initialize();await flush(restarted);assert.deepEqual(sent,[]);
+ const snapshot=await restarted.snapshot('run');assert.equal(snapshot.policy.paused,true);
+ const resume={runId:'run',clientMutationId:'resume',expectedPolicyGeneration:snapshot.policy.generation,deliveryIds:['two']};
+ await restarted.resume(resume);await flush(restarted);assert.deepEqual(sent,['two']);assert.equal((await restarted.get('one')).held,true);
+ await restarted.resume(resume);await flush(restarted);assert.deepEqual(sent,['two']);
+ await assert.rejects(restarted.resume({...resume,clientMutationId:'stale'}),/CONFLICT/);
+ await assert.rejects(restarted.resume({...resume,deliveryIds:['one']}),/CONFLICT/);
+});
+test('stop during preparation prevents dispatch and stop never waits for remote acceptance',async t=>{
+ let prepare,release;const ready=new Promise(r=>prepare=r),gate=new Promise(r=>release=r);let calls=0;
+ const {queue}=await fixture(t,{runs:[{id:'run'}],deliverFormInput:async(item,{dispatch})=>{prepare();await gate;const result=await dispatch({},()=>{calls++;return Promise.resolve();});await result.receipt;}});
+ await queue.append({runId:'run',text:'Hi',clientMutationId:'one'});await ready;await queue.pause('run');release();await flush(queue);
+ assert.equal(calls,0);assert.equal((await queue.snapshot('run')).deliveries[0].state,'queued');
+ let accept,sent;const remote=new Promise(r=>accept=r),started=new Promise(r=>sent=r);
+ queue.runtime.deliverFormInput=async(item,{dispatch})=>{const result=await dispatch({},()=>{sent();return remote;});await result.receipt;};
+ await queue.resume({runId:'run',clientMutationId:'resume',expectedPolicyGeneration:1,deliveryIds:[(await queue.snapshot('run')).deliveries[0].id]});await started;
+ await queue.pause('run');assert.equal((await queue.snapshot('run')).policy.paused,true);accept();await flush(queue);
+ assert.equal((await queue.snapshot('run')).deliveries[0].state,'delivered');
+});
+test('unfinished outbox quota applies to all sources and archive blocks ordinary input',async t=>{
+ const runtime={runs:[{id:'run'}]}, {queue,database}=await fixture(t,runtime);await queue.pause('run');
+ for(let i=0;i<32;i++)await database.call('chatInput',{action:'enqueue',item:answer(`a${i}`)});
+ await assert.rejects(queue.enqueue(answer('overflow')),/QUOTA_EXCEEDED/);
+ runtime.runs[0].archivedAt='now';await assert.rejects(queue.append({runId:'run',text:'Hello',clientMutationId:'archived'}),{code:'FORBIDDEN'});
+});
+test('runtime records ordinary steered input without a form identity',async()=>{
+ const runtime=new AgentRuntime({directory:'/tmp',publish:()=>{}});runtime.persist=async()=>{};runtime.changed=()=>{};
+ const run={id:'run',status:'running',threadId:'thread',turnId:'turn',messages:[]};runtime.runs=[run];runtime.contexts.set('c',{run,turnKey:'original',rpc:{call:async()=>{}}});
+ await runtime.deliverFormInput({id:'user:one',runId:'run',text:'Hello',source:'user'},{onDispatch:async()=>{}});
+ assert.equal(run.messages[0].userInputId,'user:one');assert.equal(run.messages[0].formSubmissionId,undefined);assert.equal(run.messages[0].turnKey,'original');
+});
+test('runtime Stop persists pause even when the task is already idle',async t=>{
+ const runtime=new AgentRuntime({directory:'/tmp',publish:()=>{}});runtime.runs=[{id:'run',status:'completed'}];
+ const {queue}=await fixture(t,runtime);runtime.chatInputs=queue;
+ await runtime.stop('run');assert.equal((await queue.snapshot('run')).policy.paused,true);
+});
+test('form submission and outbox quota rejection are one atomic transaction',async t=>{
+ const {database,queue}=await fixture(t,{runs:[{id:'run'}]});await queue.pause('run');
+ const flow=await database.call('formData',{action:'put',revision:null,flow:{id:'form',runId:'run',submissions:[]}});
+ for(let i=0;i<32;i++)await database.call('chatInput',{action:'enqueue',item:answer(`full${i}`)});
+ await assert.rejects(database.call('uiSubmit',{flow:{...flow,submissions:[{id:'extra'}]},revision:flow.revision,item:answer('extra')}),/QUOTA_EXCEEDED/);
+ const [saved]=await database.call('formData',{action:'list',runId:'run'});assert.equal(saved.revision,flow.revision);assert.deepEqual(saved.submissions,[]);assert.equal(await queue.get('extra'),null);
+});
+test('notification reaching idle boundary becomes held and only explicit resume permits idle delivery',async t=>{
+ const runtime={runs:[{id:'run'}],deliverFormInput:async()=>{throw Object.assign(Error('idle'),{code:'BUSY',holdInput:true});}};
+ const {queue,database}=await fixture(t,runtime);queue.tick=()=>{};
+ const item={...answer('notice'),activeOnly:true};await queue.enqueue(item);await queue.deliver(item);
+ assert.equal((await queue.get(item.id)).held,true);assert.equal(await database.call('chatInput',{action:'canDispatch',id:item.id}),false);
+ await queue.resume({runId:'run',clientMutationId:'release',expectedPolicyGeneration:0,deliveryIds:[item.id]});assert.equal((await queue.get(item.id)).allowIdle,true);
+});

@@ -214,3 +214,36 @@ test('command actions are preserved and redacted; compaction has a real lifecycl
  event('item/completed',{id:'compact',type:'contextCompaction'});
  assert.equal(context.run.tools.length,2);assert.equal(context.run.tools[1].status,'completed');
 });
+
+
+test('only successful explicit deliverable calls register an outcome for this turn',()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};
+ const context={turnKey:'u',run:{messages:[],tools:[]},config:{apiKey:'secret'}};
+ const item={id:'delivery',type:'mcpToolCall',server:'atelier_progress',tool:'register_deliverable',status:'completed',arguments:{path:'report.md',title:'Report'}};
+ const emit=value=>runtime.notification(context,{method:'item/completed',params:{item:value}});
+ emit({...item,result:{isError:true}});
+ emit({...item,arguments:{path:'report.md'}});
+ assert.equal(context.run.tools.length,0);
+ emit(item);emit(item);
+ assert.equal(context.run.tools.length,1);
+ assert.equal(context.run.tools[0].type,'deliverable');
+ assert.equal(context.run.tools[0].turnKey,'u');
+ assert.deepEqual(JSON.parse(context.run.tools[0].detail),item.arguments);
+});
+test('native resolved removes only matching typed RPC identity without recording an answer',()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};
+ const run={id:'r',threadId:'thread',status:'waiting',messages:[],approvals:[],questions:[{id:'7',rpcId:7,blocking:true},{id:'eight',rpcId:'eight',blocking:false}]};
+ const context={run,config:{}};runtime.notification(context,{method:'serverRequest/resolved',params:{threadId:'other',requestId:7}});assert.equal(run.questions.length,2);
+ runtime.notification(context,{method:'serverRequest/resolved',params:{threadId:'thread',requestId:'7'}});assert.equal(run.questions.length,2);
+ runtime.notification(context,{method:'serverRequest/resolved',params:{threadId:'thread',requestId:7}});assert.equal(run.questions.length,1);assert.equal(run.status,'running');assert.equal(run.messages.length,0);
+});
+test('cancellation notifications cannot start an idle task unless explicitly released',async()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.runs=[{id:'r',status:'completed'}];runtime.start=async()=>{throw Error('must not start');};
+ await assert.rejects(runtime.deliverFormInput({runId:'r',activeOnly:true},{onDispatch(){}}),{code:'BUSY',holdInput:true});
+});
+test('restart drops stale native RPCs even from idle histories',async()=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'native-restart-'));try{
+  await fs.writeFile(path.join(directory,'conversations.json'),JSON.stringify([{id:'r',status:'completed',questions:[{id:'old',rpcId:123}],messages:[]} ]));
+  const runtime=new AgentRuntime({directory,publish(){}});await runtime.init();assert.deepEqual(runtime.runs[0].questions,[]);assert.equal(runtime.runs[0].status,'completed');await runtime.shutdown();
+ }finally{await fs.rm(directory,{recursive:true,force:true});}
+});

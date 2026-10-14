@@ -12,7 +12,6 @@ import {Command,CommandDialog,CommandShortcut,CommandInput,CommandList,CommandGr
 import {t,formatDate,useLanguage} from './i18n';
 import type {SearchResult} from './types';
 import './workspace-search.css';
-import {useTaskRecency} from './use-task-recency';
 const categoryLabels={task:'任务',project:'项目',extension:'扩展',skill:'技能'};
 const categoryCopy={
  task:{placeholder:'搜索任务名称或对话内容',empty:'还没有任务',missing:'没有找到相关任务',description:'新建任务后，可在这里快速找到并继续。'},
@@ -39,7 +38,6 @@ export default function WorkspaceSearch({close,open,fallback,recentTasks,onActio
  };
  const [category,setCategory]=useState<SearchResult['kind']|'action'>('task');
  const {skills}=useSkills();
- const recency=useTaskRecency(null);
  const copy=categoryCopy[category];
  const recentTasksRef=useRef(recentTasks);recentTasksRef.current=recentTasks;
  const [query,setQuery]=useState('');
@@ -52,7 +50,7 @@ export default function WorkspaceSearch({close,open,fallback,recentTasks,onActio
    let result;
    if(category==='action')result={items:[],total:0,next:null};
    else if(category==='task'&&!query.trim()){
-    const found=[...recentTasksRef.current].sort((a,b)=>Math.max(recency[b.id]||0,Date.parse(b.date||'')||0)-Math.max(recency[a.id]||0,Date.parse(a.date||'')||0));
+    const found=[...recentTasksRef.current].sort((a,b)=>(Date.parse(b.date||'')||0)-(Date.parse(a.date||'')||0));
     const offset=Number(cursor||0);result={items:found.slice(offset,offset+20),total:found.length,next:offset+20<found.length?String(offset+20):null};
    }
    else if(category==='skill'&&window.desktop?.skills){

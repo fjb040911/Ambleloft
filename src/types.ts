@@ -1,6 +1,6 @@
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
-export interface Skill {displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
+export interface Skill {builtIn?:{key:string;version:number;digest:string};displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
 export interface SkillDetail extends Skill {body:string}
 export interface SkillSnapshot {displayName?:string;displayDescription?:string;id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
 export interface SkillImportResult {skill?:Skill;duplicate?:Skill;token?:string}
@@ -15,7 +15,7 @@ export interface ProviderConfig { id?:string; name?:string; models?:string[]; ba
 export interface ProviderInput { id?:string; create?:boolean; name?:string; models?:string[]; baseUrl: string; model: string; executable: string; apiKey?: string; clearKey?: boolean; protocol?: 'auto'|'responses'|'chat'; webSearch?: 'disabled'|'live'; reasoningSummary?: boolean; limits?:ModelLimits; modelLimits?:Record<string,ModelLimits>; modelImageInputs?:Record<string,ImageInputCapability> }
 export interface TurnTiming { startedAt: string; finishedAt?: string; durationMs?: number; outcome?: 'completed' | 'failed' | 'interrupted' }
 export interface TaskPlan {turnKey:string;explanation:string;steps:{step:string;status:'pending'|'inProgress'|'completed'}[]}
-export interface DeliveredFile {id:string;turnKey:string;path:string;name:string;size:number;modifiedAt:string}
+export interface DeliveredFile {kind?:'delivery'|'change';title?:string;id:string;turnKey:string;path:string;name:string;size:number;modifiedAt:string}
 export interface FileChange {id:string;path:string;status:'added'|'modified'|'deleted';additions?:number;deletions?:number;reason?:string;hunks?:{oldStart:number;oldLines:number;newStart:number;newLines:number;lines:string[]}[]}
 export interface TurnFileChanges {turnKey:string;files:FileChange[];notice?:string}
 export interface TaskApp {id:string;turnKey:string;title:string;extensionName:string;extensionId:string;resourceUri:string}
@@ -43,6 +43,14 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      inputs?: {
+        list(input:{runId:string}):Promise<{policy:{paused:boolean;generation:number};deliveries:InputDelivery[];requests:PersistentInputRequest[]}>;
+        append(input:{runId:string;clientMutationId:string;text:string}):Promise<InputDelivery>;
+        action(input:{action:'resume';runId:string;clientMutationId:string;expectedPolicyGeneration:number;deliveryIds:string[]}):Promise<{paused:boolean;generation:number}>;
+        action(input:{action:'reconcile';runId:string;deliveryId:string}):Promise<InputDelivery>;
+        action(input:{action:'cancel';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'acceptProposal'|'rejectProposal';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;proposalId:string;resume?:{expectedPolicyGeneration:number}}|{action:'beginEdit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'saveDraft';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>}|{action:'submit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>;resume?:{expectedPolicyGeneration:number}}):Promise<PersistentInputRequest>;
+        onChanged(listener:(event:{runId:string})=>void):()=>void;
+      };
       taskApps?: {
         onContextChanged(listener:(value:{sessionId:string;context:unknown})=>void):()=>void;
         open(input:{runId:string;appId:string}):Promise<{sessionId:string;url:string}>;
@@ -143,3 +151,16 @@ export interface ConnectionCatalog {revision:number;defaultId:string|null;connec
 
 export interface ConfigurationSchema {type:string;description?:string;properties?:Record<string,ConfigurationSchema>;required?:string[];enum?:Array<string|number|boolean|null>;minimum?:number;maximum?:number;minLength?:number;maxLength?:number}
 export interface ExtensionConfiguration {schema:ConfigurationSchema;value:Record<string,unknown>;revision:number;generation:number}
+
+export interface InputDelivery {id:string;runId:string;text:string;source?:'user'|'inputRequest';flowId?:string;requestId?:string;state:'queued'|'dispatching'|'delivered'|'failed'|'unknown';held?:boolean;error?:string;target?:{threadId?:string;turnId?:string;turnKey?:string;mode?:'start'|'steer'}}
+export interface PersistentInputRequest {
+ id:string;runId:string;conversationId:string;projectId:string|null;originKey:string;
+ state:'pending'|'answered'|'cancelled'|'superseded'|'expired';revision:number;
+ reason:string;template:InputRequestTemplate;draft:Record<string,string|number|boolean>;draftTouched:boolean;
+ locale:string;createdAt:string;updatedAt:string;sourceInvalid?:boolean;deliveryId?:string;
+ proposal?:{id:string;kind:'replacement';record:Pick<PersistentInputRequest,'template'|'draft'|'reason'|'originKey'>;baseRevision:number}|{id:string;kind:'messageResolution';answer:NonNullable<PersistentInputRequest['answer']>};
+ replacesId?:string;replacedById?:string;
+ answer?:{sourceMessages?:{id:string;text:string;sequence:number}[];id:string;requestId:string;requestRevision:number;source:'form'|'userMessage';values:Record<string,string|number|boolean>;displayLabels:Record<string,string>;locale:string;createdAt:string};
+}
+
+export interface InputRequestTemplate {version:1;id:string;title:string;description?:string;steps:{id:string;title:string;fields:import('./FormFields').FormFieldDefinition[]}[];submit:{kind:'chat';label:string}}

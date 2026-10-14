@@ -35,4 +35,4 @@ function QuestionForm({runId,request}:{runId:string;request:NonNullable<AgentRun
  <QuestionnaireActions><QuestionnairePrevious disabled={busy}>{t('上一题')}</QuestionnairePrevious><QuestionnaireNext disabled={busy||!answered[item]}>{t('下一题')}</QuestionnaireNext><QuestionnaireSubmit disabled={busy||request.questions.some(q=>!answered[q.id])}>{t(busy?'正在提交…':'提交回答')}</QuestionnaireSubmit></QuestionnaireActions>
  </Questionnaire>;
 }
-export default function QuestionQueue({run}:{run:AgentRun}) {return <div className="question-queue">{run.questions?.map(request=><QuestionForm key={run.id+request.id} runId={run.id} request={request}/>)}</div>;}
+export default function QuestionQueue({run,selectedId}:{run:AgentRun;selectedId?:string|null}) {return <div className="question-queue">{run.questions?.map(request=><div key={run.id+request.id} hidden={selectedId!==undefined&&selectedId!==request.id}><QuestionForm runId={run.id} request={request}/></div>)}</div>;}
