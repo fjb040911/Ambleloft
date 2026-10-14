@@ -12,8 +12,9 @@ async function setup(page:Page,paused=false,missingHandler=false){
 }
 test('active send retains newly typed text and keeps Stop available',async({page})=>{
  await setup(page);const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('目的地上海');await input.press('Enter');
- await expect(page.getByRole('button',{name:'发送补充',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'停止',exact:true})).toBeEnabled();await expect(input).toBeEnabled();
+ await expect(page.getByRole('button',{name:'发送补充',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'停止',exact:true})).toBeEnabled();await expect(input).toBeEnabled();
  await input.fill('预算三千');await page.evaluate(()=>(window as any).__accept());await expect(input).toHaveValue('预算三千');await page.getByRole('button',{name:/查看投递记录/}).click();await expect(page.getByRole('region',{name:'补充消息'})).toContainText('排队中');
+ await expect(page.getByRole('button',{name:'停止',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'发送补充',exact:true}).click();
  await page.getByRole('button',{name:'停止',exact:true}).click();await expect(page.getByText('任务已暂停',{exact:true})).toBeVisible();await expect(input).toHaveValue('预算三千');
 });
 test('failed sends retain draft and retry the same delivery identity',async({page})=>{

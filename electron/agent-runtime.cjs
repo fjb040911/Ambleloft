@@ -114,7 +114,7 @@ class AgentRuntime {
   supplementalTools(context) {
     // U6 enables discovery only after the task dock can render these requests.
     if(!this.inputToolsEnabled||!this.inputRequests)return undefined;
-    return require('../core/inputs/model.cjs').bindModelInputs(this.inputRequests,context.run.id,{forms:this.forms,validate:()=>{
+    return require('../core/inputs/model.cjs').bindModelInputs(this.inputRequests,context.run.id,{forms:this.forms,position:()=>({turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1}),validate:()=>{
       if(this.contexts.get(context.key)!==context||context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});
     }});
   }
@@ -361,6 +361,9 @@ class AgentRuntime {
         context.rpc.send({id:message.id,error:{code:-32602,message:'Invalid questions'}});return;
       }
       run.questions||=[];run.questions.push({id:String(message.id),rpcId:message.id,blocking:params.isBlocking!==false,questions:JSON.parse(redact(JSON.stringify(questions),context.config.apiKey))});
+      const request=run.questions.at(-1);
+      request.recordId=randomUUID();
+      run.messages.push({id:request.recordId,role:'assistant',phase:'commentary',text:'',turnKey:context.turnKey,order:run.nextEventOrder=(run.nextEventOrder||0)+1,inputRecord:{requestId:request.id,state:'pending',questions:request.questions.map(q=>({id:q.id,label:q.question}))}});
       if(params.isBlocking!==false)run.status='waiting';this.changed(run);
     } else if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(message.method)) {
       run.approvals.push({ id: String(message.id), rpcId: message.id, method: message.method,
@@ -392,7 +395,10 @@ class AgentRuntime {
     }
     context.rpc.send({id:request.rpcId,result:{answers:result}});
     context.run.questions=context.run.questions.filter(q=>q!==request);
-    context.run.messages.push({id:randomUUID(),role:'assistant',phase:'commentary',text:request.questions.map(q=>q.question+'\n\n'+(q.isSecret?'[私密回答已提交]':answers[q.id].trim())).join('\n\n'),turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1});
+    const record=context.run.messages.find(m=>m.id===request.recordId);
+    const inputRecord={requestId:request.id,state:'answered',questions:request.questions.map(q=>({id:q.id,label:q.question,answer:q.isSecret?'[私密回答已提交]':answers[q.id].trim()}))};
+    if(record)record.inputRecord=inputRecord;
+    else context.run.messages.push({id:randomUUID(),role:'assistant',phase:'commentary',text:'',inputRecord,turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1});
     context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(context.run);
   }
   async stop(id,{pause=true}={}) {

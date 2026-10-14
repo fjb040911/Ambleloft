@@ -468,7 +468,7 @@ test('nested Mermaid preview isolates document zoom and returns to the parent mo
 
 test('turn file changes open a readonly panel with text diff and Office status',async({page})=>{
  await prepare(page,'文件已更新');
- await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.fileChanges=[{turnKey:'u',files:[{id:'md',path:'README.md',status:'modified',additions:1,deletions:1,hunks:[{oldStart:1,oldLines:1,newStart:1,newLines:1,lines:['-old heading','+new heading']}]},{id:'xlsx',path:'report.xlsx',status:'added',reason:'此文件类型仅展示变更状态'},{id:'pptx',path:'slides.pptx',status:'modified',reason:'此文件类型仅展示变更状态'}]}];w.__demoRun.tools.push({id:'writes',turnKey:'u',type:'fileChange',status:'completed',detail:JSON.stringify(['README.md','report.xlsx','slides.pptx'].map(path=>({path,kind:'update'})))});w.__emit();});
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.fileChanges=[{turnKey:'u',files:[{id:'md',path:'README.md',status:'modified',additions:1,deletions:1,hunks:[{oldStart:1,oldLines:1,newStart:1,newLines:1,lines:['-old heading','+new heading']}]},{id:'xlsx',path:'report.xlsx',status:'added',reason:'此文件类型仅展示变更状态'},{id:'pptx',path:'slides.pptx',status:'modified',reason:'此文件类型仅展示变更状态'}]}];w.__demoRun.tools.push({id:'writes',turnKey:'u',type:'fileChange',label:'文件变更',status:'completed',detail:JSON.stringify(['README.md','report.xlsx','slides.pptx'].map(path=>({path,kind:'update'})))});w.__emit();});
  await page.getByRole('button',{name:'查看本轮变更',exact:true}).click();
  const panel=page.getByRole('complementary',{name:'本轮文件变更'});
  await expect(panel).toBeVisible();
@@ -583,7 +583,7 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  const headings=page.locator('.workspace-navigation .nav-group-toggle');
  await expect(headings).toHaveText(['项目','任务','扩展']);
  await page.screenshot({path:'test-results/task-sidebar.png'});
- for(const heading of await headings.all()){await expect(heading).toHaveCSS('font-size','12px');await expect(heading).toHaveCSS('min-height','32px');}
+ for(const heading of await headings.all()){await expect(heading).toHaveCSS('font-size','14px');await expect(heading).toHaveCSS('min-height','32px');}
  for(const name of ['项目','任务','扩展']){
   const heading=page.getByRole('button',{name,exact:true});
   await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');

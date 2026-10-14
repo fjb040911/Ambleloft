@@ -156,8 +156,10 @@ test('user questions are separate from approvals, validate answers and reject du
  const context={turnKey:'u',run:{id:'r',messages:[],tools:[],approvals:[{id:'a'}]},config:{apiKey:'secret'},rpc:{send:m=>sent.push(m)}};runtime.contexts.set('test',context);
  runtime.request(context,{id:8,method:'item/tool/requestUserInput',params:{isBlocking:true,questions:[{id:'audience',header:'受众',question:'面向谁？',options:[{label:'设计师',description:'设计工作'}]},{id:'private',header:'私密',question:'私密输入',isSecret:true}]}});
  assert.equal(context.run.status,'waiting');assert.equal(context.run.questions.length,1);
+ const recordId=context.run.messages[0].id;assert.equal(context.run.messages[0].inputRecord.state,'pending');assert.equal(context.run.messages[0].turnKey,'u');
  assert.throws(()=>runtime.answer({runId:'r',requestId:'8',answers:{audience:'设计师'}}),/每个问题/);
  runtime.answer({runId:'r',requestId:'8',answers:{audience:'设计师',private:'private-value'}});
+ assert.equal(context.run.messages.length,1);assert.equal(context.run.messages[0].id,recordId);assert.equal(context.run.messages[0].inputRecord.state,'answered');assert.equal(context.run.messages[0].inputRecord.questions[0].answer,'设计师');
  assert.equal(sent[0].result.answers.audience.answers[0],'设计师');assert.equal(sent[0].result.answers.private.answers[0],'private-value');
  assert.equal(context.run.status,'waiting');assert.equal(context.run.questions.length,0);assert.ok(!JSON.stringify(context.run).includes('private-value'));
  assert.throws(()=>runtime.answer({runId:'r',requestId:'8',answers:{}}),/失效/);

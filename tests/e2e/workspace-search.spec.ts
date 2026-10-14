@@ -190,14 +190,13 @@ test('search shows recent tasks, project context and matching excerpts within ea
   if(localStorage.getItem('atelier.workspace.v1'))return;
   const tasks=[0,1].map(i=>({id:'draft'+i,title:'设计讨论 '+i,prompt:'背景说明。'.repeat(80)+'验收关键词：侧栏交互',projectId:i?'p':null,status:'draft',modelId:'',createdAt:`2026-01-0${i+1}T00:00:00.000Z`}));
   localStorage.setItem('atelier.workspace.v1',JSON.stringify({tasks,projects:[{id:'p',name:'工作台项目',path:'/tmp/project',createdAt:'2026-01-01'}],theme:'light',language:'zh-CN'}));
-  localStorage.setItem('atelier.task-recency.v1',JSON.stringify({draft0:Date.now()}));
  });
  await page.goto('/');await page.getByRole('button',{name:'搜索工作台',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'搜索工作台'});const input=dialog.getByRole('combobox');const rows=dialog.locator('.search-result');
  await expect(input).toHaveAttribute('placeholder','搜索任务名称或对话内容');
  await expect(dialog.locator('[cmdk-group-heading]')).toHaveText('最近使用');
- await expect(rows.first()).toContainText('设计讨论 0');
- await expect(rows.first()).toContainText('未关联项目');await expect(rows.nth(1)).toContainText('工作台项目');
+ await expect(rows.first()).toContainText('设计讨论 1');
+ await expect(rows.first()).toContainText('工作台项目');await expect(rows.nth(1)).toContainText('未关联项目');
  await expect(rows.first()).not.toContainText('背景说明');
  await input.fill('验收关键词');await expect(rows).toHaveCount(2);
  await expect(rows.first().locator('mark')).toHaveText('验收关键词');

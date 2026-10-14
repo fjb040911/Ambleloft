@@ -10,7 +10,6 @@ import {Badge} from './components/ui/badge';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
 import {Textarea} from './components/ui/textarea';
-import {Collapsible,CollapsibleTrigger,CollapsibleContent} from './components/ui/collapsible';
 import {AlertDialog,AlertDialogTrigger,AlertDialogContent,AlertDialogHeader,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogAction,AlertDialogCancel} from './components/ui/alert-dialog';
 import {ChevronDown,ChevronUp,ClipboardList} from 'lucide-react';
 
@@ -66,9 +65,4 @@ export default function SupplementalInputDock({run,requests,policy,refresh,selec
    </div>
   </Card>
  </section>;
-}
-
-export function InputRequestHistory({requests,onOpen}:{requests:PersistentInputRequest[];onOpen(id:string):void}){
- if(!requests.length)return null;
- return <section className="my-4 flex flex-col gap-2" aria-label={t('补充记录')}>{requests.map(r=><Collapsible key={r.id} className="rounded-lg border border-border px-3 py-2"><div className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 break-words text-sm">{r.template.title}</span>{r.state==='pending'?<Button size="sm" variant="ghost" onClick={()=>onOpen(r.id)}>{t('前往填写')}</Button>:<div className="flex items-center gap-2"><Badge variant="secondary">{t(r.state==='answered'?'已提交':r.state==='expired'?'已失效':r.state==='cancelled'?'已取消':'已替换')}</Badge>{(r.answer||r.draftTouched)&&<CollapsibleTrigger render={<Button size="sm" variant="ghost"/>}>{t(r.answer?'查看回答':'查看原填写')}</CollapsibleTrigger>}</div>}</div>{(r.answer||r.draftTouched)&&<CollapsibleContent><dl className="mt-3 flex flex-col gap-2">{r.template.steps[0].fields.map(f=>{const value=(r.answer?.values||r.draft)[f.name];if(value===undefined)return null;const display=f.options?.find(o=>o.value===value)?.label??(typeof value==='boolean'?t(value?'是':'否'):String(value));return <div key={f.name} className="text-sm"><dt className="text-muted-foreground">{f.label}</dt><dd className="m-0 whitespace-pre-wrap break-words">{display}</dd></div>;})}</dl></CollapsibleContent>}</Collapsible>)}</section>;
 }

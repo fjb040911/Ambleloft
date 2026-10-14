@@ -117,7 +117,7 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.4.1 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
+**0.5.0 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
 
 - **Platforms:** validated on macOS Apple Silicon. Windows and Linux are targets; packages are not available yet.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.

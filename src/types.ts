@@ -28,7 +28,7 @@ export interface AgentRun {
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
-  messages: { model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
+  messages: { inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
@@ -157,7 +157,7 @@ export interface PersistentInputRequest {
  id:string;runId:string;conversationId:string;projectId:string|null;originKey:string;
  state:'pending'|'answered'|'cancelled'|'superseded'|'expired';revision:number;
  reason:string;template:InputRequestTemplate;draft:Record<string,string|number|boolean>;draftTouched:boolean;
- locale:string;createdAt:string;updatedAt:string;sourceInvalid?:boolean;deliveryId?:string;
+ turnKey?:string;order?:number;locale:string;createdAt:string;updatedAt:string;sourceInvalid?:boolean;deliveryId?:string;
  proposal?:{id:string;kind:'replacement';record:Pick<PersistentInputRequest,'template'|'draft'|'reason'|'originKey'>;baseRevision:number}|{id:string;kind:'messageResolution';answer:NonNullable<PersistentInputRequest['answer']>};
  replacesId?:string;replacedById?:string;
  answer?:{sourceMessages?:{id:string;text:string;sequence:number}[];id:string;requestId:string;requestRevision:number;source:'form'|'userMessage';values:Record<string,string|number|boolean>;displayLabels:Record<string,string>;locale:string;createdAt:string};
