@@ -1,0 +1,17 @@
+{
+  "requestKey": "trip-preferences-example-1",
+  "reason": "目的地已确认，接下来用偏好筛选景点；时间和预算可以在影响路线时再补充。",
+  "source": {
+    "kind": "dynamic",
+    "definition": {
+      "title": "这次更想怎么玩？",
+      "description": "可多选，也可以暂不选择，让我先给你一个均衡方案。",
+      "fields": [
+        {"name": "nature", "type": "checkbox", "label": "自然景观与户外放松"},
+        {"name": "culture", "type": "checkbox", "label": "城市文化与历史"},
+        {"name": "popular", "type": "checkbox", "label": "热门地标与拍照"},
+        {"name": "other", "type": "text", "label": "其他偏好（选填）", "placeholder": "例如：带长辈同行，希望少走路"}
+      ]
+    }
+  }
+}

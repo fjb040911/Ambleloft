@@ -255,10 +255,16 @@ class AgentRuntime {
   }
   async execute(context) {
     const { rpc, run, config } = context;
+    let clarification='';
+    if(run.threadId){
+      const {resumeInputContext}=require('./resume-input-context.cjs');
+      const requests=this.inputRequests?await this.inputRequests.list(run.id):[];
+      clarification=await resumeInputContext(run,requests,context.turnKey);
+    }
     await rpc.call('initialize', { clientInfo: { name: 'atelier', title: 'Ambleloft', version: require('../package.json').version } });
     rpc.send({ method: 'initialized', params: {} });
     const params = { model: config.model, modelProvider: 'atelier', cwd: run.cwd, sandbox: run.permission==='full'?'danger-full-access':'read-only', approvalPolicy: run.permission==='full'?'never':'on-request',
-      developerInstructions: developerInstructions + imageInputInstructions(config) + (context.skills?.instructions || '') + (context.projectDescription ? '\nProject context supplied by the user:\n' + context.projectDescription : '') };
+      developerInstructions: developerInstructions + imageInputInstructions(config) + (context.skills?.instructions || '') + clarification + (context.projectDescription ? '\nProject context supplied by the user:\n' + context.projectDescription : '') };
     const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId } : {}) });
     if (context.done || context.cancelled) return;
     run.threadId = thread.thread.id; run.status = 'running'; this.changed(run);

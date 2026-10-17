@@ -1293,5 +1293,12 @@
   "已整理聊天中的回答，请以补充记录的确认状态为准。": "Answers were collected from chat. Check the input record for confirmation status.",
   "已查看当前任务的待补充事项。": "Reviewed pending questions for this task.",
   "已检查当前可用的补充信息功能。": "Checked the available input capabilities.",
-  "暂无详情": "No details available"
+  "暂无详情": "No details available",
+  "上次未回答的问题": "Previously unanswered questions",
+  "查看上次未回答的问题": "Review unanswered questions",
+  "收起问题提示": "Hide question reminder",
+  "任务停止后，原提问已失效。你可以在聊天中补充回答；仅发送“继续”不会补齐这些信息。": "The original question expired when the task stopped. You can answer in chat; saying “continue” does not supply the missing details.",
+  "可以补充回答或调整要求后继续。收起此提示不会恢复任务。": "Add answers or adjust your request to continue. Hiding this notice does not resume the task.",
+  "查看暂停状态": "View paused status",
+  "收起暂停提示": "Hide pause notice"
 }

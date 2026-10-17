@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
+import {interruptedQuestion} from '../core/inputs/interrupted-question.mjs';
 import type {AgentRun,PersistentInputRequest} from './types';
 import {t,useLanguage} from './i18n';
 import InputRequestFields from './InputRequestFields';
@@ -11,7 +12,7 @@ import {Alert,AlertDescription} from './components/ui/alert';
 import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
 import {Textarea} from './components/ui/textarea';
 import {AlertDialog,AlertDialogTrigger,AlertDialogContent,AlertDialogHeader,AlertDialogTitle,AlertDialogDescription,AlertDialogFooter,AlertDialogAction,AlertDialogCancel} from './components/ui/alert-dialog';
-import {ChevronDown,ChevronUp,ClipboardList} from 'lucide-react';
+import {ChevronDown,ChevronUp,ClipboardList,X} from 'lucide-react';
 
 function RequestDecision({controller,request,action,disabled,onDone,resume}:{controller:ReturnType<typeof inputRequestController>;request:PersistentInputRequest;action:'cancel'|'acceptProposal'|'rejectProposal';disabled:boolean;onDone():Promise<void>;resume?:{expectedPolicyGeneration:number}}){
  const [preview,setPreview]=useState<PersistentInputRequest|null>(null);
@@ -47,12 +48,19 @@ function RequestEditor({request,paused,generation,archived,refresh,onSubmitted}:
 }
 
 export default function SupplementalInputDock({run,requests,policy,refresh,selection}:{run:AgentRun;requests:PersistentInputRequest[];policy?:{paused:boolean;generation:number};refresh():Promise<void>;selection?:{id:string;key:number}}){
- useLanguage();const [selected,setSelected]=useState(''),[collapsed,setCollapsed]=useState(false),region=useRef<HTMLElement>(null);
+ useLanguage();const [selected,setSelected]=useState(''),[collapsed,setCollapsed]=useState(false),[dismissed,setDismissed]=useState(''),region=useRef<HTMLElement>(null);
  const pending=requests.filter(r=>r.state==='pending'||inputRequestController(r).snapshot().dirty),native=run.questions||[];
  const options=[...native.map(r=>({id:'native:'+r.id,title:r.questions[0]?.question||t('等待你的回答')})),...pending.map(r=>({id:r.id,title:r.template.title}))];
  const active=options.some(o=>o.id===selected)?selected:options[0]?.id;
  useEffect(()=>{if(selection){setSelected(selection.id);setCollapsed(false);region.current?.focus();}},[selection]);
- if(!options.length)return null;
+ const lastRecord=interruptedQuestion(run.messages);
+ const interrupted=lastRecord?.inputRecord?.state==='pending'&&!native.length&&!['preparing','running','waiting','stopping'].includes(run.status)?lastRecord:undefined;
+ if(!options.length){
+  if(!interrupted)return null;
+  return <section aria-label={t('上次未回答的问题')} className="mb-3">
+   {dismissed===interrupted.id?<Button size="sm" variant="ghost" onClick={()=>setDismissed('')}>{t('查看上次未回答的问题')}</Button>:<Card size="sm"><CardHeader><div className="flex items-center justify-between gap-2"><CardTitle>{t('上次未回答的问题')}</CardTitle><Button size="icon" variant="ghost" aria-label={t('收起问题提示')} onClick={()=>setDismissed(interrupted.id)}><X/></Button></div><CardDescription>{t('任务停止后，原提问已失效。你可以在聊天中补充回答；仅发送“继续”不会补齐这些信息。')}</CardDescription></CardHeader><CardContent><ul className="list-disc space-y-2 pl-5">{interrupted.inputRecord!.questions.map(q=><li key={q.id} className="whitespace-pre-wrap break-words">{q.label}</li>)}</ul></CardContent></Card>}
+  </section>;
+ }
  return <section ref={region} tabIndex={-1} aria-label={t('待补充信息')} className="mb-3 min-w-0">
   <Card size="sm" className="max-h-[55dvh]">
    <div className="flex shrink-0 items-center gap-2 px-4"><ClipboardList className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><span className="text-sm font-medium">{t('待补充信息')}</span><Badge variant="secondary">{options.length}</Badge><div className="min-w-0 flex-1"/>

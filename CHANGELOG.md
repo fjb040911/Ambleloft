@@ -1,5 +1,14 @@
 # Preview notes / 预览版说明
 
+## v0.5.1 — Task continuation and clarification fixes
+
+- Starts a new prompt after Stop with the selected model and provider, without automatically sending held supplemental content.
+- Restores unresolved clarification context when resuming a thread; a bare “continue” does not silently answer outstanding questions.
+- Improves paused-state notices and supplemental input interactions, and expands built-in guidance and examples.
+- macOS Apple Silicon DMG/ZIP with SHA-256 checksums; ad-hoc signed, not Apple-notarized.
+
+修复停止任务后发送新消息时的模型与服务选择，避免自动发送暂存的补充内容；恢复未回答问题的上下文，避免将“继续”视为已作答。优化暂停提示和补充信息交互，并完善内置技能说明与示例。本次提供 macOS Apple Silicon 预览安装包，尚未经过 Apple 公证。
+
 ## v0.5.0 — Persistent supplemental input preview
 
 - Adds a persistent input channel for supplying information while a task runs, with durable drafts, answer snapshots, delivery state, and restart recovery.

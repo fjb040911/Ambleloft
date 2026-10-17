@@ -75,6 +75,8 @@ test('built-in skill installs once, localizes, is lazy and read-only, and preser
  await skills.initializeBuiltins({root:source});assert.equal((await skills.list())[0].revision,skill.revision);
  const prepared=await skills.prepare();assert.equal(prepared.explicit,'');assert.equal(prepared.snapshots.length,0);assert.equal(prepared.instructions.split(skill.path).length-1,1);assert.equal(prepared.instructions.includes((await skills.detail(skill.id)).body),false);
  assert.doesNotMatch((await skills.prepare([],{inputToolsEnabled:false})).instructions,/supplemental-input/);
+ assert.match(prepared.instructions,/Supplemental input interaction guidance/);
+ assert.doesNotMatch((await skills.prepare([],{inputToolsEnabled:false})).instructions,/Supplemental input interaction guidance/);
  assert.equal((await skills.prepare([skill.id,skill.id])).snapshots.length,1);
  await assert.rejects(skills.update({id:skill.id,version:skill.version,name:'x',description:'x',body:'x'}),/只读/);
  await assert.rejects(skills.remove(skill.id),/不能删除/);
@@ -83,6 +85,7 @@ test('built-in skill installs once, localizes, is lazy and read-only, and preser
  await fs.appendFile(path.join(source,'supplemental-input/references/lifecycle.md'),'\nUpdated guidance.\n');
  await skills.initializeBuiltins({root:source});const updated=(await skills.list())[0];assert.equal(updated.enabled,false);assert.equal(updated.version,2);assert.notEqual(updated.builtIn.digest,skill.builtIn.digest);
  assert.equal((await skills.prepare()).instructions.includes('supplemental-input'),false);
+ assert.doesNotMatch((await skills.prepare()).instructions,/Supplemental input interaction guidance/);
  assert.match(await fs.readFile(skill.path,'utf8'),/Supplemental information/);
  const reopened=createSkills(path.join(dir,'app'),db);await reopened.initializeBuiltins({root:source});assert.equal((await reopened.list())[0].enabled,false);assert.equal((await reopened.list())[0].revision,updated.revision);
 });
@@ -97,7 +100,16 @@ test('bundled example executes through real model tools without requiring the gu
  const capabilities=await api.call('input_capabilities',{});assert.equal(capabilities.value.dynamicForms,1);
  const result=await api.call('input_request',request);assert.equal(result.ok,true);assert.equal(result.value.state,'pending');
  assert.equal((await api.call('input_request',request)).value.created,false);
- const saved=await service.action({action:'submit',runId:'r',requestId:result.value.requestId,expectedRevision:0,clientMutationId:'answer',values:{destination:'Shanghai',departure:'2026-12-01'}});
+ const saved=await service.action({action:'submit',runId:'r',requestId:result.value.requestId,expectedRevision:0,clientMutationId:'answer',values:{destination:'Shanghai'}});
+ assert.equal((await api.call('input_read_answer',{requestId:saved.id})).value.answer.values.destination,'Shanghai');
+ // The next focused request must not require the earlier answer to be entered
+ // again, and must not expose defaults as a confirmed answer while pending.
+ const followup=JSON.parse((await skills.readFile({id:skill.id,file:'examples/travel-preferences.json'})).text);
+ const next=await api.call('input_request',followup);assert.equal(next.ok,true);
+ assert.equal((await api.call('input_read_answer',{requestId:next.value.requestId})).value.answer,null);
+ const answered=await service.action({action:'submit',runId:'r',requestId:next.value.requestId,expectedRevision:0,clientMutationId:'preferences',values:{nature:true,other:'少走路'}});
+ const preferences=(await api.call('input_read_answer',{requestId:answered.id})).value.answer.values;
+ assert.equal(preferences.nature,true);assert.equal(preferences.other,'少走路');
  assert.equal((await api.call('input_read_answer',{requestId:saved.id})).value.answer.values.destination,'Shanghai');
 });
 test('missing guide degrades to ordinary catalog; modified owned bundle is repaired without enabling it',async t=>{
@@ -109,6 +121,6 @@ test('missing guide degrades to ordinary catalog; modified owned bundle is repai
 });
 test('builtin bundle is included in both desktop resource configurations and its references are readable',async t=>{
  const {skills}=await fixture(t);await skills.initializeBuiltins();const [skill]=await skills.list();
- for(const file of ['references/lifecycle.md','examples/travel.json','skill.nls.json','skill.nls.zh-CN.json'])assert.ok((await skills.readFile({id:skill.id,file})).text.length);
+ for(const file of ['references/lifecycle.md','references/interaction-design.md','examples/travel.json','examples/travel-preferences.json','skill.nls.json','skill.nls.zh-CN.json'])assert.ok((await skills.readFile({id:skill.id,file})).text.length);
  for(const config of ['electron-builder.cjs','electron-builder.win.cjs'])assert.ok(require('../build/'+config).extraResources.some(r=>r.from==='resources/skills'&&r.to==='skills'));
 });
