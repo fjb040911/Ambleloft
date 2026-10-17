@@ -6,6 +6,8 @@ async function setup(page:Page,paused=false,native=false){
  if(native)run.questions=[{id:'native-question',questions:[{id:'transport',question:'怎样出行？'}]}];
  const request=(id:string,title:string)=>({id,turnKey:'u',order:1,runId:run.id,conversationId:run.id,projectId:null,originKey:'model',state:'pending',revision:0,reason:'确认目的地和预算，帮助安排适合你的行程。',locale:'zh-CN',createdAt:now,updatedAt:now,draft:{},draftTouched:false,template:{version:1,id,title,steps:[{id:'details',title,fields:[{name:'city',type:'text',label:'目的地',required:true},{name:'budget',type:'money',label:'预算',currency:'CNY'},{name:'notes',type:'textarea',label:'旅行偏好'}]}],submit:{kind:'chat',label:'提交'}}});
  const snapshot:any={policy:{paused,generation:paused?1:0},deliveries:[],requests:[request('a','补充出行计划'),request('b','住宿偏好')]};
+ w.__interruptUnanswered=()=>{run.status='interrupted';run.questions=[];run.messages.push({id:'interrupted-question',role:'assistant',text:'',turnKey:'u',inputRecord:{requestId:'expired-native',state:'pending',questions:[{id:'purpose',label:'脚本具体需要完成什么？'}]}});snapshot.requests=[];snapshot.policy={paused:true,generation:2};event?.({runId:run.id});runEvent?.(structuredClone(run));};
+ w.__followupAndStop=(text:string)=>{run.messages.push({id:'followup-'+run.messages.length,role:'user',text,inputDeliveryState:'delivered'});run.status='interrupted';snapshot.policy={paused:true,generation:snapshot.policy.generation+1};event?.({runId:run.id});runEvent?.(structuredClone(run));};
  const receipts=new Map();w.__setTools=(tools:any[])=>{run.tools=tools;runEvent(structuredClone(run));};w.__commands=[];w.__snapshot=snapshot;w.__refresh=()=>event?.({runId:run.id});w.__nextTurn=()=>{run.messages.push({id:'u2',role:'user',text:'继续下一项'});runEvent(structuredClone(run));};w.__failAfterCommit=false;
  w.__unknown=()=>{snapshot.deliveries=[{id:'unknown-one',runId:run.id,state:'unknown',text:'已确认的回答'}];event?.({runId:run.id});};
  w.__messageProposal=()=>{const r=snapshot.requests[0];r.revision++;r.proposal={id:'message-proposal',kind:'messageResolution',answer:{values:{city:'北京'},sourceMessages:[{id:'m',text:'我决定去北京。'}]}};event?.({runId:run.id});};
@@ -158,4 +160,41 @@ test('input tools render readable answers and keep protocol data behind technica
  await process.getByRole('button',{name:'技术详情',exact:true}).click();await expect(process.locator('pre')).toContainText('requestId');
  await page.evaluate(()=>(window as any).__setTools([{id:'read',turnKey:'u',order:3,type:'mcpToolCall',label:'input_read_answer',status:'completed',detail:'broken json'}]));
  await expect(process).toContainText('暂时无法显示这一步的结果。');await expect(process.getByText('北京',{exact:true})).toHaveCount(0);
+});
+
+test('interrupted native question remains readable and notices can hide without resuming',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>(window as any).__interruptUnanswered());
+ const reminder=page.getByRole('region',{name:'上次未回答的问题',exact:true});
+ await expect(reminder).toContainText('脚本具体需要完成什么？');
+ await expect(reminder).not.toContainText('提交回答');
+ await page.getByRole('button',{name:'收起问题提示',exact:true}).click();
+ await expect(reminder.getByText('脚本具体需要完成什么？')).not.toBeVisible();
+ await page.getByRole('button',{name:'查看上次未回答的问题',exact:true}).click();
+ await expect(reminder).toContainText('脚本具体需要完成什么？');
+ await page.getByRole('button',{name:'收起暂停提示',exact:true}).click();
+ await expect(page.getByRole('button',{name:'查看暂停状态',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__snapshot.policy.paused)).toBe(true);
+ expect(await page.evaluate(()=>(window as any).__commands)).toEqual([]);
+ await page.screenshot({path:'test-results/interrupted-question-recovery.png',animations:'disabled'});
+});
+
+test('supplied information retires both notices across subsequent stops while new questions still appear',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>(window as any).__interruptUnanswered());
+ const reminder=page.getByRole('region',{name:'上次未回答的问题',exact:true});
+ await expect(reminder).toBeVisible();
+ await page.evaluate(()=>(window as any).__followupAndStop('继续'));
+ await expect(reminder).toBeVisible();
+ await page.evaluate(()=>(window as any).__followupAndStop('监控vllm的运行状态'));
+ await expect(reminder).toHaveCount(0);
+ await expect(page.getByRole('region',{name:'补充消息',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__followupAndStop('继续'));
+ await expect(reminder).toHaveCount(0);
+ await expect(page.getByText('任务已暂停',{exact:true})).toHaveCount(0);
+ await page.screenshot({path:'test-results/resolved-question-paused.png',animations:'disabled'});
+ await page.evaluate(()=>(window as any).__unknown());
+ await expect(page.getByRole('region',{name:'补充消息',exact:true})).toBeVisible();
+ await page.evaluate(()=>(window as any).__interruptUnanswered());
+ await expect(reminder).toBeVisible();
 });

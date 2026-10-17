@@ -5,7 +5,7 @@ import {Checkbox} from './components/ui/checkbox';
 import {Field,FieldGroup,FieldLabel,FieldLegend,FieldSet} from './components/ui/field';
 import {Badge} from './components/ui/badge';
 import {Collapsible,CollapsibleTrigger,CollapsibleContent} from './components/ui/collapsible';
-import {Check,ChevronDown,Pause,Send} from 'lucide-react';
+import {Check,ChevronDown,Pause,Send,X} from 'lucide-react';
 import type {InputDelivery,PersistentInputRequest} from './types';
 import {t} from './i18n';
 
@@ -18,19 +18,23 @@ export function useInputDeliveries(runId:string){
  return {snapshot,error,refresh};
 }
 const labels={queued:'排队中',dispatching:'正在投递',delivered:'已送达',failed:'发送失败',unknown:'待核实'};
-export default function InputDeliveryPanel({snapshot,selected,onSelected,onContinue,busy,error,onRefresh}:{snapshot:Snapshot|null;selected:string[];onSelected(ids:string[]):void;onContinue():void;busy:boolean;error:string;onRefresh():void}){
+export default function InputDeliveryPanel({snapshot,selected,onSelected,onContinue,busy,error,onRefresh,hasUnansweredQuestion=false}:{snapshot:Snapshot|null;selected:string[];onSelected(ids:string[]):void;onContinue():void;busy:boolean;error:string;onRefresh():void;hasUnansweredQuestion?:boolean}){
  const [open,setOpen]=useState(false),[checking,setChecking]=useState(''),[notice,setNotice]=useState('');
+ const [dismissed,setDismissed]=useState(false);
+ useEffect(()=>setDismissed(false),[snapshot?.policy.generation,snapshot?.policy.paused]);
  const reconcile=async(item:InputDelivery)=>{setChecking(item.id);setNotice('');try{const result=await window.desktop!.inputs!.action({action:'reconcile',runId:item.runId,deliveryId:item.id});setNotice(result.state==='delivered'?'已确认送达':'暂未找到送达记录，不会自动重发。');onRefresh();}catch{setNotice('暂时无法核实，请稍后重试。');}finally{setChecking('');}};
  if(error)return <Alert variant="destructive"><AlertTitle>{error}</AlertTitle><AlertDescription><Button size="sm" variant="outline" onClick={onRefresh}>{t('重试')}</Button></AlertDescription></Alert>;
  if(!snapshot)return null;
  const pending=snapshot.deliveries.filter(item=>item.state!=='delivered'),latest=snapshot.deliveries.find(item=>item.state==='delivered');
+ if(!pending.length&&snapshot.policy.paused&&!hasUnansweredQuestion&&!snapshot.requests?.some(request=>request.state==='pending'))return null;
  if(!pending.length&&!snapshot.policy.paused&&!latest)return null;
  const selectable=pending.filter(item=>item.state==='queued'&&(snapshot.policy.paused||item.held));
- const description=snapshot.policy.paused?(pending.length?'未发送的内容已保留。勾选需要发送的内容，再继续任务。':'输入补充内容，发送后继续任务。'):pending.some(item=>item.state==='unknown')?'有内容需要核实，请查看记录后再决定下一步。':pending.some(item=>item.state==='failed')?'有内容未能发送，原文已保留。':selectable.length?'部分内容仍暂停发送，可展开后选择继续。':'可以继续编辑，下方内容将按顺序送达。';
+ const description=snapshot.policy.paused?(pending.length?'未发送的内容已保留。勾选需要发送的内容，再继续任务。':'可以补充回答或调整要求后继续。收起此提示不会恢复任务。'):pending.some(item=>item.state==='unknown')?'有内容需要核实，请查看记录后再决定下一步。':pending.some(item=>item.state==='failed')?'有内容未能发送，原文已保留。':selectable.length?'部分内容仍暂停发送，可展开后选择继续。':'可以继续编辑，下方内容将按顺序送达。';
+ if(snapshot.policy.paused&&!pending.length&&dismissed)return <Button size="sm" variant="ghost" className="mb-2" onClick={()=>setDismissed(false)}>{t('查看暂停状态')}</Button>;
  if(!pending.length&&!snapshot.policy.paused)return <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"><Check className="size-3.5" aria-hidden="true"/>{t('补充消息已送达')}</div>;
  return <Alert role="region" aria-label={t('补充消息')} className="input-delivery-panel mb-3 rounded-2xl border-border px-4 py-3 shadow-sm">
   {snapshot.policy.paused?<Pause aria-hidden="true"/>:<Send aria-hidden="true"/>}
-  <AlertTitle>{t(snapshot.policy.paused?'任务已暂停':'补充消息')}</AlertTitle>
+  <AlertTitle className="flex items-center justify-between">{t(snapshot.policy.paused?'任务已暂停':'补充消息')}{snapshot.policy.paused&&!pending.length&&<Button size="icon" variant="ghost" aria-label={t('收起暂停提示')} onClick={()=>setDismissed(true)}><X/></Button>}</AlertTitle>
   <AlertDescription className="flex flex-col gap-3">
    <p>{t(description)}</p>{notice&&<p role="status">{t(notice)}</p>}
    {!!pending.length&&<Collapsible open={open} onOpenChange={setOpen}>
