@@ -10,6 +10,7 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,active=fa
 }){
  const localRef=useRef<HTMLTextAreaElement>(null),ref=inputRef||localRef;
  const hintId=useId();const [draftNotice,setDraftNotice]=useState(false);
+ const showStop=active&&(!allowActiveSend||!canSend||disabled||stopping);
  useLayoutEffect(()=>{
   const el=ref.current;if(!el)return;
   const resize=()=>{if(!el.clientWidth)return;el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,200)}px`;};
@@ -24,9 +25,9 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,active=fa
     onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&e.nativeEvent.keyCode!==229){e.preventDefault();if(active&&!allowActiveSend)setDraftNotice(true);else if(!disabled&&canSend)onSubmit();}}}/>
    <InputGroupAddon align="block-start" className="empty:hidden">{skills}</InputGroupAddon>
    <InputGroupAddon align="block-end" className="composer-bottom px-2.5 pt-1 pb-2.5">{controls}
-    {active?<InputGroupButton className="rounded-full hover:bg-primary disabled:opacity-100" size="icon-sm" variant="default" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><Square size={13} fill="currentColor"/></InputGroupButton>
+    {showStop?<InputGroupButton className="rounded-full hover:bg-primary disabled:opacity-100" size="icon-sm" variant="default" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><Square size={13} fill="currentColor"/></InputGroupButton>
      :null}
-    {(!active||allowActiveSend)&&<InputGroupButton className={`rounded-full hover:bg-primary ${disabled?'disabled:opacity-100':''}`} size={saveDraft||showSendLabel?"sm":"icon-sm"} variant="default" type="submit" aria-label={sendLabel} title={sendLabel} disabled={!canSend||disabled}>{saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:showSendLabel?<><ArrowUp data-icon="inline-start"/>{sendLabel}</>:<ArrowUp size={17}/>}</InputGroupButton>}
+    {!showStop&&<InputGroupButton className={`rounded-full hover:bg-primary ${disabled?'disabled:opacity-100':''}`} size={saveDraft||showSendLabel?"sm":"icon-sm"} variant="default" type="submit" aria-label={sendLabel} title={sendLabel} disabled={!canSend||disabled}>{saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:showSendLabel?<><ArrowUp data-icon="inline-start"/>{sendLabel}</>:<ArrowUp size={17}/>}</InputGroupButton>}
    </InputGroupAddon>
   </InputGroup>
   <div className={footer?"composer-footer":"composer-hint-wrapper"}>{footer}

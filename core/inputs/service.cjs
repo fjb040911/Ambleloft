@@ -28,7 +28,7 @@ class InputRequests{
   if(fields.length>12||Buffer.byteLength(JSON.stringify({title:template.title,description:template.description,fields}))>32768||fields.some(f=>f.type==='group-toggle'||f.dependsOn||f.visibleWhen||f.options?.length>50||['__proto__','constructor','prototype'].includes(f.name)))throw fail('INVALID_ARGUMENT');
   const prefill=valuesInput(input.prefill||{},fields),checked=T.validateValues(template.steps[0],prefill,{partial:true});
   if(Object.keys(checked.errors).length)throw fail('INVALID_ARGUMENT','预填内容不符合字段定义');
-  const record={projectId:run.projectId||null,conversationId:run.conversationId||run.id,originKey:input.originKey,sourceKey:input.sourceKey||null,sourceRevision:input.sourceRevision||null,sourceDigest:input.sourceDigest||null,reason:input.reason,template,draft:checked.values,locale:input.locale||'zh-CN'};
+  const record={...(input.turnKey?{turnKey:input.turnKey,order:input.order}:{}),projectId:run.projectId||null,conversationId:run.conversationId||run.id,originKey:input.originKey,sourceKey:input.sourceKey||null,sourceRevision:input.sourceRevision||null,sourceDigest:input.sourceDigest||null,reason:input.reason,template,draft:checked.values,locale:input.locale||'zh-CN'};
   if(!await this.validateSource(record))throw fail('FORBIDDEN','补充请求来源不可用');
   validate();
   if(prepareOnly)return record;

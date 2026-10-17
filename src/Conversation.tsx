@@ -3,7 +3,8 @@ import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
-import SupplementalInputDock,{InputRequestHistory} from './SupplementalInputDock';
+import SupplementalInputDock from './SupplementalInputDock';
+import {PersistentInputRecord} from './InputProcessRecord';
 import { t } from './i18n';
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { ChevronUp, Clock3 } from 'lucide-react';
@@ -138,17 +139,17 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
         <MessageScrollerContent className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
           {(floatingHost?turns.slice(-3):turns).map(turn => <MessageScrollerItem scrollAnchor messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
-            <VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user bg-message text-message-foreground" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{turn.user.text}</div></article>
-            <TurnProgress paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
+            <VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user bg-message text-message-foreground" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}</div></article>
+            <TurnProgress allRequests={deliveries.snapshot?.requests||[]} requests={(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1))} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={id=>setInputSelection({id,key:Date.now()})} paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<article className="message assistant" aria-label={t("助手消息")}><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></article>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
             <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock>
 
           </MessageScrollerItem>)}
+          {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><MessageScrollerItem key={r.id} messageId={'legacy-input-'+r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={id=>setInputSelection({id,key:Date.now()})}/></MessageScrollerItem>)}
           {referenceError&&<MessageScrollerItem messageId="reference-error" role="alert" className="error-banner">{referenceError}</MessageScrollerItem>}
           {run.error && <MessageScrollerItem messageId="error" className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button><Button type="button" variant="outline" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</Button></div>}</MessageScrollerItem>}
-        <InputRequestHistory requests={deliveries.snapshot?.requests||[]} onOpen={id=>setInputSelection({id,key:Date.now()})}/>
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
     </div>

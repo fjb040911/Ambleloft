@@ -1,5 +1,15 @@
 # Preview notes / 预览版说明
 
+## v0.5.0 — Persistent supplemental input preview
+
+- Adds a persistent input channel for supplying information while a task runs, with durable drafts, answer snapshots, delivery state, and restart recovery.
+- Adds a dedicated pending-input area, validated dynamic forms, and a built-in skill for requesting supplemental information.
+- Improves input and tool records in task history, composer controls, and the task workspace.
+- Adds host-to-SDK synchronization notes; external SDK integration remains a separate verification step.
+- macOS Apple Silicon DMG/ZIP with SHA-256 checksums; ad-hoc signed, not Apple-notarized.
+
+新增运行中补充信息通道、持久化草稿与答案、投递状态和重启恢复；提供独立待补充区、动态表单与内置补充信息技能。优化任务历史中的输入和工具记录、聊天输入区与工作台，并补充宿主到 SDK 的同步说明。外部 SDK 仍需单独同步与验证。本次提供 macOS Apple Silicon 预览安装包，尚未经过 Apple 公证。
+
 ## v0.4.1 — Localization and conversation polish
 
 - Adds shared localization for extensions, skills, forms, declarative interfaces, and messages, with locale fallback and localized skill examples.

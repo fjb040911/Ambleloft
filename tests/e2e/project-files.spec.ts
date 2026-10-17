@@ -196,10 +196,10 @@ test('sidebar categories disclose independently and arrows reflect expansion',as
  await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
  const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'任务',exact:true});
  await expect(projects).toHaveAttribute('aria-expanded','true');await projects.click();await expect(projects).toHaveAttribute('aria-expanded','false');await expect(chats).toHaveAttribute('aria-expanded','true');
- await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder.locator('.lucide-chevron-right')).toHaveCSS('transform','matrix(0, 1, -1, 0, 0, 0)');
+ await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder).toHaveAttribute('aria-expanded','true');await expect(folder.locator('.lucide-folder-open')).toBeVisible();
  const alignment=await sidebar.locator('.project-tree').first().evaluate(el=>({project:el.querySelector('.project-tree-name span')!.getBoundingClientRect().left,task:el.querySelector('.tree-task > button > span:nth-child(2)')!.getBoundingClientRect().left,folder:el.querySelector('.tree-toggle svg')!.getBoundingClientRect().right,dot:el.querySelector('.task-state')!.getBoundingClientRect().right}));
- expect(alignment.task).toBeGreaterThan(alignment.project);expect(alignment.dot).toBeGreaterThan(alignment.folder);
- await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-chevron-right')).toHaveCSS('transform','none');await expect(sidebar.locator('.tree-task')).not.toBeVisible();
+ expect(Math.abs(alignment.task-alignment.project)).toBeLessThan(2);expect(alignment.dot).toBeLessThan(alignment.task);
+ await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'})).toHaveAttribute('aria-expanded','false');await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-folder')).toBeVisible();await expect(sidebar.locator('.tree-task')).not.toBeVisible();
  await sidebar.getByRole('button',{name:'展开项目：Demo'}).click();await expect(sidebar.locator('.tree-task')).toHaveCount(1);
  await chats.click();await expect(chats).toHaveAttribute('aria-expanded','false');
  await chats.hover();await expect(sidebar.getByRole('button',{name:'新建任务',exact:true})).toHaveCSS('opacity','1');

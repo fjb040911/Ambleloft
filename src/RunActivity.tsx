@@ -1,3 +1,4 @@
+import {inputToolTitle} from './InputToolRecord';
 import {commandPresentation} from './tool-presentation';
 import {Marker,MarkerIcon,MarkerContent} from './components/ui/marker';
 import {Spinner} from './components/ui/spinner';
@@ -10,6 +11,7 @@ export const toolBusy=(status:string)=>['inProgress','running','pending'].includ
 export function toolSummary(tool:AgentRun['tools'][number]):string {
  if(tool.type==='commandExecution')return commandPresentation(tool).summary;
  if(tool.type==='contextCompaction')return '';
+ const inputTitle=inputToolTitle(tool.label);if(inputTitle)return t(inputTitle);
  if(tool.progress)return tool.progress;
  try {
   const data=JSON.parse(tool.detail);

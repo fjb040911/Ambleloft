@@ -26,3 +26,18 @@ test('all published input tool names match the frozen contract',()=>{
  const {toolSchemas}=require('../core/inputs/definition.cjs');const {tools}=require('../core/inputs/model.cjs');
  assert.deepEqual(tools.map(t=>t.name).sort(),toolSchemas.map(t=>t.name).sort());
 });
+test('published schemas have explicit object roots and preserve contract validation',()=>{
+ const {toolSchemas}=require('../core/inputs/definition.cjs');
+ for(const tool of toolSchemas){
+  assert.equal(tool.inputSchema.type,'object',tool.name);
+  assert.equal(tool.inputSchema.$ref,undefined,tool.name);
+  const check=new Ajv({strict:false,allErrors:true}).compile(tool.inputSchema);
+  assert.equal(check(null),false,tool.name);
+  assert.equal(check({unexpected:'value'}),false,tool.name);
+  if(tool.name==='input_request'){
+   assert.equal(check(args()),true,JSON.stringify(check.errors));
+   const missing=args();delete missing.requestKey;assert.equal(check(missing),false);
+   const nested=args();nested.source.definition.fields[0].type='password';assert.equal(check(nested),false);
+  }
+ }
+});

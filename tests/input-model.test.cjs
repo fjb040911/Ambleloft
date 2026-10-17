@@ -138,3 +138,12 @@ test('model cancellation has no outbox; user cancellation stays paused across re
  const cancel={action:'cancel',runId:'run',requestId:r2.id,expectedRevision:0,clientMutationId:'cancel'};const saved=await f.service.action(cancel);assert.deepEqual(await f.service.action(cancel),saved);
  const snapshot=await f.queue.snapshot('run');assert.equal(snapshot.policy.paused,true);assert.equal(snapshot.deliveries.length,1);assert.equal(snapshot.deliveries[0].held,true);assert.equal(snapshot.deliveries[0].activeOnly,true);
 });
+
+test('host position survives retries and stays out of the model projection',async t=>{
+ const f=await fixture(t);let turnKey='first',order=10;
+ const api=bindModelInputs(f.service,'run',{position:()=>({turnKey,order:order++})});
+ const first=await api.call('input_request',definition());assert.equal(first.ok,true);
+ turnKey='later';await api.call('input_request',definition());
+ const records=await f.service.list('run');assert.equal(records.length,1);assert.equal(records[0].turnKey,'first');assert.equal(records[0].order,10);
+ const list=await api.call('input_list',{});assert.equal(list.value.requests[0].turnKey,undefined);
+});

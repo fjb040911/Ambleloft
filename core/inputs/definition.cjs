@@ -4,7 +4,13 @@ const T=require('../forms/template.cjs');
 const valid=new Ajv({strict:false,allErrors:true}).compile({$schema:schema.$schema,$defs:schema.$defs,$ref:'#/$defs/request'});
 const validTool=new Ajv({strict:false,allErrors:true}).compile(schema);
 function validateTool(name,args){jsonData(args);if(!validTool({name,arguments:args}))throw error('补充工具参数不符合规范',(validTool.errors||[]).slice(0,12).map(e=>e.instancePath||'/'));}
-const toolSchemas=schema.oneOf.map(branch=>({name:branch.properties.name.const,inputSchema:{$schema:schema.$schema,...(JSON.stringify(branch.properties.arguments).includes('#/$defs/')?{$defs:schema.$defs}:{}),...branch.properties.arguments}}));
+// Providers require an explicit object root; retain definitions for nested refs.
+const toolSchemas=schema.oneOf.map(branch=>{
+ const args=branch.properties.arguments;
+ const root=args.$ref?schema.$defs[args.$ref.slice('#/$defs/'.length)]:args;
+ if(!root||root.type!=='object')throw Error('Input tool parameters must be an object');
+ return {name:branch.properties.name.const,inputSchema:{$schema:schema.$schema,...(JSON.stringify(root).includes('#/$defs/')?{$defs:schema.$defs}:{}),...root}};
+});
 const error=(message,paths=[])=>Object.assign(Error(message),{code:'INVALID_ARGUMENT',details:{paths}});
 // Only JSON data may cross the model boundary. Reject values JSON.stringify would
 // silently drop or coerce before checking byte limits and the frozen schema.
