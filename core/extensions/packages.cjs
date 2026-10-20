@@ -19,7 +19,12 @@ class PackageStore{
   try{
    const result=await runWorker({source,mode,stage,validator:this.validator});
    const target=path.join(this.root,'revisions',result.id,result.digest);await fs.mkdir(path.dirname(target),{recursive:true});
-   try{await fs.rename(stage,target);}catch(error){if(!['EEXIST','ENOTEMPTY'].includes(error.code))throw error;await compare(stage,target);await fs.rm(stage,{recursive:true,force:true});}
+   try{await fs.rename(stage,target);}catch(error){
+    // Windows reports EPERM when renaming onto an existing revision directory.
+    // Accept it only after verifying the entire existing revision below.
+    if(!['EEXIST','ENOTEMPTY'].includes(error.code)&&!(process.platform==='win32'&&error.code==='EPERM'&&await fs.lstat(target).then(s=>s.isDirectory()&&!s.isSymbolicLink(),()=>false)))throw error;
+    await compare(stage,target);await fs.rm(stage,{recursive:true,force:true});
+   }
    return {...result,relativePath:path.relative(this.root,target),sourceMode:mode};
   }catch(error){await fs.rm(stage,{recursive:true,force:true});throw error;}
  }

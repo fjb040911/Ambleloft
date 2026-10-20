@@ -2,7 +2,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const {Database}=require('../electron/database.cjs');const {ExtensionService}=require('../core/extensions/service.cjs');const {PackageStore}=require('../core/extensions/packages.cjs');
 const legacy=require('../examples/extensions/workspace-guide.json');
 const manifest=(version='1.0.0')=>({specVersion:'1.0-draft',publisher:'fixture',name:'package',version,displayName:'Fixture',engines:{api:'1'},main:'main.cjs',permissions:[{capability:'projects.read',scope:'project'},{capability:'storage',scope:'self'},{capability:'secrets',scope:'self'}]});
-async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-a3-'));const db=new Database(root);await db.call('ready');t.after(async()=>{await db.close();await fs.rm(root,{recursive:true,force:true});});const service=new ExtensionService(db,{directory:root});await service.initialize();return {root,db,service};}
+async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-a3-'));const db=new Database(root),databases=[db];await db.call('ready');t.after(async()=>{await Promise.all(databases.map(database=>database.close()));await fs.rm(root,{recursive:true,force:true});});const service=new ExtensionService(db,{directory:root});await service.initialize();return {root,db,service,registerDatabase:database=>{databases.push(database);return database;}};}
 async function archive(root,m=manifest(),extra={}){const file=path.join(root,'test.amble-extension');await fs.writeFile(file,zipSync({'extension.json':strToU8(JSON.stringify(m)),'main.cjs':strToU8('throw new Error("Package code must not run during install")'),...extra}));return file;}
 test('archive install, cancellation, update, restore and restart require explicit trust without executing code',async t=>{
  const {root,db,service}=await fixture(t);let file=await archive(root);
@@ -37,9 +37,9 @@ test('project grants deny other projects, stale generations and undeclared capab
  await service.remove(id,true);await service.installPackage(await archive(root),'archive',async()=>true);await service.setGrants(id,[{capability:'storage',resource:'self'}]);assert.equal((await service.storage({id,generation:service.items[0].generation},'k')).value,null);
 });
 test('legacy migration isolates bad entries, preserves text commands and never carries code trust into replacement',async t=>{
- const {root,db}=await fixture(t);await db.call('writeSetting',{key:'platform.extensions.v1',value:[{manifest:legacy,enabled:true},{manifest:{},enabled:true}]});
+ const {root,db,registerDatabase}=await fixture(t);await db.call('writeSetting',{key:'platform.extensions.v1',value:[{manifest:legacy,enabled:true},{manifest:{},enabled:true}]});
  // Use a fresh profile DB because migration is deliberately one-shot.
- const dir=path.join(root,'legacy');await fs.mkdir(dir);const old=new Database(dir);t.after(()=>old.close());await old.call('writeSetting',{key:'platform.extensions.v1',value:[{manifest:legacy,enabled:true},{manifest:{},enabled:true}]});
+ const dir=path.join(root,'legacy');await fs.mkdir(dir);const old=registerDatabase(new Database(dir));await old.call('writeSetting',{key:'platform.extensions.v1',value:[{manifest:legacy,enabled:true},{manifest:{},enabled:true}]});
  const service=new ExtensionService(old,{directory:dir});await service.initialize();assert.equal(service.items[0].trusted,false);assert.equal(service.snapshot().diagnostics.length,1);assert.ok(service.execute(legacy.id+'.open'));
  const [publisher,name]=legacy.id.split('.');await service.installPackage(await archive(root,{...manifest(),publisher,name}),'archive',async()=>false);assert.equal(service.items[0].kind,'legacy');
  await service.installPackage(await archive(root,{...manifest(),publisher,name}),'archive',async()=>true);assert.equal(service.items.length,1);assert.equal(service.items[0].kind,'package');assert.equal(service.items[0].grants.length,0);assert.throws(()=>service.execute(legacy.id+'.open'));
@@ -70,10 +70,10 @@ test('updating clears grants and stale consent cannot authorize the new revision
  await assert.rejects(service.setGrants(id,[{capability:'storage',resource:'self'}],generation),/CONFLICT/);
 });
 test('development snapshots include dependencies and bundled validator works; profiles remain isolated',async t=>{
- const {root,db,service}=await fixture(t);const dev=path.join(root,'dev');await fs.mkdir(path.join(dev,'node_modules','fixture'),{recursive:true});await fs.writeFile(path.join(dev,'extension.json'),JSON.stringify(manifest()));await fs.writeFile(path.join(dev,'main.cjs'),'module.exports={}');await fs.writeFile(path.join(dev,'node_modules','fixture','index.js'),'module.exports=42');
+ const {root,db,service,registerDatabase}=await fixture(t);const dev=path.join(root,'dev');await fs.mkdir(path.join(dev,'node_modules','fixture'),{recursive:true});await fs.writeFile(path.join(dev,'extension.json'),JSON.stringify(manifest()));await fs.writeFile(path.join(dev,'main.cjs'),'module.exports={}');await fs.writeFile(path.join(dev,'node_modules','fixture','index.js'),'module.exports=42');
  await service.installPackage(dev,'directory',async()=>true);const revision=service.items[0].revisions[0];assert.equal(await fs.readFile(path.join(service.packages.root,revision.relativePath,'node_modules','fixture','index.js'),'utf8'),'module.exports=42');
  const validator=path.join(root,'validator.cjs');require('esbuild').buildSync({entryPoints:[path.join(__dirname,'../core/extensions/manifest.cjs')],bundle:true,platform:'node',format:'cjs',outfile:validator});
- const otherRoot=path.join(root,'other-profile');const otherDb=new Database(otherRoot);t.after(()=>otherDb.close());const other=new ExtensionService(otherDb,{directory:otherRoot,validator});await other.initialize();assert.equal(other.items.length,0);await other.installPackage(dev,'directory',async()=>true);
+ const otherRoot=path.join(root,'other-profile');const otherDb=registerDatabase(new Database(otherRoot));const other=new ExtensionService(otherDb,{directory:otherRoot,validator});await other.initialize();assert.equal(other.items.length,0);await other.installPackage(dev,'directory',async()=>true);
  assert.notEqual(await db.call('readSetting',{key:'extensions.profile'}),await otherDb.call('readSetting',{key:'extensions.profile'}));assert.equal(other.items[0].grants.length,0);
  await fs.writeFile(path.join(dev,'main.cjs'),'module.exports={changed:true}');assert.equal(await fs.readFile(path.join(service.packages.root,revision.relativePath,'main.cjs'),'utf8'),'module.exports={}');
 });
