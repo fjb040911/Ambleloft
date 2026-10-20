@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { ENGINE_VERSION } = require('../electron/engine.cjs');
 module.exports = async context => {
+  await require('./verify-terminal.cjs')(context);
   const arch = { 0: 'ia32', 1: 'x64', 3: 'arm64' }[context.arch];
   if (context.electronPlatformName !== 'darwin' || arch !== process.arch) throw new Error('必须在目标架构 macOS 上构建并验证');
   const root = path.join(context.packager.projectDir, 'vendor/engine', `darwin-${arch}`);

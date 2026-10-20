@@ -1,0 +1,31 @@
+import {_electron as electron,expect} from '@playwright/test';
+import {mkdtemp,rm,mkdir,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createInterface} from 'node:readline';import {once} from 'node:events';
+const input=createInterface({input:process.stdin});const [line]=await once(input,'line');input.close();const credentials=JSON.parse(line);
+const temp=await mkdtemp(path.join(tmpdir(),'amble-ssh-ui-'));let app;
+try{
+ app=await electron.launch({...(process.argv[2]?{executablePath:path.resolve(process.argv[2])}:{}),args:[...(process.argv[2]?[]:['.']),`--user-data-dir=${temp}`],env:{...process.env,ATELIER_DEV:'0'}});
+ const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.getByLabel('任务内容',{exact:true}).waitFor();
+ await app.evaluate(({dialog},fingerprint)=>{dialog.showMessageBox=async(_owner,options)=>({response:options.title==='信任 SSH 服务器'&&options.detail.includes(fingerprint)?1:0});},credentials.fingerprint);
+ await page.getByRole('button',{name:'新建项目',exact:true}).click();
+ await page.getByRole('radio',{name:'SSH 远端项目',exact:false}).check();
+ await page.getByLabel('连接名称',{exact:true}).fill('SSH 验证');await page.getByLabel('主机 / IP',{exact:true}).fill(credentials.host);await page.getByLabel('SSH 用户名',{exact:true}).fill(credentials.username);await page.getByLabel('SSH 密码',{exact:true}).fill(credentials.password);
+ await page.getByRole('button',{name:'保存连接并测试',exact:true}).click();await expect(page.getByRole('button',{name:'使用此目录',exact:true})).toBeVisible({timeout:20000});
+ await page.getByLabel('项目名称',{exact:true}).fill('SSH 测试项目');await page.getByLabel('工作目录',{exact:true}).fill(credentials.path);await page.getByRole('button',{name:'保存项目',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('[role=status]').filter({hasText:'SSH ·'})).toContainText('已连接');
+ const project=(await page.evaluate(()=>window.desktop.readWorkspace())).projects[0];assert.equal(project.type,'ssh');assert.equal(project.path,credentials.path);assert.ok(!JSON.stringify(project).includes(credentials.password));
+ await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();const tree=page.getByRole('complementary',{name:'项目文件树'});await tree.getByRole('treeitem',{name:'client',exact:true}).click();await tree.getByRole('treeitem',{name:'package.json',exact:true}).click();await expect(page.locator('.cm-content')).toContainText('react');
+ await app.evaluate(({Menu})=>Menu.getApplicationMenu().items.find(i=>i.label==='视图').submenu.items.find(i=>i.label==='打开终端').click());
+ await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);const sessions=await page.evaluate(()=>window.desktop.terminal.list());assert.equal(sessions[0].remote,true);assert.equal(sessions[0].cwd,credentials.path);
+ await page.locator('.terminal-screen:visible .xterm-helper-textarea').focus();await page.keyboard.type('unset HISTFILE; printf "REMOTE_%s\\n" UI_OK');await page.keyboard.press('Enter');await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('REMOTE_UI_OK');
+ await expect(page.getByLabel('新终端使用的 Shell')).toContainText('远端登录 Shell');
+ await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/ssh-project-desktop.png'});
+ await page.getByRole('button',{name:'断开连接',exact:true}).click();await expect(page.locator('.terminal-tabs [role=tab]')).toContainText('已退出');
+ await page.waitForTimeout(2500);await expect(page.locator('[role=status]').filter({hasText:'SSH ·'})).toContainText('未连接');
+ await page.getByRole('button',{name:'连接服务器',exact:true}).click();await expect(page.locator('[role=status]').filter({hasText:'SSH ·'})).toContainText('已连接');assert.equal((await page.evaluate(()=>window.desktop.terminal.list())).length,1,'Reconnect must not recreate/replay terminals');
+ await page.getByRole('button',{name:'新建终端',exact:true}).click();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(2);
+ assert.deepEqual(errors,[]);console.log('PASS: SSH project UI, first-host trust, directory chooser, remote file preview, terminal, explicit disconnect/reconnect without command replay.');
+}finally{await app?.close();await rm(temp,{recursive:true,force:true});}

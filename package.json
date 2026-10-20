@@ -1,6 +1,6 @@
 {
   "name": "ambleloft",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "description": "Open-source, extensible desktop Agent workspace",
   "main": "electron/main.cjs",
@@ -18,8 +18,8 @@
     "test:mermaid": "node scripts/test-mermaid-copy.mjs",
     "test:chat-bridge": "node scripts/test-chat-bridge.cjs",
     "test:files": "node scripts/test-project-files.mjs",
-    "prebuild": "node scripts/prepare-pdf-assets.mjs && node scripts/prepare-office.mjs && npm run extensions:bundle",
-    "predev": "node scripts/prepare-pdf-assets.mjs",
+    "prebuild": "node scripts/prepare-terminal.cjs && node scripts/prepare-pdf-assets.mjs && node scripts/prepare-office.mjs && npm run extensions:bundle",
+    "predev": "node scripts/prepare-terminal.cjs && node scripts/prepare-pdf-assets.mjs",
     "predev:web": "node scripts/prepare-pdf-assets.mjs",
     "engine:prepare": "node scripts/prepare-engine.cjs",
     "package:mac": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.cjs --mac --dir",
@@ -47,7 +47,11 @@
     "test:extensions:apps": "node scripts/test-mcp-apps.mjs",
     "test:forms": "node --test tests/forms.test.cjs && node scripts/test-declarative-forms.mjs",
     "test:inputs:engine": "node scripts/probes/async-input-engine.cjs",
-    "test:inputs:desktop": "node scripts/test-user-input.mjs"
+    "test:inputs:desktop": "node scripts/test-user-input.mjs",
+    "package:linux": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.linux.cjs --linux --dir",
+    "dist:linux": "npm run engine:prepare && npm run build && electron-builder --config build/electron-builder.linux.cjs --linux",
+    "test:terminal": "node --test tests/terminal.test.cjs && node scripts/test-terminal.mjs",
+    "postinstall": "node scripts/prepare-terminal.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -58,6 +62,9 @@
     "@codemirror/state": "^6.7.5",
     "@codemirror/view": "^6.43.12",
     "@shadcn/react": "^0.3.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",
@@ -70,6 +77,7 @@
     "lucide-react": "^0.468.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mermaid": "^11.17.2",
+    "node-pty": "^1.1.0",
     "openid-client": "^6.8.8",
     "pako": "^3.0.1",
     "pdfjs-dist": "^6.3.289",
@@ -81,6 +89,7 @@
     "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "ssh2": "^1.17.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "^2.9.1"
   },

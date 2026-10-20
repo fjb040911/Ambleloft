@@ -7,6 +7,7 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await expect(page.getByText('最近的任务',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'添加项目',exact:true}).click();
  await page.getByRole('textbox',{name:'项目名称',exact:true}).fill('品牌设计');
+ await page.locator('.project-description summary').click();
  await page.getByRole('textbox',{name:'项目说明',exact:true}).fill('品牌视觉与包装方案');
  await page.getByRole('textbox',{name:'工作目录',exact:true}).fill('/tmp/brand');
  await page.getByRole('button',{name:'保存项目',exact:true}).click();
@@ -46,7 +47,7 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await page.getByRole('button',{name:'保存修改'}).click();
  await page.getByRole('button',{name:'管理项目：品牌设计'}).click();
  await page.getByRole('button',{name:'删除项目',exact:true}).click();
- await expect(page.getByRole('dialog')).toContainText('不会删除本机文件');
+ await expect(page.getByRole('dialog')).toContainText('项目文件不会被删除');
  await page.getByRole('button',{name:'确认删除项目',exact:true}).click();
  await expect(page.locator('.project-tree')).toHaveCount(0);
  await expect(page.getByRole('region',{name:'任务',exact:true})).not.toContainText('包装方案');

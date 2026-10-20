@@ -4,10 +4,13 @@ const fail = (code, message) => { const error = new Error(`${code}: ${message}`)
 const text = (v, max, empty = false) => typeof v === 'string' && v.length <= max && (empty || v.trim().length > 0);
 function validateRecord(kind, value) {
   if (!value || !text(value.id, 120) || !text(value.title ?? value.name, 120) || !text(value.createdAt, 100, true)) fail('INVALID_ARGUMENT', 'Invalid resource');
-  const allowed = kind === 'project' ? ['id','name','path','description','createdAt','revision'] : ['id','title','prompt','modelId','projectId','status','createdAt','archivedAt','selectedSkillIds','revision','conversationId'];
+  const allowed = kind === 'project' ? ['id','name','path','description','createdAt','revision','type','connectionId'] : ['id','title','prompt','modelId','projectId','status','createdAt','archivedAt','selectedSkillIds','revision','conversationId'];
   if (Object.keys(value).some(k => !allowed.includes(k))) fail('INVALID_ARGUMENT', 'Unknown resource field');
   if (kind === 'project') {
     if (!text(value.path, 4096) || value.description !== undefined && !text(value.description, 10000, true)) fail('INVALID_ARGUMENT', 'Invalid project');
+    if(value.type!==undefined&&!['local','ssh'].includes(value.type))fail('INVALID_ARGUMENT','Invalid project type');
+    if(value.type==='ssh'&&(!text(value.connectionId,120)||!value.path.startsWith('/')||value.path.includes('\0')))fail('INVALID_ARGUMENT','Invalid SSH project');
+    if(value.type!=='ssh'&&value.connectionId!==undefined)fail('INVALID_ARGUMENT','Local project cannot reference SSH');
   } else {
     if (!text(value.prompt, 20000, true) || !text(value.modelId, 200, true) || value.status !== 'draft' || !(value.projectId === null || text(value.projectId, 120))) fail('INVALID_ARGUMENT', 'Invalid draft');
     if (value.archivedAt != null && !text(value.archivedAt, 100)) fail('INVALID_ARGUMENT', 'Invalid archive time');

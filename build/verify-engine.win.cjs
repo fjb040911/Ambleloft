@@ -4,6 +4,7 @@ const {createHash} = require('node:crypto');
 const {ENGINE_VERSION, probeVersion} = require('../electron/engine.cjs');
 
 module.exports = async context => {
+  await require('./verify-terminal.cjs')(context);
   if (process.platform !== 'win32' || context.electronPlatformName !== 'win32' || context.arch !== 1 || process.arch !== 'x64') {
     throw new Error('Windows package must be built and verified on Windows x64');
   }

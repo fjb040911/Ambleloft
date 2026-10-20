@@ -26,7 +26,7 @@ export interface AgentRun {
   queued?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
-  id: string; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
+  id: string; remote?:{connectionId:string;path:string}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
   messages: { inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
@@ -35,7 +35,7 @@ export interface AgentRun {
   approvals: { id: string; method: string; detail: string; progress?:string }[];
 }
 export interface Task { conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
-export interface Project { revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
+export interface Project { type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
 export interface Workspace { revision?:number;settingsRevision?:number; tasks: Task[]; projects: Project[]; theme: Theme; layoutMode?: 'classic'|'activity'; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
 export interface WorkspaceChange {kind:'project'|'draft'|'settings';action:'put'|'delete'|'patch';id?:string;expectedRevision:number|null;value?:Project|Task|Partial<Pick<Workspace,'theme'|'language'|'fontScale'|'layoutMode'>>}
 export interface Device { name: string; chip: string; memoryGB: number | null; freeMemoryGB: number | null; platform: string; arch: string; mode: 'desktop' | 'preview' }
@@ -84,6 +84,8 @@ declare global {
       };
       extensions?: {automation?(input:{id:string;action?:'get'|'policy'|'retry'|'discard'|'deleteJob'|'retryJob'|'cleanupJobs';policy?:AutomationPolicy;eventId?:string;jobId?:string}):Promise<AutomationState>;details?(id:string):Promise<{readme:string;publisher:string;size:number|null}>;configuration(input:{id:string;action?:'get'|'save'|'reset';generation?:number;expectedRevision?:number;value?:unknown}):Promise<ExtensionConfiguration>;resetConfirmations(input:{id:string}):Promise<ExtensionSnapshot>;development(input:{id:string;url:string}):Promise<boolean>;onChanged?(listener:()=>void):()=>void;activate(id:string):Promise<ExtensionSnapshot>;list():Promise<ExtensionSnapshot>;install(input?:{development?:boolean}):Promise<ExtensionSnapshot>;rollback(input:{id:string;digest:string}):Promise<ExtensionSnapshot>;grants(input:{id:string;revoke?:boolean;projectId?:string;capabilities?:string[]}):Promise<ExtensionSnapshot>;enable(input:{id:string;enabled:boolean}):Promise<ExtensionSnapshot>;remove(id:string):Promise<ExtensionSnapshot>;command(id:string):Promise<{extensionId:string;viewId:string;when?:string;visible?:boolean}>};
       skills?: SkillsAPI;
+      ssh?:import('./SshProjectFields').SshAPI;
+      terminal?: import('./TerminalPanel').TerminalAPI;
       projectFiles?: ProjectFilesAPI;
       selectAttachments(): Promise<{name:string;path:string}[]>;
       copyText(text: string): Promise<void>;
