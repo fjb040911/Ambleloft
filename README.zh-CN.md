@@ -2,41 +2,99 @@
   <img src="public/brand/icon-128.png" width="80" height="80" alt="Ambleloft" />
   <h1>Ambleloft</h1>
   <p><strong>把你的应用，带进 AI 对话。</strong></p>
-  <p><a href="https://ambleloft.com/">官方网站</a> · <a href="#开发第一个扩展">开发插件</a> · <a href="specs/README.md">阅读文档</a></p>
+  <p>开源免费的桌面 AI Agent，为软件公司构建自己的业务 Agent 提供底座。</p>
+  <p><a href="https://ambleloft.com/zh/">官方网站</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">下载与发行说明</a> · <a href="https://ambleloft.com/zh/docs/overview/">开发教程</a> · <a href="#开发第一个扩展">开发插件</a></p>
   <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
 </div>
 
-Ambleloft 是连接应用与 AI Agent 的开源平台。通过插件，让用户在对话中填写表单、确认操作、跟进业务进展。
+Ambleloft 是开源免费的桌面 AI Agent，也是面向软件公司构建业务 Agent 的开放扩展平台。用户可以通过对话处理项目文件、查看工具活动、参与操作确认并审阅结果。软件团队可以基于这个工作台，为已有产品增加对话式业务入口。
 
-[![观看 80 秒介绍：在聊天中填写差旅表单并确认操作](.github/assets/intro-zh-CN.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4)
+**用 Skill 定义业务入口，用声明式表单确认信息，通过 Node 扩展连接你的服务。** 你的应用掌握业务规则与最终处理结果，Ambleloft 提供对话、交互组件和扩展运行环境。
 
-**80 秒了解 Ambleloft：**[中文版](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4) · [English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)。两个版本均带字幕，无音轨。
+本仓库提供 **0.6.0 开发预览**。体验本文所述能力，请先[从源码运行](#从源码运行)；安装包的功能范围以对应发行说明为准。桌面核心免费，模型及外部服务费用另计。
 
-*画面使用真实应用界面、演示数据和模拟桌面接口。视频展示填写差旅信息并将结果带回对话，不代表已向生产报销系统提交申请。*
+## 模型理解意图，你的软件掌握业务
 
-## 让应用在对话中工作
+用户说：“帮我报销上周的差旅费。”你的团队已经定义好这项业务需要哪些字段、如何校验、分几步填写，以及怎样提交。
 
-### 让用户在聊天里办事
+1. Agent 找到 Skill 注册的表单，预填对话中已经提供的信息。
+2. 宿主渲染表单，用户补充缺项、前后切换步骤并核对填写内容。
+3. 用户确认后，按表单配置将结构化答案发送到聊天，或调用扩展的业务操作。
+4. 需要提交业务时，Node 扩展调用财务服务，由服务保存申请并提供可核对的处理结果。
 
-用户提出需求后，展示表单或自定义界面，让他们直接填写信息、核对选项并确认下一步。线性多步骤流程可以使用声明式表单；自定义 HTML/JS 界面可使用当前支持的 MCP Apps 协议子集。
+将答案发送到聊天与提交到财务系统是两种不同的动作。开发者在表单中选择提交方式，并实现相应的业务对接。
 
-[查看表单开发指南](specs/extensions/declarative-forms-guide.md) · [声明式编辑器与结果集合](specs/extensions/declarative-ui-guide.md)
+![Ambleloft 聊天中的差旅表单](.github/assets/travel-expense-zh-CN.png)
 
-当前源码预览支持依赖字段、条件显示、异步聊天提交，以及带筛选、选择和分页的表格/卡片集合。使用前请探测宿主能力。
+*应用界面使用演示数据和模拟桌面接口。截图展示表单交互，不代表已接入生产财务系统。*
 
-### 让 Agent 调用你的应用
+### 定义一份表单，在对话中反复使用
 
-把已有 API 和业务逻辑封装成插件操作，同一个操作可供界面和 Agent 调用。Ambleloft 提供运行环境、权限校验和确认交互，插件定义具体的业务处理。
+把字段、选项、校验和步骤写进 YAML，与 `SKILL.md` 一起维护。Agent 负责选择模板、带入已知信息；宿主负责展示、草稿和步骤导航。你的团队可以像维护软件一样，对业务流程进行版本管理、测试和交付。
 
-[编写第一个业务操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.zh-CN.md)
+独立 Skill 就能收集信息，并把确认后的答案发送到聊天。先从这条路径开始；需要连接业务服务时，再加入扩展。
 
-### 让业务进展主动找人
+[编写三步业务表单](https://ambleloft.com/zh/docs/declarative-ui/) · [宿主表单契约](specs/extensions/declarative-forms-guide.md) · [可导入的差旅 Skill](examples/skills/travel-expense/SKILL.md)
 
-订阅自己业务服务的事件，把进展送到消息中心。为消息附上操作按钮，让用户查看变化后继续处理。现有案例展示了 SSE 事件订阅和需经确认的消息操作。
+### 让现有软件，拥有新的交互入口
 
-[查看服务事件案例](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.zh-CN.md) · [添加消息操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.zh-CN.md)
+通过 Node 扩展，把已有 API 封装成业务 Operation，复用 JavaScript / TypeScript 和 npm 库完成接入。同一个操作可按声明的调用方和权限，供扩展界面及 Agent 使用。
 
-*服务事件案例订阅自有业务服务。当前源码还提供独立的[轮次完成 Hook 与后台作业预览](specs/extensions/background-automation-guide.md)，需要项目权限和用户开启自动化；旧版已发布 SDK/CLI 不一定支持。*
+CRM、ERP、财务、售后工单和企业内部服务，都可以成为对接对象。每项集成需要对应的适配、认证和业务规则；授权、持久化、去重与结果查询仍由业务服务负责。
+
+[接入业务 Operation](https://ambleloft.com/zh/docs/operations/) · [认证接入示例](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.zh-CN.md)
+
+### 业务继续推进，用户随时参与
+
+订阅自己业务服务的事件，把进展送到 Ambleloft 消息中心。为消息附上需经确认的操作，让用户查看变化后继续处理。服务事件和消息操作案例分别展示了这两种接入方式。
+
+当前源码还支持按项目授权的轮次完成 Hook，以及用户主动开启的后台摘要作业。这与业务服务事件使用独立的契约，详见[自动化指南](specs/extensions/background-automation-guide.md)。
+
+[订阅服务事件](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.zh-CN.md) · [添加消息操作](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.zh-CN.md)
+
+## 在共同底座上，构建自己的业务 Agent
+
+| 你定义 | Ambleloft 提供 |
+| --- | --- |
+| Skill 描述业务能力的使用时机 | 技能发现与模型工具调用 |
+| 表单字段、校验、步骤与提交映射 | 聊天内表单、草稿、步骤导航和提交记录 |
+| 连接业务 API 的 Operation | Node 扩展运行环境、权限校验与确认交互 |
+| 业务服务事件与用户可执行的操作 | 应用内消息与操作处理 |
+| 模型端点和项目上下文 | 会话、文件访问、执行审阅与模型连接 |
+
+需要自定义 HTML/JS 界面时，可以使用当前支持的 [MCP Apps 子集](specs/extensions/mcp-apps-design.md)。Skill 也可以声明[编辑器和结果集合](specs/extensions/declarative-ui-guide.md)。通过[本地化资源](specs/extensions/localization-design.md)翻译技能、模板和通知，同时保持业务值与身份标识不变。
+
+应用内置的[补充信息 Skill](resources/skills/supplemental-input/SKILL.md)帮助 Agent 在开放式任务中询问缺失信息。开发者定义的业务表单使用自己的模板和契约。
+
+## 我们的方向：让对话、系统与现场协同工作
+
+我们希望成为软件公司开发自己业务 Agent 的底座，让团队把行业知识和已有服务带入对话。
+
+一次售后服务可以体现这个方向：从聊天中了解故障，用表单确认信息，通过业务系统和服务器服务推进处理，再把现场进展带回用户。桌面、服务器与其他终端应共同参与同一条业务流程。
+
+这是产品的发展方向，跨终端协作和服务器自主持续执行仍需要后续建设与业务适配。当前 SSH 项目支持桌面 Agent 操作远端文件和命令，并不等于上述完整流程已经交付。
+
+[在官网了解产品愿景](https://ambleloft.com/zh/#product-film) · [核对当前源码能力](specs/extensions/current-capabilities.md)
+
+<details>
+<summary>观看早期表单交互演示（80 秒）</summary>
+
+[![差旅表单交互演示](.github/assets/intro-zh-CN.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4)
+
+[中文版](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4) · [English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)。两个版本均带字幕，无音轨。
+
+此早期视频使用真实应用界面、演示数据和模拟桌面接口，两步表单将答案带回聊天。下方业务服务案例使用另一套三步流程和本地演示服务。
+
+</details>
+
+## 选择你的起点
+
+| 你想做什么 | 从这里开始 |
+| --- | --- |
+| 用桌面 Agent 完成任务 | [从源码运行](#从源码运行)，然后[连接模型](#连接模型) |
+| 在 Skill 中定义表单 | [声明式业务表单教程](https://ambleloft.com/zh/docs/declarative-ui/) |
+| 连接已有业务服务 | [开发第一个扩展](#开发第一个扩展) |
+| 核对宿主接口与能力边界 | [源码文档](specs/README.md) |
 
 ## 开发第一个扩展
 
@@ -87,7 +145,7 @@ npm run pack
 3. 启动本地演示服务，在扩展设置中填写服务地址。
 4. 在聊天中请求报销差旅费用，完成三步流程，再查询申请记录。
 
-案例使用虚构数据和本地演示服务，也展示响应丢失后的只读核实流程。上方介绍视频使用另一套两步 UI 演示，将输入结果带回聊天。
+案例使用虚构数据和本地演示服务，也展示响应丢失后的只读核实流程。上方早期表单视频使用另一套两步 UI 演示，将输入结果带回聊天。
 
 </details>
 
@@ -117,11 +175,11 @@ Ambleloft 提供模型连接、项目文件、会话历史和执行审批。选�
 
 ## 当前预览范围
 
-**0.6.0 开发预览。** 本文描述当前源码能力，早期 0.2.1 安装包可能不包含这些功能。
+**0.6.0 开发预览。** 以当前宿主源码和契约为能力基线；安装包覆盖范围以对应发行说明为准。
 
-- **平台：**已验证 macOS Apple Silicon；Windows 和 Linux 为目标平台，尚未提供安装包。
+- **平台：**macOS Apple Silicon 是当前主要验证环境。Windows、Linux 需要分别完成构建与原生运行时验证，安装包以发行说明为准。
 - **扩展：**表单、操作、隔离页面、设置、消息操作及 OIDC 认证均处于开发者预览。MCP Apps 支持有限子集，不代表兼容完整 ChatGPT Apps 或任意远程 MCP。
-- **工具：**示例固定使用已发布的 SDK/CLI **0.1.0-alpha.7**；本仓库的 alpha.1 参考 SDK 独立维护。API 尚未稳定，商城尚未开放。轮次完成 Hook、明确版本的轮次读取和后台作业为新增源码预览，权限、额度与 SDK 兼容范围见[自动化指南](specs/extensions/background-automation-guide.md)。
+- **工具：**SDK/CLI 与示例应对齐所开发能力的宿主基线。按[扩展入门教程](https://ambleloft.com/zh/docs/first-extension/)及所选案例的依赖说明准备工具。API 仍在演进，商城尚未开放；项目授权、模型开关和作业额度见[自动化指南](specs/extensions/background-automation-guide.md)。
 
 Ambleloft 连接已有模型端点，不负责模型下载和推理运行时管理。模型及外部服务费用另计。
 
