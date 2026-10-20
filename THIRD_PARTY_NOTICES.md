@@ -8,6 +8,6 @@ Ambleloft uses the official, pinned Codex 0.153.4 npm distribution without modif
 
 ## Frontend and desktop dependencies
 
-Direct and transitive dependency versions and source integrity are recorded in `package-lock.json`. Consult the license and notice files in each installed package for the applicable terms, including Electron, React, Vite, Lucide, CodeMirror, PDF.js, KaTeX, Mermaid, ECharts and DOMPurify. The frontend build retains emitted third-party license comments where supported by the build tools.
+Direct and transitive dependency versions and source integrity are recorded in `package-lock.json`. Consult the license and notice files in each installed package for the applicable terms, including Electron, React, Vite, Lucide, CodeMirror, PDF.js, KaTeX, Mermaid, ECharts, DOMPurify, xterm.js (including its fit and search addons), node-pty, and ssh2 (with asn1, bcrypt-pbkdf, safer-buffer and tweetnacl). Terminal and SSH dependency licenses are included under `resources/licenses/terminal` in application packages. The frontend build retains emitted third-party license comments where supported by the build tools.
 
 The Ambleloft logo was developed with AI image-generation assistance. Upstream project names and trademarks identify their respective projects and do not imply endorsement.

@@ -17,7 +17,7 @@ app.setName('Ambleloft');
 if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', path.join(app.getPath('appData'), 'Atelier'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
-let pageHost;let taskApps;let profileId;
+let pageHost;let taskApps;let profileId;let terminals;let ssh;
 let store;
 let database;
 let runtime;
@@ -40,13 +40,17 @@ function createWindow() {
     width: 1240, height: 840, minWidth: 800, minHeight: 560,
     title: 'Ambleloft', backgroundColor: '#f8f9fb',
     icon: path.join(__dirname, '../dist/brand/icon-512.png'),
-    ...(process.platform === 'win32' ? {titleBarStyle: 'hidden', titleBarOverlay: {color: '#e9ecf0', symbolColor: '#262c35', height: 38}, autoHideMenuBar: true} : {titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 }}),
+    ...(process.platform === 'win32' ? {titleBarStyle: 'hidden', titleBarOverlay: {color: '#e9ecf0', symbolColor: '#262c35', height: 38}, autoHideMenuBar: true} : process.platform === 'darwin' ? {titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 }} : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   if (process.platform === 'win32') window.setMenuBarVisibility(false);
   const record=windows.add(window,profileId);
+  window.webContents.on('before-input-event',(_event,input)=>{
+    // Preserve shell control keys (interrupt, suspend, readline) on Windows/Linux.
+    window.webContents.setIgnoreMenuShortcuts(!!record.terminalFocused&&input.control&&!input.meta&&['a','c','x','z','y'].includes(input.key.toLowerCase()));
+  });
   window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
-  window.once('closed',()=>{pageHost?.resetOwner(record);taskApps?.closeOwner(record);});
+  window.once('closed',()=>{terminals?.closeOwner(record);pageHost?.resetOwner(record);taskApps?.closeOwner(record);});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-frame-navigate', event => {
     if (!event.isMainFrame) {
@@ -75,7 +79,16 @@ app.whenReady().then(async () => {
     fileApplications:require('./file-applications.cjs').createFileApplications({getIcon:async file=>(await app.getFileIcon(file,{size:'small'})).toDataURL()}),
     publish:run=>windows.broadcast(profileId,'agent:event',pageRun(run))
   });
-  store=services.workspace;runtime=services.tasks;
+  store=services.workspace;runtime=services.tasks;ssh=services.ssh;
+  ssh.publish=()=>windows.broadcast(profileId,'ssh:event');
+  ssh.confirmHost=async info=>{const owner=windows.focused();if(!owner)return false;const result=await hostDialog('showMessageBox',owner,{type:'question',title:'信任 SSH 服务器',message:`首次连接 ${info.username}@${info.host}:${info.port}`,detail:'请核对服务器指纹：\n'+info.fingerprint,buttons:['取消','信任并连接'],defaultId:0,cancelId:0});return result.response===1;};
+  ipcMain.handle('ssh:list',event=>{authorize(event);return ssh.list();});
+  ipcMain.handle('ssh:save',(event,input)=>{authorize(event);return ssh.save(input);});
+  ipcMain.handle('ssh:connect',async(event,input)=>{authorize(event);await ssh.connect(input.id);return ssh.list();});
+  ipcMain.handle('ssh:disconnect',(event,input)=>{authorize(event);ssh.disconnect(input.id);return ssh.list();});
+  ipcMain.handle('ssh:browse',(event,input)=>{authorize(event);return ssh.browse(input.id,input.path);});
+  ipcMain.handle('ssh:validate',async(event,input)=>{authorize(event);return {path:await ssh.directory(input.id,input.path)};});
+  ipcMain.handle('ssh:key',async event=>{const owner=authorize(event);const result=await hostDialog('showOpenDialog',owner.window,{title:'选择 SSH 私钥',properties:['openFile']});return result.canceled?null:result.filePaths[0];});
   const skills=services.skills;
   try{await skills.initializeBuiltins();}catch{console.warn('Built-in skill guidance is unavailable; ordinary chat remains available.');}
   let extensionError='';
@@ -127,7 +140,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('input:append',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw new Error('正在更新或测试模型配置');return chatInputs.append(input,owner);});
   ipcMain.handle('input:action',async(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw new Error('正在更新或测试模型配置');if(input?.action==='resume'){const {action,...value}=input;return chatInputs.resume(value);}try{if(input?.action==='reconcile')return await inputRequests.reconcile(input);return await inputRequests.action(input,owner);}catch(error){return {inputValidationError:{code:error.code||'STORAGE_UNAVAILABLE',message:error.message,...(error.fields?{fields:error.fields}:{})}};}});
   ipcMain.handle('forms:list',async(event,input)=>{authorize(event);return Promise.all((await forms.list(input.runId)).map(flow=>forms.project(flow)));});
-  ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return forms.project((await forms.ui.list(input.runId)).find(f=>f.id===input.id));}try{return await forms.projectResponse(await forms.action(input,owner));}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
+  ipcMain.handle('forms:action',async(event,input)=>{const owner=authorize(event);if(input.action==='location'){const target=await forms.ui.location(input);await services.files.open(target,{shell,dialog:{showSaveDialog:(window,options)=>hostDialog('showSaveDialog',window,options),showOpenDialog:(window,options)=>hostDialog('showOpenDialog',window,options)},window:owner.window});return forms.project((await forms.ui.list(input.runId)).find(f=>f.id===input.id));}try{return await forms.projectResponse(await forms.action(input,owner));}catch(error){if(error.fields)return {uiValidationError:{message:error.message,fields:error.fields}};throw error;}});
 
   const {McpApps}=require('../core/extensions/mcp-apps.cjs');
   taskApps=new McpApps({service:services.extensions,router:operationRouter,runtime,locale:()=>services.extensions.options.locale,theme:()=>nativeTheme.shouldUseDarkColors?'dark':'light'});runtime.mcpApps=taskApps;
@@ -138,6 +151,23 @@ app.whenReady().then(async () => {
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
   services.extensions.options.pageChanged=async(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
+  terminals = new (require('./terminal.cjs').TerminalService)({spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size),resolveContext:async input=>{
+    const project = input.projectId ? (await store.read()).projects.find(p=>p.id===input.projectId) : null;
+    if(input.projectId&&!project)throw Error('项目不存在');
+    const run = input.runId ? runtime.runs.find(r=>r.id===input.runId) : null;
+    if(input.runId&&(!run||(run.projectId||'')!==(input.projectId||'')))throw Error('任务与项目不匹配');
+    if(project?.type==='ssh'){if(run?.remote&&(run.remote.connectionId!==project.connectionId||run.remote.path!==project.path))throw Error('远端项目位置已改变，请新建任务');await ssh.connect(project.connectionId);const root=await ssh.directory(project.connectionId,project.path);const location=await ssh.withSftp(project.connectionId,s=>ssh.resolve(s,root,input.directory||''));return {projectId:project.id,runId:run?.id,cwd:await ssh.directory(project.connectionId,location.full),connectionId:project.connectionId};}
+    const fs=require('node:fs/promises');
+    const root=await fs.realpath(run?.cwd||project?.path||os.homedir());
+    const cwd=await fs.realpath(input.directory ? path.resolve(root,input.directory) : root);
+    const relative=path.relative(root,cwd);
+    if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('目录不属于当前工作区');
+    if(!(await fs.stat(cwd)).isDirectory())throw Error('目录不存在');
+    return {projectId:project?.id||'',runId:run?.id,cwd};
+  }});
+  ipcMain.handle('terminal:focus',(event,input)=>{const owner=authorize(event);owner.terminalFocused=input?.active===true;if(!owner.terminalFocused)owner.window.webContents.setIgnoreMenuShortcuts(false);});
+  ipcMain.handle('terminal:profiles',async(event,input)=>{authorize(event);const project=(await store.read()).projects.find(p=>p.id===input?.projectId);return project?.type==='ssh'?[{id:'remote-login',name:'远端登录 Shell'}]:terminals.profiles.map(({id,name})=>({id,name}));});
+  for(const action of ['list','create','read','write','resize','close'])ipcMain.handle('terminal:'+action,(event,input)=>terminals[action](authorize(event),input));
   ipcMain.handle('window:menu',event=>{const owner=authorize(event);if(process.platform==='win32')Menu.getApplicationMenu()?.popup({window:owner.window,x:12,y:38});});
   ipcMain.handle('window:chrome',(event,input)=>{const owner=authorize(event);if(process.platform!=='win32')return;if(!/^#[0-9a-f]{6}$/i.test(input?.color)||!/^#[0-9a-f]{6}$/i.test(input?.symbolColor))throw new Error('Invalid chrome colors');owner.window.setTitleBarOverlay({color:input.color,symbolColor:input.symbolColor,height:38});});
   ipcMain.handle('window:new',event=>{authorize(event);createWindow();return true;});
@@ -212,7 +242,7 @@ app.whenReady().then(async () => {
   const files=services.files;
   protocol.handle('atelier-preview', request=>files.resource(request));
   for (const action of ['context','list','search','read','office','apps']) ipcMain.handle('files:'+action,(event,input)=>{authorize(event);return files[action](input);});
-  ipcMain.handle('files:open',(event,input)=>{const window=authorize(event).window;return files.open(input,{shell,dialog:{showOpenDialog:(owner,options)=>hostDialog('showOpenDialog',owner,options)},window});});
+  ipcMain.handle('files:open',(event,input)=>{const window=authorize(event).window;return files.open(input,{shell,dialog:{showSaveDialog:(owner,options)=>hostDialog('showSaveDialog',owner,options),showOpenDialog:(owner,options)=>hostDialog('showOpenDialog',owner,options)},window});});
   let runtimeError = '';
   try { await runtime.init(); await inputRequests.refreshSources(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
   const checkRuntime = () => { if (runtimeError) throw new Error(runtimeError); };
@@ -252,7 +282,7 @@ app.whenReady().then(async () => {
     try { return await probeProvider(await provider.secret(id)); } finally { configBusy = false; }
   });
   ipcMain.handle('agent:edit', (event, input) => { authorize(event); checkRuntime(); return runtime.edit(input).then(list=>list.map(summary)); });
-  ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
+  ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在');if(project.type==='ssh')throw Error('请通过项目文件面板浏览远端目录'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
   ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
   const searchSnapshots=new Map();
   const recentSearchUse=await database.call('readSetting',{key:'workspace.searchRecent'})||{};
@@ -322,7 +352,7 @@ app.whenReady().then(async () => {
     { label: 'Ambleloft', submenu: [{ role: 'about' }, { type: 'separator' }, { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => command('settings') }, { type: 'separator' }, { role: 'hide' }, { role: 'unhide' }, { role: 'quit' }] },
     { label: '文件', submenu: [{ label:'新建窗口',accelerator:'CmdOrCtrl+Shift+N',click:()=>createWindow()},{ label: '新建任务', accelerator: 'CmdOrCtrl+N', click: () => command('new-task') }, { label: '添加项目…', accelerator: 'CmdOrCtrl+O', click: () => command('add-project') }, { role: 'close' }] },
     { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: '显示', submenu: [{ label: '搜索', accelerator: 'CmdOrCtrl+F', click: () => command('search') }, { label: '显示 / 隐藏侧栏', accelerator: 'CmdOrCtrl+\\', click: () => command('sidebar') }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }, { type: 'separator' }, { label: '开发者工具', accelerator: 'Alt+CommandOrControl+I', click: () => { const contents=windows.focused()?.webContents; if(!contents||contents.isDestroyed())return; if(contents.isDevToolsOpened())contents.closeDevTools();else contents.openDevTools({mode:'detach'}); } }] },
+    { label: '视图', submenu: [{ label: '打开终端', accelerator: 'Ctrl+`', click: () => command('terminal') }, { type: 'separator' }, { label: '搜索', accelerator: 'CmdOrCtrl+F', click: () => command('search') }, { label: '显示 / 隐藏侧栏', accelerator: 'CmdOrCtrl+\\', click: () => command('sidebar') }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }, { type: 'separator' }, { label: '开发者工具', accelerator: 'Alt+CommandOrControl+I', click: () => { const contents=windows.focused()?.webContents; if(!contents||contents.isDestroyed())return; if(contents.isDevToolsOpened())contents.closeDevTools();else contents.openDevTools({mode:'detach'}); } }] },
     { role: 'windowMenu' },
   ]));
   createWindow();
@@ -331,6 +361,7 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', event => {
+  terminals?.shutdown();ssh?.shutdown();
   if (!runtime || quitting) return;
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();

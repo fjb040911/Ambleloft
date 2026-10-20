@@ -1,0 +1,12 @@
+.terminal-panel{position:relative;flex:none;min-height:160px;max-height:75%;min-width:0;flex-direction:column;background:var(--surface);color:var(--text);border-top:1px solid var(--border);overflow:hidden}
+.terminal-panel.terminal-maximized{max-height:none;flex:1}
+.main-shell:has(>.terminal-maximized:not([style*="display: none"]))>.workspace-content{display:none}
+.terminal-resize{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:2;touch-action:none}
+.terminal-resize:hover,.terminal-resize:focus-visible{background:var(--accent)}
+.terminal-toolbar{display:flex;align-items:center;gap:4px;min-height:40px;padding:5px 10px 2px;border-bottom:1px solid var(--border);overflow-x:auto;flex:none}
+.terminal-heading{font-size:12px;padding-right:10px;white-space:nowrap}.terminal-toolbar button{display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:28px;min-width:28px;border-radius:4px;color:inherit;background:transparent;border:0;cursor:pointer}.terminal-toolbar button:hover{background:var(--hover)}.terminal-toolbar button:disabled{opacity:.4;cursor:default}
+.terminal-tabs{display:flex;flex:1;min-width:70px;overflow:auto;gap:4px}.terminal-tabs button{font-size:12px;padding:3px 9px;white-space:nowrap}.terminal-tabs button[aria-selected=true]{background:var(--selection)}
+.terminal-toolbar select{background:var(--raised);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;max-width:140px;height:26px}
+.terminal-directory{font:11px monospace;color:var(--secondary);padding:4px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}.terminal-screen{flex:1;min-height:0;min-width:0;padding:2px 10px 6px}.terminal-screen .xterm{height:100%}.terminal-search{display:flex;gap:8px;padding:4px 12px}.terminal-search input{background:var(--raised);color:var(--text);border:1px solid var(--border);padding:3px 8px;border-radius:4px}.terminal-search button{font-size:12px}.terminal-error{font-size:12px;padding:5px 12px;color:light-dark(#b42318,#ffb5ad);white-space:pre-wrap}.terminal-empty{padding:20px;color:var(--secondary);font-size:13px}
+
+.terminal-toolbar button:focus-visible,.terminal-search input:focus-visible,.terminal-toolbar select:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}

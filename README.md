@@ -117,7 +117,7 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.5.1 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
+**0.6.0 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
 
 - **Platforms:** validated on macOS Apple Silicon. Windows and Linux are targets; packages are not available yet.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
@@ -149,6 +149,14 @@ npm start
 ```
 
 `npm run dev:web` starts a browser-only UI preview. Native filesystem access and agent execution require the desktop app.
+
+## SSH projects and integrated terminal
+
+Create an SSH project to browse remote files and run Agent commands through SSH/SFTP while the Agent stays on your computer. Password, private-key, and local SSH-agent authentication are supported. First connections require host-key confirmation; changed fingerprints block connections. Remote writes and commands require approval in default permission mode.
+
+Open the integrated terminal from **View → Open Terminal**, **Ctrl + backtick**, or a folder's context menu. Sessions are grouped by project and remain active when the panel is hidden. Local and SSH terminals support tabs, search, resizing, and theme-aware colors.
+
+SSH projects currently target Linux servers with Bash and SFTP. Jump hosts, MFA, port forwarding, and terminal process recovery after a disconnect are not supported. Build and native-runtime validation must run on each target OS and architecture; this release provides macOS Apple Silicon binaries.
 
 <details>
 <summary>Office previews: dependencies and supported features</summary>

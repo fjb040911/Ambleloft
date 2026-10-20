@@ -1,5 +1,14 @@
 # Preview notes / 预览版说明
 
+## v0.6.0 — SSH projects and integrated terminal preview
+
+- Adds SSH projects with remote file browsing, SFTP access, remote Agent tools, host-key confirmation, and connection lifecycle controls.
+- Adds an integrated local/SSH terminal with project-scoped tabs, search, resizing, and theme support.
+- Improves project creation and connection-status UI; adds Linux packaging configuration and native PTY verification.
+- macOS Apple Silicon DMG/ZIP with SHA-256 checksums; ad-hoc signed, not Apple-notarized. Windows/Linux require native validation.
+
+新增 SSH 远端项目、远端文件浏览与 Agent 工具、服务器指纹确认和连接状态管理；新增按项目分组的本地/SSH 终端，支持标签、搜索、调整尺寸和主题。改进项目创建界面，加入 Linux 打包配置及原生 PTY 校验。本次提供 macOS Apple Silicon 安装包，尚未经过 Apple 公证。
+
 ## v0.5.1 — Task continuation and clarification fixes
 
 - Starts a new prompt after Stop with the selected model and provider, without automatically sending held supplemental content.

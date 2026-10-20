@@ -58,9 +58,10 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
  useEffect(()=>{if(notice){const timer=setTimeout(()=>setNotice(''),2500);return()=>clearTimeout(timer);}},[notice]);
  useEffect(()=>{
   if(!open||paused||!api)return;
-  let cancelled=false;
-  api.context(context).then(value=>{if(!cancelled){setRoot(value.root);setBase(value.baseUrl);}}).catch(e=>{if(!cancelled)setTreeError(e.message);});
-  return()=>{cancelled=true;};
+  let cancelled=false,running=false,ready=false;
+  const refresh=async()=>{if(running||ready)return;running=true;try{const value=await api.context(context);if(!cancelled){setRoot(value.root);setBase(value.baseUrl);ready=true;}}catch(e){if(!cancelled)setTreeError((e as Error).message);}finally{running=false;}};
+  void refresh();const timer=setInterval(refresh,2000);
+  return()=>{cancelled=true;clearInterval(timer);};
  },[api,context.projectId,context.runId,open,paused,reload]);
  useEffect(()=>{
   if(!open||paused||!api)return;
@@ -178,11 +179,11 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
    else if(event.key==='End')target=visibleEntries.at(-1)?.entry.path;
    else if(event.key==='ArrowRight'){if(entry.directory){if(!expanded)toggleFolder(entry.path);else if(visibleEntries[index+1]?.depth>depth)target=visibleEntries[index+1].entry.path;}}
    else if(event.key==='ArrowLeft'){if(entry.directory&&expanded)toggleFolder(entry.path);else target=entry.path.includes('/')?entry.path.slice(0,entry.path.lastIndexOf('/')):undefined;}
-   else if(!entry.directory&&(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10'))){event.preventDefault();const rect=event.currentTarget.getBoundingClientRect();event.currentTarget.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:rect.left+24,clientY:rect.bottom}));return;}
+   else if(event.key==='ContextMenu'||(event.shiftKey&&event.key==='F10')){event.preventDefault();const rect=event.currentTarget.getBoundingClientRect();event.currentTarget.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:rect.left+24,clientY:rect.bottom}));return;}
    else return;
    event.preventDefault();if(target)focusEntry(target);
   }}>{entry.directory?(expanded?<ChevronDown size={13}/>:<ChevronRight size={13}/>):<span className="file-tree-spacer"/>}{icon(entry)}<span>{matches?entry.path:entry.name}</span></button>;
-  return <div role="none" key={entry.path}>{entry.directory?row:<ContextMenu open={menu?.source==='context'&&menu.path===entry.path} onOpenChange={value=>setMenu(value?{path:entry.path,source:'context'}:null)}><ContextMenuTrigger render={row}/><ContextMenuContent className="w-72 max-w-[calc(100vw-16px)] p-1.5" alignOffset={0} aria-label={t('文件操作')} onKeyDown={event=>event.stopPropagation()}>{menuItems(entry.path,true)}</ContextMenuContent></ContextMenu>}{entry.directory&&expanded&&!directories[entry.path]&&<p className="file-tree-note">{t('正在加载…')}</p>}{entry.directory&&expanded&&directories[entry.path]?.entries.length===0&&<p className="file-tree-note">{t('空目录')}</p>}{entry.directory&&expanded&&directories[entry.path]?.truncated&&<p className="file-tree-note">{t('目录较大，仅显示前 2000 项')}</p>}</div>;
+  return <div role="none" key={entry.path}>{entry.directory?<ContextMenu><ContextMenuTrigger render={row}/><ContextMenuContent><ContextMenuItem disabled={!window.desktop?.terminal} onClick={()=>window.dispatchEvent(new CustomEvent('terminal:open',{detail:{directory:entry.path}}))}>{t('在此处打开终端')}</ContextMenuItem></ContextMenuContent></ContextMenu>:<ContextMenu open={menu?.source==='context'&&menu.path===entry.path} onOpenChange={value=>setMenu(value?{path:entry.path,source:'context'}:null)}><ContextMenuTrigger render={row}/><ContextMenuContent className="w-72 max-w-[calc(100vw-16px)] p-1.5" alignOffset={0} aria-label={t('文件操作')} onKeyDown={event=>event.stopPropagation()}>{menuItems(entry.path,true)}</ContextMenuContent></ContextMenu>}{entry.directory&&expanded&&!directories[entry.path]&&<p className="file-tree-note">{t('正在加载…')}</p>}{entry.directory&&expanded&&directories[entry.path]?.entries.length===0&&<p className="file-tree-note">{t('空目录')}</p>}{entry.directory&&expanded&&directories[entry.path]?.truncated&&<p className="file-tree-note">{t('目录较大，仅显示前 2000 项')}</p>}</div>;
  };
  const selected=file?.path===active?file:null;
  const code=selected&&selected.text!==undefined&&(mode==='code'||selected.kind==='code');
