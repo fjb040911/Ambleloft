@@ -2,41 +2,99 @@
   <img src="public/brand/icon-128.png" width="80" height="80" alt="Ambleloft" />
   <h1>Ambleloft</h1>
   <p><strong>Bring your apps into AI conversations.</strong></p>
-  <p><a href="https://ambleloft.com/">Official website</a> · <a href="#build-your-first-extension">Build an extension</a> · <a href="specs/README.md">Documentation</a></p>
+  <p>An open-source desktop AI agent and a foundation for software companies building their own business agents.</p>
+  <p><a href="https://ambleloft.com/en/">Official website</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">Downloads & release notes</a> · <a href="https://ambleloft.com/en/docs/overview/">Developer guides</a> · <a href="#build-your-first-extension">Build an extension</a></p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Ambleloft is an open-source platform for connecting your apps to AI agents. Build extensions that let users fill out forms, confirm actions, and follow business progress in chat.
+Ambleloft is a free, open-source desktop AI agent and an open extension platform. Work with project files, review tool activity, confirm actions, and inspect results in conversation. Software teams can build on that workspace to give their existing products a conversational interface.
 
-[![Watch the 80-second introduction: complete a travel expense form in chat](.github/assets/intro-en.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)
+**Define the business entry point in a Skill. Specify fields and steps in a declarative form. Connect your services through a Node extension.** Your application owns the business rules and final outcome; Ambleloft provides the conversation, interaction components, and extension runtime.
 
-**Watch the 80-second introduction:** [English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4) · [简体中文](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4). Both videos have captions and no audio.
+This repository contains the **0.6.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
 
-*Real application UI with demo data and a simulated desktop bridge. The video shows collecting travel details and returning them to chat, not a production reimbursement submission.*
+## The agent understands intent. Your software owns the rules.
 
-## Your app, inside the conversation
+A user asks: “Help me claim last week’s travel expenses.” Your team has already defined the required fields, validation, steps, and submission operation.
 
-### Let users act in chat
+1. The Agent finds the form registered by your Skill and prefills facts already provided in the conversation.
+2. The host renders the form. The user supplies missing details, moves between steps, and reviews their entries.
+3. After confirmation, the form follows its configured submission path: send structured answers to chat, or invoke an extension operation.
+4. For a business submission, the Node extension calls your finance service. Your service stores the request and provides a result that can be checked.
 
-Present a form or custom interface when a user asks to do something. They can enter details, review choices, and confirm the next step in the conversation. Use declarative forms for linear, multi-step flows, or the supported MCP Apps subset for custom HTML/JS.
+Sending answers to chat and submitting a claim to a finance system are distinct actions. You choose the path in the form definition and implement the business integration.
 
-[Explore in-chat forms](specs/extensions/declarative-forms-guide.md). Source-preview templates can opt into single-click chat submission, dependent and conditional fields, mixed group toggles, and frozen answer reads; probe `forms_capabilities` before using these increments.
+![Travel form in the Ambleloft conversation interface](.github/assets/travel-expense-en.png)
 
-Source preview: the Agent can request [persistent supplemental forms](specs/extensions/user-input-u9-results.md) above the chat composer. Users can also add text while a task runs. The built-in guidance Skill is optional; probe `input_capabilities` before calling the internal model tools. This does not expose a new Node SDK API or independent execution-unit scheduling.
+*Application UI with demo data and a simulated desktop bridge. This screenshot illustrates form interaction, not a production finance integration.*
 
-### Let the Agent call your app
+### Define the form once, reuse it in conversation
 
-Wrap your existing APIs and business logic as extension operations. The same operation can serve your interface and the Agent. Ambleloft provides the runtime, permission checks, and confirmation interactions; your extension defines what the operation does.
+Put fields, choices, validation, and steps in YAML alongside your `SKILL.md`. The Agent selects the template and supplies known information; the host handles rendering, drafts, and step navigation. Your team can version, test, and deliver the workflow with the rest of its software.
 
-[Build your first operation](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/hello-operation/README.md)
+A standalone Skill can collect information and send confirmed answers to chat. Start there, then add an extension when the workflow needs your business service.
 
-### Bring progress back to the user
+[Build a three-step form](https://ambleloft.com/en/docs/declarative-ui/) · [Host form contract](specs/extensions/declarative-forms-guide.md) · [Importable travel Skill](examples/skills/travel-expense/SKILL.md)
 
-Subscribe to events from your business service and publish updates in the message center. Add action buttons so users can review a change and continue the workflow. The samples demonstrate SSE events and confirmed message actions.
+### Connect the software your customers already use
 
-[Explore service events](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.md) · [Add message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md)
+Use Node extensions to wrap existing APIs as business operations. Reuse JavaScript / TypeScript and npm libraries for your integration. An operation can serve both the extension interface and the Agent, subject to its declared callers and permissions.
 
-*Service-event examples use your own backend. The current source also includes a separate [preview of turn-completion hooks and background jobs](specs/extensions/background-automation-guide.md), gated by project permissions and user-enabled automation. Previously published SDK/CLI packages may not support it.*
+CRM, ERP, finance, service-desk software, and internal services are integration targets. Each needs its own adapter, authentication, and business rules. The service remains responsible for authorization, persistence, deduplication, and result lookup.
+
+[Connect a business operation](https://ambleloft.com/en/docs/operations/) · [Authentication example](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/enterprise-auth/README.md)
+
+### Keep people involved as work progresses
+
+Subscribe to events from your business service and publish progress in Ambleloft’s message center. Add confirmed actions so users can review an update and take the next step. The service-event and message-action samples demonstrate these patterns independently.
+
+The current source also supports project-authorized turn-completion Hooks and opt-in background summary jobs. These use a separate contract from business-service events; see the [automation guide](specs/extensions/background-automation-guide.md).
+
+[Subscribe to service events](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/service-events/README.md) · [Add message actions](https://github.com/fjb040911/ambleloft-extension-samples/blob/main/message-actions/README.md)
+
+## A shared foundation for your business Agent
+
+| You define | Ambleloft provides |
+| --- | --- |
+| Skills that describe when to use a business capability | Skill discovery and model tool calls |
+| Form fields, validation, steps, and submission mappings | In-chat form rendering, drafts, navigation, and submission records |
+| Operations that connect to your APIs | Node extension runtime, permission checks, and confirmation interactions |
+| Service events and actions users can take | In-app messages and action handling |
+| Your model endpoint and project context | Conversations, file access, execution review, and model connections |
+
+For custom HTML/JS interfaces, use the supported [MCP Apps subset](specs/extensions/mcp-apps-design.md). Skills can also declare [editors and result collections](specs/extensions/declarative-ui-guide.md). Use [localization resources](specs/extensions/localization-design.md) to translate skills, templates, and notifications while retaining business values and identifiers.
+
+The built-in [supplemental information Skill](resources/skills/supplemental-input/SKILL.md) helps the Agent ask for missing details during open-ended tasks. Developer-defined business forms use their own templates and contracts.
+
+## Our direction: connect conversations, systems, and the people doing the work
+
+We want software companies to deliver business Agents on a shared foundation, bringing their domain knowledge and existing services into conversation.
+
+A service request is one example of that direction: identify the issue in chat, confirm details in a form, coordinate work through business systems and server-side services, then bring field updates back to the user. Desktop, server, and other device experiences should contribute to the same business process.
+
+This is the product direction. Cross-device coordination and unattended server-side execution require further development and integration. Current SSH projects let the desktop Agent operate remote files and commands; they do not provide that whole future workflow.
+
+[Explore the product vision on the website](https://ambleloft.com/en/#product-film) · [Check current source capabilities](specs/extensions/current-capabilities.md)
+
+<details>
+<summary>Watch the earlier form interaction demo (80 seconds)</summary>
+
+[![Travel form interaction demo](.github/assets/intro-en.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)
+
+[English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4) · [简体中文](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4). Both versions have captions and no audio.
+
+This earlier video uses real application UI, demo data, and a simulated desktop bridge. Its two-step form returns answers to chat. The business-service example below uses a separate three-step flow and a local demo service.
+
+</details>
+
+## Choose your first step
+
+| Your goal | Start here |
+| --- | --- |
+| Use the desktop Agent for a task | [Run from source](#run-from-source), then [connect a model](#connect-a-model) |
+| Define a form in a Skill | [Declarative business form tutorial](https://ambleloft.com/en/docs/declarative-ui/) |
+| Connect an existing business service | [Build your first extension](#build-your-first-extension) |
+| Inspect the host’s contracts and boundaries | [Source documentation](specs/README.md) |
 
 ## Build your first extension
 
@@ -61,7 +119,7 @@ In a compatible host, open **Settings → Extensions → Install**, select the p
 
 ![Extension overview: interactive interfaces and operations shared by users and agents](.github/assets/extension-platform-en.png)
 
-Use a Skill to describe when the Agent should use your capability, a form or page to collect input, and an operation to execute business logic. See the [current capabilities and contracts](specs/extensions/current-capabilities.md). Ordinary skills can also declare deterministic editors and result collections with single-click chat actions; see the [declarative UI v1 guide](specs/extensions/declarative-ui-guide.md) and [complete sample skill](specs/extensions/examples/declarative-ui/SKILL.md). Collections support explicit table/card layouts with shared filtering, selection, pagination, and actions (`ui_capabilities.collectionLayouts: 1`); see the [business-neutral service request example](specs/extensions/examples/declarative-ui/requests.json). These features are source previews. A [host-rendered file reference design](specs/extensions/file-reference-design.md) reuses `rows.location.pathField` without requiring skills to import UI components; compact file references are integrated into task UI with directory hints, full-path details, copying, and host-authorized file location (source preview).
+Use a Skill to describe when to use your capability, a form or page to collect input, and an operation to execute business logic. See the [current capabilities and contracts](specs/extensions/current-capabilities.md) for source-preview interfaces and runtime capability checks. The [declarative UI guide](specs/extensions/declarative-ui-guide.md) covers editors, collections, and their submission contract.
 
 </details>
 
@@ -87,7 +145,7 @@ Use a Skill to describe when the Agent should use your capability, a form or pag
 3. Start its local demo service and configure the service URL in extension settings.
 4. Ask to submit travel expenses, complete the three-step flow, and query the resulting records.
 
-This sample uses fictional data and a local demo service. It also demonstrates read-only reconciliation after a lost response. The introduction video shows a separate two-step UI demo that returns input to chat.
+This sample uses fictional data and a local demo service. It also demonstrates read-only reconciliation after a lost response. The earlier form video above shows a separate two-step UI demo that returns input to chat.
 
 </details>
 
@@ -117,11 +175,11 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.6.0 development preview.** Use the current source for the capabilities described here. The earlier 0.2.1 installers may not include them.
+**0.6.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
 
-- **Platforms:** validated on macOS Apple Silicon. Windows and Linux are targets; packages are not available yet.
+- **Platforms:** macOS Apple Silicon is the primary validated environment. Windows and Linux require platform-specific build and native-runtime validation; check release notes for available packages.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
-- **Tooling:** samples pin published SDK/CLI **0.1.0-alpha.7**. This repository's alpha.1 reference SDK is maintained separately. APIs are not stable and a marketplace is not available. Turn-completion hooks, versioned turn reads, and background jobs are a new source preview; see the [automation guide](specs/extensions/background-automation-guide.md) for permissions, quotas, and SDK compatibility.
+- **Tooling:** use SDK/CLI and samples aligned with the host capability you are developing against. Follow the [extension setup guide](https://ambleloft.com/en/docs/first-extension/) and the selected sample’s dependency instructions. APIs are evolving and a marketplace is not available. The [automation guide](specs/extensions/background-automation-guide.md) documents project grants, model opt-in, and job limits.
 
 Ambleloft connects to existing model endpoints. Model downloads and inference-runtime management are outside the current scope. Model and external service charges are separate.
 
