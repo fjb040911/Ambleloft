@@ -26,7 +26,7 @@ export interface AgentRun {
   queued?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
-  id: string; remote?:{connectionId:string;path:string}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
+  id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
   messages: { inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
@@ -35,7 +35,9 @@ export interface AgentRun {
   approvals: { id: string; method: string; detail: string; progress?:string }[];
 }
 export interface Task { conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
-export interface Project { type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
+export type DockerEnvironment={kind:'docker';endpoint:string;daemonId:string;containerId:string;containerName:string;imageId:string;user:string|null;shell:'auto'|'bash'|'sh'};
+export type RemoteEnvironment={kind:'host'}|DockerEnvironment;
+export interface Project { environment?:RemoteEnvironment; type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
 export interface Workspace { revision?:number;settingsRevision?:number; tasks: Task[]; projects: Project[]; theme: Theme; layoutMode?: 'classic'|'activity'; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
 export interface WorkspaceChange {kind:'project'|'draft'|'settings';action:'put'|'delete'|'patch';id?:string;expectedRevision:number|null;value?:Project|Task|Partial<Pick<Workspace,'theme'|'language'|'fontScale'|'layoutMode'>>}
 export interface Device { name: string; chip: string; memoryGB: number | null; freeMemoryGB: number | null; platform: string; arch: string; mode: 'desktop' | 'preview' }
@@ -43,12 +45,13 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      creation?:import('./CreationGuide').CreationAPI;
       inputs?: {
         list(input:{runId:string}):Promise<{policy:{paused:boolean;generation:number};deliveries:InputDelivery[];requests:PersistentInputRequest[]}>;
         append(input:{runId:string;clientMutationId:string;text:string}):Promise<InputDelivery>;
-        action(input:{action:'resume';runId:string;clientMutationId:string;expectedPolicyGeneration:number;deliveryIds:string[]}):Promise<{paused:boolean;generation:number}>;
-        action(input:{action:'reconcile';runId:string;deliveryId:string}):Promise<InputDelivery>;
-        action(input:{action:'cancel';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'acceptProposal'|'rejectProposal';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;proposalId:string;resume?:{expectedPolicyGeneration:number}}|{action:'beginEdit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'saveDraft';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>}|{action:'submit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>;resume?:{expectedPolicyGeneration:number}}):Promise<PersistentInputRequest>;
+        action(input:{action:'resume';runId:string;clientMutationId:string;expectedPolicyGeneration:number;deliveryIds:string[]}):Promise<{paused:boolean;generation:number}|import('./input-action-result').InputActionError>;
+        action(input:{action:'reconcile';runId:string;deliveryId:string}):Promise<InputDelivery|import('./input-action-result').InputActionError>;
+        action(input:{action:'cancel';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'acceptProposal'|'rejectProposal';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;proposalId:string;resume?:{expectedPolicyGeneration:number}}|{action:'beginEdit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'saveDraft';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>}|{action:'submit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>;resume?:{expectedPolicyGeneration:number}}):Promise<PersistentInputRequest|import('./input-action-result').InputActionError>;
         onChanged(listener:(event:{runId:string})=>void):()=>void;
       };
       taskApps?: {

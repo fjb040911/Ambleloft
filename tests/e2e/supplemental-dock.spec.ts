@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
-async function setup(page:Page,paused=false,native=false){
- await page.addInitScript(({paused,native})=>{
+async function setup(page:Page,paused=false,native=false,creation=false){
+ await page.addInitScript(({paused,native,creation})=>{
  const w=window as any;let event:any,runEvent:any;const now=new Date().toISOString();
  const run:any={id:'dock-run',title:'补充表单测试',model:'fixture',baseUrl:'http://localhost/v1',cwd:'/tmp',createdAt:now,status:'running',messages:[{id:'u',role:'user',text:'帮我做一份旅游攻略'}],tools:[],approvals:[]};
  if(native)run.questions=[{id:'native-question',questions:[{id:'transport',question:'怎样出行？'}]}];
@@ -14,11 +14,12 @@ async function setup(page:Page,paused=false,native=false){
  w.__proposal=()=>{const r=snapshot.requests[0];r.revision++;r.proposal={id:'proposal-one',kind:'replacement',record:{...request('replacement','新的出行计划'),draft:{city:'北京'}}};event?.({runId:run.id});};
  w.__conflict=()=>{snapshot.requests[0].revision++;snapshot.requests[0].draft={city:'其他窗口的填写'};event?.({runId:run.id});};
  w.desktop={getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),getDevice:async()=>({name:'Test',mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[],tasks:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>[run],onWorkspace:(fn:any)=>{w.__locale=()=>fn({layoutMode:'classic',projects:[],tasks:[],theme:'dark',language:'en',revision:1});return()=>{};},onRun:(fn:any)=>{runEvent=fn;return()=>{};},answerRun:async(input:any)=>{w.__nativeAnswer=input;run.questions=[];runEvent(structuredClone(run));},onCommand:()=>()=>{},
- inputs:{list:async()=>structuredClone(snapshot),onChanged:(fn:any)=>{event=fn;return()=>{};},action:async(input:any)=>{
-  w.__commands.push(input);if(receipts.has(input.clientMutationId))return structuredClone(receipts.get(input.clientMutationId));
+ inputs:{list:async()=>structuredClone(w.__staleSnapshot||snapshot),onChanged:(fn:any)=>{event=fn;return()=>{};},action:async(input:any)=>{
+  w.__commands.push(input);if(receipts.has(input.clientMutationId)){delete w.__staleSnapshot;event?.({runId:run.id});return structuredClone(receipts.get(input.clientMutationId));}
+  if(w.__failAfterCommit&&input.action==='submit')w.__staleSnapshot=structuredClone(snapshot);
   if(input.action==='reconcile')return structuredClone(snapshot.deliveries.find((d:any)=>d.id===input.deliveryId));
   const r=snapshot.requests.find((r:any)=>r.id===input.requestId);if(r.revision!==input.expectedRevision)throw Object.assign(Error('CONFLICT'),{code:'CONFLICT'});
-  if(input.action==='submit'&&!input.values.city)throw Object.assign(Error('INVALID_ARGUMENT'),{code:'INVALID_ARGUMENT',fields:{city:'请填写目的地'}});
+  if(input.action==='submit'&&!input.values.city)return {inputValidationError:{code:'INVALID_ARGUMENT',message:'请检查填写内容',fields:{city:'请填写目的地'}}};
   if(input.action==='cancel')r.state='cancelled';
   if(input.action==='rejectProposal')delete r.proposal;
   if(input.action==='acceptProposal'){if(r.proposal?.id!==input.proposalId)throw Object.assign(Error('CONFLICT'),{code:'CONFLICT'});if(r.proposal.kind==='messageResolution'){r.state='answered';r.answer=r.proposal.answer;if(input.resume)snapshot.policy.paused=false;}else{r.state='superseded';snapshot.requests.push({...request('replacement','新的出行计划'),draft:{city:'北京'}});}delete r.proposal;}
@@ -29,7 +30,12 @@ async function setup(page:Page,paused=false,native=false){
   r.revision++;receipts.set(input.clientMutationId,structuredClone(r));event?.({runId:run.id});
   if(w.__failAfterCommit){w.__failAfterCommit=false;throw Error('Disconnected');}return structuredClone(r);
  }}};
- },{paused,native});
+ if(creation){
+  snapshot.requests=snapshot.requests.slice(0,1);
+  Object.assign(snapshot.requests[0],{reason:'先确认接入方式，具体地址和工具路径可在安装后设置。',template:{version:1,id:'debug',title:'确认调试方式',steps:[{id:'details',fields:[{name:'city',type:'select',label:'现有调试工具',required:true,options:[{label:'GDB Server',value:'gdb'},{label:'厂商工具',value:'vendor'},{label:'暂不确定，先看建议',value:'unknown'}]},{name:'scope',type:'select',label:'希望先完成什么',options:[{label:'只读状态与日志（推荐）',value:'read'},{label:'运行控制与断点',value:'control'}]}]}],submit:{kind:'chat',label:'提交'}}});
+  w.desktop.creation={read:async()=>({runId:run.id,revision:2,stage:'brief',kind:'extension',title:'FPGA C 项目自动调试助手',summary:'连接现有调试工具，帮助查看目标状态与日志；设备地址和工具路径在安装后的扩展设置中配置。',nextStep:'确认接入方式',trialPrompt:'查看目标状态',limitations:'尚未连接真实硬件',trial:'pending'}),onChanged:()=>()=>{}};
+ }
+ },{paused,native,creation});
  await page.goto('/');await page.locator('.tree-task > button:first-child').filter({hasText:'补充表单测试'}).click();
 }
 test('fixed dock preserves fields and focus through typing, switching, collapse and language change',async({page})=>{
@@ -87,6 +93,8 @@ test('submission freezes fields until acknowledged without disabling the convers
  await page.evaluate(()=>(window as any).__holdSubmit=true);await dock.getByRole('button',{name:'提交补充信息'}).click();
  await expect(city).toBeDisabled();await expect(page.getByRole('textbox',{name:'继续对话'})).toBeEnabled();
  await page.evaluate(()=>(window as any).__releaseSubmit());await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('已提交');
+ // The next pending question now opens automatically; collapse it to inspect history.
+ await dock.getByRole('button',{name:'稍后填写'}).click();
  await page.getByRole('button',{name:'补充出行计划',exact:true}).click();await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('上海');
 });
 
@@ -197,4 +205,50 @@ test('supplied information retires both notices across subsequent stops while ne
  await expect(page.getByRole('region',{name:'补充消息',exact:true})).toBeVisible();
  await page.evaluate(()=>(window as any).__interruptUnanswered());
  await expect(reminder).toBeVisible();
+});
+
+
+test('creation overview yields to the form and keeps details available at desktop and narrow widths',async({page})=>{
+ await setup(page,false,false,true);const overview=page.getByRole('region',{name:'创建进度',exact:true}),dock=page.getByRole('region',{name:'待补充信息',exact:true});
+ await expect(overview.getByRole('button',{name:'继续创建'})).toHaveCount(0);
+ const before=await overview.boundingBox(),form=await dock.boundingBox();expect(form!.y-(before!.y+before!.height)).toBeGreaterThanOrEqual(12);expect(before!.height).toBeLessThan(65);
+ await page.screenshot({path:'test-results/creation-intake-light.png',animations:'disabled'});
+ await overview.locator('summary').click();await expect(overview).toContainText('设备地址和工具路径');
+ await page.setViewportSize({width:760,height:900});await page.evaluate(()=>(window as any).__locale());
+ await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
+ await page.screenshot({path:'test-results/creation-intake-dark.png',animations:'disabled'});
+ await page.getByRole('region',{name:'Creation progress',exact:true}).locator('summary').click();await page.setViewportSize({width:390,height:844});
+ await expect(page.getByRole('region',{name:'Needs your input',exact:true}).getByRole('button',{name:'Submit answers'})).toBeInViewport();await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('unconfirmed submission retries the original receipt without sending a second answer',async({page})=>{
+ await setup(page);const dock=page.getByRole('region',{name:'待补充信息',exact:true});await dock.getByRole('textbox',{name:'目的地 *',exact:true}).fill('上海');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__snapshot.requests[0].draft.city)).toBe('上海');
+ await page.evaluate(()=>(window as any).__failAfterCommit=true);await dock.getByRole('button',{name:'提交补充信息',exact:true}).click();
+ await expect(dock.getByRole('alert')).toContainText('提交结果暂未确认');await expect(dock.getByRole('textbox',{name:'目的地 *',exact:true})).toBeDisabled();
+ await dock.getByRole('button',{name:'核实提交结果',exact:true}).click();
+ expect(await page.evaluate(()=>{const calls=(window as any).__commands.filter((c:any)=>c.action==='submit');return calls.length===2&&calls[0].clientMutationId===calls[1].clientMutationId;})).toBe(true);
+ expect(await page.evaluate(()=>(window as any).__snapshot.deliveries.length)).toBe(1);
+});
+
+test('each new question opens by default and a manually collapsed header has balanced spacing',async({page})=>{
+ await setup(page);const dock=page.getByRole('region',{name:'待补充信息',exact:true});
+ await expect(dock.getByRole('button',{name:'稍后填写'})).toHaveAttribute('aria-expanded','true');
+ await dock.getByRole('textbox',{name:'目的地 *',exact:true}).fill('上海');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__snapshot.requests[0].draft.city)).toBe('上海');
+ await dock.getByRole('button',{name:'提交补充信息',exact:true}).click();
+ await expect(dock.getByText('住宿偏好',{exact:true})).toBeVisible();
+ await expect(dock.getByRole('textbox',{name:'目的地 *',exact:true})).toBeVisible();
+ await dock.getByRole('button',{name:'稍后填写'}).click();await page.evaluate(()=>(window as any).__refresh());
+ const toggle=dock.getByRole('button',{name:'继续填写'});await expect(toggle).toHaveAttribute('aria-expanded','false');
+ const card=dock.locator('[data-slot="card"]').first(),label=dock.getByText('待补充信息',{exact:true});
+ const bounds=await card.boundingBox(),text=await label.boundingBox(),button=await toggle.boundingBox();
+ expect(Math.abs((text!.y+text!.height/2)-(bounds!.y+bounds!.height/2))).toBeLessThan(1);
+ expect(Math.abs((button!.y+button!.height/2)-(bounds!.y+bounds!.height/2))).toBeLessThan(1);
+ const padding=await card.evaluate(el=>{const style=getComputedStyle(el);return [style.paddingTop,style.paddingBottom];});expect(padding[0]).toBe(padding[1]);
+ await dock.screenshot({path:'test-results/supplemental-collapsed-balanced.png'});
+ await page.evaluate(()=>{const w=window as any;const next=structuredClone(w.__snapshot.requests[1]);next.id='new-round';next.template.title='下一轮补充';w.__snapshot.requests=[next];w.__refresh();});
+ await expect(dock.getByText('下一轮补充',{exact:true})).toBeVisible();
+ await expect(dock.getByRole('button',{name:'稍后填写'})).toHaveAttribute('aria-expanded','true');
 });

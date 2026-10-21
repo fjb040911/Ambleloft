@@ -70,9 +70,9 @@ test('repository install rejects untrusted hosts, invalid refs and escaping path
 
 test('built-in skill installs once, localizes, is lazy and read-only, and preserves disabled choice on upgrade',async t=>{
  const {skills,dir,db}=await fixture(t);const source=path.join(dir,'builtins');await fs.cp(path.join(__dirname,'../resources/skills'),source,{recursive:true});
- await skills.initializeBuiltins({root:source});let [skill]=await skills.list();assert.equal(skill.id,'builtin-supplemental-input');assert.equal(skill.builtIn.version,1);
- assert.equal(skill.displayName,'Supplemental information');skills.locale='zh-CN';assert.equal((await skills.list())[0].displayName,'补充信息');
- await skills.initializeBuiltins({root:source});assert.equal((await skills.list())[0].revision,skill.revision);
+ await skills.initializeBuiltins({root:source});let skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');assert.equal(skill.id,'builtin-supplemental-input');assert.equal(skill.builtIn.version,1);
+ assert.equal(skill.displayName,'Supplemental information');skills.locale='zh-CN';assert.equal((await skills.list()).find(s=>s.id==='builtin-supplemental-input').displayName,'补充信息');
+ await skills.initializeBuiltins({root:source});assert.equal((await skills.list()).find(s=>s.id==='builtin-supplemental-input').revision,skill.revision);
  const prepared=await skills.prepare();assert.equal(prepared.explicit,'');assert.equal(prepared.snapshots.length,0);assert.equal(prepared.instructions.split(skill.path).length-1,1);assert.equal(prepared.instructions.includes((await skills.detail(skill.id)).body),false);
  assert.doesNotMatch((await skills.prepare([],{inputToolsEnabled:false})).instructions,/supplemental-input/);
  assert.match(prepared.instructions,/Supplemental input interaction guidance/);
@@ -83,14 +83,14 @@ test('built-in skill installs once, localizes, is lazy and read-only, and preser
  await assert.rejects(skills.importFolder(path.join(source,'supplemental-input'),{replaceId:skill.id}),/不能覆盖/);
  await skills.update({id:skill.id,enabled:false});
  await fs.appendFile(path.join(source,'supplemental-input/references/lifecycle.md'),'\nUpdated guidance.\n');
- await skills.initializeBuiltins({root:source});const updated=(await skills.list())[0];assert.equal(updated.enabled,false);assert.equal(updated.version,2);assert.notEqual(updated.builtIn.digest,skill.builtIn.digest);
+ await skills.initializeBuiltins({root:source});const updated=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');assert.equal(updated.enabled,false);assert.equal(updated.version,2);assert.notEqual(updated.builtIn.digest,skill.builtIn.digest);
  assert.equal((await skills.prepare()).instructions.includes('supplemental-input'),false);
  assert.doesNotMatch((await skills.prepare()).instructions,/Supplemental input interaction guidance/);
  assert.match(await fs.readFile(skill.path,'utf8'),/Supplemental information/);
- const reopened=createSkills(path.join(dir,'app'),db);await reopened.initializeBuiltins({root:source});assert.equal((await reopened.list())[0].enabled,false);assert.equal((await reopened.list())[0].revision,updated.revision);
+ const reopened=createSkills(path.join(dir,'app'),db);await reopened.initializeBuiltins({root:source});assert.equal((await reopened.list()).find(s=>s.id==='builtin-supplemental-input').enabled,false);assert.equal((await reopened.list()).find(s=>s.id==='builtin-supplemental-input').revision,updated.revision);
 });
 test('bundled example executes through real model tools without requiring the guide to stay enabled',async t=>{
- const {skills,db}=await fixture(t);await skills.initializeBuiltins();const [skill]=await skills.list();
+ const {skills,db}=await fixture(t);await skills.initializeBuiltins();const skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');
  const file=await skills.readFile({id:skill.id,file:'examples/travel.json'}),request=JSON.parse(file.text);
  const {InputRequests}=require('../core/inputs/service.cjs'),{ChatInputs}=require('../core/forms/chat-inputs.cjs'),{bindModelInputs}=require('../core/inputs/model.cjs');
  const runtime={runs:[{id:'r',status:'running',messages:[],tools:[]}]};await db.call('saveRuns',runtime.runs);
@@ -113,14 +113,14 @@ test('bundled example executes through real model tools without requiring the gu
  assert.equal((await api.call('input_read_answer',{requestId:saved.id})).value.answer.values.destination,'Shanghai');
 });
 test('missing guide degrades to ordinary catalog; modified owned bundle is repaired without enabling it',async t=>{
- const {skills,dir}=await fixture(t);await skills.initializeBuiltins();let [skill]=await skills.list();await skills.update({id:skill.id,enabled:false});
- await fs.writeFile(skill.path,'tampered');await skills.initializeBuiltins();const repaired=(await skills.list())[0];assert.notEqual(repaired.revision,skill.revision);assert.equal(repaired.enabled,false);
+ const {skills,dir}=await fixture(t);await skills.initializeBuiltins();let skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');await skills.update({id:skill.id,enabled:false});
+ await fs.writeFile(skill.path,'tampered');await skills.initializeBuiltins();const repaired=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');assert.notEqual(repaired.revision,skill.revision);assert.equal(repaired.enabled,false);
  assert.match(await fs.readFile(repaired.path,'utf8'),/^---/);
  await skills.update({id:skill.id,enabled:true});await assert.rejects(skills.initializeBuiltins({root:path.join(dir,'missing')}));
  assert.doesNotMatch((await skills.prepare()).instructions,/supplemental-input/);
 });
 test('builtin bundle is included in both desktop resource configurations and its references are readable',async t=>{
- const {skills}=await fixture(t);await skills.initializeBuiltins();const [skill]=await skills.list();
+ const {skills}=await fixture(t);await skills.initializeBuiltins();const skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');
  for(const file of ['references/lifecycle.md','references/interaction-design.md','examples/travel.json','examples/travel-preferences.json','skill.nls.json','skill.nls.zh-CN.json'])assert.ok((await skills.readFile({id:skill.id,file})).text.length);
  for(const config of ['electron-builder.cjs','electron-builder.win.cjs'])assert.ok(require('../build/'+config).extraResources.some(r=>r.from==='resources/skills'&&r.to==='skills'));
 });

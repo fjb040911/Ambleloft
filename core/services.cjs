@@ -28,6 +28,7 @@ function createCoreServices({directory,database,encryption,publish,fileApplicati
  const messages=new (require('./extensions/message-service.cjs').MessageService)(database);
  extensions.messages=messages;
  const automation=new (require('./automation/service.cjs').AutomationService)({database,extensions,providers});extensions.automation=automation;
- return {workspace,providers,skills,tasks,files,ssh,remoteFiles,extensions,messages,automation};
+ const creation=new (require('./creation/service.cjs').CreationService)({database,directory,runtime:tasks,skills,extensions});tasks.creation=creation;
+ return {workspace,providers,skills,tasks,files,ssh,remoteFiles,extensions,messages,automation,creation};
 }
 module.exports={createCoreServices};

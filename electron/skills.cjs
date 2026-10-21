@@ -152,4 +152,4 @@ function createSkills(directory,database) {
     },
   };return api;
 }
-module.exports={createSkills,parseSkill};
+module.exports={createSkills,parseSkill,copyBundle};

@@ -21,10 +21,10 @@ function DetailEmpty({title,description}:{title:string;description:string}) {
 }
 const permissionName=(key:string)=>t(({'agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'读取项目信息','projects.path.read':'读取项目路径','conversations.create':'创建聊天','conversations.open':'打开聊天','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
 
-export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle}:{item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
+export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle,initialTab='details'}:{initialTab?:string;item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
  const confirm=useConfirm();
  const [dirty,setDirty]=useState(false),[automationDirty,setAutomationDirty]=useState(false);
- const [tab,setTab]=useState('details'),[error,setError]=useState(''),[projectError,setProjectError]=useState('');
+ const [tab,setTab]=useState(initialTab),[error,setError]=useState(''),[projectError,setProjectError]=useState('');
  const [details,setDetails]=useState<{readme:string;publisher:string;size:number|null}|null>(null),[projects,setProjects]=useState<Project[]>([]);
  useEffect(()=>{
   let live=true;setDetails(null);setError('');setProjectError('');

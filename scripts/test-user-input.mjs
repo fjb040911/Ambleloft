@@ -42,6 +42,9 @@ try{
   const snapshots=await page.evaluate(runId=>window.desktop.inputs.list({runId}),task.id);assert.equal(snapshots.requests.length,1);assert.equal(snapshots.requests[0].state,'pending');assert.equal(snapshots.deliveries.length,0);
   await page.locator('.activity-rail').getByRole('button',{name:'任务',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:/U9 补充信息验收/}).first().click();
   const dock=page.getByRole('region',{name:'待补充信息',exact:true});await expect(dock).toBeVisible();
+  await dock.getByRole('button',{name:'提交补充信息',exact:true}).click();
+  await expect(dock.getByLabel('目的地',{exact:false})).toBeEnabled();
+  await expect(dock.getByLabel('目的地',{exact:false})).toHaveAttribute('aria-invalid','true');
   await dock.getByLabel('目的地',{exact:false}).fill('Shanghai U9');await dock.getByLabel('出发日期',{exact:false}).fill('2026-12-01');
   await until(async()=>{const r=(await page.evaluate(runId=>window.desktop.inputs.list({runId}),task.id)).requests[0];return r.draft.destination==='Shanghai U9'&&r.draft.departure==='2026-12-01';});
   await mkdir('test-results',{recursive:true});await page.screenshot({path:`test-results/u9-${process.env.ATELIER_TEST_APP?'packaged':'electron'}-${protocol}.png`});

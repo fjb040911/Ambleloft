@@ -1,3 +1,4 @@
+import {unwrapInputResult} from './input-action-result';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Alert,AlertTitle,AlertDescription} from './components/ui/alert';
 import {Button} from './components/ui/button';
@@ -22,7 +23,7 @@ export default function InputDeliveryPanel({snapshot,selected,onSelected,onConti
  const [open,setOpen]=useState(false),[checking,setChecking]=useState(''),[notice,setNotice]=useState('');
  const [dismissed,setDismissed]=useState(false);
  useEffect(()=>setDismissed(false),[snapshot?.policy.generation,snapshot?.policy.paused]);
- const reconcile=async(item:InputDelivery)=>{setChecking(item.id);setNotice('');try{const result=await window.desktop!.inputs!.action({action:'reconcile',runId:item.runId,deliveryId:item.id});setNotice(result.state==='delivered'?'已确认送达':'暂未找到送达记录，不会自动重发。');onRefresh();}catch{setNotice('暂时无法核实，请稍后重试。');}finally{setChecking('');}};
+ const reconcile=async(item:InputDelivery)=>{setChecking(item.id);setNotice('');try{const result=unwrapInputResult(await window.desktop!.inputs!.action({action:'reconcile',runId:item.runId,deliveryId:item.id}));setNotice(result.state==='delivered'?'已确认送达':'暂未找到送达记录，不会自动重发。');onRefresh();}catch{setNotice('暂时无法核实，请稍后重试。');}finally{setChecking('');}};
  if(error)return <Alert variant="destructive"><AlertTitle>{error}</AlertTitle><AlertDescription><Button size="sm" variant="outline" onClick={onRefresh}>{t('重试')}</Button></AlertDescription></Alert>;
  if(!snapshot)return null;
  const pending=snapshot.deliveries.filter(item=>item.state!=='delivered'),latest=snapshot.deliveries.find(item=>item.state==='delivered');

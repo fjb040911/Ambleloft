@@ -40,7 +40,7 @@ class TerminalService {
     const pty = context.connectionId ? await this.spawnRemote(context,size) : this.spawn(profile.id, profile.args, {name:'xterm-256color', ...size, cwd:context.cwd, env});
     if(this.closed||this.closedOwners.has(owner.id)){pty.kill();throw Error('Terminal owner closed');}
     if(this.list(owner).length>=16){pty.kill();throw Error('最多同时保留 16 个终端');}
-    const s = {id:randomUUID(), owner:owner.id, ...context, shell:context.connectionId?'SSH bash':profile.name, pty, output:'', paused:false, exited:false, exitCode:null};
+    const s = {id:randomUUID(), owner:owner.id, ...context, shell:context.environment?.kind==='docker'?'Docker · '+context.environment.containerName:context.connectionId?'SSH bash':profile.name, pty, output:'', paused:false, exited:false, exitCode:null};
     this.sessions.set(s.id, s);
     s.data = pty.onData(data => {
       s.output += data;

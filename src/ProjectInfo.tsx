@@ -11,5 +11,5 @@ export function ProjectInfo({name,path,count,permission,edit}:{name:string;path:
 export function TaskProjectInfo({project,cwd,permission,count,edit}:{project?:Project;cwd:string;permission:string;count:number;edit(project:Project):void}){
  const [open,setOpen]=useState(false);
  const name=project?.name||cwd.split(/[\\/]/).filter(Boolean).at(-1)||t('工作目录');
- return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger render={<Button variant="ghost" size="icon" title={name} aria-label={`${t('项目信息')}：${name}`}/>}><Folder/></PopoverTrigger><PopoverContent align="start" sideOffset={8} role="region" aria-label={t('项目信息')}><ProjectInfo name={name} path={cwd} count={project?count:undefined} permission={permission} edit={project?()=>{setOpen(false);edit(project);}:undefined}/></PopoverContent></Popover>;
+ return <Popover open={open} onOpenChange={setOpen}><PopoverTrigger render={<Button variant="ghost" size="icon" title={name} aria-label={`${t('项目信息')}：${name}`}/>}><Folder/></PopoverTrigger><PopoverContent align="start" sideOffset={8} role="region" aria-label={t('项目信息')}><ProjectInfo name={name} path={project?.environment?.kind==='docker'?`${project.environment.containerName} → ${cwd}`:cwd} count={project?count:undefined} permission={permission} edit={project?()=>{setOpen(false);edit(project);}:undefined}/></PopoverContent></Popover>;
 }

@@ -1,3 +1,4 @@
+import {unwrapInputResult} from './input-action-result';
 import type {PersistentInputRequest} from './types';
 import type {FormValues} from './FormFields';
 
@@ -36,7 +37,7 @@ export class InputRequestController{
   const r=this.state.request;
   this.pending ||= {action,runId:r.runId,requestId:r.id,expectedRevision:expectedRevision??r.revision,clientMutationId:crypto.randomUUID(),...(values?{values}:{}),...(resume?{resume}: {}),...(proposalId?{proposalId}:{})} as Command;
   const sent=this.pending;
-  const result=await window.desktop!.inputs!.action(sent);
+  const result=unwrapInputResult(await window.desktop!.inputs!.action(sent));
   this.pending=undefined;
   this.patch({request:result,...(sent.action==='saveDraft'&&JSON.stringify(this.state.values)===JSON.stringify(sent.values)?{dirty:false}:{}),...(result.state!=='pending'?{dirty:false}:{}),error:'',fields:{},conflict:false});
  }
@@ -52,7 +53,7 @@ export class InputRequestController{
   this.work=task().catch((e:Error&{code?:string;fields?:Record<string,string>})=>{
    // Validation errors have definitely not committed; allow corrected answers.
    if(e.fields||e.code==='INVALID_ARGUMENT'||e.code==='INTERACTION_REQUIRED')this.pending=undefined;
-   this.patch({error:e.code==='CONFLICT'?'内容已更新，你的填写仍保留。请查看最新版本后再决定。':e.code==='INTERACTION_REQUIRED'?'任务已暂停，请使用“提交并继续”。':e.fields?'请检查填写内容':'暂时未能保存，你的填写仍保留，请重试。',fields:e.fields||{},conflict:e.code==='CONFLICT'});
+   this.patch({error:e.code==='CONFLICT'?'内容已更新，你的填写仍保留。请查看最新版本后再决定。':e.code==='INTERACTION_REQUIRED'?'任务已暂停，请使用“提交并继续”。':e.fields?'请检查填写内容':this.pending?.action==='submit'?'提交结果暂未确认。请核实结果，避免重复发送。':'暂时未能保存，你的填写仍保留，请重试。',fields:e.fields||{},conflict:e.code==='CONFLICT'});
   }).finally(()=>{this.work=undefined;this.patch({busy:false,submitting:this.pending?.action==='submit'});if(this.incoming){const incoming=this.incoming;this.incoming=undefined;this.update(incoming);}});return this.work;
  }
  save=()=>{clearTimeout(this.timer);if(this.state.conflict)return Promise.resolve();return this.run(()=>this.flush());};

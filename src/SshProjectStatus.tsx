@@ -16,6 +16,14 @@ const explanations:Record<string,string>={
 export default function SshProjectStatus({project,connection,loading,error:syncError,edit,openTerminal,collapsible=false}:{collapsible?:boolean;project:Project;connection?:SshConnection;loading:boolean;error:string;edit():void;openTerminal():void}){
  const api=window.desktop?.ssh;
  const detailsId=useId();
+ const [environmentState,setEnvironmentState]=useState(''),[environmentError,setEnvironmentError]=useState('');
+ const [refresh,setRefresh]=useState(0);
+ const environmentKey=JSON.stringify(project.environment);
+ useEffect(()=>{
+  if(project.environment?.kind!=='docker'||connection?.state!=='connected'){setEnvironmentState('');setEnvironmentError('');return;}
+  let live=true,checking=false;const check=async()=>{if(checking)return;checking=true;setEnvironmentState('checking');try{await api?.validate({id:project.connectionId!,path:project.path,environment:project.environment});if(live){setEnvironmentState('ready');setEnvironmentError('');}}catch(e){if(live){setEnvironmentState('error');setEnvironmentError(sshErrorMessage(e));}}finally{checking=false;}};
+  void check();const timer=setInterval(()=>{if(document.visibilityState==='visible')void check();},15000);window.addEventListener('focus',check);return()=>{live=false;clearInterval(timer);window.removeEventListener('focus',check);};
+ },[api,project.connectionId,project.path,environmentKey,connection?.state,refresh]);
  const preferenceKey='amble.ssh-details.'+project.id;
  const [showDetails,setShowDetails]=useState(()=>{try{return localStorage.getItem(preferenceKey)==='expanded';}catch{return false;}});
  const expanded=!collapsible||showDetails;
@@ -26,21 +34,24 @@ export default function SshProjectStatus({project,connection,loading,error:syncE
  const connected=state==='connected',progress=['connecting','reconnecting'].includes(state),repair=['authentication','untrusted','missing'].includes(state);
  const Icon=state==='connected'?CheckCircle2:progress||state==='loading'||state==='disconnecting'?LoaderCircle:state==='disconnected'?Unplug:AlertCircle;
  const action=async(disconnect=false)=>{if(!api||!project.connectionId)return;const current=++generation.current;setError('');setPending(disconnect?'disconnecting':'connecting');try{await(disconnect?api.disconnect({id:project.connectionId}):api.connect({id:project.connectionId}));}catch(e){if(current===generation.current)setError(sshErrorMessage(e));}finally{if(current===generation.current)setPending('');}};
- const detail=error||syncError||(!pending&&connection?.error)||'';
+ const detail=environmentError||error||syncError||(!pending&&connection?.error)||'';
+ const pathLabel=project.environment?.kind==='docker'?`${project.environment.containerName} → ${project.path}`:project.path;
  const address=connection?`${connection.username}@${connection.host}:${connection.port}`:project.name;
  const badge=<span className="ssh-status-badge" role="status" aria-live="polite"><Icon size={14} aria-hidden="true"/>SSH · {t(sshLabels[state]||sshLabels.error)}</span>;
  return <section className="ssh-status" data-collapsible={collapsible} data-expanded={expanded} data-state={state} aria-label={t('SSH 连接')}>
   {collapsible&&<button type="button" className="ssh-status-summary" onClick={toggleDetails} aria-expanded={expanded} aria-controls={detailsId} aria-label={t(expanded?'收起 SSH 连接详情':'展开 SSH 连接详情')}>
-   {badge}<span className="ssh-summary-address" title={address}>{address}</span><code className="ssh-summary-path" title={project.path}>{project.path}</code><span className="ssh-summary-toggle">{t(expanded?'收起':'详情')}<ChevronDown size={14} aria-hidden="true"/></span>
+   {badge}<span className="ssh-summary-address" title={address}>{address}</span><code className="ssh-summary-path" title={pathLabel}>{pathLabel}</code><span className="ssh-summary-toggle">{t(expanded?'收起':'详情')}<ChevronDown size={14} aria-hidden="true"/></span>
   </button>}
   <div className="ssh-status-body" id={detailsId} hidden={!expanded}>
   <div className="ssh-status-main"><div className="ssh-status-identity"><Server size={18} aria-hidden="true"/><strong title={connection?.name||project.name}>{connection?.name||project.name}</strong>{!collapsible&&badge}</div>
-   <p className="ssh-status-address">{connection&&<span title={`${connection.username}@${connection.host}:${connection.port}`}>{connection.username}@{connection.host}:{connection.port}</span>}<code title={project.path}>{project.path}</code></p>
+   <p className="ssh-status-address">{connection&&<span title={`${connection.username}@${connection.host}:${connection.port}`}>{connection.username}@{connection.host}:{connection.port}</span>}<code title={pathLabel}>{pathLabel}</code></p>
+   {project.environment?.kind==='docker'&&<p role="status" className="ssh-status-help">Docker · {t(environmentState==='ready'?'工作环境可用':environmentState==='checking'?'正在检查工作环境…':environmentState==='error'?'工作环境不可用，请检查容器和目录。':'连接后检查工作环境')}</p>}
    <p className="ssh-status-help">{t(explanations[state]||explanations.error)}</p>
    {detail&&<p className="ssh-status-error" role="alert">{t(sshErrorMessage(Error(detail)))}</p>}
   </div>
   <div className="ssh-status-actions">
-   {connected?<><Button type="button" size="sm" onClick={openTerminal}><Terminal/>{t('打开终端')}</Button><Button type="button" size="sm" variant="ghost" title={t('断开共享连接，使用它的终端和任务会受到影响。')} onClick={()=>void action(true)}><Unplug/>{t('断开连接')}</Button></>:progress?<Button type="button" size="sm" variant="outline" onClick={()=>void action(true)}><X/>{t(state==='reconnecting'?'停止重连':'取消连接')}</Button>:<Button type="button" size="sm" disabled={!api||loading||state==='disconnecting'||!!syncError} onClick={()=>repair||!connection?edit():void action()}>{repair?<Settings2/>:<PlugZap/>}{t(state==='unavailable'?'状态不可用':repair?'检查连接设置':state==='error'?'重新连接':'连接服务器')}</Button>}
+   {connected?<><Button type="button" size="sm" disabled={project.environment?.kind==='docker'&&environmentState!=='ready'} onClick={openTerminal}><Terminal/>{t('打开终端')}</Button><Button type="button" size="sm" variant="ghost" title={t('断开共享连接，使用它的终端和任务会受到影响。')} onClick={()=>void action(true)}><Unplug/>{t('断开连接')}</Button></>:progress?<Button type="button" size="sm" variant="outline" onClick={()=>void action(true)}><X/>{t(state==='reconnecting'?'停止重连':'取消连接')}</Button>:<Button type="button" size="sm" disabled={!api||loading||state==='disconnecting'||!!syncError} onClick={()=>repair||!connection?edit():void action()}>{repair?<Settings2/>:<PlugZap/>}{t(state==='unavailable'?'状态不可用':repair?'检查连接设置':state==='error'?'重新连接':'连接服务器')}</Button>}
+   {connected&&project.environment?.kind==='docker'&&<Button type="button" size="sm" variant="ghost" onClick={()=>setRefresh(value=>value+1)}>{t('刷新环境状态')}</Button>}
    {!repair&&<Button type="button" size="sm" variant="ghost" disabled={progress||state==='disconnecting'} onClick={edit}><Settings2/>{t('连接设置')}</Button>}
   </div>
   </div>

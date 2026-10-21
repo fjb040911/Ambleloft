@@ -51,3 +51,12 @@
 .project-editor-dialog .project-folder-list button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 .project-editor-dialog .project-folder-list p{margin:12px;font-size:12px;color:var(--secondary);line-height:1.6}
 @media(max-width:520px){.project-editor-dialog>[data-slot=dialog-header]{padding:20px 44px 0 16px}.project-editor-dialog .project-editor-body{padding:12px 16px 20px;gap:18px}.project-editor-dialog .project-editor-footer{padding:12px 16px;flex-wrap:wrap}.project-editor-dialog .project-location-options{grid-template-columns:1fr}.project-editor-dialog .project-location-option{padding:10px 12px}.project-editor-dialog .project-directory-input{flex-wrap:wrap}.project-editor-dialog .project-directory-input input{flex-basis:100%}.project-editor-dialog .project-ssh-fields{grid-template-columns:1fr}.project-editor-dialog .project-connection-picker{flex-wrap:wrap}.project-editor-dialog .project-connection-picker>[data-slot=field]{flex-basis:100%}}
+.docker-container-list{max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px}
+.docker-container-list>[role=option]{display:flex;align-items:center;gap:10px;width:100%;padding:10px;text-align:left;border:0;background:transparent;border-radius:5px;cursor:pointer;font-size:13px}
+.docker-container-list>[role=option]:hover{background:var(--hover)}
+.docker-container-list>[role=option][aria-selected=true]{background:var(--selection)}
+.docker-container-list>[role=option]:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+
+.project-editor-dialog .project-editor-body>*{flex-shrink:0}
+.project-editor-dialog>[data-slot=dialog-header]{position:relative;z-index:1;background:var(--popover);padding-bottom:12px}
+.project-editor-dialog>[data-slot=button]{z-index:2}

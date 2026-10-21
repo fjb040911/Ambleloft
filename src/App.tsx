@@ -9,6 +9,7 @@ import ProjectCategoryIcon from './ProjectCategoryIcon';
 import ExtensionCategoryIcon from './ExtensionCategoryIcon';
 import ExtensionIcon from './ExtensionIcon';
 import ChatComposer from './ChatComposer';
+import {CreationLauncher} from './CreationGuide';
 import {SidebarProvider,SidebarTrigger,useSidebar,Sidebar,SidebarHeader,SidebarFooter,SidebarMenu,SidebarMenuItem,SidebarMenuButton} from './components/ui/sidebar';
 import ManagementDialog from './ManagementDialog';
 import {Button} from './components/ui/button';
@@ -29,8 +30,7 @@ import ExtensionInteraction from './ExtensionInteraction';
 import { t, setLanguage, useLanguage } from './i18n';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 const TerminalPanel=lazy(()=>import('./TerminalPanel'));
-import { MessageCircle, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, CircleHelp, Cloud, Cpu, FileText, Folder, FolderPlus, HardDrive, Laptop, LayoutGrid, Monitor, Moon, PanelRight, PanelLeft, PencilLine, Plus, Puzzle, Settings, ShieldCheck, Sparkles, Sun, Trash2, X } from 'lucide-react';
-import { capabilities } from './catalog';
+import { MessageCircle, ArrowRight, Check, ChevronDown, ChevronRight, CircleHelp, Cloud, Cpu, FileText, Folder, FolderPlus, HardDrive, Laptop, LayoutGrid, Monitor, Moon, PanelRight, PanelLeft, Plus, Puzzle, Settings, ShieldCheck, Sparkles, Sun, Trash2, X } from 'lucide-react';
 import Modal from './Modal';
 import { bridge, emptyWorkspace } from './storage';
 import WorkspaceNavigation, { workspaceTasks, type NavTask } from './WorkspaceNavigation';
@@ -39,10 +39,9 @@ import ProjectFilePanel, {useFilePanelOpen} from './ProjectFilePanel';
 import SkillTags from './SkillTags';
 import ComposerControls, {type ComposerOptions} from './ComposerControls';
 import Conversation, { isRunning, runStatus } from './Conversation';
-import type { AgentRun, ProviderConfig, ProviderCatalog, Capability, Device, Page, Project, Task, Theme, Workspace } from './types';
+import type { AgentRun, ProviderConfig, ProviderCatalog, Device, Page, Project, Task, Theme, Workspace } from './types';
 
 const pages = [{ id: 'plugins', label: '扩展', icon: Puzzle }] as const;
-const capabilityIcons = { folder: Folder, pen: PencilLine, research: BookOpen };
 
 
 export default function App() { return <SidebarProvider className="contents" keyboardShortcut={false}><WorkspaceApp/></SidebarProvider>; }
@@ -164,7 +163,7 @@ function WorkspaceApp() {
   const saveProject = () => manage(async()=>{
     if(!projectEditor?.name.trim()||!projectEditor.path.trim())throw new Error('请填写项目名称并选择工作目录');
     const project={...projectEditor,name:projectEditor.name.trim(),path:projectEditor.path.trim()};
-    if(project.type==='ssh'){if(!window.desktop?.ssh||!project.connectionId)throw new Error('请先配置 SSH 连接');project.path=(await window.desktop.ssh.validate({id:project.connectionId,path:project.path})).path;}
+    if(project.type==='ssh'){if(!window.desktop?.ssh||!project.connectionId)throw new Error('请先配置 SSH 连接');project.path=(await window.desktop.ssh.validate({id:project.connectionId,path:project.path,environment:project.environment})).path;}
     await persist(state=>{if(state.projects.find(p=>p.id===project.id)?.revision!==project.revision)throw new Error('CONFLICT: 项目已更新，请重新打开编辑');return {...state,projects:state.projects.some(p=>p.id===project.id)?state.projects.map(p=>p.id===project.id?project:p):[...state.projects,project]};});
     setProjectEditor(null);openProject(project.id);
   });
@@ -214,7 +213,6 @@ function WorkspaceApp() {
     const task: Task = { selectedSkillIds:composerOptions.selectedSkillIds, ...continuingDraft, id: continuingDraft?.id||crypto.randomUUID(), title: taskPrompt.slice(0,34), prompt: taskPrompt+(composerOptions.attachments?.length?'\n\n附件：\n'+composerOptions.attachments.map(file=>file.path).join('\n'):''), modelId: choice?.model||provider?.model||'', projectId: projectId || null, status: 'draft', createdAt: new Date().toISOString() };
     try { await persist(state => {if(continuingDraft&&state.tasks.find(t=>t.id===task.id)?.revision!==continuingDraft.revision)throw new Error('CONFLICT: 草稿已更新');return { ...state, tasks: [task, ...state.tasks.filter(t=>t.id!==task.id)] };}); const saved=workspaceRef.current.tasks.find(t=>t.id===task.id)||task;setContinuingDraft(saved);setPrompt(saved.prompt);setComposerOptions({permission:'default',selectedSkillIds:saved.selectedSkillIds});setNotice(t('草稿已保存'));setTaskDetail(null); } catch { /* Persistent error is visible. */ }
   };
-  const useCapability = (cap: Capability) => { setContinuingDraft(null); setRunId(null); navigate('home'); setPrompt(cap.prompt); setTimeout(() => promptRef.current?.focus(), 0); };
   const pageLabel = page==='messages' ? t('消息中心') : page==='extension-view' ? (nativeExtension?.manifest.name||extensionView?.title||t('扩展')) : page === 'settings' ? t("设置") : page==='home' ? (currentRun?currentRun.title:continuingDraft?.title||t("新建任务")) : page==='projects'?t("我的项目"):page==='devices'?t("我的设备"):pages.find(item => item.id === page)?.label;
   const navTasks=workspaceTasks(runs.filter(r=>!r.archivedAt),workspace.tasks.filter(t=>!t.archivedAt),workspace.projects);
   const archived=workspaceTasks(runs.filter(r=>r.archivedAt),workspace.tasks.filter(t=>t.archivedAt),workspace.projects);
@@ -267,14 +265,14 @@ function WorkspaceApp() {
           <header className="home-start-heading"><img className="home-start-mark" src="./brand/icon-128.png" alt="" aria-hidden="true"/><h1>{t(continuingDraft?"继续你的任务":"今天，想完成什么？")}</h1></header>
           <div className="new-task-composer">
           {continuingDraft&&<div className="draft-context-bar"><span>{t(workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt?'当前打开的是已归档草稿':'正在继续已有草稿')} · {continuingDraft.title}</span><Button type="button" variant="ghost" size="sm" disabled={submitting||saving} onClick={()=>{setContinuingDraft(null);setRunId(null);setError('');}}>{t('以当前内容新建聊天')}</Button>{workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt&&<Button type="button" variant="ghost" size="sm" onClick={()=>{setTaskDetail(workspace.tasks.find(task=>task.id===continuingDraft.id)||continuingDraft);setModal(null);}}>{t('查看归档草稿')}</Button>}</div>}
-          <ChatComposer value={prompt} onChange={setPrompt} onSubmit={()=>void saveTask()} disabled={submitting||saving} inputRef={promptRef}
+          <ChatComposer selectedSkillIds={composerOptions.selectedSkillIds} onSelectSkill={id=>setComposerOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} value={prompt} onChange={setPrompt} onSubmit={()=>void saveTask()} disabled={submitting||saving} inputRef={promptRef}
             footer={<div className="home-project-context"><ProjectPicker projects={workspace.projects} value={projectId} onChange={setProjectId} disabled={submitting||saving||!!continuingDraft}/></div>}
             label={t('任务内容')} placeholder={t('描述你想完成的事，或添加文件作为参考…')} canSend={!!ready&&(!!prompt.trim()||!!composerOptions.selectedSkillIds?.length)} saveDraft={!provider?.configured} sendLabel={provider?.configured?t('发送任务'):t('保存任务草稿')}
             skills={<SkillTags ids={composerOptions.selectedSkillIds} disabled={submitting||saving} onRemove={id=>setComposerOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
             controls={<ComposerControls catalog={catalog} value={{providerId:choice?.providerId||provider?.id,model:choice?.model||provider?.model,...composerOptions}} onChange={next=>{setComposerOptions(next);if(next.providerId&&next.model)setChoice({providerId:next.providerId,model:next.model});}} disabled={submitting||saving} openSettings={section=>{setSettingsSection(section);navigate('settings');}}/>}/>
 
           </div>
-          <section className="starter-section" aria-label={t("任务示例")}><div className="starter-suggestions">{capabilities.map(cap=>{const Icon=capabilityIcons[cap.icon];return <Button variant="outline" size="sm" className="rounded-full" disabled={submitting||saving} key={cap.id} onClick={()=>useCapability(cap)}><Icon data-icon="inline-start"/>{t(cap.name)}</Button>;})}</div></section>
+          <CreationLauncher projectId={projectId||null} disabled={submitting||saving} draft={prompt} manage={()=>{setSettingsSection('skills');navigate('settings');}} onChoose={(text,id)=>{setPrompt(text);setComposerOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])]}));requestAnimationFrame(()=>promptRef.current?.focus());}}/>
         </div>}
 
         {page==='plugins'&&<div className="content-page extension-library"><div className="extension-page-heading"><div><h1>{t('扩展')}</h1><p className="page-description">{t('让工作台拥有更多可能。')}</p></div><Button variant="outline" onClick={()=>{setSettingsSection('plugins');navigate('settings');}}>{t('管理扩展')}</Button></div>{extensions.installed.some(item=>item.enabled)?<div className="extension-library-grid">{extensions.installed.filter(item=>item.enabled).map(item=><button className="extension-library-card" key={item.manifest.id} onClick={()=>{setExtensionViewId(item.manifest.id);navigate('extension-view');closeNarrowSidebar();}}><span className="extension-library-icon"><ExtensionIcon icon={item.manifest.icon} size={24}/></span><span className="extension-library-copy"><strong>{item.manifest.name}</strong><span>{item.manifest.description}</span></span><ChevronRight size={16} aria-hidden="true"/></button>)}</div>:<section className="extension-empty" aria-labelledby="extension-empty-title"><div className="extension-empty-icon" aria-hidden="true"><Puzzle size={38} strokeWidth={1.35}/></div><h2 id="extension-empty-title">{t(extensions.installed.length?'还没有启用的扩展':'为工作台添加新能力')}</h2><p>{t(extensions.installed.length?'启用已安装的扩展，即可在这里打开并使用。':'连接常用工具，拓展你的工作方式。安装后的扩展会显示在这里。')}</p><Button variant="default" onClick={()=>{setSettingsSection('plugins');navigate('settings');}}>{t(extensions.installed.length?'管理扩展':'添加扩展')}<ArrowRight size={15} aria-hidden="true"/></Button></section>}</div>}
