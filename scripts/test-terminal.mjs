@@ -44,6 +44,8 @@ try{
  await page.evaluate(id=>window.desktop.terminal.write({id,data:`node -e "console.log('LONG'+'RUNNING');setInterval(()=>{},1000)"\r`}),first.id);
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('LONGRUNNING');
  await page.keyboard.press('Control+c');
+ // ConPTY/PowerShell must finish returning to its prompt before the next command.
+ if(process.platform==='win32')await expect.poll(async()=> (await page.locator('.terminal-screen:visible .xterm-rows').innerText()).trim().endsWith('>')).toBe(true);
  await page.keyboard.type('echo INTERRUPT_""OK');await page.keyboard.press('Enter');
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('INTERRUPT_OK');
  await open();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);

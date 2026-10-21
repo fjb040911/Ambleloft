@@ -38,7 +38,8 @@ try{
   const provider=await page.evaluate(async({url,protocol})=>window.desktop.saveProvider({name:'U9 fixture',baseUrl:url,model:'fixture',executable:'',protocol}),{url:'http://127.0.0.1:'+server.address().port+'/v1',protocol});
   const task=await page.evaluate(providerId=>window.desktop.startRun({prompt:'U9 补充信息验收',providerId,permission:'default'}),provider.id);
   await until(()=>release);assert.equal(round,4,'Independent tool must execute before user answer');
-  assert.ok(JSON.stringify(requests[0]).includes(builtin.path),'Built-in guide must be discoverable in the engine request');
+  const requestText=value=>typeof value==='string'?[value]:value&&typeof value==='object'?Object.values(value).flatMap(requestText):[];
+  assert.ok(requestText(requests[0]).some(text=>text.includes(builtin.path)||text.includes(JSON.stringify(builtin.path).slice(1,-1))),'Built-in guide must be discoverable in the engine request');
   const snapshots=await page.evaluate(runId=>window.desktop.inputs.list({runId}),task.id);assert.equal(snapshots.requests.length,1);assert.equal(snapshots.requests[0].state,'pending');assert.equal(snapshots.deliveries.length,0);
   await page.locator('.activity-rail').getByRole('button',{name:'任务',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:/U9 补充信息验收/}).first().click();
   const dock=page.getByRole('region',{name:'待补充信息',exact:true});await expect(dock).toBeVisible();

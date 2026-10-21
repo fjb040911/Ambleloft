@@ -36,7 +36,7 @@ async function copyBundle(source,target) {
   const visit=async(from,to,relative='')=>{
     const stat=await fs.lstat(from);
     if(stat.isSymbolicLink())throw new Error('技能目录不能包含符号链接，请复制实际文件后导入');
-    if(stat.isDirectory()) {await fs.mkdir(to,{recursive:true});for(const name of await fs.readdir(from)){if(['.git','node_modules','.DS_Store'].includes(name))continue;await visit(path.join(from,name),path.join(to,name),path.join(relative,name));}}
+    if(stat.isDirectory()) {await fs.mkdir(to,{recursive:true});for(const name of await fs.readdir(from)){if(['.git','node_modules','.DS_Store'].includes(name))continue;await visit(path.join(from,name),path.join(to,name),path.posix.join(relative,name));}}
     else if(stat.isFile()) {bytes+=stat.size;if(++count>1000||bytes>50*1024*1024)throw new Error('技能目录最多包含 1000 个文件，总大小不超过 50 MB');await fs.copyFile(from,to);files.push(relative);}
     else throw new Error('技能目录包含不支持的文件类型');
   };
@@ -54,7 +54,8 @@ function createSkills(directory,database) {
     try {
       const files=await copyBundle(source,destination);
       const frontmatter=fields.frontmatter || `name: ${JSON.stringify(fields.name)}\ndescription: ${JSON.stringify(fields.description)}`;
-      const content=`---\n${frontmatter}\n---\n\n${fields.body}\n`;
+      // Built-in integrity is checked against source bytes, including CRLF.
+      const content=builtIn?await fs.readFile(path.join(source,'SKILL.md')):`---\n${frontmatter}\n---\n\n${fields.body}\n`;
       await fs.writeFile(path.join(destination,'SKILL.md'),content);
       const localized=await require('../core/localization/skill.cjs').validateSkillLocalization(destination);
       const now=new Date().toISOString();
