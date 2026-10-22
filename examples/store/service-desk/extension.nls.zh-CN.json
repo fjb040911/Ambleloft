@@ -1,0 +1,14 @@
+{
+  "name": "设备售后工单（测试）",
+  "description": "通过三步表单报修设备，确认后连接你的测试售后服务。",
+  "serviceUrl": "本机 SSH 隧道服务地址，例如 http://127.0.0.1:18080",
+  "submitTicket": "创建测试工单",
+  "lookupTicket": "核实提交结果",
+  "getTicket": "查询工单状态",
+  "health": "检查售后测试服务",
+  "badAddress": "请在扩展设置中填写 SSH 隧道的本机地址，例如 http://127.0.0.1:18080",
+  "unknown": "提交结果未知，请核实工单；不要重复创建。",
+  "offline": "服务不可用，请检查 SSH 隧道。",
+  "serverError": "服务返回错误 {status}",
+  "confirm": "请通过表单确认后提交"
+}

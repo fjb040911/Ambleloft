@@ -26,12 +26,12 @@ test('project disclosure and navigation are independent and draft keyboard navig
  await expect(page.getByRole('combobox',{name:'当前项目'})).toContainText('Demo');
 });
 
-test('home draft action and quiet examples reflow in English dark mode at large text size',async({page})=>{
+test('home draft action reflows without preset prompts in English dark mode at large text size',async({page})=>{
  await page.setViewportSize({width:640,height:800});
  await page.addInitScript(()=>localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'dark',language:'en',fontScale:130,layoutMode:'activity',projects:[],tasks:[]})));
  await page.goto('/');await expect(page.locator('.home-page h1')).toHaveText('What would you like to work on today?');
  const action=page.getByRole('button',{name:'Save task draft',exact:true});await expect(action).toHaveText('Save draft');
- await expect(page.locator('.composer-hint')).toContainText('Enter to save draft');await expect(page.locator('.starter-suggestions button')).toHaveCount(3);
+ await expect(page.locator('.composer-hint')).toContainText('Enter to save draft');await expect(page.locator('.starter-section')).toHaveCount(0);
  expect(await page.locator('.home-page').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  expect(await page.locator('.composer').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.getByRole('textbox',{name:'Task prompt',exact:true}).fill('A draft to keep');await action.click();await expect(page.getByRole('dialog')).toHaveCount(0);

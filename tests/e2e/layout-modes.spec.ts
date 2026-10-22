@@ -7,8 +7,8 @@ test('layout preference persists and group switching preserves draft and navigat
  await page.getByRole('button',{name:'活动栏 按项目、任务、扩展分别浏览。',exact:true}).click();
  await page.getByRole('button',{name:'返回应用',exact:true}).click();
  await expect(page.locator('.activity-rail')).toBeVisible();await expect(input).toHaveValue('布局切换保留输入');
- await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
- await expect(input).toHaveValue('布局切换保留输入');await expect(page.getByRole('region',{name:'我的项目',exact:true})).toBeHidden();
+ await page.locator('.activity-rail').getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await expect(page.locator('.skill-extension-center')).toBeVisible();await page.getByRole('button',{name:'Ambleloft 工作台',exact:true}).click();await expect(input).toHaveValue('布局切换保留输入');await expect(page.getByRole('region',{name:'我的项目',exact:true})).toBeHidden();
  await page.locator('.activity-rail').getByRole('button',{name:'任务',exact:true}).click();await expect(page.getByText('从一个问题开始')).toBeVisible();
  await page.getByRole('button',{name:'隐藏侧栏',exact:true}).click();await expect(page.locator('.activity-rail')).toBeVisible();await expect(page.getByRole('button',{name:'搜索工作台',exact:true})).toBeVisible();
  await page.reload();await expect(page.locator('.activity-rail')).toBeVisible();
@@ -21,8 +21,8 @@ test('activity navigation exposes contextual actions, tooltips and date sections
  await page.goto('/');await expect(page.getByRole('button',{name:'新建项目',exact:true})).toBeVisible();await expect(page.getByText('组织你的工作',{exact:true})).toBeVisible();
  const rail=page.locator('.activity-rail');await rail.getByRole('button',{name:'任务',exact:true}).hover();await expect(page.locator('[data-slot=tooltip-content]')).toContainText('任务');await rail.getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['今天','昨天']);await expect(page.locator('.workspace-navigation .nav-caption:visible')).toHaveCount(0);
- await rail.getByRole('button',{name:'扩展',exact:true}).click();await expect(page.getByRole('button',{name:'管理扩展',exact:true})).toBeVisible();await expect(page.getByText('扩展你的工作台',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'管理扩展',exact:true}).click();await expect(page.locator('.settings-sidebar')).toBeVisible();await expect(page.locator('.settings-window-toolbar').getByRole('button',{name:'返回应用',exact:true})).toBeVisible();
+ await rail.getByRole('button',{name:'技能与扩展',exact:true}).click();await expect(page.locator('.skill-extension-center')).toBeVisible();
+ await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.locator('.settings-sidebar')).toBeVisible();await expect(page.locator('.settings-window-toolbar').getByRole('button',{name:'返回应用',exact:true})).toBeVisible();
 });
 
 test('mobile Sidebar sheet dismisses with Escape and preserves the composer',async({page})=>{

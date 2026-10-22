@@ -3,7 +3,7 @@
   <h1>Ambleloft</h1>
   <p><strong>Bring your apps into AI conversations.</strong></p>
   <p>An open-source desktop AI agent and a foundation for software companies building their own business agents.</p>
-  <p><a href="https://ambleloft.com/en/">Official website</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">Downloads & release notes</a> · <a href="https://ambleloft.com/en/docs/overview/">Developer guides</a> · <a href="#build-your-first-extension">Build an extension</a></p>
+  <p><a href="https://ambleloft.com/en/">Official website</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">Downloads & release notes</a> · <a href="https://ambleloft.com/en/docs/overview/">Developer guides</a> · <a href="#start-with-skill-master">Create with Skill Master</a></p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
@@ -11,7 +11,7 @@ Ambleloft is a free, open-source desktop AI agent and an open extension platform
 
 **Define the business entry point in a Skill. Specify fields and steps in a declarative form. Connect your services through a Node extension.** Your application owns the business rules and final outcome; Ambleloft provides the conversation, interaction components, and extension runtime.
 
-This repository contains the **0.6.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
+This repository contains the **0.8.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
 
 ## The agent understands intent. Your software owns the rules.
 
@@ -93,8 +93,34 @@ This earlier video uses real application UI, demo data, and a simulated desktop 
 | --- | --- |
 | Use the desktop Agent for a task | [Run from source](#run-from-source), then [connect a model](#connect-a-model) |
 | Define a form in a Skill | [Declarative business form tutorial](https://ambleloft.com/en/docs/declarative-ui/) |
-| Connect an existing business service | [Build your first extension](#build-your-first-extension) |
+| Create a skill or connect a business service with AI guidance | [Start with Skill Master](#start-with-skill-master) |
+| Work on a server project | [SSH remote projects](#work-on-your-server-projects-from-here) |
+| Develop directly with the SDK | [Build your first extension](#build-your-first-extension) |
 | Inspect the host’s contracts and boundaries | [Source documentation](specs/README.md) |
+
+## Start with Skill Master
+
+Describe the business outcome and provide the relevant API docs. The built-in Skill Master guides you through the decisions and helps generate editable skills, forms, and extension code.
+
+1. Create a task in a **local project**, choose **Create skill / extension**, and send the prepared prompt. For example: “Let colleagues register service tickets in chat.”
+2. Add API docs, field rules, and sanitized examples to the project, then ask the Agent to read them. Confirm the proposed fields, steps, and business actions as the guide progresses.
+3. Review the generated files and check results. Approve installation from the creation card, configure the connection in extension settings, and try the workflow in chat.
+
+Start with a Skill for reusable instructions or a defined business form. When the workflow needs a new service, tool, or device integration, Skill Master can recommend an extension and help define its execution model. Addresses and tool paths belong in extension settings; credentials use the host's supported credential entry. Source stays in your project for further changes and tests.
+
+A successful package check does not verify your business service. Use a demo or read-only operation first, then check authentication, field mapping, and the real result before using business writes.
+
+[Create with Skill Master](https://ambleloft.com/en/docs/skill-master/) · [Read the built-in guide](resources/skills/skill-master/SKILL.md)
+
+## Work on your server projects from here
+
+Create an **SSH remote project**, connect to your server, and select its project directory. Browse remote files, ask the Agent to inspect or change the project, and check commands in the integrated terminal. Your existing server toolchain remains the working environment.
+
+Use a local project for the Skill Master creation and installation path above. SSH project access does not move locally installed extension backends onto the server.
+
+The source preview also includes SSH-to-Docker project selection. This path has simulated integration coverage; validation against a real SSH and Docker environment remains pending.
+
+[Explore remote projects](https://ambleloft.com/en/docs/remote-projects/) · [Docker scope and verification](specs/remote-workspaces/README.md)
 
 ## Build your first extension
 
@@ -156,6 +182,7 @@ Ambleloft provides model connections, project files, conversation history, and e
 | Foundation | Included |
 | --- | --- |
 | Models and context | Local, private-network, or cloud endpoints; Responses and Chat Completions adaptation; project folders and file attachments. |
+| Remote projects | SSH project directories, remote file access, Agent commands, and an integrated terminal. |
 | Execution and review | Tool activity, plans, approvals, stopping tasks, rich results, and per-turn file-change review. |
 | Everyday work | Local history, archive search and restore, reusable Skills, file and Office previews. |
 | Your workspace | English / Simplified Chinese, light / dark themes, adjustable panels, and grouped sidebar or activity-bar navigation. |
@@ -175,7 +202,7 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.6.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
+**0.8.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
 
 - **Platforms:** macOS Apple Silicon is the primary validated environment. Windows and Linux require platform-specific build and native-runtime validation; check release notes for available packages.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.

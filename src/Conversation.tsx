@@ -1,3 +1,4 @@
+import {unwrapInputResult} from './input-action-result';
 import {Button} from './components/ui/button';
 import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
@@ -21,6 +22,7 @@ import TurnNavigation from './TurnNavigation';
 import TaskForms, {useTaskForms} from './TaskForms';
 import {mergeHistory,groupByTurn} from './conversation-data';
 import ChatComposer from './ChatComposer';
+import {CreationGuide} from './CreationGuide';
 import InputDeliveryPanel,{useInputDeliveries} from './InputDeliveryPanel';
 import {interruptedQuestion} from '../core/inputs/interrupted-question.mjs';
 import TaskAppCard from './TaskAppCard';
@@ -103,7 +105,7 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
   const inputAPI=window.desktop?.inputs;
   const resumeInputs=async(deliveryIds=selectedInputs)=>{
     if(!inputAPI||!deliveries.snapshot)throw Error(t('暂时无法读取补充消息，请重试'));
-    await inputAPI.action({action:'resume',runId:run.id,clientMutationId:crypto.randomUUID(),expectedPolicyGeneration:deliveries.snapshot.policy.generation,deliveryIds});
+    unwrapInputResult(await inputAPI.action({action:'resume',runId:run.id,clientMutationId:crypto.randomUUID(),expectedPolicyGeneration:deliveries.snapshot.policy.generation,deliveryIds}));
     setSelectedInputs([]);await deliveries.refresh();
   };
   const sending=useRef(false);
@@ -162,10 +164,11 @@ function ConversationBody({ onFollowingChange, visible = true, floatingHost, run
     <div className="conversation-dock">
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
+      <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       <SupplementalInputDock run={run} requests={deliveries.snapshot?.requests||[]} policy={deliveries.snapshot?.policy} refresh={deliveries.refresh} selection={inputSelection}/>
       {run.approvals.length > 0 && <div className={`approval-queue${run.approvals.length>1?' is-multiple':''}`} aria-label={t("待处理授权")}><div className="sr-only" role="status">{t("待处理授权 ·")}{run.approvals.length}</div>{run.approvals.map(approval => <ApprovalCard key={approval.id} approval={approval} disabled={!!pending} pending={pending?.id===approval.id?pending.decision:undefined} error={approvalError?.id===approval.id?approvalError.message:undefined} decide={decision => void decide(approval.id,decision)} />)}{run.tools.filter(tool=>tool.type==='fileChange').length > 0 && <details className="approval-diffs"><summary>{t("文件变更记录")}</summary>{run.tools.filter(tool=>tool.type==='fileChange').map(tool=><pre key={tool.id}>{tool.detail}</pre>)}</details>}</div>}
       <InputDeliveryPanel snapshot={deliveries.snapshot} hasUnansweredQuestion={!!run.questions?.length||!!interruptedQuestion(run.messages)} error={deliveries.error} selected={selectedInputs} onSelected={setSelectedInputs} onContinue={()=>void continueSelected()} busy={inputSending||submitting||run.status==='stopping'} onRefresh={()=>void deliveries.refresh()}/>
-      <ChatComposer followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending}
+      <ChatComposer selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending}
         label={t('继续对话')} placeholder={run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
         canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}

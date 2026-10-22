@@ -1,5 +1,23 @@
 # Preview notes / 预览版说明
 
+## v0.8.0 — Skill and extension center preview
+
+- Adds a skill/extension center, trusted catalog validation, explicit installation confirmation, and recoverable catalog error presentation.
+- Adds curated sample packages and publishing tooling. Live catalog/model acceptance requires separate configuration.
+- Includes guided creation and remote-workspace improvements from the open PR.
+- macOS Apple Silicon preview, ad-hoc signed and not Apple-notarized.
+
+新增技能与扩展中心、目录校验、明确安装确认及错误恢复提示，并加入示例包与发布工具。真实目录和模型验收需单独配置。
+
+## v0.7.0 — Guided creation and remote workspace preview
+
+- Adds Skill Master guided skill/extension creation, validated installation snapshots, and trial prompts.
+- Adds SSH-to-Docker workspace selection; real SSH + Docker validation remains pending.
+- Improves SSH project setup, sidebar project information, supplemental input handling, and application About information.
+- macOS Apple Silicon preview; ad-hoc signed, not Apple-notarized.
+
+新增 Skill Master 创建引导与 Docker 工作区预览，改进 SSH 配置、项目侧栏信息、补充输入及关于界面。真实 SSH + Docker 环境尚待验收。
+
 ## v0.6.0 — SSH projects and integrated terminal preview
 
 - Adds SSH projects with remote file browsing, SFTP access, remote Agent tools, host-key confirmation, and connection lifecycle controls.

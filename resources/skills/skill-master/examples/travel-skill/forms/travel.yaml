@@ -1,0 +1,38 @@
+version: 1
+id: travel-registration
+title: 差旅登记
+steps:
+  - id: trip
+    title: 行程
+    fields:
+      - name: destination
+        type: text
+        label: 目的地
+        required: true
+      - name: departure
+        type: date
+        label: 出发日期
+        required: true
+  - id: purpose
+    title: 事由与预算
+    fields:
+      - name: reason
+        type: textarea
+        label: 出差事由
+        required: true
+      - name: budget
+        type: money
+        label: 预算
+        currency: CNY
+        minimum: "0.01"
+        required: true
+  - id: review
+    title: 核对
+    fields:
+      - name: confirmed
+        type: checkbox
+        label: 我已核对前两步的信息，需要修改可返回上一步
+        required: true
+submit:
+  kind: chat
+  label: 发送登记信息

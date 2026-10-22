@@ -1,3 +1,4 @@
+const {validateEnvironment}=require('./environment.cjs');
 const fs=require('node:fs/promises');
 const path=require('node:path').posix;
 const {randomUUID,createHash}=require('node:crypto');
@@ -11,7 +12,7 @@ function validateConnection(value){
  return {id:value.id||randomUUID(),name:String(value.name||value.host).slice(0,120),host:value.host.trim(),port:value.port,username:value.username.trim(),authType:value.authType,...(value.authType==='key'?{privateKeyPath:value.privateKeyPath}:{})};
 }
 class SshService{
- constructor({database,encryption,publish=()=>{},confirmHost=async()=>false,clientFactory=()=>new Client()}){Object.assign(this,{database,encryption,publish,confirmHost,clientFactory});this.clients=new Map();this.opening=new Map();this.pending=new Map();this.secrets=new Map();this.states=new Map();this.timers=new Map();this.attempts=new Map();this.stopped=new Set();this.queue=Promise.resolve();this.closed=false;}
+ constructor({database,encryption,publish=()=>{},confirmHost=async()=>false,clientFactory=()=>new Client()}){Object.assign(this,{database,encryption,publish,confirmHost,clientFactory});this.clients=new Map();this.opening=new Map();this.pending=new Map();this.secrets=new Map();this.states=new Map();this.timers=new Map();this.attempts=new Map();this.stopped=new Set();this.queue=Promise.resolve();this.closed=false;this.docker=new (require('./docker.cjs').DockerService)(this);}
  async records(){return await this.database.call('readSetting',{key:'sshConnections'})||[];}
  async mutate(fn){const result=this.queue.then(async()=>{const records=await this.records();const value=await fn(records);await this.database.call('writeSetting',{key:'sshConnections',value:records});return value;});this.queue=result.catch(()=>{});return result;}
  state(id,state,error=''){this.states.set(id,{state,error});this.publish();}
@@ -67,15 +68,16 @@ class SshService{
  async connected(id){if(this.closed)throw Error('SSH 服务已关闭');if(this.stopped.has(id))throw Error('SSH 已断开，请手动连接');if(this.clients.has(id))return this.clients.get(id);if(this.pending.has(id))return this.pending.get(id);throw Error('SSH 未连接，请先连接服务器');}
  async sftp(id){const client=await this.connected(id);return new Promise((resolve,reject)=>client.sftp((e,s)=>e?reject(Error('SFTP 不可用')):resolve(s)));}
  async withSftp(id,fn){const s=await this.sftp(id);let timer;try{return await Promise.race([fn(s),new Promise((_,reject)=>{timer=setTimeout(()=>{s.end();reject(Error('SFTP 操作超时'));},30000);})]);}finally{clearTimeout(timer);s.end();}}
- async directory(id,requested){return this.withSftp(id,async s=>{const root=await call(s,'realpath',requested||'.'),stat=await call(s,'stat',root);if(!stat.isDirectory())throw Error('远端路径不是目录');return root;});}
- async browse(id,directory){return this.withSftp(id,async s=>{const root=await call(s,'realpath',directory||'.');const entries=await call(s,'readdir',root);return {path:root,parent:path.dirname(root),entries:entries.filter(e=>e.attrs.isDirectory()&&!['.','..'].includes(e.filename)).slice(0,1000).map(e=>({name:e.filename,path:path.join(root,e.filename)})).sort((a,b)=>a.name.localeCompare(b.name))};});}
+ async directory(id,requested,environment){validateEnvironment(environment);if(environment?.kind==='docker')return (await this.docker.directory(id,requested,environment)).path;return this.withSftp(id,async s=>{const root=await call(s,'realpath',requested||'.'),stat=await call(s,'stat',root);if(!stat.isDirectory())throw Error('远端路径不是目录');return root;});}
+ async browse(id,directory,environment){validateEnvironment(environment);if(environment?.kind==='docker')return this.docker.browse(id,directory,environment);return this.withSftp(id,async s=>{const root=await call(s,'realpath',directory||'.');const entries=await call(s,'readdir',root);return {path:root,parent:path.dirname(root),entries:entries.filter(e=>e.attrs.isDirectory()&&!['.','..'].includes(e.filename)).slice(0,1000).map(e=>({name:e.filename,path:path.join(root,e.filename)})).sort((a,b)=>a.name.localeCompare(b.name))};});}
  async resolve(s,root,relative='',newFile=false){
   if(typeof relative!=='string'||relative.includes('\0')||relative.includes('\\')||path.isAbsolute(relative)||relative.split('/').includes('..'))throw Error('远端路径必须位于项目目录中');
   const canonical=await call(s,'realpath',root),requested=path.join(canonical,relative);
   const full=newFile?path.join(await call(s,'realpath',path.dirname(requested)),path.basename(requested)):await call(s,'realpath',requested);
   if(!inside(canonical,full))throw Error('不能访问远端项目目录之外的文件');return {root:canonical,full,relative:path.relative(canonical,full)};
  }
- async execute(id,root,command,{signal,timeoutMs=120000}={}){
+ async execute(id,root,command,{signal,timeoutMs=120000,environment}={}){
+  validateEnvironment(environment);if(environment?.kind==='docker')return this.docker.execute(id,root,command,{signal,timeoutMs,environment});
   if(typeof command!=='string'||!command.trim()||command.length>32000||command.includes('\0'))throw Error('远端命令无效');
   const client=await this.connected(id);const cwd=await this.directory(id,root);
   if(signal?.aborted)throw Error('操作已取消');
@@ -90,7 +92,8 @@ class SshService{
    client.exec('bash -lc '+quote('cd -- '+quote(cwd)+' || exit; '+command),(error,stream)=>{if(error){finish(Error('无法打开 SSH 命令通道'));return;}channel=stream;if(settled){stream.close();return;}stream.on('data',collect(chunks));stream.stderr.on('data',collect(errors));stream.on('exit',(code,sig)=>{exitCode=code;exitSignal=sig;});stream.on('error',()=>finish(Error('SSH 命令通道中断，结果未知')));stream.on('close',()=>{if(exitCode===null&&!exitSignal){lost();return;}finish(null,{stdout:Buffer.concat(chunks).toString('utf8'),stderr:Buffer.concat(errors).toString('utf8'),exitCode,signal:exitSignal,truncated,cwd});});});
   });
  }
- async pty(id,root,{cols,rows}){
+ async pty(id,root,{cols,rows},environment){
+  validateEnvironment(environment);if(environment?.kind==='docker')return this.docker.pty(id,root,{cols,rows},environment);
   const client=await this.connected(id),cwd=await this.directory(id,root);
   return new Promise((resolve,reject)=>client.exec('cd -- '+quote(cwd)+' && exec bash -l',{pty:{term:'xterm-256color',cols,rows}},(error,stream)=>{
    if(error){reject(Error('无法创建远端终端'));return;}stream.setEncoding('utf8');stream.on('error',()=>stream.close());let exited=false;

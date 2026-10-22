@@ -1,0 +1,38 @@
+version: 1
+id: travel-registration
+title: "%title%"
+steps:
+  - id: trip
+    title: "%trip%"
+    fields:
+      - name: destination
+        type: text
+        label: "%destination%"
+        required: true
+      - name: departure
+        type: date
+        label: "%departure%"
+        required: true
+  - id: purpose
+    title: "%purpose%"
+    fields:
+      - name: reason
+        type: textarea
+        label: "%reason%"
+        required: true
+      - name: budget
+        type: money
+        label: "%budget%"
+        currency: CNY
+        minimum: "0.01"
+        required: true
+  - id: review
+    title: "%review%"
+    fields:
+      - name: confirmed
+        type: checkbox
+        label: "%confirmed%"
+        required: true
+submit:
+  kind: chat
+  label: "%submit%"

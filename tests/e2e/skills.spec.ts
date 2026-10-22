@@ -61,3 +61,48 @@ test('built-in guidance is read-only but can be disabled and reenabled',async({p
  const dialog=page.getByRole('dialog',{name:'补充信息',exact:true});await expect(dialog).toContainText('内置 · 只读');await expect(dialog.getByRole('button',{name:'编辑',exact:true})).toHaveCount(0);await expect(dialog.getByRole('button',{name:'删除技能',exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'停用',exact:true}).click();await expect(dialog).toContainText('已停用');await dialog.getByRole('button',{name:'启用',exact:true}).click();await expect(dialog).toContainText('已启用');
 });
+
+
+test('$ selects a skill at the caret without sending, including in follow-up',async({page})=>{
+ await setup(page,true);const input=page.getByRole('textbox',{name:'任务内容',exact:true});
+ await input.fill('请整理 $补充 后面的文字');await input.press('Home');for(let i=0;i<7;i++)await input.press('ArrowRight');
+ const item=page.getByRole('option',{name:/补充信息/});await expect(item).toBeVisible();await expect(input).toBeFocused();
+ const activeId=await input.getAttribute('aria-activedescendant');expect(activeId).toBeTruthy();expect(await page.locator(`[id="${activeId}"]`).count()).toBe(1);
+ await input.press('Enter');await expect(input).toHaveValue('请整理  后面的文字');await expect(page.locator('.composer .skill-tag')).toContainText('补充信息');
+ expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await page.getByRole('button',{name:'发送任务',exact:true}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['skill-1']);
+ const followup=page.getByRole('textbox',{name:'继续对话'});await followup.fill('$');await expect(item).toBeVisible();await followup.press('Tab');await expect(followup).toHaveValue('');await expect(followup).toBeFocused();
+ await followup.fill('再整理一次');await page.getByRole('button',{name:'发送后续消息'}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['skill-1']);
+});
+
+test('$ groups extensions, filters unavailable items and preserves ordinary dollar text',async({page})=>{
+ await setup(page);await page.evaluate(()=>{(window as any).desktop.extensions={list:async()=>({capabilities:{},installed:[
+  {manifest:{id:'acme.fpga',name:'FPGA 调试助手',description:'连接开发板并读取调试日志'},enabled:true,trusted:true},
+  {manifest:{id:'acme.disabled',name:'Disabled extension'},enabled:false},
+  {manifest:{id:'acme.untrusted',name:'Untrusted extension'},enabled:true,trusted:false},
+ ]})};});
+ const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('$');
+ await expect(page.getByRole('option')).toHaveCount(2);await expect(input).toBeFocused();
+ await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));await page.screenshot({path:'test-results/composer-mentions.png'});
+ await input.press('ArrowDown');await expect(page.getByRole('option',{name:/FPGA/})).toHaveAttribute('aria-selected','true');await expect(input).toHaveAttribute('aria-activedescendant',(await page.getByRole('option',{name:/FPGA/}).getAttribute('id'))!);
+ await input.press('Escape');await expect(page.getByRole('option')).toHaveCount(0);await expect(input).toHaveValue('$');
+ for(const text of ['费用 $100','echo ${HOME}','echo $(pwd)',String.raw`echo \$HOME`]){await input.fill(text);await expect(page.getByRole('option')).toHaveCount(0);}
+ await input.fill('请用 $fpga');await expect(page.getByRole('option')).toHaveCount(1);await page.getByRole('option',{name:/FPGA/}).click();
+ await expect(input).toHaveValue('请用 使用扩展「FPGA 调试助手」(acme.fpga) ');await expect(input).toBeFocused();expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await input.fill('$nothing');await expect(page.getByText('没有匹配的技能或扩展')).toBeVisible();await input.press('Enter');expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await input.fill('$meeting');await input.dispatchEvent('keydown',{key:'Enter',isComposing:true});await expect(input).toHaveValue('$meeting');await expect(page.locator('.composer .skill-tag')).toHaveCount(0);
+ await input.press('Enter');await expect(page.locator('.composer .skill-tag')).toHaveCount(1);
+});
+
+
+test('$ picker reflows on narrow screens and recovers from extension loading failure',async({page})=>{
+ await setup(page);await page.setViewportSize({width:600,height:700});
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';(window as any).desktop.extensions={list:async()=>{throw Error('offline');}};});
+ const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('$');
+ await expect(page.getByText('部分列表未能加载，重新输入 $ 可重试。')).toBeVisible();await expect(page.getByRole('option',{name:/meeting-summary/})).toBeVisible();
+ await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));
+ const popup=page.locator('[data-slot="popover-content"]');expect(await popup.evaluate(el=>el.getBoundingClientRect().right<=innerWidth&&el.getBoundingClientRect().left>=0)).toBe(true);
+ await page.screenshot({path:'test-results/composer-mentions-narrow-dark.png'});
+ await input.press('Escape');await page.evaluate(()=>{(window as any).desktop.extensions.list=async()=>({capabilities:{},installed:[]});});await input.fill('');await input.fill('$');await expect(page.getByText('部分列表未能加载，重新输入 $ 可重试。')).toHaveCount(0);
+ await input.press('Enter');await input.fill('$');await input.press('Enter');await expect(page.locator('.composer .skill-tag')).toHaveCount(1);
+});

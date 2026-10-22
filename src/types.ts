@@ -1,3 +1,10 @@
+export type StoreText = {zh:string;en:string};
+export interface StoreListing {previewSteps?:Array<{title:StoreText;description:StoreText}>;id:string;kind:'skill'|'extension';entityName:string;title:StoreText;summary:StoreText;description:StoreText;publisher:string;license:string;tags:string[];trialPrompt:StoreText;runtime:StoreText;setup:StoreText;release:{hostRequirements?:{minVersion:string};platforms?:string[];architectures?:string[];version:string;status:'published'|'yanked'|'revoked';artifactPath:string;artifactSha256:string;artifactSize:number;packageDigest:string;reviewedAt:string;reviewedBy:string;changelog:StoreText}}
+export interface StoreInstallation {sourceId:string;listingId:string;releaseVersion:string;entityId:string;kind:'skill'|'extension';locallyModified:boolean;installedAt:string}
+export interface StoreCatalog {source:{id:string;title:string}|null;items:StoreListing[];stale:boolean;error?:string;installed:StoreInstallation[];busy:string[]}
+export interface StoreOpen {sourceId:string;listingId:string}
+export interface StoreAPI {pendingOpenError():Promise<{code:'STORE_UNTRUSTED_SOURCE'}|null>;onOpenError(listener:(error:{code:'STORE_UNTRUSTED_SOURCE'})=>void):()=>void;catalog(input?:{refresh?:boolean}):Promise<StoreCatalog>;install(input:StoreOpen):Promise<{kind:'skill'|'extension';entityId:string;cancelled?:boolean}>;cancel(input:{listingId:string}):Promise<{cancelled:boolean}>;pendingOpen():Promise<StoreOpen|null>;onChanged(listener:()=>void):()=>void;onOpen(listener:(target:StoreOpen)=>void):()=>void}
+export type AppInfo = {version:string;channel:'development'|'packaged'|'browser';platform:string;osVersion:string;arch:string;commit:string|null;dirty:boolean|null;builtAt:string|null};
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
 export interface Skill {builtIn?:{key:string;version:number;digest:string};displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
@@ -26,7 +33,7 @@ export interface AgentRun {
   queued?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
-  id: string; remote?:{connectionId:string;path:string}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
+  id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
   messages: { inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
@@ -35,7 +42,9 @@ export interface AgentRun {
   approvals: { id: string; method: string; detail: string; progress?:string }[];
 }
 export interface Task { conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
-export interface Project { type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
+export type DockerEnvironment={kind:'docker';endpoint:string;daemonId:string;containerId:string;containerName:string;imageId:string;user:string|null;shell:'auto'|'bash'|'sh'};
+export type RemoteEnvironment={kind:'host'}|DockerEnvironment;
+export interface Project { environment?:RemoteEnvironment; type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
 export interface Workspace { revision?:number;settingsRevision?:number; tasks: Task[]; projects: Project[]; theme: Theme; layoutMode?: 'classic'|'activity'; fontScale?:number; language?: 'system'|'zh-CN'|'en' }
 export interface WorkspaceChange {kind:'project'|'draft'|'settings';action:'put'|'delete'|'patch';id?:string;expectedRevision:number|null;value?:Project|Task|Partial<Pick<Workspace,'theme'|'language'|'fontScale'|'layoutMode'>>}
 export interface Device { name: string; chip: string; memoryGB: number | null; freeMemoryGB: number | null; platform: string; arch: string; mode: 'desktop' | 'preview' }
@@ -43,12 +52,14 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      store?:StoreAPI;
+      creation?:import('./CreationGuide').CreationAPI;
       inputs?: {
         list(input:{runId:string}):Promise<{policy:{paused:boolean;generation:number};deliveries:InputDelivery[];requests:PersistentInputRequest[]}>;
         append(input:{runId:string;clientMutationId:string;text:string}):Promise<InputDelivery>;
-        action(input:{action:'resume';runId:string;clientMutationId:string;expectedPolicyGeneration:number;deliveryIds:string[]}):Promise<{paused:boolean;generation:number}>;
-        action(input:{action:'reconcile';runId:string;deliveryId:string}):Promise<InputDelivery>;
-        action(input:{action:'cancel';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'acceptProposal'|'rejectProposal';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;proposalId:string;resume?:{expectedPolicyGeneration:number}}|{action:'beginEdit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'saveDraft';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>}|{action:'submit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>;resume?:{expectedPolicyGeneration:number}}):Promise<PersistentInputRequest>;
+        action(input:{action:'resume';runId:string;clientMutationId:string;expectedPolicyGeneration:number;deliveryIds:string[]}):Promise<{paused:boolean;generation:number}|import('./input-action-result').InputActionError>;
+        action(input:{action:'reconcile';runId:string;deliveryId:string}):Promise<InputDelivery|import('./input-action-result').InputActionError>;
+        action(input:{action:'cancel';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'acceptProposal'|'rejectProposal';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;proposalId:string;resume?:{expectedPolicyGeneration:number}}|{action:'beginEdit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string}|{action:'saveDraft';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>}|{action:'submit';runId:string;requestId:string;expectedRevision:number;clientMutationId:string;values:Record<string,string|number|boolean>;resume?:{expectedPolicyGeneration:number}}):Promise<PersistentInputRequest|import('./input-action-result').InputActionError>;
         onChanged(listener:(event:{runId:string})=>void):()=>void;
       };
       taskApps?: {
@@ -88,6 +99,7 @@ declare global {
       terminal?: import('./TerminalPanel').TerminalAPI;
       projectFiles?: ProjectFilesAPI;
       selectAttachments(): Promise<{name:string;path:string}[]>;
+      getAppInfo?(): Promise<AppInfo>;
       copyText(text: string): Promise<void>;
       openLink(url: string): Promise<void>;
       getProvider(id?:string): Promise<ProviderConfig>;

@@ -45,7 +45,7 @@ test('installation actions stay in the header and dirty configuration survives c
 test('English dark layout reflows inside narrow settings content at 130 percent text scale',async({page})=>{
  await page.addInitScript(()=>{const desktop=(window as any).desktop;const read=desktop.readWorkspace;desktop.readWorkspace=async()=>({...await read(),language:'en',theme:'dark',fontScale:130});});
  await page.setViewportSize({width:820,height:900});await page.goto('/');await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('navigation',{name:'Settings navigation'}).getByRole('button',{name:'Extensions',exact:true}).click();
- const noOverflow=async()=>{expect(await page.locator('.settings-content').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);};
+ const noOverflow=async()=>{expect(await page.locator('.skill-extension-center').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);};
  await expect(page.locator('.extension-list-card')).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-list-narrow-dark.png'});
  await page.locator('.extension-list-card').click();await page.getByRole('tab',{name:'Settings',exact:true}).click();await expect(page.getByLabel('language')).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-settings-narrow-dark.png'});
  await page.getByRole('tab',{name:'Permissions',exact:true}).click();await expect(page.locator('.extension-permissions')).toContainText('品牌设计');await noOverflow();

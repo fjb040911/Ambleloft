@@ -47,7 +47,6 @@
 .composer-note .composer-status { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
 .home-page .composer-note .text-button { color: var(--accent); font-size: inherit; padding: 0; }
 .home-page .keyboard-hint { white-space: nowrap; font-size: .6875rem; }
-.home-page .starter-section { margin-top: 1.75rem; }
 .home-page .section-heading h2 { font-size: .875rem; }
 .home-page .starter-grid { gap: .75rem; }
 .home-page .starter-card { padding: 1rem; }
@@ -571,12 +570,10 @@ body { font-optical-sizing: auto; }
  .app-shell > [data-slot="sidebar"][data-collapsible="offcanvas"] [data-slot="sidebar-gap"] { width:0; }
 }
 
-/* Keep the task input dominant; examples remain quiet shortcuts. */
+/* Keep the task input dominant. */
 .home-page { padding-top:clamp(2rem,5vh,3rem); }
 .home-page h1 { font-size:clamp(1.5rem,3cqi,1.875rem); }
 .home-page .new-task-composer { margin-top:1.5rem; }
-.home-page .starter-section { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem .75rem; margin-top:1.25rem; }
-.starter-suggestions { display:flex; flex-wrap:wrap; gap:.25rem; }
 .turn-step-summary { max-width:40ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* The window chrome spans all columns; content starts beneath native controls. */

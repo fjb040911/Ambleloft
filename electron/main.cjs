@@ -1,3 +1,4 @@
+const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
 const { app, BrowserWindow, ipcMain, Menu, dialog, session, safeStorage, shell, clipboard, protocol, nativeTheme, Notification, powerMonitor } = require('electron');
 const {accessArtifact} = require('./artifacts.cjs');
@@ -26,6 +27,20 @@ let messageServiceForShutdown;
 let authenticationForShutdown;
 let quitting = false;
 let configBusy = false;
+let catalogService;
+let pendingStoreURL = process.argv.find(value => value.startsWith('ambleloft://')) || null;
+let pendingStoreOpen = null;
+let pendingStoreOpenError = null;
+function receiveStoreURL(value) {
+  if (!catalogService) { pendingStoreURL = value; return; }
+  const target = require('../core/catalog-store/catalog.cjs').inspectStoreLink(value, catalogService.sources);
+  if (!target) return;
+  if (target.code) { pendingStoreOpenError = target; pendingStoreOpen = null; }
+  else { pendingStoreOpen = target; pendingStoreOpenError = null; }
+  const window = windows.focused();
+  if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); window.webContents.send(target.code ? 'catalog-store:open-error' : 'catalog-store:open', target); }
+}
+app.on('open-url', (event, value) => { event.preventDefault(); receiveStoreURL(value); });
 const devURL = !app.isPackaged && process.env.ATELIER_DEV === '1' ? 'http://127.0.0.1:5173' : null;
 const entry = path.join(__dirname, '../dist/index.html');
 const trustedURL = devURL || pathToFileURL(entry).href;
@@ -65,7 +80,7 @@ function createWindow() {
   return window;
 }
 
-app.on('second-instance', () => { const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
+app.on('second-instance', (_event, argv) => { const link = argv.find(value => value.startsWith('ambleloft://')); if (link) receiveStoreURL(link); const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
@@ -86,10 +101,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('ssh:save',(event,input)=>{authorize(event);return ssh.save(input);});
   ipcMain.handle('ssh:connect',async(event,input)=>{authorize(event);await ssh.connect(input.id);return ssh.list();});
   ipcMain.handle('ssh:disconnect',(event,input)=>{authorize(event);ssh.disconnect(input.id);return ssh.list();});
-  ipcMain.handle('ssh:browse',(event,input)=>{authorize(event);return ssh.browse(input.id,input.path);});
-  ipcMain.handle('ssh:validate',async(event,input)=>{authorize(event);return {path:await ssh.directory(input.id,input.path)};});
+  ipcMain.handle('ssh:browse',(event,input)=>{authorize(event);return ssh.browse(input.id,input.path,input.environment);});
+  ipcMain.handle('ssh:validate',async(event,input)=>{authorize(event);if(input.environment?.kind==='docker')await ssh.docker.enter(input.id,input.environment);return {path:await ssh.directory(input.id,input.path,input.environment)};});
+  for(const [action,method] of [['dockerList','list'],['dockerEnter','enter'],['dockerStart','start']])ipcMain.handle('ssh:'+action,(event,input)=>{authorize(event);return ssh.docker[method](input.id,method==='list'?input.endpoint:input.environment);});
   ipcMain.handle('ssh:key',async event=>{const owner=authorize(event);const result=await hostDialog('showOpenDialog',owner.window,{title:'选择 SSH 私钥',properties:['openFile']});return result.canceled?null:result.filePaths[0];});
   const skills=services.skills;
+  if (app.isPackaged) app.setAsDefaultProtocolClient('ambleloft');
+  else if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('ambleloft', process.execPath, [path.resolve(process.argv[1])]);
   try{await skills.initializeBuiltins();}catch{console.warn('Built-in skill guidance is unavailable; ordinary chat remains available.');}
   let extensionError='';
   try{await services.extensions.initialize();}catch(error){extensionError=error.message;}
@@ -151,12 +169,12 @@ app.whenReady().then(async () => {
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
   services.extensions.options.pageChanged=async(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
-  terminals = new (require('./terminal.cjs').TerminalService)({spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size),resolveContext:async input=>{
+  terminals = new (require('./terminal.cjs').TerminalService)({spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size,context.environment),resolveContext:async input=>{
     const project = input.projectId ? (await store.read()).projects.find(p=>p.id===input.projectId) : null;
     if(input.projectId&&!project)throw Error('项目不存在');
     const run = input.runId ? runtime.runs.find(r=>r.id===input.runId) : null;
     if(input.runId&&(!run||(run.projectId||'')!==(input.projectId||'')))throw Error('任务与项目不匹配');
-    if(project?.type==='ssh'){if(run?.remote&&(run.remote.connectionId!==project.connectionId||run.remote.path!==project.path))throw Error('远端项目位置已改变，请新建任务');await ssh.connect(project.connectionId);const root=await ssh.directory(project.connectionId,project.path);const location=await ssh.withSftp(project.connectionId,s=>ssh.resolve(s,root,input.directory||''));return {projectId:project.id,runId:run?.id,cwd:await ssh.directory(project.connectionId,location.full),connectionId:project.connectionId};}
+    if(project?.type==='ssh'){if(run?.remote&&!sameTarget(run.remote,project))throw Error('远端项目位置已改变，请新建任务');await ssh.connect(project.connectionId);const root=await ssh.directory(project.connectionId,project.path,project.environment);const location=project.environment?.kind==='docker'?await ssh.docker.file(project.connectionId,project.environment,{op:'resolve',root,path:input.directory||''}):await ssh.withSftp(project.connectionId,s=>ssh.resolve(s,root,input.directory||''));return {projectId:project.id,runId:run?.id,cwd:await ssh.directory(project.connectionId,location.full,project.environment),connectionId:project.connectionId,environment:project.environment};}
     const fs=require('node:fs/promises');
     const root=await fs.realpath(run?.cwd||project?.path||os.homedir());
     const cwd=await fs.realpath(input.directory ? path.resolve(root,input.directory) : root);
@@ -186,9 +204,50 @@ app.whenReady().then(async () => {
   ipcMain.handle('extensions:configuration',(event,input)=>{authorize(event);return extensionService().configuration(input);});
   ipcMain.handle('extensions:details',(event,id)=>{authorize(event);return require('../core/extensions/details.cjs').extensionDetails(extensionService(),id);});
   ipcMain.handle('extensions:list',event=>{const owner=authorize(event);return extensionService().snapshot(pageHost.contexts.get(owner.id)?.projectId);});
+  const {packageConfirmation, skillConfirmation} = require('./install-confirmation.cjs');
   const confirmPackage=async (window,revision)=>{
-    const answer=await hostDialog('showMessageBox',window,{type:'warning',title:'信任扩展代码',message:`信任 ${revision.id} v${revision.manifest.version}？`,detail:`摘要：${revision.digest}\n此扩展包含开发者提供的代码。Node 扩展可使用当前用户的系统权限，资源授权只限制宿主核心 API，不是系统沙箱。\n声明权限：${(revision.manifest.permissions||[]).map(p=>p.capability+' ('+p.scope+')').join(', ')||'无'}\n更新和恢复旧版都会清除已有资源授权。启用后可按声明启动独立 Node 后台；静态扩展页面可打开，Agent 操作入口尚未开放。`,buttons:['取消','信任并安装'],defaultId:0,cancelId:0});return answer.response===1;
+    const {language} = await store.read();
+    const answer = await hostDialog('showMessageBox', window, packageConfirmation(revision, language, app.getLocale()));
+    return answer.response === 1;
   };
+  const {CatalogStore, loadSources} = require('../core/catalog-store/service.cjs');
+  let catalogSources = [], catalogSourceError;
+  try { catalogSources = await loadSources(); } catch { catalogSourceError = 'STORE_INVALID_SOURCE_FILE'; }
+  catalogService = new CatalogStore({directory: app.getPath('userData'), database, skills, extensions: services.extensions, sources: catalogSources, publish: () => windows.broadcast(profileId, 'catalog-store:event')});
+  await catalogService.initialize();
+  if (pendingStoreURL) { receiveStoreURL(pendingStoreURL); pendingStoreURL = null; }
+  ipcMain.handle('catalog-store:catalog', async (event, input) => { authorize(event); const result = await catalogService.catalog(input); return catalogSourceError ? {...result, error: catalogSourceError} : result; });
+  ipcMain.handle('catalog-store:pendingOpenError', event => { authorize(event); const target = pendingStoreOpenError; pendingStoreOpenError = null; return target; });
+  ipcMain.handle('catalog-store:pendingOpen', event => { authorize(event); const target = pendingStoreOpen; pendingStoreOpen = null; return target; });
+  ipcMain.handle('catalog-store:cancel', (event, input) => { authorize(event); return catalogService.cancel(input || {}); });
+  ipcMain.handle('catalog-store:install', async (event, input) => {
+    const owner = authorize(event);
+    const result = await catalogService.install(input, {
+      extension: revision => confirmPackage(owner.window, revision),
+      skill: async item => {
+        const {language} = await store.read();
+        return (await hostDialog('showMessageBox', owner.window, skillConfirmation(item, language, app.getLocale()))).response === 1;
+      }
+    });
+    windows.broadcast(profileId, 'skills:event'); windows.broadcast(profileId, 'extensions:event'); return result;
+  });
+  services.creation.publish=runId=>windows.broadcast(profileId,'creation:event',{runId});
+  ipcMain.handle('creation:read',async(event,input)=>{authorize(event);return services.creation.read(input.runId);});
+  ipcMain.handle('creation:trial',async(event,input)=>{authorize(event);return services.creation.confirmTrial(input.runId,input.expectedRevision);});
+  ipcMain.handle('creation:install',async(event,input)=>{
+    const owner=authorize(event);let replacedSkillId;
+    const result=await services.creation.install(input.runId,input.expectedRevision,{
+      confirmPackage:revision=>confirmPackage(owner.window,revision),
+      confirmSkill:async(state,duplicate)=>{
+        const response=await hostDialog('showMessageBox',owner.window,{type:'question',message:duplicate?'已存在同名技能':'安装并启用技能？',detail:state.title+'\n'+state.summary+'\n安装的是已检查的文件快照。'+(duplicate?'\n替换会更新现有技能；另存会保留两个版本。':''),buttons:duplicate?['取消','替换并启用','另存并启用']:['取消','安装并启用'],defaultId:0,cancelId:0});
+        if(response.response===0)return null;
+        if(duplicate&&response.response===1)replacedSkillId=duplicate.id;
+        return duplicate?(response.response===1?{replaceId:duplicate.id}:{asNew:true}):{};
+      }
+    });
+    if(replacedSkillId&&result.stage==='installed')await inputRequests.invalidateOrigin('skill:'+replacedSkillId);
+    windows.broadcast(profileId,'skills:event');windows.broadcast(profileId,'extensions:event');return result;
+  });
   ipcMain.handle('extensions:install',async (event,input)=>{
     const window=authorize(event).window;const development=input?.development===true;
     const selection=await hostDialog('showOpenDialog',window,{title:development?'选择扩展开发目录':'安装或更新扩展',properties:[development?'openDirectory':'openFile'],...(!development?{filters:[{name:'Extension',extensions:['amble-extension','zip','json']}]}:{})});
@@ -324,6 +383,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:approve', (event, input) => { authorize(event); checkRuntime(); return runtime.approve(input); });
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
+  ipcMain.handle('app:info', event => { authorize(event); return require('./app-info.cjs').appInfo(app); });
   ipcMain.handle('device:get', (event) => {
     authorize(event);
     return { name: os.hostname().replace(/\.local$/, ''), chip: os.cpus()[0]?.model || os.arch(),
@@ -335,6 +395,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('workspace:save',()=>{throw new Error('UNSUPPORTED: 请刷新应用，工作台已改用资源级保存');});
   ipcMain.handle('workspace:patch',async(event,input)=>{
     authorize(event);
+    const projects=(await store.read()).projects;
+    for(const change of input?.changes||[]){const before=projects.find(p=>p.id===change.id);if(change.kind==='project'&&change.action==='put'&&before&&!sameTarget(before,change.value)&&[...terminals.sessions.values()].some(s=>s.projectId===change.id&&!s.exited))throw Error('请先关闭此项目的终端，再修改工作环境');}
     return publishWorkspace(await runtime.patchWorkspace(input));
   });
   ipcMain.handle('attachments:select', async event => {
@@ -366,6 +428,6 @@ app.on('before-quit', event => {
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();
   authenticationForShutdown?.close();
-  Promise.resolve().then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
+  Promise.resolve().then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
     .finally(async () => { await database?.close().catch(error => dialog.showErrorBox('关闭数据库失败', error.message)); app.quit(); });
 });

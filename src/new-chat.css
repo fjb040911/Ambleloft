@@ -17,9 +17,6 @@
 .home-start .composer[aria-busy=true] .composer-hint { opacity:1; }
 .home-page.home-start .composer-note { display:flex; justify-content:center; align-items:center; gap:4px 8px; padding:0; margin-top:8px; }
 .home-start .composer-note .composer-status { flex:0 1 auto; }
-.home-page.home-start .starter-section { justify-content:center; margin-top:28px; }
-.home-start .starter-suggestions { justify-content:center; gap:8px; }
-.home-start .starter-suggestions button { font-weight:400; }
 .home-start .draft-context-bar { margin-bottom:12px; }
 @media(max-height:740px) {
  .home-page.home-start { padding-top:40px; }

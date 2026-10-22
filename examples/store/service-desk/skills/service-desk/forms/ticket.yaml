@@ -1,0 +1,36 @@
+version: 1
+id: ticket
+title: "%title%"
+description: "%intro%"
+steps:
+  - id: issue
+    title: "%issue%"
+    fields:
+      - {name: asset, type: text, label: "%asset%", maxLength: 120, required: true}
+      - {name: problem, type: textarea, label: "%problem%", maxLength: 2000, required: true}
+  - id: contact
+    title: "%contactStep%"
+    fields:
+      - name: priority
+        type: select
+        label: "%priority%"
+        required: true
+        options:
+          - {label: "%normal%", value: normal}
+          - {label: "%urgent%", value: urgent}
+      - {name: contact, type: text, label: "%contact%", maxLength: 120, required: true}
+  - id: confirm
+    title: "%confirmStep%"
+    fields:
+      - {name: confirmed, type: checkbox, label: "%confirmed%", required: true}
+submit:
+  kind: operation
+  label: "%submit%"
+  operation: labs.service-desk.submitTicket
+  input:
+    asset: {from: steps.issue.asset}
+    problem: {from: steps.issue.problem}
+    priority: {from: steps.contact.priority}
+    contact: {from: steps.contact.contact}
+    confirmed: {from: steps.confirm.confirmed}
+  recovery: {operation: labs.service-desk.lookupTicket}

@@ -1,0 +1,1 @@
+{"requestKey":"creator-outcome-1","reason":"先明确你想完成的事，再推荐合适的实现方式。","source":{"kind":"dynamic","definition":{"title":"你希望它帮你做什么？","description":"用自己的话描述即可，名称和实现方式我会帮你建议。","fields":[{"name":"outcome","type":"textarea","label":"想解决的问题","required":true,"placeholder":"例如：帮同事登记差旅申请，或连接开发板查看调试日志。"}]}}}
