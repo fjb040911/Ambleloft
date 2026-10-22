@@ -1,0 +1,14 @@
+{
+  "name": "Three-step travel registration",
+  "description": "Confirm the itinerary, purpose and budget in three steps, then return them to chat. No external finance submission.",
+  "title": "Travel registration",
+  "trip": "Itinerary",
+  "destination": "Destination",
+  "departure": "Departure date",
+  "purpose": "Purpose and budget",
+  "reason": "Business purpose",
+  "budget": "Budget (CNY)",
+  "review": "Review",
+  "confirmed": "I have checked the information. I can go back to make changes.",
+  "submit": "Send registration to chat"
+}

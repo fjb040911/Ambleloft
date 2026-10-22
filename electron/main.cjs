@@ -27,6 +27,20 @@ let messageServiceForShutdown;
 let authenticationForShutdown;
 let quitting = false;
 let configBusy = false;
+let catalogService;
+let pendingStoreURL = process.argv.find(value => value.startsWith('ambleloft://')) || null;
+let pendingStoreOpen = null;
+let pendingStoreOpenError = null;
+function receiveStoreURL(value) {
+  if (!catalogService) { pendingStoreURL = value; return; }
+  const target = require('../core/catalog-store/catalog.cjs').inspectStoreLink(value, catalogService.sources);
+  if (!target) return;
+  if (target.code) { pendingStoreOpenError = target; pendingStoreOpen = null; }
+  else { pendingStoreOpen = target; pendingStoreOpenError = null; }
+  const window = windows.focused();
+  if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); window.webContents.send(target.code ? 'catalog-store:open-error' : 'catalog-store:open', target); }
+}
+app.on('open-url', (event, value) => { event.preventDefault(); receiveStoreURL(value); });
 const devURL = !app.isPackaged && process.env.ATELIER_DEV === '1' ? 'http://127.0.0.1:5173' : null;
 const entry = path.join(__dirname, '../dist/index.html');
 const trustedURL = devURL || pathToFileURL(entry).href;
@@ -66,7 +80,7 @@ function createWindow() {
   return window;
 }
 
-app.on('second-instance', () => { const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
+app.on('second-instance', (_event, argv) => { const link = argv.find(value => value.startsWith('ambleloft://')); if (link) receiveStoreURL(link); const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
@@ -92,6 +106,8 @@ app.whenReady().then(async () => {
   for(const [action,method] of [['dockerList','list'],['dockerEnter','enter'],['dockerStart','start']])ipcMain.handle('ssh:'+action,(event,input)=>{authorize(event);return ssh.docker[method](input.id,method==='list'?input.endpoint:input.environment);});
   ipcMain.handle('ssh:key',async event=>{const owner=authorize(event);const result=await hostDialog('showOpenDialog',owner.window,{title:'选择 SSH 私钥',properties:['openFile']});return result.canceled?null:result.filePaths[0];});
   const skills=services.skills;
+  if (app.isPackaged) app.setAsDefaultProtocolClient('ambleloft');
+  else if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('ambleloft', process.execPath, [path.resolve(process.argv[1])]);
   try{await skills.initializeBuiltins();}catch{console.warn('Built-in skill guidance is unavailable; ordinary chat remains available.');}
   let extensionError='';
   try{await services.extensions.initialize();}catch(error){extensionError=error.message;}
@@ -188,9 +204,33 @@ app.whenReady().then(async () => {
   ipcMain.handle('extensions:configuration',(event,input)=>{authorize(event);return extensionService().configuration(input);});
   ipcMain.handle('extensions:details',(event,id)=>{authorize(event);return require('../core/extensions/details.cjs').extensionDetails(extensionService(),id);});
   ipcMain.handle('extensions:list',event=>{const owner=authorize(event);return extensionService().snapshot(pageHost.contexts.get(owner.id)?.projectId);});
+  const {packageConfirmation, skillConfirmation} = require('./install-confirmation.cjs');
   const confirmPackage=async (window,revision)=>{
-    const answer=await hostDialog('showMessageBox',window,{type:'warning',title:'信任扩展代码',message:`信任 ${revision.id} v${revision.manifest.version}？`,detail:`摘要：${revision.digest}\n此扩展包含开发者提供的代码。Node 扩展可使用当前用户的系统权限，资源授权只限制宿主核心 API，不是系统沙箱。\n声明权限：${(revision.manifest.permissions||[]).map(p=>p.capability+' ('+p.scope+')').join(', ')||'无'}\n更新和恢复旧版都会清除已有资源授权。启用后可按声明启动独立 Node 后台；静态扩展页面可打开，Agent 操作入口尚未开放。`,buttons:['取消','信任并安装'],defaultId:0,cancelId:0});return answer.response===1;
+    const {language} = await store.read();
+    const answer = await hostDialog('showMessageBox', window, packageConfirmation(revision, language, app.getLocale()));
+    return answer.response === 1;
   };
+  const {CatalogStore, loadSources} = require('../core/catalog-store/service.cjs');
+  let catalogSources = [], catalogSourceError;
+  try { catalogSources = await loadSources(); } catch { catalogSourceError = 'STORE_INVALID_SOURCE_FILE'; }
+  catalogService = new CatalogStore({directory: app.getPath('userData'), database, skills, extensions: services.extensions, sources: catalogSources, publish: () => windows.broadcast(profileId, 'catalog-store:event')});
+  await catalogService.initialize();
+  if (pendingStoreURL) { receiveStoreURL(pendingStoreURL); pendingStoreURL = null; }
+  ipcMain.handle('catalog-store:catalog', async (event, input) => { authorize(event); const result = await catalogService.catalog(input); return catalogSourceError ? {...result, error: catalogSourceError} : result; });
+  ipcMain.handle('catalog-store:pendingOpenError', event => { authorize(event); const target = pendingStoreOpenError; pendingStoreOpenError = null; return target; });
+  ipcMain.handle('catalog-store:pendingOpen', event => { authorize(event); const target = pendingStoreOpen; pendingStoreOpen = null; return target; });
+  ipcMain.handle('catalog-store:cancel', (event, input) => { authorize(event); return catalogService.cancel(input || {}); });
+  ipcMain.handle('catalog-store:install', async (event, input) => {
+    const owner = authorize(event);
+    const result = await catalogService.install(input, {
+      extension: revision => confirmPackage(owner.window, revision),
+      skill: async item => {
+        const {language} = await store.read();
+        return (await hostDialog('showMessageBox', owner.window, skillConfirmation(item, language, app.getLocale()))).response === 1;
+      }
+    });
+    windows.broadcast(profileId, 'skills:event'); windows.broadcast(profileId, 'extensions:event'); return result;
+  });
   services.creation.publish=runId=>windows.broadcast(profileId,'creation:event',{runId});
   ipcMain.handle('creation:read',async(event,input)=>{authorize(event);return services.creation.read(input.runId);});
   ipcMain.handle('creation:trial',async(event,input)=>{authorize(event);return services.creation.confirmTrial(input.runId,input.expectedRevision);});
@@ -388,6 +428,6 @@ app.on('before-quit', event => {
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();
   authenticationForShutdown?.close();
-  Promise.resolve().then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
+  Promise.resolve().then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
     .finally(async () => { await database?.close().catch(error => dialog.showErrorBox('关闭数据库失败', error.message)); app.quit(); });
 });

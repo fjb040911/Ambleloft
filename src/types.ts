@@ -1,3 +1,9 @@
+export type StoreText = {zh:string;en:string};
+export interface StoreListing {previewSteps?:Array<{title:StoreText;description:StoreText}>;id:string;kind:'skill'|'extension';entityName:string;title:StoreText;summary:StoreText;description:StoreText;publisher:string;license:string;tags:string[];trialPrompt:StoreText;runtime:StoreText;setup:StoreText;release:{hostRequirements?:{minVersion:string};platforms?:string[];architectures?:string[];version:string;status:'published'|'yanked'|'revoked';artifactPath:string;artifactSha256:string;artifactSize:number;packageDigest:string;reviewedAt:string;reviewedBy:string;changelog:StoreText}}
+export interface StoreInstallation {sourceId:string;listingId:string;releaseVersion:string;entityId:string;kind:'skill'|'extension';locallyModified:boolean;installedAt:string}
+export interface StoreCatalog {source:{id:string;title:string}|null;items:StoreListing[];stale:boolean;error?:string;installed:StoreInstallation[];busy:string[]}
+export interface StoreOpen {sourceId:string;listingId:string}
+export interface StoreAPI {pendingOpenError():Promise<{code:'STORE_UNTRUSTED_SOURCE'}|null>;onOpenError(listener:(error:{code:'STORE_UNTRUSTED_SOURCE'})=>void):()=>void;catalog(input?:{refresh?:boolean}):Promise<StoreCatalog>;install(input:StoreOpen):Promise<{kind:'skill'|'extension';entityId:string;cancelled?:boolean}>;cancel(input:{listingId:string}):Promise<{cancelled:boolean}>;pendingOpen():Promise<StoreOpen|null>;onChanged(listener:()=>void):()=>void;onOpen(listener:(target:StoreOpen)=>void):()=>void}
 export type AppInfo = {version:string;channel:'development'|'packaged'|'browser';platform:string;osVersion:string;arch:string;commit:string|null;dirty:boolean|null;builtAt:string|null};
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
@@ -46,6 +52,7 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      store?:StoreAPI;
       creation?:import('./CreationGuide').CreationAPI;
       inputs?: {
         list(input:{runId:string}):Promise<{policy:{paused:boolean;generation:number};deliveries:InputDelivery[];requests:PersistentInputRequest[]}>;

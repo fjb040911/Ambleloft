@@ -32,9 +32,10 @@ export const settingsGroups=[
  {name:'集成',items:[{id:'apps',label:'连接',icon:PlugZap},{id:'plugins',label:'扩展',icon:ExtensionCategoryIcon},{id:'skills',label:'技能',icon:BookOpen}]},
  {name:'模型服务',items:[{id:'providers',label:'模型提供商',icon:Cloud}]},
 ];
-export default function SettingsWorkspace({windowsDesktop=false,initialSkillId,section,setSection,workspace,save,back,archived,restore,remove,catalog,refresh,busy}:{windowsDesktop?:boolean;initialSkillId?:string;section:string;setSection(value:string):void;workspace:Workspace;save(update:Partial<Workspace>):Promise<void>;back():void;archived:NavTask[];restore(task:NavTask):Promise<void>;remove(task:NavTask):Promise<void>;catalog:ProviderCatalog;refresh():Promise<void>;busy:boolean}){
+export default function SettingsWorkspace({openLibrary,windowsDesktop=false,initialSkillId,section,setSection,workspace,save,back,archived,restore,remove,catalog,refresh,busy}:{openLibrary?(kind:'skill'|'extension',entityId?:string):void;windowsDesktop?:boolean;initialSkillId?:string;section:string;setSection(value:string):void;workspace:Workspace;save(update:Partial<Workspace>):Promise<void>;back():void;archived:NavTask[];restore(task:NavTask):Promise<void>;remove(task:NavTask):Promise<void>;catalog:ProviderCatalog;refresh():Promise<void>;busy:boolean}){
  const initialExtensionId=section.startsWith('plugins:')?section.slice(8):undefined;
  if(initialExtensionId)section='plugins';
+ useEffect(()=>{if(openLibrary&&(section==='plugins'||section==='skills'))openLibrary(section==='skills'?'skill':'extension',section==='skills'?initialSkillId:initialExtensionId);},[section,initialSkillId,initialExtensionId]);
  const backRef=useRef<HTMLButtonElement>(null);
  useEffect(()=>{backRef.current?.focus({preventScroll:true});},[]);
  const [editor,setEditor]=useState<ProviderConfig|null|undefined>();

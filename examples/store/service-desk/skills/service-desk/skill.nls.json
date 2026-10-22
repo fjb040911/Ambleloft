@@ -1,0 +1,17 @@
+{
+  "name": "Equipment service desk",
+  "description": "Confirm the device, fault and contact, then create a test ticket and look up the receipt.",
+  "title": "Equipment service request",
+  "intro": "Test scenario. Use fictional data. No ticket is created before confirmation.",
+  "issue": "Device and issue",
+  "asset": "Device ID",
+  "problem": "What went wrong?",
+  "contactStep": "Contact and priority",
+  "priority": "Priority",
+  "normal": "Normal",
+  "urgent": "Business impacted — urgent",
+  "contact": "Contact or test employee ID",
+  "confirmStep": "Confirm submission",
+  "confirmed": "I checked the device, issue and contact and agree to create a test ticket.",
+  "submit": "Create test ticket"
+}

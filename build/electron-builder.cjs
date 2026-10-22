@@ -3,6 +3,7 @@ const release = process.env.ATELIER_RELEASE === '1';
 module.exports = {
   appId: 'app.atelier.agent',
   productName: 'Ambleloft',
+  protocols: [{name:'Ambleloft Store',schemes:['ambleloft']}],
   icon: 'public/brand/icon-512.png',
   win: { icon: 'build/icons/ambleloft.ico' },
   linux: { icon: 'public/brand/icon-512.png' },

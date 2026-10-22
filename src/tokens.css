@@ -84,3 +84,8 @@
     --orange-bg: #403529; --orange-text: #e0bc90; --green-bg: #293b33; --green-text: #9acdaf;
   }
 }
+
+/* Skill and extension center: restrained Figma-inspired story surfaces. */
+:root { --store-feature:#ded2f7; --store-create:#e1edc7; --store-feature-text:#25212e; }
+:root[data-theme='dark'] { --store-feature:#373044; --store-create:#313b2b; --store-feature-text:#eeeaf5; }
+@media (prefers-color-scheme:dark) { :root[data-theme='system'] { --store-feature:#373044; --store-create:#313b2b; --store-feature-text:#eeeaf5; } }

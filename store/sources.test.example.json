@@ -1,0 +1,9 @@
+[
+  {
+    "id": "curated",
+    "title": "Ambleloft curated test catalog",
+    "baseUrl": "http://127.0.0.1:18081/",
+    "keyId": "curated-v1",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA3BNeWlezBEnB26Hx2OfFbntz83FinCDvM7o2yn1bb6w=\n-----END PUBLIC KEY-----\n"
+  }
+]

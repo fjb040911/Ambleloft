@@ -15,6 +15,27 @@ async function setup(page:Page,layoutMode='activity',width=256,language='zh-CN')
  },{layoutMode,width,remoteName,language});await page.goto('/');
 }
 function remoteRow(page:Page){return page.locator('.project-tree-row').filter({has:page.locator('.project-tree-title',{hasText:remoteName})});}
+test('SSH banner follows the active category and page without disconnecting the project',async({page})=>{
+ await setup(page);await page.evaluate(()=>{const w=window as any;w.__disconnects=0;w.desktop.ssh.disconnect=async()=>{w.__disconnects++;};w.desktop.ssh.validate=async()=>({path:'/srv/workspaces/remote-project/source'});});
+ const banner=page.getByRole('region',{name:'SSH 连接',exact:true}),rail=page.getByRole('navigation',{name:'分组导航'});
+ await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
+ await rail.getByRole('button',{name:'任务',exact:true}).click();await expect(banner).toHaveCount(0);
+ await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toBeVisible();
+ await page.locator('#project-tasks-remote').getByText('项目任务',{exact:true}).click();await expect(banner).toHaveAttribute('data-collapsible','true');
+ await rail.getByRole('button',{name:'任务',exact:true}).click();await expect(banner).toHaveCount(0);
+ await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toBeVisible();
+ await rail.getByRole('button',{name:'技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toHaveCount(0);
+ await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
+ await page.locator('.project-tree-row').filter({hasText:'本地资料'}).locator('.project-tree-name').click();await expect(banner).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__disconnects)).toBe(0);
+});
+test('grouped navigation keeps SSH details on project pages only',async({page})=>{
+ await setup(page,'classic');const banner=page.getByRole('region',{name:'SSH 连接',exact:true});
+ await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
+ await page.getByRole('button',{name:'发现技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
+});
 for(const mode of ['activity','classic'])test(`${mode}: long names leave space for status and rich SSH metadata`,async({page})=>{
  await setup(page,mode);const row=remoteRow(page);const state=row.locator('.ssh-nav-state'),title=row.locator('.project-tree-title');await expect(state).toHaveAttribute('data-state','connected');
  const boxes=await Promise.all([title.boundingBox(),state.boundingBox(),row.boundingBox()]);expect(boxes[0]!.x+boxes[0]!.width).toBeLessThanOrEqual(boxes[1]!.x);expect(boxes[1]!.x+boxes[1]!.width).toBeLessThanOrEqual(boxes[2]!.x+boxes[2]!.width);

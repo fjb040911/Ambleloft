@@ -1,0 +1,268 @@
+{
+  "specVersion": "1.0-draft",
+  "publisher": "labs",
+  "name": "service-desk",
+  "version": "0.1.0",
+  "displayName": "%name%",
+  "engines": {
+    "api": "1"
+  },
+  "main": "main.cjs",
+  "skills": [
+    "skills/service-desk"
+  ],
+  "permissions": [
+    {
+      "capability": "configuration",
+      "scope": "self"
+    }
+  ],
+  "configuration": {
+    "type": "object",
+    "properties": {
+      "serviceUrl": {
+        "type": "string",
+        "maxLength": 200,
+        "description": "%serviceUrl%"
+      }
+    },
+    "required": [
+      "serviceUrl"
+    ],
+    "additionalProperties": false
+  },
+  "operations": [
+    {
+      "id": "labs.service-desk.submitTicket",
+      "handler": "submitTicket",
+      "title": "%submitTicket%",
+      "description": "%submitTicket%",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "write",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "urgent"
+            ]
+          },
+          "contact": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "confirmed": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "asset",
+          "problem",
+          "priority",
+          "contact",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received"
+            ]
+          }
+        },
+        "required": [
+          "ticketId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration"
+      ]
+    },
+    {
+      "id": "labs.service-desk.lookupTicket",
+      "handler": "lookupTicket",
+      "title": "%lookupTicket%",
+      "description": "%lookupTicket%",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "submissionId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "notExecuted",
+              "unknown"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "ticketId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "received"
+                ]
+              }
+            },
+            "required": [
+              "ticketId",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration"
+      ]
+    },
+    {
+      "id": "labs.service-desk.getTicket",
+      "handler": "getTicket",
+      "title": "%getTicket%",
+      "description": "%getTicket%",
+      "exposeTo": [
+        "page",
+        "agent"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "ticketId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received"
+            ]
+          }
+        },
+        "required": [
+          "ticketId",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration"
+      ]
+    },
+    {
+      "id": "labs.service-desk.health",
+      "handler": "health",
+      "title": "%health%",
+      "description": "%health%",
+      "exposeTo": [
+        "page",
+        "agent"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "connected": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "connected",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration"
+      ]
+    }
+  ],
+  "description": "%description%"
+}

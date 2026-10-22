@@ -1,0 +1,180 @@
+{
+  "sourceId": "curated",
+  "items": [
+    {
+      "id": "examples.travel-registration",
+      "kind": "skill",
+      "entityName": "travel-registration",
+      "directory": "../examples/store/travel-registration",
+      "version": "0.1.1",
+      "publisher": "Ambleloft examples",
+      "license": "Apache-2.0",
+      "tags": [
+        "forms",
+        "travel"
+      ],
+      "title": {
+        "zh": "三步差旅登记",
+        "en": "Three-step travel registration"
+      },
+      "summary": {
+        "zh": "核对行程、事由与预算，生成一份清晰的登记草稿。",
+        "en": "Confirm itinerary, purpose and budget in a clear registration draft."
+      },
+      "description": {
+        "zh": "开发者声明三步表单，AI 从聊天中引导用户填写。确认后结果返回聊天，不会直接提交到财务系统。",
+        "en": "A developer-defined three-step form guides the conversation. Confirmed information returns to chat without submitting to a finance system."
+      },
+      "trialPrompt": {
+        "zh": "使用三步差旅登记，帮我整理下周上海出差的行程和预算。请打开表单让我核对。",
+        "en": "Use three-step travel registration to organize my trip to Shanghai next week. Open the form so I can confirm the itinerary and budget."
+      },
+      "runtime": {
+        "zh": "当前本地项目任务",
+        "en": "Current local project task"
+      },
+      "setup": {
+        "zh": "无需外部服务；预算以人民币填写。",
+        "en": "No external service is required. Budget is recorded in CNY."
+      },
+      "changelog": {
+        "zh": "修正核对确认项的中英文显示；目录详情增加只读步骤预览。",
+        "en": "Fix the localized review confirmation label; add a read-only step preview to the listing."
+      },
+      "requirements": {
+        "hostRequirements": {
+          "minVersion": "0.7.0"
+        },
+        "platforms": [
+          "darwin",
+          "linux",
+          "win32"
+        ],
+        "architectures": [
+          "arm64",
+          "x64"
+        ]
+      },
+      "previewSteps": [
+        {
+          "title": {
+            "zh": "行程",
+            "en": "Itinerary"
+          },
+          "description": {
+            "zh": "核对目的地与出发日期。AI 可以从对话中带入已知信息。",
+            "en": "Confirm the destination and departure date. AI can prefill details from the conversation."
+          }
+        },
+        {
+          "title": {
+            "zh": "事由与预算",
+            "en": "Purpose and budget"
+          },
+          "description": {
+            "zh": "填写出差事由与人民币预算；需要调整时可返回前一步。",
+            "en": "Enter the purpose and budget in CNY. Return to the previous step to make changes."
+          }
+        },
+        {
+          "title": {
+            "zh": "核对并返回聊天",
+            "en": "Review and return to chat"
+          },
+          "description": {
+            "zh": "勾选核对确认后，将登记信息发回当前聊天，不向财务系统提交。",
+            "en": "Confirm the details to send the registration back to this chat. Nothing is submitted to a finance system."
+          }
+        }
+      ]
+    },
+    {
+      "id": "labs.service-desk",
+      "kind": "extension",
+      "entityName": "labs.service-desk",
+      "directory": "../examples/store/service-desk",
+      "version": "0.1.0",
+      "publisher": "Ambleloft labs",
+      "license": "Apache-2.0",
+      "tags": [
+        "forms",
+        "business",
+        "equipment"
+      ],
+      "title": {
+        "zh": "设备售后工单",
+        "en": "Equipment service desk"
+      },
+      "summary": {
+        "zh": "从故障描述到工单回执，连接已有的售后服务。",
+        "en": "Turn an equipment issue into a trackable ticket in an existing service."
+      },
+      "description": {
+        "zh": "用三步表单核对设备、故障和联系人，用户确认后由扩展提交测试 API。返回真实工单号，支持查询与幂等恢复。该样例需要独立测试服务和 SSH 隧道，不包含企业认证或生产派单能力。",
+        "en": "Confirm the device, issue and contact in three steps, then submit to a test API after user confirmation. Returns a real ticket ID with lookup and idempotent recovery. Requires a separate test service and SSH tunnel; enterprise authentication and production dispatch are not included."
+      },
+      "trialPrompt": {
+        "zh": "使用设备售后工单，帮我报修 DEMO-FPGA-01，开机后调试日志中断。先检查服务连接，再打开表单让我确认。",
+        "en": "Use the equipment service desk to report DEMO-FPGA-01: debug logs stop after startup. Check the service connection, then open the form for my confirmation."
+      },
+      "runtime": {
+        "zh": "本机 Node 扩展，经 SSH 隧道访问远端 API",
+        "en": "Local Node extension connecting to a remote API through an SSH tunnel"
+      },
+      "setup": {
+        "zh": "授权读取自身配置；在扩展设置填写 serviceUrl（例如 http://127.0.0.1:18080），并保持测试服务隧道运行。",
+        "en": "Grant access to its own configuration, set serviceUrl (for example http://127.0.0.1:18080), and keep the SSH tunnel to the test service running."
+      },
+      "changelog": {
+        "zh": "首个测试目录版本，包含中英文表单、独立服务配置与四个业务操作。",
+        "en": "Initial test catalog release with localized forms, service configuration and four operations."
+      },
+      "requirements": {
+        "hostRequirements": {
+          "minVersion": "0.7.0"
+        },
+        "platforms": [
+          "darwin",
+          "linux",
+          "win32"
+        ],
+        "architectures": [
+          "arm64",
+          "x64"
+        ]
+      },
+      "previewSteps": [
+        {
+          "title": {
+            "zh": "设备与故障",
+            "en": "Device and issue"
+          },
+          "description": {
+            "zh": "填写设备编号，描述遇到的问题。此样例只使用虚构测试资料。",
+            "en": "Enter a device ID and describe the issue. Use fictional test data in this sample."
+          }
+        },
+        {
+          "title": {
+            "zh": "联系与优先级",
+            "en": "Contact and priority"
+          },
+          "description": {
+            "zh": "选择常规或紧急处理，填写联系人或测试工号。服务地址在扩展设置中配置。",
+            "en": "Choose normal or urgent priority and enter a contact or test user ID. Configure the service URL in extension settings."
+          }
+        },
+        {
+          "title": {
+            "zh": "确认提交与回执",
+            "en": "Confirm and receive a ticket"
+          },
+          "description": {
+            "zh": "核对后提交，并通过宿主的业务确认。扩展调用测试服务，返回真实工单号；结果不明时可查询确认。",
+            "en": "Review and submit, then approve the host confirmation. The extension calls the test service and returns a real ticket ID; uncertain results can be looked up."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,14 @@
 # Preview notes / 预览版说明
 
+## v0.8.0 — Skill and extension center preview
+
+- Adds a skill/extension center, trusted catalog validation, explicit installation confirmation, and recoverable catalog error presentation.
+- Adds curated sample packages and publishing tooling. Live catalog/model acceptance requires separate configuration.
+- Includes guided creation and remote-workspace improvements from the open PR.
+- macOS Apple Silicon preview, ad-hoc signed and not Apple-notarized.
+
+新增技能与扩展中心、目录校验、明确安装确认及错误恢复提示，并加入示例包与发布工具。真实目录和模型验收需单独配置。
+
 ## v0.7.0 — Guided creation and remote workspace preview
 
 - Adds Skill Master guided skill/extension creation, validated installation snapshots, and trial prompts.

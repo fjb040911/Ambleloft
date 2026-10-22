@@ -1,0 +1,14 @@
+{
+  "name": "Equipment service desk (test)",
+  "description": "Register an equipment issue in three steps and submit it to your test service after confirmation.",
+  "serviceUrl": "Local SSH tunnel address, for example http://127.0.0.1:18080",
+  "submitTicket": "Create a test ticket",
+  "lookupTicket": "Check submission outcome",
+  "getTicket": "Look up ticket status",
+  "health": "Check the test service",
+  "badAddress": "Set the local SSH tunnel address in extension settings, for example http://127.0.0.1:18080",
+  "unknown": "Submission outcome is unknown. Check the existing submission before trying again.",
+  "offline": "Service unavailable. Check the SSH tunnel.",
+  "serverError": "Service returned error {status}",
+  "confirm": "Submit through the confirmed form"
+}

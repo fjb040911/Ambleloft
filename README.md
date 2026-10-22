@@ -11,7 +11,7 @@ Ambleloft is a free, open-source desktop AI agent and an open extension platform
 
 **Define the business entry point in a Skill. Specify fields and steps in a declarative form. Connect your services through a Node extension.** Your application owns the business rules and final outcome; Ambleloft provides the conversation, interaction components, and extension runtime.
 
-This repository contains the **0.7.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
+This repository contains the **0.8.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
 
 ## The agent understands intent. Your software owns the rules.
 
@@ -202,7 +202,7 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.7.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
+**0.8.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
 
 - **Platforms:** macOS Apple Silicon is the primary validated environment. Windows and Linux require platform-specific build and native-runtime validation; check release notes for available packages.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
