@@ -61,3 +61,6 @@
 /* Sidebar lists normally receive these resets from Tailwind preflight. */
 [data-slot="sidebar-menu"], [data-slot="sidebar-menu-sub"] { list-style:none; padding:0; margin:0; }
 [data-slot="sidebar"] [data-slot="collapsible-content"][hidden] { display:none; }
+
+/* Button-rendered anchors need the same reset as buttons without global preflight. */
+.about-dialog a[data-slot="button"] { color:inherit; text-decoration:none; -webkit-app-region:no-drag; }

@@ -1,3 +1,4 @@
+export type AppInfo = {version:string;channel:'development'|'packaged'|'browser';platform:string;osVersion:string;arch:string;commit:string|null;dirty:boolean|null;builtAt:string|null};
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
 export interface Skill {builtIn?:{key:string;version:number;digest:string};displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
@@ -91,6 +92,7 @@ declare global {
       terminal?: import('./TerminalPanel').TerminalAPI;
       projectFiles?: ProjectFilesAPI;
       selectAttachments(): Promise<{name:string;path:string}[]>;
+      getAppInfo?(): Promise<AppInfo>;
       copyText(text: string): Promise<void>;
       openLink(url: string): Promise<void>;
       getProvider(id?:string): Promise<ProviderConfig>;

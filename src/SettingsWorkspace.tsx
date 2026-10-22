@@ -22,7 +22,7 @@ import ArchivedConversations from './ArchivedConversations';
 import ExtensionsPage from './ExtensionsPage';
 import { t } from './i18n';
 import {useEffect,useRef,useState,useCallback} from 'react';
-import {PanelLeft, ArrowLeft, Settings, MessageCircle, PlugZap, Puzzle, BookOpen, Compass, Database, Box, SlidersHorizontal, Cpu, Cloud, Monitor, Sun, Moon, Check, Type, Languages, ShieldCheck, Info, Plus} from 'lucide-react';
+import {PanelLeft, ArrowLeft, Settings, MessageCircle, PlugZap, Puzzle, BookOpen, Compass, Database, Box, SlidersHorizontal, Cpu, Cloud, Monitor, Sun, Moon, Check, Type, Languages, ShieldCheck, Plus} from 'lucide-react';
 import type {Workspace, ProviderConfig, ProviderCatalog} from './types';
 import type {NavTask} from './WorkspaceNavigation';
 import SkillManager from './SkillManager';
@@ -53,7 +53,7 @@ export default function SettingsWorkspace({windowsDesktop=false,initialSkillId,s
  <section className="settings-group"><h2><Monitor size={18}/>{t("外观")}</h2><p>{t("默认跟随系统，也可以选择你喜欢的模式。")}</p><div className="theme-options">{([{id:'system',label:'跟随系统',icon:Monitor},{id:'light',label:'浅色',icon:Sun},{id:'dark',label:'深色',icon:Moon}] as const).map(theme=><Button variant={workspace.theme===theme.id?'secondary':'outline'} key={theme.id} disabled={busy||pending} aria-pressed={workspace.theme===theme.id} className="h-auto min-h-20 flex-1 flex-col gap-2" onClick={()=>void act(()=>save({theme:theme.id}))}><theme.icon/><span>{t(theme.label)}</span></Button>)}</div></section>
  <Card className="my-6"><CardHeader><CardTitle className="flex items-center gap-2"><PanelLeft aria-hidden="true"/>{t('导航布局')}</CardTitle><CardDescription>{t('选择侧栏组织方式，不改变你的项目、任务和扩展。')}</CardDescription></CardHeader><CardContent><ToggleGroup className="layout-options grid w-full grid-cols-1 sm:grid-cols-2 gap-3" variant="outline" value={[workspace.layoutMode||'activity']} disabled={busy||pending} onValueChange={values=>{const mode=values[0];if(mode==='classic'||mode==='activity')void act(()=>save({layoutMode:mode}));}} aria-label={t('导航布局')}>{(['classic','activity'] as const).map(mode=><ToggleGroupItem key={mode} value={mode} className="layout-option h-auto flex-col items-stretch whitespace-normal p-3.5 gap-3"><span className={`layout-mini ${mode}`} aria-hidden="true"><i/><span><b/><b/><b/></span><span/></span><span className="layout-option-title">{t(mode==='classic'?'分组侧栏':'活动栏')}{(workspace.layoutMode||'activity')===mode&&<Check size={16}/>}</span><small>{t(mode==='classic'?'所有分组一起展示，快速浏览。':'按项目、任务、扩展分别浏览。')}</small></ToggleGroupItem>)}</ToggleGroup></CardContent></Card>
  <section className="settings-group"><h2><ShieldCheck size={18}/>{t("数据与隐私")}</h2><div className="setting-row"><span><strong>{t("工作台数据")}</strong><small>{t("任务和设置保存在本机，服务密钥使用系统加密存储。")}</small></span><span className="badge green">{t("本地保存")}</span></div><div className="setting-row"><span><strong>{t("云端与模型调用")}</strong><small>{t("任务及所用上下文仅发送至该任务绑定的模型服务。")}</small></span></div></section>
- <section className="settings-group"><h2><Info size={18}/>{t("关于 Ambleloft")}</h2><p>{t("v0.2.1 · 桌面预览")}</p><p>{t("你的个人 AI 工作台。支持模型服务、多轮对话与执行审批。")}</p></section></>}
+ </>}
  {section==='notifications'&&<NotificationSettings/>}
  {section==='accounts'&&<AccountSettings onStateChange={onEditorState} onCancel={change}/>}
  {section==='conversations'&&<ArchivedConversations tasks={archived} projects={workspace.projects} restore={restore} remove={remove}/>}

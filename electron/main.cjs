@@ -343,6 +343,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:approve', (event, input) => { authorize(event); checkRuntime(); return runtime.approve(input); });
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
+  ipcMain.handle('app:info', event => { authorize(event); return require('./app-info.cjs').appInfo(app); });
   ipcMain.handle('device:get', (event) => {
     authorize(event);
     return { name: os.hostname().replace(/\.local$/, ''), chip: os.cpus()[0]?.model || os.arch(),

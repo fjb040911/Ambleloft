@@ -1,5 +1,14 @@
 # Preview notes / 预览版说明
 
+## v0.7.0 — Guided creation and remote workspace preview
+
+- Adds Skill Master guided skill/extension creation, validated installation snapshots, and trial prompts.
+- Adds SSH-to-Docker workspace selection; real SSH + Docker validation remains pending.
+- Improves SSH project setup, sidebar project information, supplemental input handling, and application About information.
+- macOS Apple Silicon preview; ad-hoc signed, not Apple-notarized.
+
+新增 Skill Master 创建引导与 Docker 工作区预览，改进 SSH 配置、项目侧栏信息、补充输入及关于界面。真实 SSH + Docker 环境尚待验收。
+
 ## v0.6.0 — SSH projects and integrated terminal preview
 
 - Adds SSH projects with remote file browsing, SFTP access, remote Agent tools, host-key confirmation, and connection lifecycle controls.

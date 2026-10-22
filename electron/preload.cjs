@@ -22,6 +22,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   skills: {onChanged:listener=>{const handler=()=>listener();ipcRenderer.on('skills:event',handler);return()=>ipcRenderer.removeListener('skills:event',handler);},...Object.fromEntries(['list','detail','readFile','update','remove','import'].map(action=>[action,input=>ipcRenderer.invoke('skills:'+action,input)]))},
   projectFiles: Object.fromEntries(['context','list','search','read','office','apps','open'].map(action=>[action,input=>ipcRenderer.invoke('files:'+action,input)])),
   selectAttachments: () => ipcRenderer.invoke('attachments:select'),
+  getAppInfo: () => ipcRenderer.invoke('app:info'),
   copyText: text => ipcRenderer.invoke('clipboard:write-text', text),
   openLink: url => ipcRenderer.invoke('link:open', url),
   getProvider: id => ipcRenderer.invoke('provider:get', id),

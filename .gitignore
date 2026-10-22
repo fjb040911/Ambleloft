@@ -66,3 +66,5 @@ coverage/
 /build/ui-template.cjs
 
 /build/input-definition.cjs
+
+/.impeccable/

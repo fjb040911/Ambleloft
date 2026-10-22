@@ -13,12 +13,12 @@ async function setup(page:Page){await page.addInitScript(()=>{
   browse:async({environment:e,path}:any)=>{(window as any).__browse.push({environment:e,path});return {path:path||'/home/dev',parent:'/',entries:path==='/workspace'?[{name:'firmware',path:'/workspace/firmware'}]:[],writable:true,storage:'bind'};},validate:async({path,environment:e}:any)=>{(window as any).__validated={path,environment:e};if((window as any).__failValidate)throw Error('容器当前状态：exited');return {path};},connect:async()=>[],disconnect:async()=>[],
  },skills:{list:async()=>[]},extensions:{list:async()=>({capabilities:{},installed:[]})}};
  });await page.goto('/');}
-async function create(page:Page){await page.getByRole('button',{name:'新建项目',exact:true}).click();await page.getByRole('radio',{name:/SSH 远端项目/}).check();await page.getByLabel('项目名称',{exact:true}).fill('FPGA 开发');await page.locator('#ssh-connection').selectOption('c');await page.getByRole('radio',{name:'Docker 容器',exact:true}).check();await expect(page.getByRole('option',{name:/fpga-dev/})).toBeVisible();}
+async function create(page:Page){await page.getByRole('button',{name:'新建项目',exact:true}).click();await page.getByRole('radio',{name:/SSH 远端项目/}).check();await page.locator('#ssh-connection').selectOption('c');await page.getByRole('button',{name:'继续',exact:true}).click();await page.getByLabel('项目名称',{exact:true}).fill('FPGA 开发');await page.getByRole('radio',{name:'Docker 容器',exact:true}).check();await expect(page.getByRole('option',{name:/fpga-dev/})).toBeVisible();}
 test('SSH Docker picker enters container directories, saves target and restores it',async({page})=>{
  await setup(page);await create(page);await expect(page.getByRole('option',{name:/old-dev/})).toHaveCount(0);
  await page.getByRole('option',{name:/fpga-dev/}).dblclick();await expect(page.getByLabel('容器文件夹')).toContainText('firmware');
  await page.getByRole('button',{name:'firmware',exact:true}).click();await page.getByRole('button',{name:'使用此目录',exact:true}).click();await expect(page.getByLabel('容器工作目录',{exact:true})).toHaveValue('/workspace/firmware');
- await expect(page.getByRole('button',{name:'保存项目',exact:true})).toBeEnabled();await page.screenshot({path:'test-results/docker-project-ready.png',animations:'disabled'});await page.getByRole('button',{name:'保存项目',exact:true}).click();await expect(page.getByRole('dialog',{name:'创建项目'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'创建项目',exact:true})).toBeEnabled();await page.screenshot({path:'test-results/docker-project-ready.png',animations:'disabled'});await page.getByRole('button',{name:'创建项目',exact:true}).click();await expect(page.getByRole('dialog',{name:'创建项目'})).toHaveCount(0);
  const p=await page.evaluate(()=>(window as any).desktop.readWorkspace().then((s:any)=>s.projects[0]));expect(p.environment.containerId).toBe('a'.repeat(64));expect(p.path).toBe('/workspace/firmware');
  expect(await page.evaluate(()=>(window as any).__validated.environment.containerId)).toBe(p.environment.containerId);
  await page.reload();await expect(page.getByRole('heading',{name:'FPGA 开发',exact:true})).toBeVisible();await expect(page.getByText('fpga-dev → /workspace/firmware',{exact:true}).first()).toBeVisible();
@@ -33,7 +33,7 @@ test('environment switching clears directories and narrow dark picker stays usab
  await setup(page);await create(page);await page.setViewportSize({width:600,height:850});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  const input=page.getByLabel('搜索容器');await input.fill('does-not-exist');await expect(page.getByText('没有匹配的容器')).toBeVisible();await input.fill('ubuntu');await expect(page.getByRole('option',{name:/fpga-dev/})).toBeVisible();
  await page.getByRole('option',{name:/fpga-dev/}).focus();await page.keyboard.press('Enter');await page.getByRole('button',{name:'使用此目录',exact:true}).click();
- await page.getByRole('radio',{name:'服务器',exact:true}).check();await expect(page.getByLabel('工作目录',{exact:true})).toHaveValue('');await expect(page.getByRole('button',{name:'保存项目',exact:true})).toBeDisabled();
+ await page.getByRole('radio',{name:'服务器',exact:true}).check();await expect(page.getByLabel('工作目录',{exact:true})).toHaveValue('');await expect(page.getByRole('button',{name:'创建项目',exact:true})).toBeDisabled();
  await page.getByRole('radio',{name:'Docker 容器',exact:true}).check();await expect(page.getByRole('option',{name:/fpga-dev/})).toBeVisible();
  await page.screenshot({path:'test-results/docker-project-dark.png',animations:'disabled'});
  const dialog=page.getByRole('dialog',{name:'创建项目'});expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);

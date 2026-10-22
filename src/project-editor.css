@@ -29,28 +29,33 @@
 .project-editor-dialog .project-editor-hint,.project-editor-footer>p{font-size:12px;color:var(--secondary);line-height:1.5}
 .project-editor-dialog .project-editor-error{font-size:13px;color:var(--orange-text);line-height:1.5;margin:0;overflow-wrap:anywhere}
 .project-editor-dialog .project-manage-actions{display:flex;flex-wrap:wrap;gap:8px;padding-top:16px;border-top:1px solid var(--border)}
-.project-editor-dialog .project-ssh{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;display:flex;flex-direction:column;gap:14px;min-width:0}
-.project-editor-dialog .project-section-heading{display:flex;gap:8px;align-items:center;font-size:13px}
+.project-editor-dialog .project-ssh{display:flex;flex-direction:column;gap:16px;min-width:0}
+.project-editor-dialog .project-section-heading{display:flex;gap:8px;align-items:center;justify-content:space-between;font-size:14px}
 .project-editor-dialog .project-section-heading strong{font-weight:600}
-.project-editor-dialog .project-connected{margin-left:auto;display:flex;gap:4px;align-items:center;font-size:12px;color:var(--text)}
-.project-editor-dialog .project-connection-picker{display:flex;align-items:center;gap:8px;min-width:0}
-.project-editor-dialog .project-connection-picker>[data-slot=field]{min-width:0;flex:1}
-.project-editor-dialog .project-ssh-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.project-editor-dialog .project-ssh-fields>.project-host-row,.project-ssh-fields>label,.project-ssh-fields>[data-slot=field-description],.project-ssh-fields>button{grid-column:1/-1}
-.project-editor-dialog .project-host-row{display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:12px}
-.project-editor-dialog .project-ssh-fields>[data-slot=field]:first-child{grid-column:1/-1}
-.project-editor-dialog .project-native-select{height:32px;width:100%;border:1px solid var(--border);border-radius:8px;background:var(--raised);color:var(--text);padding:4px 8px;outline-offset:3px}
+.project-editor-dialog .project-connected{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--text);white-space:nowrap}
+.project-editor-dialog .project-connected svg{width:14px;height:14px}
+.project-editor-dialog .project-connection-summary{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.project-editor-dialog .project-connection-summary>svg{width:20px;height:20px;flex-shrink:0;color:var(--secondary)}
+.project-editor-dialog .project-connection-summary>div{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+.project-editor-dialog .project-connection-summary strong{font-size:14px;font-weight:600}
+.project-editor-dialog .project-connection-summary>div>span{font-size:12px;color:var(--secondary)}
+.project-editor-dialog .project-ssh>[data-slot=button]{align-self:flex-start}
+.project-editor-dialog .project-ssh>[data-slot=alert]{overflow-wrap:anywhere}
+.project-editor-dialog .project-ssh [data-slot=alert-description]{display:flex;flex-direction:column;gap:12px}
+.project-editor-dialog .project-ssh [data-slot=alert-description] button{align-self:flex-start}
+.project-editor-dialog .project-ssh [data-slot=alert-description] summary{cursor:pointer}
 .project-editor-dialog .project-connection-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .project-editor-dialog .project-folder-browser{border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .project-editor-dialog .project-folder-toolbar{display:flex;gap:8px;align-items:center;padding:8px;background:var(--hover);border-bottom:1px solid var(--border)}
 .project-editor-dialog .project-folder-toolbar code{font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .project-editor-dialog .project-folder-list{max-height:160px;overflow:auto;padding:4px}
 .project-editor-dialog .project-folder-list button{width:100%;display:flex;align-items:center;gap:9px;text-align:left;padding:8px;border-radius:5px;font-size:13px;background:transparent;border:0;cursor:pointer}
+.project-editor-dialog .project-folder-list button svg{width:16px;height:16px;flex-shrink:0}
 .project-editor-dialog .project-folder-list button span{flex:1;overflow-wrap:anywhere;min-width:0}
 .project-editor-dialog .project-folder-list button:hover{background:var(--hover)}
 .project-editor-dialog .project-folder-list button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 .project-editor-dialog .project-folder-list p{margin:12px;font-size:12px;color:var(--secondary);line-height:1.6}
-@media(max-width:520px){.project-editor-dialog>[data-slot=dialog-header]{padding:20px 44px 0 16px}.project-editor-dialog .project-editor-body{padding:12px 16px 20px;gap:18px}.project-editor-dialog .project-editor-footer{padding:12px 16px;flex-wrap:wrap}.project-editor-dialog .project-location-options{grid-template-columns:1fr}.project-editor-dialog .project-location-option{padding:10px 12px}.project-editor-dialog .project-directory-input{flex-wrap:wrap}.project-editor-dialog .project-directory-input input{flex-basis:100%}.project-editor-dialog .project-ssh-fields{grid-template-columns:1fr}.project-editor-dialog .project-connection-picker{flex-wrap:wrap}.project-editor-dialog .project-connection-picker>[data-slot=field]{flex-basis:100%}}
+@media(max-width:520px){.project-editor-dialog>[data-slot=dialog-header]{padding:20px 44px 0 16px}.project-editor-dialog .project-editor-body{padding:12px 16px 20px;gap:18px}.project-editor-dialog .project-editor-footer{padding:12px 16px;flex-wrap:wrap}.project-editor-dialog .project-location-options{grid-template-columns:1fr}.project-editor-dialog .project-location-option{padding:10px 12px}.project-editor-dialog .project-directory-input{flex-wrap:wrap}.project-editor-dialog .project-directory-input input{flex-basis:100%}.project-editor-dialog .project-connection-summary{flex-wrap:wrap}}
 .docker-container-list{max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px}
 .docker-container-list>[role=option]{display:flex;align-items:center;gap:10px;width:100%;padding:10px;text-align:left;border:0;background:transparent;border-radius:5px;cursor:pointer;font-size:13px}
 .docker-container-list>[role=option]:hover{background:var(--hover)}
