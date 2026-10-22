@@ -32,7 +32,7 @@ function commonApplications(file,paths){
 }
 function createFileApplications({platform=process.platform,execute=exec,getIcon=async()=>undefined,stat=fs.stat,spawn=require('node:child_process').spawn}={}) {
  const cache=new Map(),icons=new Map();
- const paths=platform==='win32'?path.win32:path;
+ const paths=platform==='win32'?path.win32:path.posix;
  const identity=id=>platform==='win32'?id.toLowerCase():id;
  async function icon(id){
   if(!icons.has(id)){
@@ -59,11 +59,11 @@ function createFileApplications({platform=process.platform,execute=exec,getIcon=
   if(platform==='darwin'){
    let result={apps:[]};
    try{result=JSON.parse((await execute('/usr/bin/osascript',['-l','JavaScript','-e',script,file],{timeout:5000,maxBuffer:256*1024})).stdout);}catch{/* System default remains usable when discovery is unavailable. */}
-   apps=(result.apps||[]).filter(a=>typeof a.path==='string'&&path.isAbsolute(a.path)&&a.path.endsWith('.app')).map(a=>({id:a.path,name:a.name||path.basename(a.path,'.app'),icon:a.icon,isDefault:a.path===result.defaultPath}));
-   if(result.defaultPath&&!apps.some(a=>a.id===result.defaultPath))apps.unshift({id:result.defaultPath,name:path.basename(result.defaultPath,'.app'),isDefault:true});
+   apps=(result.apps||[]).filter(a=>typeof a.path==='string'&&paths.isAbsolute(a.path)&&a.path.endsWith('.app')).map(a=>({id:a.path,name:a.name||paths.basename(a.path,'.app'),icon:a.icon,isDefault:a.path===result.defaultPath}));
+   if(result.defaultPath&&!apps.some(a=>a.id===result.defaultPath))apps.unshift({id:result.defaultPath,name:paths.basename(result.defaultPath,'.app'),isDefault:true});
    // Editors are useful for source/text only, never injected into images or Office files.
-   if(textTypes.has(path.extname(file).slice(1).toLowerCase()))for(const name of ['Visual Studio Code','Cursor','Windsurf','Zed'])for(const dir of ['/Applications',path.join(os.homedir(),'Applications')]){
-    const id=path.join(dir,name+'.app');if(await validApplication(id)){if(!apps.some(a=>a.id===id))apps.push({id,name});break;}
+   if(textTypes.has(paths.extname(file).slice(1).toLowerCase()))for(const name of ['Visual Studio Code','Cursor','Windsurf','Zed'])for(const dir of ['/Applications',paths.join(os.homedir(),'Applications')]){
+    const id=paths.join(dir,name+'.app');if(await validApplication(id)){if(!apps.some(a=>a.id===id))apps.push({id,name});break;}
    }
   }else if(platform==='win32'){
    try{const value=JSON.parse((await windows('list',file)).stdout.replace(/^\uFEFF/,''));apps=(Array.isArray(value)?value:[value]).filter(a=>a&&typeof a.id==='string'&&a.id.startsWith('windows:')&&typeof a.name==='string');}catch{/* PowerShell may be disabled by system policy; keep default opening available. */}

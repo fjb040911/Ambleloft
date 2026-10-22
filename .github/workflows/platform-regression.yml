@@ -1,0 +1,23 @@
+name: Platform compatibility
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Extension, skill, file application and terminal regressions
+        run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs

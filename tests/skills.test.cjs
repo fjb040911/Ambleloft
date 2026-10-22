@@ -70,10 +70,11 @@ test('repository install rejects untrusted hosts, invalid refs and escaping path
 
 test('built-in skill installs once, localizes, is lazy and read-only, and preserves disabled choice on upgrade',async t=>{
  const {skills,dir,db}=await fixture(t);const source=path.join(dir,'builtins');await fs.cp(path.join(__dirname,'../resources/skills'),source,{recursive:true});
+ const builtinFile=path.join(source,'supplemental-input/SKILL.md');await fs.writeFile(builtinFile,(await fs.readFile(builtinFile,'utf8')).replace(/\r?\n/g,'\r\n'));
  await skills.initializeBuiltins({root:source});let skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');assert.equal(skill.id,'builtin-supplemental-input');assert.equal(skill.builtIn.version,1);
  assert.equal(skill.displayName,'Supplemental information');skills.locale='zh-CN';assert.equal((await skills.list()).find(s=>s.id==='builtin-supplemental-input').displayName,'补充信息');
  await skills.initializeBuiltins({root:source});assert.equal((await skills.list()).find(s=>s.id==='builtin-supplemental-input').revision,skill.revision);
- const prepared=await skills.prepare();assert.equal(prepared.explicit,'');assert.equal(prepared.snapshots.length,0);assert.equal(prepared.instructions.split(skill.path).length-1,1);assert.equal(prepared.instructions.includes((await skills.detail(skill.id)).body),false);
+ const prepared=await skills.prepare();assert.equal(prepared.explicit,'');assert.equal(prepared.snapshots.length,0);assert.equal(prepared.instructions.split(JSON.stringify(skill.path).slice(1,-1)).length-1,1);assert.equal(prepared.instructions.includes((await skills.detail(skill.id)).body),false);
  assert.doesNotMatch((await skills.prepare([],{inputToolsEnabled:false})).instructions,/supplemental-input/);
  assert.match(prepared.instructions,/Supplemental input interaction guidance/);
  assert.doesNotMatch((await skills.prepare([],{inputToolsEnabled:false})).instructions,/Supplemental input interaction guidance/);
@@ -119,6 +120,18 @@ test('missing guide degrades to ordinary catalog; modified owned bundle is repai
  await skills.update({id:skill.id,enabled:true});await assert.rejects(skills.initializeBuiltins({root:path.join(dir,'missing')}));
  assert.doesNotMatch((await skills.prepare()).instructions,/supplemental-input/);
 });
+for(const ending of ['\n','\r\n'])test(`builtin bytes and revision survive restart with ${ending==='\n'?'LF':'CRLF'} source`,async t=>{
+ const {skills,dir,db}=await fixture(t),source=path.join(dir,'builtin-source');
+ await fs.cp(path.join(__dirname,'../resources/skills'),source,{recursive:true});
+ const file=path.join(source,'supplemental-input','SKILL.md');
+ const content=(await fs.readFile(file,'utf8')).replace(/\r?\n/g,ending);await fs.writeFile(file,content);
+ await skills.initializeBuiltins({root:source});const first=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');
+ assert.equal(await fs.readFile(first.path,'utf8'),content);
+ const reopened=createSkills(path.join(dir,'app'),db);await reopened.initializeBuiltins({root:source});
+ assert.equal((await reopened.list()).find(s=>s.id==='builtin-supplemental-input').revision,first.revision);
+ assert.ok((await reopened.readFile({id:first.id,file:'references/lifecycle.md'})).text.length);
+});
+
 test('builtin bundle is included in both desktop resource configurations and its references are readable',async t=>{
  const {skills}=await fixture(t);await skills.initializeBuiltins();const skill=(await skills.list()).find(s=>s.id==='builtin-supplemental-input');
  for(const file of ['references/lifecycle.md','references/interaction-design.md','examples/travel.json','examples/travel-preferences.json','skill.nls.json','skill.nls.zh-CN.json'])assert.ok((await skills.readFile({id:skill.id,file})).text.length);

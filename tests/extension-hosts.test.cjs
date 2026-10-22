@@ -24,11 +24,13 @@ test('private storage crosses the bound host channel and revoke stops the genera
  await f.hosts.activate(f.id);await assert.rejects(f.hosts.invoke(f.id,f.id+'.echo',{value:'store'}),e=>e.code==='FORBIDDEN'&&e.effectStatus==='unknown');
 });
 test('cancelled running calls retain capacity, queued calls cancel before start, late results cannot settle twice',async t=>{
- const f=await fixture(t,{limits:{concurrency:1,queue:1}});await f.hosts.activate(f.id);
- const first=f.hosts.invoke(f.id,f.id+'.echo',{value:'wait'},{timeout:180});const rejected=assert.rejects(first,e=>e.code==='TIMEOUT'&&e.effectStatus==='unknown');await until(()=>f.hosts.snapshot(f.id).activeCalls===1);
+ // Release the late result explicitly; filesystem validation can exceed 300 ms on Windows.
+ const source="let releaseLate;process.on('message',m=>{if(m.type==='test:release-late')releaseLate?.();});"+code.replace("setTimeout(()=>resolve({value:'late'}),300)","releaseLate=()=>resolve({value:'late'})");
+ const f=await fixture(t,{source,limits:{concurrency:1,queue:1}});await f.hosts.activate(f.id);
+ const first=f.hosts.invoke(f.id,f.id+'.echo',{value:'wait'},{timeout:2000});const rejected=assert.rejects(first,e=>e.code==='TIMEOUT'&&e.effectStatus==='unknown');await until(()=>f.hosts.snapshot(f.id).activeCalls===1);
  const controller=new AbortController();const next=f.hosts.invoke(f.id,f.id+'.echo',{}, {signal:controller.signal});const cancelled=assert.rejects(next,e=>e.code==='CANCELLED'&&e.effectStatus==='notStarted');await until(()=>f.hosts.snapshot(f.id).queuedCalls===1);
  await assert.rejects(f.hosts.invoke(f.id,f.id+'.echo',{}),e=>e.code==='BUSY');controller.abort();await cancelled;await rejected;assert.equal(f.hosts.snapshot(f.id).activeCalls,1);
- await until(()=>f.hosts.snapshot(f.id).activeCalls===0);assert.deepEqual(await f.hosts.invoke(f.id,f.id+'.echo',{value:'ok'}),{value:'ok'});
+ f.children[0].send({type:'test:release-late'});await until(()=>f.hosts.snapshot(f.id).activeCalls===0);assert.deepEqual(await f.hosts.invoke(f.id,f.id+'.echo',{value:'ok'}),{value:'ok'});
 });
 test('bad activation pauses; crashes isolate other extensions and bounded recovery eventually pauses',async t=>{
  const bad=await fixture(t,{source:'exports.activate=()=>{};'});await assert.rejects(bad.hosts.activate(bad.id));await until(()=>bad.hosts.snapshot(bad.id).state==='paused');
