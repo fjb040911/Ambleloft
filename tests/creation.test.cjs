@@ -59,7 +59,7 @@ test('bundled skill master is localizable, selects by capability and has a valid
 test('documented environment settings install empty and remain editable through host configuration',async t=>{
  const f=await fixture(t),source=path.join(f.project,'debugger');await fs.cp(path.join(__dirname,'fixtures/extensions/valid'),source,{recursive:true});
  const reference=await fs.readFile(path.join(__dirname,'../resources/skills/skill-master/references/configuration.md'),'utf8');
- const fragment=JSON.parse(reference.match(/```json\n([\s\S]*?)\n```/)[1]);
+ const fragment=JSON.parse(reference.match(/```json\r?\n([\s\S]*?)\r?\n```/)[1]);
  const file=path.join(source,'extension.json'),manifest=JSON.parse(await fs.readFile(file,'utf8'));
  Object.assign(manifest,fragment);await fs.writeFile(file,JSON.stringify(manifest));
  const snapshot=await f.extensions.installPackage(source,'directory',async()=>true),id=snapshot.installed[0].id;

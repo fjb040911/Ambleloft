@@ -44,7 +44,8 @@ try{
  await until(async()=> (await page.evaluate(()=>window.desktop.listRuns())).length>0);
  const run=(await page.evaluate(()=>window.desktop.listRuns()))[0];
  await until(async()=> (await page.evaluate(id=>window.desktop.getRunPage({id}),run.id)).status==='completed');
- assert.ok(JSON.stringify(requests[0]).includes(builtin.path));
+ const requestStrings=value=>typeof value==='string'?[value]:value&&typeof value==='object'?Object.values(value).flatMap(requestStrings):[];
+ assert.ok(requestStrings(requests[0]).some(text=>text.includes(builtin.path)||text.includes(JSON.stringify(builtin.path).slice(1,-1))));
  const prepared=await page.evaluate(runId=>window.desktop.creation.read({runId}),run.id);assert.equal(prepared.stage,'ready');
  const card=page.getByLabel('创建进度',{exact:true});await expect(card).toContainText('文件已检查，待安装');
  await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});

@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Extension, skill, file application and terminal regressions
-        run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs
+        run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/docker.test.cjs tests/creation.test.cjs

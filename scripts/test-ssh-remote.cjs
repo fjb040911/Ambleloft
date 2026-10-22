@@ -49,6 +49,6 @@ const {AgentRuntime}=require('../electron/agent-runtime.cjs');
   console.log('PASS: SSH/SFTP, host key, login environment, PTY, confined read/write and conflict checks, real local Codex engine calling remote tools without credential exposure.');
  }finally{
   await runtime?.shutdown();if(remoteTemp){const id=(await ssh.list())[0]?.id;if(id)await ssh.execute(id,'/tmp','rm -rf -- '+quote(remoteTemp)).catch(e=>console.error('Temporary remote directory cleanup failed:',remoteTemp,e.message));}
-  ssh.shutdown();server?.closeAllConnections();if(server)await new Promise(r=>server.close(r));await fs.rm(directory,{recursive:true,force:true});
+  ssh.shutdown();server?.closeAllConnections();if(server)await new Promise(r=>server.close(r));await fs.rm(directory,{recursive:true,force:true,maxRetries:10,retryDelay:200});
  }
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
