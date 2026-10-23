@@ -24,7 +24,7 @@ test('container selection is pinned to daemon and full ID; stopped containers re
  state('exited');await assert.rejects(service.enter('connection',environment),/exited/);await service.start('connection',environment);assert.equal(calls.filter(c=>c[0]==='start').length,1);
  state('paused');await assert.rejects(service.start('connection',environment),/仅支持/);daemon('other');await assert.rejects(service.enter('connection',environment),/服务已更换/);
 });
-test('helper handles UTF-8 names, binary bytes, concurrent changes and symlink boundaries',async t=>{
+test('helper handles UTF-8 names, binary bytes, concurrent changes and symlink boundaries',{skip:process.platform==='win32'?'Linux container helper requires POSIX filesystem semantics':false},async t=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-container-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  const name="中文 ' $(echo no)\nfile.txt";const write=await localHelper({op:'write',root,path:name,text:'hello',expectedSha256:null});assert.equal(write.bytes,5);
  const list=await localHelper({op:'list',root});assert.equal(list.entries[0].name,name);
@@ -35,7 +35,7 @@ test('helper handles UTF-8 names, binary bytes, concurrent changes and symlink b
  await fs.writeFile(path.join(root,'data.png'),Buffer.from([0,255,23,128]));assert.deepEqual(Buffer.from((await localHelper({op:'bytes',root,path:'data.png'})).data,'base64'),Buffer.from([0,255,23,128]));
  await assert.rejects(localHelper({op:'bytes',root,path:'data.png',limit:2}),/限制/);
 });
-test('container files use helper instead of host SFTP and isolate task and preview targets',async t=>{
+test('container files use helper instead of host SFTP and isolate task and preview targets',{skip:process.platform==='win32'?'Linux container helper requires POSIX filesystem semantics':false},async t=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-container-files-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  let current={...project,path:root};const runs=[{id:'r',projectId:'p',remote:targetSnapshot(current)}];
  const ssh={docker:{file:async(_id,_e,args)=>localHelper(args)},withSftp:()=>{throw Error('Must never access host files');},directory:async(_id,p)=>p};
