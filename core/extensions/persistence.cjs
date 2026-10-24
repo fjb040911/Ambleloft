@@ -1,4 +1,4 @@
-const {randomUUID}=require('node:crypto');
+const {randomUUID,createHash}=require('node:crypto');
 const schema=`
 CREATE TABLE IF NOT EXISTS extension_installations(id TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS extension_revisions(id TEXT NOT NULL,digest TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(id,digest));
@@ -11,7 +11,13 @@ function extensionPersistence(db,transaction){
  const save=item=>db.prepare('INSERT INTO extension_installations VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(item.id,JSON.stringify(item));
  const revision=(id,digest)=>{const r=db.prepare('SELECT data FROM extension_revisions WHERE id=? AND digest=?').get(id,digest);if(!r)throw Error('NOT_FOUND: Revision');return JSON.parse(r.data);};
  const list=()=>db.prepare('SELECT data FROM extension_installations ORDER BY rowid').all().map(r=>{const item=JSON.parse(r.data);return {...item,revisions:db.prepare('SELECT data FROM extension_revisions WHERE id=?').all(item.id).map(r=>JSON.parse(r.data)),grants:db.prepare('SELECT capability,resource FROM extension_grants WHERE id=?').all(item.id)};});
- return {extensionState(){return list();},extensionMutation(input){return transaction(()=>{
+ return {extensionState(){return list();},extensionVerificationContext({id}){
+  // Host-only metadata: never return configuration values or credential names/values.
+  const item=get(id);
+  const revisions=db.prepare("SELECT kind,key,revision FROM extension_data WHERE id=? AND kind IN ('configuration','secret') ORDER BY kind,key").all(id);
+  const binding=createHash('sha256').update(JSON.stringify({id,active:item.active,generation:item.generation,revisions})).digest('hex');
+  return {binding,digest:item.active,enabled:item.enabled,trusted:item.trusted,configurationRevision:revisions.find(r=>r.kind==='configuration'&&r.key==='settings')?.revision||0};
+ },extensionMutation(input){return transaction(()=>{
   const {action,id}=input;
   if(action==='initialize'){
    if(!db.prepare("SELECT key FROM settings WHERE key='extensions.profile'").get())db.prepare('INSERT INTO settings VALUES (?,?)').run('extensions.profile',JSON.stringify(randomUUID()));

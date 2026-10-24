@@ -28,6 +28,8 @@ Skill 引导模型 forms_list 获取实际 key，再 forms_present({key,prefill}
 
 中间业务动作使用 next.kind=operation，最终使用 submit.kind=operation。input 可绑定 steps.<step>.<field>、前置 results.<step>.<顶层字段>、context.projectId 或契约允许的固定值。YAML 不直接执行 HTTP 或存放认证密钥。
 
+表单会省略未填写的非必填字段，以及当前不可见的字段。Operation 的 inputSchema 不应把这些字段无条件列为 required。若选择某个动作后才需要说明，按已支持的 visibleWhen 声明条件显示，并为显示时的字段设置 required；在派发业务操作前拦截缺项。例如“已解决”可不填说明，“仍有问题”必须填说明。两条分支都要用真实宿主表单验证，不能只手工组装完整对象调用后端。
+
 写操作提供同扩展、只读且 page 可调用的 recovery Operation。后端使用宿主注入的 invocation.form 身份，其中 submissionId 配合真实用户、租户、操作范围实现业务幂等；requestId 不是替代品。身份标识也不是业务凭据。
 
 未知结果先查询，不自动重发写入。恢复结果为 succeeded + result、notExecuted 或 unknown；仅在业务系统能证明没有执行且旧请求不会继续执行时返回 notExecuted。信息确认、操作授权与业务审批是不同事件，不将其中一个写成另两个已经完成。

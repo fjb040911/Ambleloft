@@ -2,7 +2,7 @@
   "specVersion": "1.0-draft",
   "publisher": "labs",
   "name": "service-desk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "%name%",
   "engines": {
     "api": "1"
@@ -14,6 +14,10 @@
   "permissions": [
     {
       "capability": "configuration",
+      "scope": "self"
+    },
+    {
+      "capability": "secrets",
       "scope": "self"
     }
   ],
@@ -88,24 +92,105 @@
         "properties": {
           "ticketId": {
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "status": {
             "type": "string",
             "enum": [
-              "received"
+              "received",
+              "processing",
+              "awaiting_customer",
+              "resolved",
+              "closed"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "asset": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "urgent"
+            ]
+          },
+          "contact": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "properties": {
+                "revision": {
+                  "type": "integer"
+                },
+                "action": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "actor": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "revision",
+                "action",
+                "actor",
+                "text",
+                "at"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
           "ticketId",
-          "status"
+          "status",
+          "revision",
+          "owner",
+          "asset",
+          "problem",
+          "priority",
+          "contact",
+          "confirmed",
+          "updatedAt",
+          "events"
         ],
         "additionalProperties": false
       },
       "requiredPermissions": [
-        "configuration"
+        "configuration",
+        "secrets"
       ]
     },
     {
@@ -139,8 +224,8 @@
             "type": "string",
             "enum": [
               "succeeded",
-              "notExecuted",
-              "unknown"
+              "unknown",
+              "notExecuted"
             ]
           },
           "result": {
@@ -148,21 +233,105 @@
             "properties": {
               "ticketId": {
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 200
               },
               "status": {
                 "type": "string",
                 "enum": [
-                  "received"
+                  "received",
+                  "processing",
+                  "awaiting_customer",
+                  "resolved",
+                  "closed"
                 ]
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "owner": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "asset": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "problem": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "urgent"
+                ]
+              },
+              "contact": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "confirmed": {
+                "type": "boolean"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "events": {
+                "type": "array",
+                "maxItems": 24,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "action": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "actor": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 2000
+                    },
+                    "at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "revision",
+                    "action",
+                    "actor",
+                    "text",
+                    "at"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
               "ticketId",
-              "status"
+              "status",
+              "revision",
+              "owner",
+              "asset",
+              "problem",
+              "priority",
+              "contact",
+              "confirmed",
+              "updatedAt",
+              "events"
             ],
             "additionalProperties": false
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200
           }
         },
         "required": [
@@ -171,7 +340,8 @@
         "additionalProperties": false
       },
       "requiredPermissions": [
-        "configuration"
+        "configuration",
+        "secrets"
       ]
     },
     {
@@ -204,24 +374,105 @@
         "properties": {
           "ticketId": {
             "type": "string",
-            "minLength": 1,
             "maxLength": 200
           },
           "status": {
             "type": "string",
             "enum": [
-              "received"
+              "received",
+              "processing",
+              "awaiting_customer",
+              "resolved",
+              "closed"
             ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "asset": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "urgent"
+            ]
+          },
+          "contact": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "properties": {
+                "revision": {
+                  "type": "integer"
+                },
+                "action": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "actor": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "revision",
+                "action",
+                "actor",
+                "text",
+                "at"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
           "ticketId",
-          "status"
+          "status",
+          "revision",
+          "owner",
+          "asset",
+          "problem",
+          "priority",
+          "contact",
+          "confirmed",
+          "updatedAt",
+          "events"
         ],
         "additionalProperties": false
       },
       "requiredPermissions": [
-        "configuration"
+        "configuration",
+        "secrets"
       ]
     },
     {
@@ -262,7 +513,352 @@
       "requiredPermissions": [
         "configuration"
       ]
+    },
+    {
+      "id": "labs.service-desk.listTickets",
+      "handler": "listTickets",
+      "title": "%listTickets%",
+      "description": "%listTickets%",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "tickets": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "properties": {
+                "ticketId": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "received",
+                    "processing",
+                    "awaiting_customer",
+                    "resolved",
+                    "closed"
+                  ]
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "owner": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "asset": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "problem": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "urgent"
+                  ]
+                },
+                "contact": {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "events": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "revision": {
+                        "type": "integer"
+                      },
+                      "action": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "actor": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "revision",
+                      "action",
+                      "actor",
+                      "text",
+                      "at"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "ticketId",
+                "status",
+                "revision",
+                "owner",
+                "asset",
+                "problem",
+                "priority",
+                "contact",
+                "confirmed",
+                "updatedAt",
+                "events"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "tickets"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration",
+        "secrets"
+      ]
+    },
+    {
+      "id": "labs.service-desk.identity",
+      "handler": "identity",
+      "title": "%identity%",
+      "description": "%identity%",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "read",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "operator"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration",
+        "secrets"
+      ]
+    },
+    {
+      "id": "labs.service-desk.actOnTicket",
+      "handler": "actOnTicket",
+      "title": "%actOnTicket%",
+      "description": "%actOnTicket%",
+      "exposeTo": [
+        "page"
+      ],
+      "effect": "write",
+      "projectScoped": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "requestInfo",
+              "resolve",
+              "supplement",
+              "return",
+              "close"
+            ]
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "operationId": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "ticketId",
+          "action",
+          "expectedRevision",
+          "text",
+          "operationId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "processing",
+              "awaiting_customer",
+              "resolved",
+              "closed"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "asset": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "urgent"
+            ]
+          },
+          "contact": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "properties": {
+                "revision": {
+                  "type": "integer"
+                },
+                "action": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "actor": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "revision",
+                "action",
+                "actor",
+                "text",
+                "at"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "ticketId",
+          "status",
+          "revision",
+          "owner",
+          "asset",
+          "problem",
+          "priority",
+          "contact",
+          "confirmed",
+          "updatedAt",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "requiredPermissions": [
+        "configuration",
+        "secrets"
+      ]
     }
   ],
-  "description": "%description%"
+  "description": "%description%",
+  "contributes": {
+    "home": {
+      "title": "%name%",
+      "webRoot": "web",
+      "entry": "index.html"
+    }
+  }
 }

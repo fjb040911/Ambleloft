@@ -2,29 +2,21 @@ import {useEffect,useRef,useState} from 'react';
 import {WandSparkles,ArrowRight,Download,Settings2,ChevronDown} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
-import {useSkills} from './skills';
-import {t} from './i18n';
+import {t,formatDateTime} from './i18n';
 import type {AgentRun} from './types';
 export const CREATOR_ID='builtin-skill-master';
 export interface CreationState{
  runId:string;revision:number;stage:'brief'|'building'|'ready'|'installed';kind:'skill'|'extension';title:string;summary:string;nextStep:string;trialPrompt:string;limitations:string;trial:'pending'|'confirmed';
  prepared?:{source:string;digest:string};installed?:{id:string;kind:'skill'|'extension';hasConfiguration:boolean};
+ delivery?:{environment?:string[];settings?:string[];permissions?:string[];unverified?:string[]};
+ readiness?:{versionCurrent:boolean;configuration:'saved'|'not-saved'|'not-needed'|'unknown';connection:'unverified'};trialStale?:boolean;
+ evidence?:{id:string;method:'package-validation'|'user-trial';source:'host'|'user';artifactDigest:string;scope:string;at:string;current:boolean;environment:{platform:string;arch:string;hostVersion?:string}}[];
 }
 export interface CreationAPI{
  read(input:{runId:string}):Promise<CreationState|null>;
  install(input:{runId:string;expectedRevision:number}):Promise<CreationState>;
  trial(input:{runId:string;expectedRevision:number}):Promise<CreationState>;
  onChanged(listener:(event:{runId:string})=>void):()=>void;
-}
-export function CreationLauncher({projectId,disabled,draft,onChoose,manage}:{projectId:string|null;disabled:boolean;draft:string;onChoose(text:string,id:string):void;manage():void}){
- const {skills}=useSkills();const skill=skills.find(s=>s.id===CREATOR_ID);
- if(!window.desktop?.creation)return null;
- const guide=t('请用技能大师引导我创建并安装一个技能或扩展。先了解我想解决的问题，再逐步给出建议、生成和验证；需要接入工具、系统或设备时，请推荐合适的扩展方式。');
- return <div className="flex flex-col items-center gap-2 pt-2">
-  <div className="flex flex-wrap items-center justify-center gap-2">
-  <Button variant="outline" disabled={disabled||!projectId||!skill} onClick={()=>skill?.enabled?onChoose(draft.includes(guide)?draft:draft.trim()?draft+'\n\n'+guide:guide,CREATOR_ID):manage()}><WandSparkles data-icon="inline-start"/>{t(skill&&!skill.enabled?'启用技能大师':'创建技能 / 扩展')}</Button></div>
-  {!projectId&&<span className="text-xs text-muted-foreground">{t('先选择一个项目，保存你的创建成果')}</span>}
- </div>;
 }
 export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=false}:{run:AgentRun;active:boolean;hasPendingInput?:boolean;onPrompt(text:string,skillId?:string):void;openSettings(section:string):void}){
  const api=window.desktop?.creation;
@@ -35,7 +27,7 @@ export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=
  if(!api||run.archivedAt)return null;
  const act=async(action:'install'|'trial')=>{if(!state||busy)return;setBusy(true);setError('');try{const result=await api[action]({runId:run.id,expectedRevision:state.revision});if(alive.current){generation.current++;setState(result);}}catch(e){if(alive.current)setError((e as Error).message);}finally{if(alive.current)setBusy(false);}};
  if(!state)return error?<Alert variant="destructive"><AlertDescription>{error}<Button variant="ghost" size="sm" onClick={()=>void refresh()}>{t('重新加载')}</Button></AlertDescription></Alert>:null;
- const status=state.trial==='confirmed'?'已试用确认':({brief:'了解需求',building:'生成与验证',ready:'文件已检查，待安装',installed:state.installed?.hasConfiguration?'已安装，请配置并试用':'已安装，待试用'}[state.stage]);
+ const status=state.trialStale?'版本或设置已变化，请重新试用':state.trial==='confirmed'?'已试用确认':({brief:'了解需求',building:'生成与验证',ready:'文件已检查，待安装',installed:state.installed?.hasConfiguration?'已安装，请配置并试用':'已安装，待试用'}[state.stage]);
  const resume=()=>onPrompt(t('继续创建。请先读取创建进度和待回答问题，保留已确认的信息，从未完成的步骤继续。'),CREATOR_ID);
  return <section className="creation-guide mb-4 min-w-0 px-1" aria-label={t('创建进度')}>
   <details className="group/creation">
@@ -50,6 +42,16 @@ export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=
      {state.summary&&<p className="text-muted-foreground">{t('交付形式')}：{state.kind==='skill'?'Skill':t('扩展')}</p>}
      {state.prepared&&<><p className="break-all text-muted-foreground">{t('生成目录')}：{state.prepared.source}</p><p className="text-muted-foreground">{t('文件检查通过不代表外部系统或设备已验证。')}</p></>}
      {state.limitations&&<p className="whitespace-pre-wrap break-words text-muted-foreground">{state.limitations}</p>}
+     {state.delivery&&Object.entries(state.delivery).filter(([,items])=>items?.length).map(([key,items])=><div key={key}><p className="font-medium">{t(({environment:'所需环境',settings:'安装设置',permissions:'所需权限',unverified:'尚未验证'} as Record<string,string>)[key])}</p><ul className="mt-1 list-disc pl-5 text-muted-foreground">{items!.map((item,i)=><li key={i} className="break-words">{item}</li>)}</ul></div>)}
+     {state.readiness&&state.installed?.kind==='extension'&&<p className="text-muted-foreground">{t(state.readiness.configuration==='saved'?'配置已保存；外部连接尚未验证。':state.readiness.configuration==='not-saved'?'请按需填写安装设置；外部连接尚未验证。':'安装状态不代表外部连接已验证。')}</p>}
+     {!!state.evidence?.length&&<div aria-label={t('验证记录')} className="flex flex-col gap-2">
+      <p className="font-medium">{t('验证记录')}</p>
+      {state.evidence.slice(-5).reverse().map(item=><div key={item.id} className="text-xs text-muted-foreground">
+       <p>{t(item.method==='package-validation'?'宿主文件检查':'用户试用确认')} · {t(item.current?'当前版本':'历史记录')} · {formatDateTime(item.at)}</p>
+       <p className="break-all">{item.artifactDigest.slice(0,12)} · {item.environment.platform}/{item.environment.arch}{item.environment.hostVersion?` · Ambleloft ${item.environment.hostVersion}`:''}</p>
+      </div>)}
+      <p className="text-xs text-muted-foreground">{t('文件检查、业务运行和用户验收分别记录；未执行的验证不会标记通过。')}</p>
+     </div>}
      {state.trialPrompt&&<p className="break-words text-muted-foreground">{t('试用方式')}：{state.trialPrompt}</p>}
     </div>
    </div>
@@ -60,8 +62,8 @@ export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=
    {state.stage==='ready'&&<Button size="sm" disabled={busy||active} onClick={()=>void act('install')}><Download data-icon="inline-start"/>{t(busy?'正在安装…':'安装并启用')}</Button>}
    {state.stage==='installed'&&<>
     {state.installed?.kind==='extension'&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>openSettings('plugins:'+state.installed!.id)}><Settings2 data-icon="inline-start"/>{t('设置与权限')}</Button>}
-    <Button size="sm" disabled={busy||active} onClick={()=>onPrompt(state.trialPrompt,state.installed?.kind==='skill'?state.installed.id:undefined)}>{t('准备试用')}<ArrowRight data-icon="inline-end"/></Button>
-    {state.trial!=='confirmed'&&<Button size="sm" variant="outline" disabled={busy||active} onClick={()=>void act('trial')}>{t('我已试用，通过')}</Button>}
+    <Button size="sm" disabled={busy||active||state.readiness?.versionCurrent===false} onClick={()=>onPrompt(state.trialPrompt,state.installed?.kind==='skill'?state.installed.id:undefined)}>{t('准备试用')}<ArrowRight data-icon="inline-end"/></Button>
+    {state.trial!=='confirmed'&&<Button size="sm" variant="outline" disabled={busy||active||state.readiness?.versionCurrent===false} onClick={()=>void act('trial')}>{t('我已试用，通过')}</Button>}
    </>}
    <Button size="sm" variant="ghost" disabled={busy||active} onClick={resume}>{t(state.stage==='brief'||state.stage==='building'?'继续创建':'继续改进')}</Button>
   </div>}

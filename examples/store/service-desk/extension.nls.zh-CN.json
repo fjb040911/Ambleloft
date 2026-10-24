@@ -10,5 +10,8 @@
   "unknown": "提交结果未知，请核实工单；不要重复创建。",
   "offline": "服务不可用，请检查 SSH 隧道。",
   "serverError": "服务返回错误 {status}",
-  "confirm": "请通过表单确认后提交"
+  "confirm": "请通过表单确认后提交",
+  "listTickets": "查看工单列表",
+  "identity": "检查测试身份",
+  "actOnTicket": "处理工单"
 }

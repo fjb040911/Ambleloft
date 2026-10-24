@@ -1,6 +1,6 @@
 {
   "name": "ambleloft",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Open-source, extensible desktop Agent workspace",
   "main": "electron/main.cjs",

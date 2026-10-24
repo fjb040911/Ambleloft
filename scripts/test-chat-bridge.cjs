@@ -30,7 +30,7 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
    const tool=data.tools.find(t=>(t.function.name==='request_user_input'||t.function.name.startsWith('request_user_input_')));assert.ok(tool);
    mode='text';send({tool_calls:[{index:0,id:'call_question',type:'function',function:{name:tool.function.name,arguments:JSON.stringify({questions:[{id:'audience',header:'Audience',question:'Who is this for?',options:[{label:'Designer',description:'Design work'},{label:'Developer',description:'Engineering'}]}]})}}]},'tool_calls');
   }else if(mode==='plan'){
-   const tool=data.tools.find(t=>(t.function.name==='update_plan'||t.function.name.startsWith('update_plan_')));assert.ok(tool);
+   const tool=data.tools.find(t=>(t.function.name==='update_plan'||t.function.name.startsWith('update_plan_')||t.function.name.endsWith('__update_plan')));assert.ok(tool);
    mode='text';send({tool_calls:[{index:0,id:'call_plan',type:'function',function:{name:tool.function.name,arguments:JSON.stringify({plan:[{step:'Verify',status:'completed'}]})}}]},'tool_calls');
   }else {send({content:'Done.'},'stop');}
   res.end('data: [DONE]\n\n');

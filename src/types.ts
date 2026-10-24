@@ -150,7 +150,7 @@ export interface ProjectFilesAPI {
 }
 
 export interface ExtensionManifest {icon?:{light:string;dark:string};id:string;name:string;version:string;apiVersion:'1';description?:string;contributes:{views?:{id:string;title:string;body:string}[];commands?:{id:string;title:string;viewId:string;when?:string;visible?:boolean}[]}}
-export interface ExtensionSnapshot {capabilities:Record<string,number>;diagnostics?:string[];installed:{manifest:ExtensionManifest;generation?:number;enabled:boolean;sourceMode?:string;operations?:{id:string;title:string;description?:string}[];home?:{title:string;when?:string};hasConfiguration?:boolean;hasBackend?:boolean;runtime?:{state:string;diagnostic?:string|null;activeCalls:number;queuedCalls:number};kind?:"legacy"|"package";trusted?:boolean;active?:string;diagnostic?:string;grants?:{capability:string;resource:string}[];revisions?:{digest:string;version:string}[];permissions?:{capability:string;scope:string}[]}[]}
+export interface ExtensionSnapshot {capabilities:Record<string,number>;diagnostics?:string[];installed:{manifest:ExtensionManifest;generation?:number;enabled:boolean;sourceMode?:string;operations?:{id:string;title:string;description?:string}[];home?:{title:string;when?:string;available?:boolean};hasConfiguration?:boolean;hasBackend?:boolean;runtime?:{state:string;diagnostic?:string|null;activeCalls:number;queuedCalls:number};kind?:"legacy"|"package";trusted?:boolean;active?:string;diagnostic?:string;grants?:{capability:string;resource:string}[];revisions?:{digest:string;version:string}[];permissions?:{capability:string;scope:string}[]}[]}
 
 export interface ExtensionInteractionRequest {id:string;extensionName:string;extensionId:string;kind:string;capabilities:string[];description?:string;caller?:string;impact?:string[];input?:unknown;allowRemember?:boolean;title?:string;key?:string;project?:string;projects?:{id:string;name:string;description:string}[]}
 
@@ -166,7 +166,8 @@ export interface ConnectionCatalog {revision:number;defaultId:string|null;connec
 export interface ConfigurationSchema {type:string;description?:string;properties?:Record<string,ConfigurationSchema>;required?:string[];enum?:Array<string|number|boolean|null>;minimum?:number;maximum?:number;minLength?:number;maxLength?:number}
 export interface ExtensionConfiguration {schema:ConfigurationSchema;value:Record<string,unknown>;revision:number;generation:number}
 
-export interface InputDelivery {id:string;runId:string;text:string;source?:'user'|'inputRequest';flowId?:string;requestId?:string;state:'queued'|'dispatching'|'delivered'|'failed'|'unknown';held?:boolean;error?:string;target?:{threadId?:string;turnId?:string;turnKey?:string;mode?:'start'|'steer'}}
+export type ManagedRepairStatus = 'queued'|'executing'|'finished'|'conflict'|'failed'|'reviewRequired'|'reviewed';
+export interface InputDelivery {repairStatus?:ManagedRepairStatus;id:string;runId:string;text:string;source?:'user'|'inputRequest';flowId?:string;requestId?:string;state:'queued'|'dispatching'|'delivered'|'failed'|'unknown';held?:boolean;error?:string;target?:{threadId?:string;turnId?:string;turnKey?:string;mode?:'start'|'steer'}}
 export interface PersistentInputRequest {
  id:string;runId:string;conversationId:string;projectId:string|null;originKey:string;
  state:'pending'|'answered'|'cancelled'|'superseded'|'expired';revision:number;

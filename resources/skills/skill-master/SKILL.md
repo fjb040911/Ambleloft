@@ -21,6 +21,10 @@ Suggest a name and polished description after understanding the goal. Offer a sh
 
 Read references/authoring.md before proposing forms. Before implementing extensions, read references/extension-api.d.ts, references/contracts.d.ts and references/extension.schema.json. Read references/configuration.md when an integration depends on environment settings.
 
+Read references/webview.md when an extension needs a home page or secure credential input. It includes the actual page bridge initialization and a bundled SDK adapter for projects without a bundler.
+
+For multilingual delivery, read references/localization.md. Host templates and custom pages use different translation paths; preserve stable business identities and saved drafts across language changes.
+
 - Existing tools plus repeatable instructions: Skill.
 - Deterministic fields and step forms that return data to chat: Skill with amble-form YAML. Fixed fields do NOT require an extension.
 - New runtime integrations, dependencies, managed configuration/credentials, long-lived sessions, event delivery or a custom UI: extension. Reuse existing tools where sufficient.
@@ -40,6 +44,8 @@ If the user is unsure of the tool family or device protocol, offer a scoped reco
 ## Build and hand off
 
 Use creation_update with the latest revision after meaningful decisions. Store title, kind, confirmed summary, nextStep, trialPrompt and limitations. stage is brief or building; do not claim an installation or a successful user trial. Keep secrets out of this record and chat. Use host credential input for secrets and configuration for non-secret settings. Describe settings with human labels and useful descriptions; avoid exposing JSON to novice users when scalar fields suffice.
+
+Use the optional delivery object for concise arrays of environment, settings, permissions and unverified requirements. These are author notes, not verification results. creation_prepare records only host file validation; a user trial is recorded separately and becomes historical when the installed version, configuration or credentials change. Never invent evidence records or infer a real connection from installation or saved settings.
 
 Write complete files in a dedicated directory inside the project; do not overwrite unrelated files. Source remains editable there. Read references/verification.md and run checks appropriate to the output. The supplied examples/travel-skill is a runnable starting point for a three-step chat form, not a compulsory business model. Ask before inventing business rules. Extension authors can use the installed CLI, but inspect its actual help/version. If the toolchain is missing, build a minimal package using the bundled manifest/API reference rather than pretending scaffolding succeeded.
 

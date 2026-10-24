@@ -20,7 +20,7 @@ async function setup(page:Page){
 }
 async function selectExisting(page:Page){await page.getByLabel('已保存的连接').selectOption('build');await page.getByRole('button',{name:'连接服务器',exact:true}).click();await expect(page.getByText('已连接',{exact:true})).toBeVisible();}
 async function chooseDirectory(page:Page){await page.getByRole('button',{name:'浏览远端目录',exact:true}).click();await page.getByRole('button',{name:'project',exact:true}).click();await page.getByRole('button',{name:'使用此目录',exact:true}).click();}
-async function newConnection(page:Page){await page.getByRole('button',{name:'新建 SSH 连接',exact:true}).click();await page.getByLabel('主机 / IP').fill('new.example.test');await page.getByLabel('SSH 用户名',{exact:true}).fill('alice');await page.getByLabel('认证方式').selectOption('agent');}
+async function newConnection(page:Page){await page.getByRole('button',{name:'新建 SSH 连接',exact:true}).click();await expect(page.getByLabel('使用系统安全存储记住凭据',{exact:true})).toBeChecked();await page.getByLabel('主机 / IP').fill('new.example.test');await page.getByLabel('SSH 用户名',{exact:true}).fill('alice');await page.getByLabel('认证方式').selectOption('agent');}
 test('existing connections require explicit selection and create the project after choosing a directory',async({page})=>{
  await setup(page);await expect(page.getByLabel('已保存的连接')).toHaveValue('');await expect(page.getByLabel('主机 / IP')).toHaveCount(0);await expect(page.getByLabel('项目名称',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'连接服务器',exact:true})).toBeDisabled();
  await page.screenshot({path:'test-results/ssh-project-select.png'});
