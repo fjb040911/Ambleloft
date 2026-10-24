@@ -38,7 +38,7 @@ test('production preview renders both business examples and reports mock deliver
  await expect(page.getByRole('listitem')).toHaveCount(2);
  await page.getByRole('button',{name:'选择本页',exact:true}).click();await expect(page.getByRole('checkbox',{checked:true})).toHaveCount(2);
  await page.getByRole('button',{name:'清除选择',exact:true}).click();await expect(page.getByRole('checkbox',{checked:true})).toHaveCount(0);
- await page.getByRole('listitem').first().getByRole('button',{name:'跟进',exact:true}).click();await expect(page.getByRole('status')).toContainText('REQ-101');
+ await page.getByRole('listitem').first().getByRole('button',{name:'跟进',exact:true}).click();await expect(page.locator('main > p[role=status]')).toContainText('REQ-101');
  await page.getByRole('button',{name:'查看文件审查示例'}).click();await expect(page.getByText('邀请面板未处理重复提交',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'切换明暗'}).click();await expect(page.locator('html')).toHaveAttribute('data-theme','dark');await page.screenshot({path:'test-results/collection-cards-dark.png',fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'表格视图'}).click();await expect(page.getByRole('table')).toBeVisible();await page.screenshot({path:'test-results/collection-table-dark.png',fullPage:true,animations:'disabled'});

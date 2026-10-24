@@ -36,7 +36,10 @@ try{
  await page.evaluate(async project=>{await window.desktop.patchWorkspace({changes:[{kind:'project',action:'put',id:'creation-test',expectedRevision:null,value:{id:'creation-test',name:'创建验收',path:project,createdAt:new Date().toISOString()}}]});},project);
  const provider=await page.evaluate(url=>window.desktop.saveProvider({name:'Creation fixture',baseUrl:url,model:'fixture',executable:'',protocol:'responses'}),'http://127.0.0.1:'+server.address().port+'/v1');
  await page.reload();await page.getByRole('combobox',{name:'当前项目'}).click();await page.getByRole('option',{name:'创建验收'}).click();
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
+ await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
  await page.getByRole('button',{name:'创建技能 / 扩展',exact:true}).click();
+ await page.getByRole('button',{name:'填入聊天输入框',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue(/请用技能大师/);
  // Send through the actual composer; inference and source generation are deterministic fixtures.
  await page.getByRole('textbox',{name:'任务内容',exact:true}).fill('创建验收：三步差旅登记');
