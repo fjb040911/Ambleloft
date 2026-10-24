@@ -108,3 +108,13 @@ Schema 新增 `contributes.mcpApps`（uri/title/entry/mimeType）及 `operations
 ## User Input v1 施工契约
 
 [补充信息协议与工具 Schema](user-input/README.md) 已完成 U0 冻结，尚未接入运行时，不属于已发布 SDK 能力。不能仅凭契约文件存在就启用新工具。
+
+## 受管修复 v1（本地项目预览）
+
+`ui.schema.json` 的 chat action 新增 `managedRepair: true`；实例通过 `data.baseline` 提供真实报告、规则和源码文件的 SHA256 基线。宿主在同一 profile 内串行化同项目的受管修复，投递成功不等于修复成功。运行前探测 `ui_capabilities`；范围、暂停/重启恢复和执行状态见[受管修复契约](../managed-repair.md)。
+
+## 宿主业务入口导航（2026-10-23）
+
+已启用且受信任、声明 `contributes.home` 的扩展会显示在活动栏「扩展」的业务入口列表，点击直接打开隔离页面。一个扩展仍只声明一个 home；本轮不新增多页面、侧栏树或 View Container 契约。安装与生命周期管理统一在「技能与扩展」。页面菜单中的设置与权限使用管理覆盖层，关闭后保留当前页面实例；切换业务页面仍可能销毁原页面，草稿应由扩展持久化。
+
+`home.when` 根据宿主入口项目和扩展 contextKeys 判断可用性。入口项目不是操作授权或自动业务绑定：项目级操作仍需显式选择项目、取得宿主授权并传递 projectId，OperationRouter 继续验证。页面初始化和重开不得重放提交。

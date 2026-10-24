@@ -125,9 +125,9 @@ export interface ExtensionAuthentication {
 }
 
 /** Source-preview skill UI contract; not an ExtensionContext execution API. */
-export interface DeclarativeUiData { values?: Record<string, unknown>; rows: Record<string, unknown>[]; state?: 'ready'|'empty'|'incomplete'|'failed'|'uninitialized'; summary?: string; coverage?: string }
+export interface DeclarativeUiData { values?: Record<string, unknown>; rows: Record<string, unknown>[]; state?: 'ready'|'empty'|'incomplete'|'failed'|'uninitialized'; summary?: string; coverage?: string; baseline?: ManagedRepairBaseline }
 export interface DeclarativeUiBinding { from?: string; value?: unknown }
-export interface DeclarativeUiAction { id: string; label: string; kind: 'chat'; scope: 'data'|'row'|'selection'|'all'; prompt: string; input?: Record<string, DeclarativeUiBinding>; eligible?: {field: string; notEquals: unknown} }
+export interface DeclarativeUiAction { id: string; label: string; kind: 'chat'; scope: 'data'|'row'|'selection'|'all'; prompt: string; input?: Record<string, DeclarativeUiBinding>; eligible?: {field: string; notEquals: unknown}; managedRepair?: true }
 export interface DeclarativeUiTemplate { version: 1; id: string; type: 'editor'|'collection'; title: string; description?: string; fields?: Record<string, unknown>[]; rows: { key: string; fields: Record<string, unknown>[]; layout?: 'table'|'cards'; card?: {titleField: string; descriptionField?: string; badgeFields?: string[]; metadataFields?: string[]}; columns?: string[]; detailFields?: string[]; unique?: string[]; filterFields?: string[]; location?: {pathField: string}; valueLabels?: Record<string, Record<string, string>> }; actions: DeclarativeUiAction[] }
 
 /** Optional amble-form v1 increments; probe forms_capabilities at runtime. */
@@ -144,3 +144,16 @@ export interface DeclarativeFormSubmission {
  values:Record<string,Record<string,string|number|boolean>>;initialValues:Record<string,Record<string,string|number|boolean>>;touched:Record<string,boolean>;
  template:JsonObject;deliveryStatus:string;
 }
+
+/** Opt-in ui_present/ui_update baseline. Does not detect files added outside refs. */
+export interface ManagedRepairBaseline {
+ version:1; scope:'enumerated-files';
+ refs:{kind:'report'|'rules'|'source';path:string;sha256:string}[];
+ /** Previous uncertain submission, only after an explicit new review with a changed report. */
+ reviewOf?:string;
+}
+/** finished means the model turn ended normally, never that a repair passed review. */
+export type ManagedRepairStatus = 'queued'|'executing'|'finished'|'conflict'|'failed'|'reviewRequired'|'reviewed';
+export interface ManagedRepairExecution {deliveryStatus:string;status:ManagedRepairStatus;error:string|null;scope:'enumerated-files'}
+/** Probe ui_capabilities before enabling managedRepair; not an ExtensionContext API. */
+export interface ManagedRepairCapabilities {managedRepair:1;managedRepairLocalOnly:true;managedRepairScope:'enumerated-files'}

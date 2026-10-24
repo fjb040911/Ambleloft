@@ -1,4 +1,16 @@
 import {test,expect} from '@playwright/test';
+test('managed repair shows execution separately from delivery and completion still requires review',async({page})=>{
+ await page.goto('/tests/fixtures/declarative-ui.html');await page.evaluate(async()=>{
+  await import('/src/shadcn.css');await import('/src/tokens.css');
+  const React=await import('/node_modules/.vite/deps/react.js'),ReactDOM=await import('/node_modules/.vite/deps/react-dom_client.js'),{default:Ui}=await import('/src/TaskUi.tsx');
+  const template=await fetch('/specs/extensions/examples/declarative-ui/review.json').then(r=>r.json());const root=(ReactDOM.createRoot||ReactDOM.default.createRoot)(document.getElementById('preview')!);
+  (window as any).repairState=(status:string)=>root.render((React.createElement||React.default.createElement)(Ui,{flow:{kind:'ui',id:'repair',runId:'r',revision:1,template,data:{rows:[{id:'A',severity:'high',file:'src/example.ts',status:'open'}],state:'ready'},submissions:[{id:'s',label:'修复所选',status:'delivered',repairStatus:status}]},archived:false}));
+  (window as any).repairState('executing');
+ });
+ await expect(page.getByText('已发送',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>(window as any).repairState('finished'));await expect(page.getByText('本轮已结束 · 待复查',{exact:true})).toBeVisible();await expect(page.getByText('请重新审查实际改动，结果尚未验证。',{exact:true})).toBeVisible();
+ await page.evaluate(()=>(window as any).repairState('reviewRequired'));await expect(page.getByText('本轮已结束 · 待复查',{exact:true})).toHaveCount(0);
+});
 test('collection filters, selection and single-click actions render with delivery states',async({page})=>{
  await page.goto('/tests/fixtures/declarative-ui.html');
  await page.evaluate(async()=>{

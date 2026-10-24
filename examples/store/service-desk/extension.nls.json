@@ -10,5 +10,8 @@
   "unknown": "Submission outcome is unknown. Check the existing submission before trying again.",
   "offline": "Service unavailable. Check the SSH tunnel.",
   "serverError": "Service returned error {status}",
-  "confirm": "Submit through the confirmed form"
+  "confirm": "Submit through the confirmed form",
+  "listTickets": "List tickets",
+  "identity": "Check test identity",
+  "actOnTicket": "Update ticket"
 }

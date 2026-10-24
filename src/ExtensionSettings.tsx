@@ -10,10 +10,11 @@ import {useEffect,useState,useId,useRef} from 'react';
 import Modal from './Modal';
 import {t} from './i18n';
 import type {ConfigurationSchema,ExtensionConfiguration} from './types';
-export default function ExtensionSettings({id,name,close,inline=false,onDirtyChange,generation}:{id:string;generation?:number;name:string;close:()=>void;inline?:boolean;onDirtyChange?(dirty:boolean):void}){
+export default function ExtensionSettings({id,name,close,inline=false,onDirtyChange,onBusyChange,generation}:{id:string;generation?:number;name:string;close:()=>void;inline?:boolean;onDirtyChange?(dirty:boolean):void;onBusyChange?(busy:boolean):void}){
  const confirm=useConfirm();
  const fieldPrefix=useId();
  const [data,setData]=useState<ExtensionConfiguration|null>(null),[value,setValue]=useState<Record<string,unknown>>({}),[error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
+ useEffect(()=>{onBusyChange?.(busy);},[busy,onBusyChange]);
  const dirtyRef=useRef(dirty);dirtyRef.current=dirty;
  const accept=(next:ExtensionConfiguration)=>{setData(next);setValue(next.value);setDirty(false);};
  const reload=async()=>{if(dirtyRef.current&&!(await confirm({title:t('放弃未保存的修改？'),action:t('放弃修改'),destructive:true})))return;try{accept(await window.desktop!.extensions!.configuration({id}));setError('');}catch(e){setError((e as Error).message);}};

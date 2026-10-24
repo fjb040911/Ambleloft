@@ -21,7 +21,7 @@ async function createAgentChannel({list,invoke,tools,resource,forms,skills,ui,in
     if(creation&&m.params.name?.startsWith('creation_'))value=await creation.call(m.params.name,args);
     else if(remote&&m.params.name?.startsWith('remote_'))value=await remote.call(m.params.name,args,abort.signal);
     else if(inputs&&m.params.name?.startsWith('input_'))value=await inputs.call(m.params.name,m.params.arguments===undefined?{}:m.params.arguments);
-    else if(ui&&m.params.name==='ui_capabilities'&&Object.keys(args).length===0)value={skillLocalization:1,templateLocalization:1,liveLocalization:1,declarativeUi:1,types:['editor','collection'],chatActions:1,collectionValueLabels:1,collectionLayouts:1,businessStatus:false,limits:{templateBytes:131072,instanceBytes:196608,rows:500,actions:8}};
+    else if(ui&&m.params.name==='ui_capabilities'&&Object.keys(args).length===0)value={skillLocalization:1,templateLocalization:1,liveLocalization:1,declarativeUi:1,types:['editor','collection'],chatActions:1,collectionValueLabels:1,collectionLayouts:1,managedRepair:1,managedRepairLocalOnly:true,managedRepairScope:'enumerated-files',businessStatus:false,limits:{templateBytes:131072,instanceBytes:196608,rows:500,actions:8}};
     else if(ui&&m.params.name==='ui_list'&&Object.keys(args).length===0)value=await ui.list();
     else if(ui&&m.params.name==='ui_present'&&Object.keys(args).every(k=>['key','data'].includes(k)))value=await ui.present(args);
     else if(ui&&m.params.name==='ui_update'&&Object.keys(args).every(k=>['id','expectedRevision','data'].includes(k)))value=await ui.update(args);

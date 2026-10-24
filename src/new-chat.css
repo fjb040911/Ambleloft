@@ -35,3 +35,7 @@
  .home-start .composer-model-name { max-width:100px; }
  .home-start .composer-hint { text-align:left; }
 }
+
+.home-page.home-start.is-sending { min-height:0; display:flex; flex-direction:column; flex:1; padding-top:24px; }
+.home-start.is-sending .pending-message { min-height:0; overflow-y:auto; flex:1; }
+.home-start.is-sending .new-task-composer { margin-top:24px; }

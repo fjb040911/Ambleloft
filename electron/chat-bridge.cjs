@@ -3,7 +3,13 @@ const {applyImageInputPolicy}=require('./model-capabilities.cjs');
 const http = require('node:http');
 const { randomUUID, createHash } = require('node:crypto');
 const usesChat = config => config.protocol === 'chat' || ((!config.protocol || config.protocol === 'auto') && /^deepseek/i.test(config.model));
-const toolName = item => !item.namespace && /^[a-zA-Z0-9_-]{1,64}$/.test(item.name) ? item.name : String(item.name).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,32) + '_' + createHash('sha256').update((item.namespace || '') + '/' + item.name).digest('hex').slice(0,24);
+const toolName = item => {
+  const readable=item.namespace?`${item.namespace}__${item.name}`:item.name;
+  // Keep names copyable for Chat models; random-looking suffixes are prone to
+  // transcription errors. Use the same deterministic mapping for history.
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(readable)?readable:
+    String(item.name).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,32)+'_'+createHash('sha256').update((item.namespace||'')+'/'+item.name).digest('hex').slice(0,24);
+};
 // Some compatible services reject tool_choice even when it is "none" if tools
 // is absent. Normalize after capability filtering and protocol translation.
 function normalizeToolSelection(body) {
@@ -85,6 +91,13 @@ function resolveTool(name, definitions) {
     (tool.namespace && name===tool.namespace+'.'+tool.name));
   return matches.length===1?matches[0]:undefined;
 }
+function resolveStreamTool(parts, definitions) {
+  const exact=resolveTool(parts.join(''),definitions);
+  if(exact)return exact;
+  // Some compatible gateways repeat the complete name on argument deltas.
+  // Accept only identical chunks that each resolve to one advertised tool.
+  if(parts.length>1&&parts.every(part=>part===parts[0]))return resolveTool(parts[0],definitions);
+}
 async function* readSSE(body) {
   const decoder=new TextDecoder();let buffer='';
   for await(const chunk of body){buffer+=decoder.decode(chunk,{stream:true});buffer=buffer.replace(/\r\n/g,'\n');let end;
@@ -141,7 +154,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         diagnostic.imageCount=body.messages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(c=>c.type==='image_url').length:0),0);
       }
       if(config.effectiveLimits)diagnostic.limits={...config.effectiveLimits};
-      const upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:controller.signal});
+      let upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:controller.signal});
       diagnostic.httpStatus=upstream.status;diagnostic.stage='upstream_stream';
       if(!upstream.ok){
         const detail=await readUpstreamError(upstream,config.apiKey);
@@ -156,50 +169,79 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
       const response={id:'resp_'+randomUUID(),object:'response',created_at:Math.floor(Date.now()/1000),model:data.model,status:'in_progress',output:[]};
-      emit('response.created',{response});let reasoningItem,textItem;const calls=new Map();let finish,usage,done=false;
+      emit('response.created',{response});let reasoningItem,textItem;let usage;
       const add=item=>{item.index=response.output.length;response.output.push(item);emit('response.output_item.added',{output_index:item.index,item:{...item,index:undefined}});return item;};
-      for await(const rawEvent of readSSE(upstream.body)){
-        if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
-        diagnostic.events++;diagnostic.lastEventAt=new Date().toISOString();
-        const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage)usage=chunk.usage;
-        const choice=chunk.choices?.[0];if(!choice)continue;
-        if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
-        const delta=choice.delta||{};
-        const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
-        if(thought){
-          if(!reasoningItem)reasoningItem=add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
-          reasoningItem.content[0]||={type:'reasoning_text',text:''};reasoningItem.content[0].text+=thought;
-          emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
+      let calls,finish;
+      for(let attempt=0;attempt<2;attempt++){
+        calls=new Map();finish=undefined;let done=false,attemptUsage;
+        for await(const rawEvent of readSSE(upstream.body)){
+          if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
+          diagnostic.events++;diagnostic.lastEventAt=new Date().toISOString();
+          const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage)attemptUsage=chunk.usage;
+          const choice=chunk.choices?.[0];if(!choice)continue;
+          if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
+          const delta=choice.delta||{};
+          const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
+          if(thought){
+            if(!reasoningItem)reasoningItem=add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
+            reasoningItem.content[0]||={type:'reasoning_text',text:''};reasoningItem.content[0].text+=thought;
+            emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
+          }
+          if(delta.content){
+            if(!textItem){textItem=add({id:'msg_'+randomUUID(),type:'message',role:'assistant',status:'in_progress',content:[]});emit('response.content_part.added',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});}
+            textItem.content[0]||={type:'output_text',text:'',annotations:[]};textItem.content[0].text+=delta.content;
+            emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
+          }
+          for(const call of delta.tool_calls||[]){
+            const acc=calls.get(call.index)||{name:'',nameParts:[],args:'',id:''};
+            if(call.function?.name){acc.name+=call.function.name;acc.nameParts.push(call.function.name);}
+            acc.args+=call.function?.arguments||'';if(call.id&&call.id!==acc.id)acc.id+=call.id;calls.set(call.index,acc);
+          }
         }
-        if(delta.content){
-          if(!textItem){textItem=add({id:'msg_'+randomUUID(),type:'message',role:'assistant',status:'in_progress',content:[]});emit('response.content_part.added',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});}
-          textItem.content[0]||={type:'output_text',text:'',annotations:[]};textItem.content[0].text+=delta.content;
-          emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
+        if(attemptUsage){usage||={prompt_tokens:0,completion_tokens:0,total_tokens:0};for(const key of Object.keys(usage))usage[key]+=attemptUsage[key]||0;}
+        diagnostic.stage='validate_completion';
+        if(!done||!finish)throw new Error('模型流未完整结束，请重试');
+        if(!['stop','tool_calls','length'].includes(finish))throw new Error(`模型未正常完成：${finish}`);
+        // Never execute a truncated tool call.
+        if(finish==='length'&&calls.size)throw new Error('工具参数被输出长度限制截断，未执行');
+        const unknown=[...calls.values()].filter(call=>!resolveStreamTool(call.nameParts,definitions));
+        if(unknown.length&&attempt===0){
+          diagnostic.toolCorrectionAttempts=1;
+          const names=unknown.map(call=>/^[a-zA-Z0-9_.-]{1,160}$/.test(call.name)?call.name:'[invalid tool name]');
+          diagnostic.rejectedTools=names.slice(0,20);
+          const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
+          // Separate any streamed narration from the corrected response.
+          if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
+          diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
+          upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:controller.signal});
+          diagnostic.httpStatus=upstream.status;
+          if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
+          continue;
         }
-        for(const call of delta.tool_calls||[]){
-          const acc=calls.get(call.index)||{name:'',args:'',id:''};acc.name+=call.function?.name||'';acc.args+=call.function?.arguments||'';acc.id+=call.id||'';calls.set(call.index,acc);
-        }
+        break;
       }
-      diagnostic.stage='validate_completion';
-      if(!done||!finish)throw new Error('模型流未完整结束，请重试');
-      if(!['stop','tool_calls','length'].includes(finish))throw new Error(`模型未正常完成：${finish}`);
-      // Never execute a truncated tool call.
-      if(finish==='length'&&calls.size)throw new Error('工具参数被输出长度限制截断，未执行');
       if(reasoningItem)emit('response.reasoning_text.done',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,text:reasoningItem.content[0].text});
       if(textItem){textItem.phase=calls.size?'commentary':'final_answer';textItem.status='completed';emit('response.output_text.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,text:textItem.content[0].text});emit('response.content_part.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:textItem.content[0]});}
       diagnostic.stage='translate_tools';
+      const translatedCalls=[];
       for(const call of calls.values()){
-        const def=resolveTool(call.name,definitions);
+        const def=resolveStreamTool(call.nameParts,definitions);
         if(!def){
           const safeName=name=>/^[a-zA-Z0-9_.-]{1,160}$/.test(name)?name:'[invalid tool name]';
           diagnostic.returnedTool=safeName(call.name);
+          diagnostic.toolNameDetails={length:call.name.length,chunks:call.nameParts.length,
+            chunkLengths:call.nameParts.slice(0,32).map(part=>part.length),
+            repeatedChunks:call.nameParts.length>1&&call.nameParts.every(part=>part===call.nameParts[0]),
+            validCharacters:/^[a-zA-Z0-9_.-]+$/.test(call.name)};
           diagnostic.availableTools=[...definitions.keys()].slice(0,100).map(safeName);
           throw new Error('模型调用了未提供或名称不唯一的工具');
         }
         const args=JSON.parse(call.args);const item={id:'fc_'+randomUUID(),call_id:call.id||randomUUID(),type:def.type==='custom'?'custom_tool_call':'function_call',name:def.name,...(def.namespace?{namespace:def.namespace}:{}),status:'completed'};
         if(def.type==='custom'){if(typeof args.input!=='string')throw new Error('工具输入无效');item.input=args.input;}else item.arguments=call.args;
-        add(item);
+        translatedCalls.push(item);
       }
+      // Validate the whole batch before exposing any executable calls.
+      for(const item of translatedCalls)add(item);
       for(const item of response.output){delete item.index;emit('response.output_item.done',{output_index:response.output.indexOf(item),item});}
       response.status=finish==='length'?'incomplete':'completed';
       if(finish==='length')response.incomplete_details={reason:'max_output_tokens'};

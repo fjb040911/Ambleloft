@@ -280,6 +280,10 @@
               },
               "notEquals": {}
             }
+          },
+          "managedRepair": {
+            "const": true,
+            "description": "Opt in to local-project baseline verification and project-scoped repair serialization. Instance data.baseline is required."
           }
         }
       }
@@ -462,6 +466,139 @@
         "input"
       ],
       "additionalProperties": false
+    },
+    "managedRepairBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "scope",
+        "refs"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "scope": {
+          "const": "enumerated-files"
+        },
+        "reviewOf": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9-]{1,128}$"
+        },
+        "refs": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "report",
+                  "rules",
+                  "source"
+                ]
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "description": "Safe project-relative file path. Host additionally rejects traversal, aliases, symlinks and hardlinks."
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "report"
+                  }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "rules"
+                  }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "source"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rows"
+      ],
+      "properties": {
+        "values": {
+          "type": "object"
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object"
+          }
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "empty",
+            "incomplete",
+            "failed",
+            "uninitialized"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "coverage": {
+          "type": "string"
+        },
+        "baseline": {
+          "$ref": "#/$defs/managedRepairBaseline"
+        }
+      },
+      "description": "ui_present/ui_update instance data. Host additionally validates fields against the template and requires baseline for managedRepair actions."
     }
   },
   "allOf": [
