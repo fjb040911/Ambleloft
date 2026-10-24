@@ -10,7 +10,7 @@ test('Enter keeps action colors through sending, generation and stopping',async(
   function Harness(){
    const [value,setValue]=React.useState('测试发送'),[stage,setStage]=React.useState('ready');
    (window as any).setStage=setStage;
-   return React.createElement(Composer,{value,onChange:setValue,onSubmit:()=>setStage('sending'),disabled:stage==='sending',active:stage==='active'||stage==='stopping',stopping:stage==='stopping',onStop:()=>setStage('stopping'),canSend:!!value,label:'任务内容',placeholder:'输入',sendLabel:'发送',skills:null,controls:null});
+   return React.createElement(Composer,{value,onChange:setValue,onSubmit:()=>setStage('sending'),disabled:stage==='sending',sending:stage==='sending',active:stage==='active'||stage==='stopping',stopping:stage==='stopping',onStop:()=>setStage('stopping'),canSend:!!value,label:'任务内容',placeholder:'输入',sendLabel:'发送',skills:null,controls:null});
   }
   DOM.createRoot(document.getElementById('preview')!).render(React.createElement(Harness));
  });
@@ -23,9 +23,9 @@ test('Enter keeps action colors through sending, generation and stopping',async(
   await expect(action).toHaveCSS('color',theme==='light'?'rgb(255, 255, 255)':'rgb(28, 30, 35)');
   const before=await colors();
   await page.getByRole('textbox',{name:'任务内容'}).press('Enter');
-  await expect(action).toBeDisabled();expect(await colors()).toEqual(before);
+  await expect(action).toBeDisabled();await expect(action.locator('[data-slot="spinner"]')).toHaveCSS('width','14px');expect(await colors()).toEqual(before);
   await page.evaluate(()=>(window as any).setStage('active'));
-  await expect(action).toHaveAccessibleName('停止');expect(await colors()).toEqual(before);
+  await expect(action).toHaveAccessibleName('停止');await expect(action.locator('svg')).toHaveCSS('width','12px');await expect(action).toHaveCSS('width','32px');expect(await colors()).toEqual(before);
   await action.click();await expect(action).toBeDisabled();expect(await colors()).toEqual(before);
  }
 });

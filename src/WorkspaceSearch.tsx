@@ -27,7 +27,7 @@ function matchedSnippet(text:string,query:string){
  return (start?'…':'')+content.slice(start,start+120)+(content.length>start+120?'…':'');
 }
 export type SearchAction='new-task'|'new-project'|'settings'|'extensions';
-const actions=[{id:'new-task' as const,title:'新建任务',keywords:'new task chat',Icon:Plus},{id:'new-project' as const,title:'创建项目',keywords:'new create project',Icon:FolderPlus},{id:'settings' as const,title:'设置',keywords:'settings preferences',Icon:Settings},{id:'extensions' as const,title:'管理扩展',keywords:'extensions plugins',Icon:Puzzle}];
+const actions=[{id:'new-task' as const,title:'新建任务',keywords:'new task chat',Icon:Plus},{id:'new-project' as const,title:'创建项目',keywords:'new create project',Icon:FolderPlus},{id:'settings' as const,title:'设置',keywords:'settings preferences',Icon:Settings},{id:'extensions' as const,title:'技能与扩展',keywords:'extensions plugins skills manage 技能 扩展 管理',Icon:Puzzle}];
 export default function WorkspaceSearch({close,open,fallback,recentTasks,onAction}:{recentTasks:SearchResult[];close():void;open(item:SearchResult):void;fallback:SearchResult[];onAction(action:SearchAction):void}){
  useLanguage();
  const highlight=(text:string)=>{

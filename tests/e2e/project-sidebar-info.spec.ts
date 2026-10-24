@@ -24,8 +24,8 @@ test('SSH banner follows the active category and page without disconnecting the 
  await page.locator('#project-tasks-remote').getByText('项目任务',{exact:true}).click();await expect(banner).toHaveAttribute('data-collapsible','true');
  await rail.getByRole('button',{name:'任务',exact:true}).click();await expect(banner).toHaveCount(0);
  await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toBeVisible();
- await rail.getByRole('button',{name:'技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
- await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toHaveCount(0);
+ await rail.getByRole('button',{name:'扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(banner).toBeVisible();
  await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
  await page.locator('.project-tree-row').filter({hasText:'本地资料'}).locator('.project-tree-name').click();await expect(banner).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__disconnects)).toBe(0);
@@ -33,7 +33,7 @@ test('SSH banner follows the active category and page without disconnecting the 
 test('grouped navigation keeps SSH details on project pages only',async({page})=>{
  await setup(page,'classic');const banner=page.getByRole('region',{name:'SSH 连接',exact:true});
  await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
- await page.getByRole('button',{name:'发现技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
  await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
 });
 for(const mode of ['activity','classic'])test(`${mode}: long names leave space for status and rich SSH metadata`,async({page})=>{

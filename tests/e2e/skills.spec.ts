@@ -15,7 +15,7 @@ test('skill tags are separate from text, survive failure and apply to only the s
  expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['skill-1']);
  await page.getByRole('textbox',{name:'继续对话'}).fill('再简短一些');await page.getByRole('button',{name:'发送后续消息'}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds||[])).toEqual([]);
 });
-async function openSkill(page:Page){await setup(page);await picker(page);await page.getByRole('button',{name:'管理技能'}).click();await page.locator('.personal-skill-card').first().click();return page.getByRole('dialog',{name:'meeting-summary',exact:true});}
+async function openSkill(page:Page){await setup(page);await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:/^管理 /}).first().click();return page.getByRole('dialog',{name:'meeting-summary',exact:true});}
 test('skills edit in place, save to preview, disable and delete',async({page})=>{
  const dialog=await openSkill(page);await dialog.evaluate(el=>(window as any).__skillDialog=el);
  await dialog.getByRole('button',{name:'编辑',exact:true}).click();
@@ -26,7 +26,7 @@ test('skills edit in place, save to preview, disable and delete',async({page})=>
  const saved=page.getByRole('dialog',{name:'会议助手',exact:true});await expect(saved.getByRole('heading',{name:'Updated workflow'})).toBeVisible();await expect(saved).toContainText('v2');
  await expect(saved.getByRole('status')).toContainText('技能已保存');
  await saved.getByRole('button',{name:'停用',exact:true}).click();await expect(saved).toContainText('已停用');
- await saved.getByRole('button',{name:'删除技能'}).click();await page.getByRole('button',{name:'确认删除'}).click();await expect(page.locator('.personal-skill-card')).toHaveCount(0);
+ await saved.getByRole('button',{name:'删除技能'}).click();await page.getByRole('button',{name:'确认删除'}).click();await expect(page.locator('.store-installed-row')).toHaveCount(0);
 });
 
 test('skill edit keeps undo across preview, guards dirty exit and supports save shortcut',async({page})=>{
@@ -53,11 +53,11 @@ test('skill detail keeps pending saves visible and recovers after failure',async
  await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
  await page.evaluate(()=>(window as any).__rejectSave(new Error('保存失败，请重试')));
  await expect(dialog.getByRole('alert')).toContainText('保存失败');await expect(dialog.getByLabel('名称',{exact:true})).toHaveValue('未保存修改');await expect(dialog.getByRole('button',{name:'保存修改'})).toBeEnabled();
- await page.keyboard.press('Escape');await page.getByRole('button',{name:'放弃修改'}).click();await expect(dialog).not.toBeVisible();await expect(page.locator('.personal-skill-card').first()).toBeFocused();
+ await page.keyboard.press('Escape');await page.getByRole('button',{name:'放弃修改'}).click();await expect(dialog).not.toBeVisible();await expect(page.getByRole('button',{name:/^管理 /}).first()).toBeFocused();
 });
 
 test('built-in guidance is read-only but can be disabled and reenabled',async({page})=>{
- await setup(page,true);await picker(page);await page.getByRole('button',{name:'管理技能'}).click();await page.locator('.personal-skill-card').first().click();
+ await setup(page,true);await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:/^管理 /}).first().click();
  const dialog=page.getByRole('dialog',{name:'补充信息',exact:true});await expect(dialog).toContainText('内置 · 只读');await expect(dialog.getByRole('button',{name:'编辑',exact:true})).toHaveCount(0);await expect(dialog.getByRole('button',{name:'删除技能',exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'停用',exact:true}).click();await expect(dialog).toContainText('已停用');await dialog.getByRole('button',{name:'启用',exact:true}).click();await expect(dialog).toContainText('已启用');
 });

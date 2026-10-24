@@ -83,3 +83,31 @@ test('model channel persists progress but never exposes installation or trial ap
  const updated=await rpc('tools/call',{name:'creation_update',arguments:brief(state.revision)});assert.equal(updated.isError,false);assert.equal((await f.creation.read('r')).stage,'building');
  assert.equal((await rpc('tools/call',{name:'creation_install',arguments:{}})).isError,true);
 });
+test('verification is host-owned, bound to the artifact and remains historical after a rebuild',async t=>{
+ const f=await fixture(t);let state=await prepareSkill(f);
+ assert.equal(state.evidence.length,1);assert.equal(state.evidence[0].method,'package-validation');assert.equal(state.evidence[0].artifactDigest,state.prepared.digest);assert.equal(state.evidence[0].current,true);
+ await assert.rejects(f.creation.update('r',{...brief(state.revision),evidence:[{result:'passed'}]}),/参数/);
+ state=await f.creation.install('r',state.revision,approve);assert.equal(state.trial,'pending');assert.equal(state.readiness.connection,'unverified');assert.equal(state.readiness.configuration,'not-needed');
+ state=await f.creation.confirmTrial('r',state.revision);assert.equal(state.evidence.at(-1).method,'user-trial');assert.equal(state.trial,'confirmed');
+ const installed=(await f.skills.list()).find(s=>s.id===state.installed.id);await fs.appendFile(installed.path,'\nChanged outside the host');
+ const stale=await f.creation.read('r');assert.equal(stale.trial,'pending');assert.equal(stale.trialStale,true);assert.equal(stale.evidence.at(-1).current,false);
+ await fs.rm(path.dirname(installed.path),{recursive:true,force:true});assert.equal((await f.creation.read('r')).trialStale,true);
+ state=await f.creation.update('r',{...brief(state.revision),delivery:{environment:['本机'],settings:[],unverified:['外部业务服务']}});assert.equal(state.evidence.every(e=>!e.current),true);assert.deepEqual(state.delivery.unverified,['外部业务服务']);
+ state=await f.creation.prepare('r',{expectedRevision:state.revision,directory:'travel'});assert.equal(state.installed,undefined);assert.equal(state.evidence.at(-1).source,'host');assert.equal(state.trial,'pending');
+});
+test('configuration and credential changes invalidate a confirmed extension trial without exposing values',async t=>{
+ const f=await fixture(t),source=path.join(f.project,'extension');await fs.cp(path.join(__dirname,'fixtures/extensions/valid'),source,{recursive:true});
+ const file=path.join(source,'extension.json'),manifest=JSON.parse(await fs.readFile(file,'utf8'));
+ manifest.configuration={type:'object',properties:{endpoint:{type:'string'}},additionalProperties:false};
+ manifest.permissions=[...(manifest.permissions||[]).filter(p=>!['configuration','secrets'].includes(p.capability)),{capability:'configuration',scope:'self'},{capability:'secrets',scope:'self'}];await fs.writeFile(file,JSON.stringify(manifest));
+ let state=await f.creation.ensure('r');state=await f.creation.update('r',brief(state.revision,'extension'));state=await f.creation.prepare('r',{expectedRevision:state.revision,directory:'extension'});state=await f.creation.install('r',state.revision,approve);
+ const id=state.installed.id;await f.extensions.setGrants(id,[{capability:'configuration',resource:'self'},{capability:'secrets',resource:'self'}]);
+ state=await f.creation.confirmTrial('r',state.revision);assert.equal(state.trial,'confirmed');
+ let config=await f.extensions.configuration({id});await f.extensions.configuration({id,action:'save',value:{endpoint:'private-setting-value'},generation:config.generation,expectedRevision:config.revision});
+ state=await f.creation.read('r');assert.equal(state.trial,'pending');assert.equal(state.trialStale,true);assert.equal(state.readiness.configuration,'saved');assert.equal(state.readiness.connection,'unverified');assert.ok(!JSON.stringify(state).includes('private-setting-value'));
+ state=await f.creation.confirmTrial('r',state.revision);const item=f.extensions.items.find(i=>i.id===id);
+ await f.database.call('extensionData',{id,generation:item.generation,capability:'secrets',kind:'secret',key:'private-key-name',write:true,value:'encrypted-test-only',expectedRevision:0});
+ const reopened=new CreationService(f);state=await reopened.read('r');assert.equal(state.trialStale,true);assert.equal(state.trial,'pending');assert.ok(!JSON.stringify(state).includes('private-key-name'));assert.ok(!JSON.stringify(state).includes('encrypted-test-only'));
+ state=await f.creation.confirmTrial('r',state.revision);const installedRevision=item.revisions.find(r=>r.digest===item.active);await fs.appendFile(path.join(f.extensions.packages.root,installedRevision.relativePath,'extension.json'),' ');
+ state=await reopened.read('r');assert.equal(state.trialStale,true);assert.equal(state.readiness.versionCurrent,false);await assert.rejects(reopened.confirmTrial('r',state.revision),/版本已变化/);
+});

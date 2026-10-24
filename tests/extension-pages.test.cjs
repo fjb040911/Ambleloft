@@ -50,3 +50,13 @@ test('new page initializes with owner locale, saved preference, or system fallba
  assert.equal(await open(),'de','newer context wins over pending workspace read');
  host.closeOwner(owner.id);
 });
+test('business entry availability follows host conditions without conflating permission grants',()=>{
+ const {ExtensionService}=require('../core/extensions/service.cjs');const service=new ExtensionService({},{});
+ service.items=[{id:'test.home',kind:'package',enabled:true,trusted:true,grants:[],manifest:{displayName:'Business',contextKeys:[{key:'device.ready',type:'boolean',default:false}],contributes:{home:{title:'Device',when:'project.exists && device.ready'}}}}];
+ assert.equal(service.snapshot('p').installed[0].home.available,false);
+ service.hosts={entries:new Map([['test.home',{context:{'device.ready':true}}]]),snapshot:()=>undefined};
+ assert.equal(service.snapshot().installed[0].home.available,false);
+ assert.equal(service.snapshot('p').installed[0].home.available,true);
+ assert.deepEqual(service.items[0].grants,[],'entry availability never creates a grant');
+ service.items[0].manifest.contributes.home.when='unknown.key';assert.equal(service.snapshot('p').installed[0].home.available,false);
+});

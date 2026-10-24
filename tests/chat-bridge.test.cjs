@@ -29,6 +29,24 @@ test('plain tool names stay readable and history uses exactly the advertised nam
  assert.equal(resolveTool('exec_command',definitions).name,'exec_command');
  assert.equal(resolveTool('exec_command_c942d4a1a1ab37f5e7f9c96b',definitions),undefined);
 });
+test('namespaced tools use readable stable names in definitions and replayed history',()=>{
+ const namespace='mcp__amble_extensions',name='remote_list';
+ const {body,definitions}=translateRequest({tools:[{type:'namespace',name:namespace,tools:[{type:'function',name}]}],input:[{type:'function_call',namespace,name,call_id:'previous',arguments:'{}'},{type:'function_call_output',call_id:'previous',output:'ok'}]},{});
+ assert.equal(body.tools[0].function.name,'mcp__amble_extensions__remote_list');
+ assert.equal(body.messages[0].tool_calls[0].function.name,body.tools[0].function.name);
+ const {resolveTool}=require('../electron/chat-bridge.cjs');
+ assert.equal(resolveTool(body.tools[0].function.name,definitions).namespace,namespace);
+ assert.equal(resolveTool('remote_list',definitions).namespace,namespace);
+ // Real pro6000 responses transcribed the old random suffix incorrectly.
+ assert.equal(resolveTool('remote_list_d12aebc4ee46ee5d4e8946e',definitions),undefined);
+});
+test('readable names retain namespace isolation and reject collisions instead of guessing',()=>{
+ const {resolveTool}=require('../electron/chat-bridge.cjs');
+ const {definitions}=translateRequest({tools:['a','b'].map(name=>({type:'namespace',name,tools:[{type:'function',name:'search'}]})),input:[]},{});
+ assert.equal(resolveTool('a__search',definitions).namespace,'a');assert.equal(resolveTool('b__search',definitions).namespace,'b');assert.equal(resolveTool('search',definitions),undefined);
+ assert.throws(()=>translateRequest({tools:[{type:'function',name:'a__search'},{type:'namespace',name:'a',tools:[{type:'function',name:'search'}]}],input:[]},{}),/工具名称重复/);
+ const {body}=translateRequest({tools:[{type:'namespace',name:'a'.repeat(80),tools:[{type:'function',name:'search'}]}],input:[]},{});assert.match(body.tools[0].function.name,/^[a-zA-Z0-9_-]{1,64}$/);
+});
 
 test('replayed image tool results remain images and follow all parallel tool results',()=>{
  const image='data:image/png;base64,'+'A'.repeat(400000);

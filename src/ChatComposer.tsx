@@ -2,12 +2,13 @@ import {useId,useLayoutEffect,useRef,useState,type ReactNode,type RefObject} fro
 import {ArrowUp,Square,Save} from 'lucide-react';
 import {InputGroup,InputGroupAddon,InputGroupButton,InputGroupTextarea} from './components/ui/input-group';
 import {t} from './i18n';
+import {Spinner} from './components/ui/spinner';
 import {useComposerMentions} from './ComposerMentions';
 
-export default function ChatComposer({value,onChange,onSubmit,disabled,active=false,stopping=false,onStop,canSend,label,placeholder,sendLabel,saveDraft=false,skills,controls,followup=false,inputRef,footer,allowActiveSend=false,keepEditable=false,showSendLabel=false,selectedSkillIds,onSelectSkill}: {
+export default function ChatComposer({value,onChange,onSubmit,disabled,sending=false,active=false,stopping=false,onStop,canSend,label,placeholder,sendLabel,saveDraft=false,skills,controls,followup=false,inputRef,footer,allowActiveSend=false,keepEditable=false,showSendLabel=false,selectedSkillIds,onSelectSkill}: {
  selectedSkillIds?:string[];onSelectSkill?:(id:string)=>void;
  allowActiveSend?:boolean;keepEditable?:boolean;showSendLabel?:boolean;
- value:string;onChange(value:string):void;onSubmit():void;disabled?:boolean;active?:boolean;stopping?:boolean;onStop?():void;canSend:boolean;
+ value:string;onChange(value:string):void;onSubmit():void;disabled?:boolean;sending?:boolean;active?:boolean;stopping?:boolean;onStop?():void;canSend:boolean;
  label:string;placeholder:string;sendLabel:string;saveDraft?:boolean;skills:ReactNode;controls:ReactNode;followup?:boolean;inputRef?:RefObject<HTMLTextAreaElement|null>;footer?:ReactNode;
 }){
  const localRef=useRef<HTMLTextAreaElement>(null),ref=inputRef||localRef;
@@ -28,9 +29,9 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,active=fa
     onKeyDown={e=>{if(mentions.onKeyDown(e))return;if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&e.nativeEvent.keyCode!==229){e.preventDefault();if(active&&!allowActiveSend)setDraftNotice(true);else if(!disabled&&canSend)onSubmit();}}}/>
    <InputGroupAddon align="block-start" className="empty:hidden">{skills}</InputGroupAddon>
    <InputGroupAddon align="block-end" className="composer-bottom px-2.5 pt-1 pb-2.5">{controls}
-    {showStop?<InputGroupButton className="rounded-full hover:bg-primary disabled:opacity-100" size="icon-sm" variant="default" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><Square size={13} fill="currentColor"/></InputGroupButton>
+    {showStop?<InputGroupButton className="rounded-full hover:bg-primary disabled:opacity-100" size="icon-sm" variant="default" aria-label={t('停止')} title={t(stopping?'正在停止':'停止')} onClick={onStop} disabled={stopping}><>{sending?<Spinner aria-hidden="true" className="size-3.5 motion-reduce:animate-none"/>:<Square className="size-3" fill="currentColor" aria-hidden="true"/>}</></InputGroupButton>
      :null}
-    {!showStop&&<InputGroupButton className={`rounded-full hover:bg-primary ${disabled?'disabled:opacity-100':''}`} size={saveDraft||showSendLabel?"sm":"icon-sm"} variant="default" type="submit" aria-label={sendLabel} title={sendLabel} disabled={!canSend||disabled}>{saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:showSendLabel?<><ArrowUp data-icon="inline-start"/>{sendLabel}</>:<ArrowUp size={17}/>}</InputGroupButton>}
+    {!showStop&&<InputGroupButton className={`rounded-full hover:bg-primary ${disabled?'disabled:opacity-100':''}`} size={saveDraft||showSendLabel?"sm":"icon-sm"} variant="default" type="submit" aria-busy={sending} aria-label={sending?t('正在发送…'):sendLabel} title={sending?t('正在发送…'):sendLabel} disabled={!canSend||disabled}>{sending?<Spinner aria-hidden="true" className="size-3.5 motion-reduce:animate-none"/>:saveDraft?<><Save data-icon="inline-start"/>{t("保存草稿")}</>:showSendLabel?<><ArrowUp data-icon="inline-start"/>{sendLabel}</>:<ArrowUp size={17}/>}</InputGroupButton>}
    </InputGroupAddon>
   </InputGroup>
   {mentions.menu}

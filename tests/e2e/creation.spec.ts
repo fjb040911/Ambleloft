@@ -21,17 +21,19 @@ async function setup(page:Page,kind:'skill'|'extension'='skill'){
   };
  },{kind});await page.goto('/');
 }
-async function begin(page:Page){await page.getByRole('combobox',{name:'当前项目'}).click();await page.getByRole('option',{name:'创建试验'}).click();await page.getByRole('button',{name:'创建技能 / 扩展',exact:true}).click();await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(page.getByLabel('创建进度', {exact:true})).toBeVisible();}
-test('creation entry preserves draft, selects the guide and never sends on click',async({page})=>{
- await setup(page);const entry=page.getByRole('button',{name:'创建技能 / 扩展',exact:true});await expect(entry).toBeDisabled();
- await expect(page.getByRole('region',{name:'任务示例'})).toHaveCount(0);await page.screenshot({path:'test-results/home-creation-clean.png'});
+async function begin(page:Page){await page.getByRole('combobox',{name:'当前项目'}).click();await page.getByRole('option',{name:'创建试验'}).click();await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:'创建技能 / 扩展',exact:true}).click();await page.getByRole('button',{name:'填入聊天输入框',exact:true}).click();await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(page.getByLabel('创建进度', {exact:true})).toBeVisible();}
+test('single center creation entry preserves draft and never sends on click',async({page})=>{
+ await setup(page);await expect(page.getByRole('button',{name:'创建技能 / 扩展',exact:true})).toHaveCount(0);
  await page.getByRole('combobox',{name:'当前项目'}).click();await page.getByRole('option',{name:'创建试验'}).click();
- await expect(entry).toBeEnabled();await expect(page.getByRole('option',{name:'创建试验'})).toHaveCount(0);
- await page.evaluate(()=>Promise.all(document.getAnimations().filter(a=>a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))));await page.screenshot({path:'test-results/home-creation-button.png'});
- const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('我想连接 FPGA 调试');await entry.click();await expect(input).toHaveValue(/我想连接 FPGA 调试\n\n请用技能大师/);await expect(input).toBeFocused();expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
- const once=await input.inputValue();await entry.click();await expect(input).toHaveValue(once);
+ const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('我想连接 FPGA 调试');
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await expect(page.getByRole('tab',{name:/已安装/})).toHaveAttribute('aria-selected','true');
+ await page.getByRole('button',{name:'创建技能 / 扩展',exact:true}).click();
+ await expect(page.getByLabel('聊天引导',{exact:true})).toHaveValue(/我想连接 FPGA 调试\n\n请用技能大师/);
+ expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await page.getByRole('button',{name:'填入聊天输入框',exact:true}).click();await expect(input).toHaveValue(/我想连接 FPGA 调试\n\n请用技能大师/);
+ expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
  await page.getByRole('button',{name:'发送任务',exact:true}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['builtin-skill-master']);await expect(page.getByLabel('创建进度',{exact:true})).toContainText('文件已检查，待安装');
- await page.screenshot({path:'test-results/creation-ready.png'});
 });
 test('install failure is recoverable; trial is prepared and only user confirmation completes it',async({page})=>{
  await setup(page);await begin(page);const card=page.getByLabel('创建进度',{exact:true});
@@ -47,4 +49,10 @@ test('reopening restores the next step and resume retains pending information',a
 });
 test('extension handoff opens the exact extension settings',async({page})=>{
  await setup(page,'extension');await begin(page);const card=page.getByLabel('创建进度',{exact:true});await card.getByRole('button',{name:'安装并启用',exact:true}).click();await card.getByRole('button',{name:'设置与权限'}).click();await expect(page.getByRole('tab',{name:'设置',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.getByText('调试设备地址',{exact:true})).toBeVisible();
+});
+test('version changes retain historical evidence and require a new trial',async({page})=>{
+ await setup(page,'extension');await begin(page);
+ await page.evaluate(()=>(window as any).__creatorUpdate({runId:'r',revision:6,stage:'installed',kind:'extension',title:'售后助手',summary:'查询并跟进设备工单',nextStep:'试用',trialPrompt:'查询工单',limitations:'真实服务尚未验证',trial:'pending',trialStale:true,prepared:{source:'service-desk',digest:'abcdef1234567890'},installed:{id:'created',kind:'extension',hasConfiguration:true},readiness:{versionCurrent:true,configuration:'saved',connection:'unverified'},delivery:{environment:['Node 扩展运行时'],unverified:['真实服务连接']},evidence:[{id:'old',method:'user-trial',source:'user',artifactDigest:'old1234567890',at:'2026-10-23T01:00:00Z',current:false,environment:{platform:'darwin',arch:'arm64'}},{id:'new',method:'package-validation',source:'host',artifactDigest:'abcdef1234567890',at:'2026-10-23T02:00:00Z',current:true,environment:{platform:'darwin',arch:'arm64',hostVersion:'0.8.0'}}]}));
+ const card=page.getByLabel('创建进度',{exact:true});await expect(card).toContainText('版本或设置已变化，请重新试用');await card.locator('summary').click();await expect(card.getByLabel('验证记录')).toContainText('宿主文件检查');await expect(card.getByLabel('验证记录')).toContainText('用户试用确认 · 历史记录');await expect(card).toContainText('配置已保存；外部连接尚未验证。');
+ await page.setViewportSize({width:760,height:840});expect(await card.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);await page.screenshot({path:'test-results/creation-evidence.png'});
 });

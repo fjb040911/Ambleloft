@@ -28,7 +28,7 @@ function errorHelp(message:string){
  if(/SSH Agent 不可用/i.test(message))return '本机 SSH Agent 不可用，请启用它或改用密码、私钥认证。';
  return '操作未完成，请查看详情后重试。';
 }
-const empty=():SshConnection=>({id:crypto.randomUUID(),name:'',host:'',port:22,username:'',authType:'password'});
+const empty=():SshConnection=>({id:crypto.randomUUID(),name:'',host:'',port:22,username:'',authType:'password',remember:true});
 type Mode='select'|'create'|'edit'|'configure';
 export default function SshProjectFields({project,change,onStateChange,ref}:{project:Project;change(project:Project):void;onStateChange(state:SshProjectState):void;ref?:Ref<SshProjectHandle>}){
  const api=window.desktop?.ssh;

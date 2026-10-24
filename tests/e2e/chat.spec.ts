@@ -581,10 +581,11 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect(page.locator('#workspace-sidebar')).toBeVisible();
  await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(224);
  const headings=page.locator('.workspace-navigation .nav-group-toggle');
- await expect(headings).toHaveText(['项目','任务','技能与扩展']);
+ await expect(headings).toHaveText(['项目','任务']);
+ await expect(page.getByRole('button',{name:'技能与扩展',exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/task-sidebar.png'});
  for(const heading of await headings.all()){await expect(heading).toHaveCSS('font-size','14px');await expect(heading).toHaveCSS('min-height','32px');}
- for(const name of ['项目','任务','技能与扩展']){
+ for(const name of ['项目','任务']){
   const heading=page.getByRole('button',{name,exact:true});
   await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');
   await expect(page.locator('.message.assistant')).toContainText('保持当前任务');

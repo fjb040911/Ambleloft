@@ -4,8 +4,8 @@ async function setup(page:Page,paused=false,missingHandler=false){
  const run:any={id:'input-test',title:'补充信息测试',model:'fixture',baseUrl:'http://localhost/v1',cwd:'/tmp',createdAt:new Date().toISOString(),status:paused?'interrupted':'running',messages:[{id:'u',role:'user',text:'规划旅行'}],tools:[],approvals:[]};
  let callback:any,inputCallback:any;
  const snapshot:any={policy:{paused,generation:paused?1:0},deliveries:paused?[{id:'one',runId:run.id,text:'之前填写的日期',state:'queued'},{id:'two',runId:run.id,text:'之前填写的预算',state:'queued'}]:[]};
- const w=window as any;w.__requests=[];w.__starts=[];w.__resumes=[];w.__snapshot=snapshot;
- w.desktop={listProviders:async()=>({defaultId:'a',providers:[{id:'a',name:'服务 A',configured:true,baseUrl:run.baseUrl,model:'fixture',models:['fixture','Model B']}]}),getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),getDevice:async()=>({name:'Test',mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[],tasks:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>[run],onRun:(fn:any)=>{callback=fn;return()=>{};},onCommand:()=>()=>{},
+ const w=window as any;w.__requests=[];w.__starts=[];w.__resumes=[];w.__snapshot=snapshot;w.__complete=()=>{run.status='completed';callback(structuredClone(run));};
+ w.desktop={listProviders:async()=>({defaultId:'a',providers:[{id:'a',name:'服务 A',configured:true,baseUrl:run.baseUrl,model:'fixture',models:['fixture','Model B']},{id:'b',name:'服务 B',configured:true,baseUrl:'http://other.local/v1',model:'Other model',models:['Other model']}]}),getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),getDevice:async()=>({name:'Test',mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[],tasks:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>[run],onRun:(fn:any)=>{callback=fn;return()=>{};},onCommand:()=>()=>{},
  startRun:async(input:any)=>{w.__starts.push(input);run.model=input.model;run.status='running';callback(structuredClone(run));return structuredClone(run);},
  stopRun:async()=>{snapshot.policy={paused:true,generation:snapshot.policy.generation+1};run.status='interrupted';callback(structuredClone(run));inputCallback?.({runId:run.id});},
  inputs:{list:async()=>{if(missingHandler)throw Error("Error invoking remote method 'input:list': Error: No handler registered for 'input:list'");return structuredClone(snapshot);},onChanged:(fn:any)=>{inputCallback=fn;return()=>{};},append:(input:any)=>{w.__requests.push(input);return new Promise((resolve,reject)=>{w.__accept=()=>{snapshot.deliveries.unshift({id:input.clientMutationId,runId:run.id,text:input.text,state:'queued'});inputCallback?.({runId:run.id});resolve(snapshot.deliveries[0]);};w.__reject=()=>reject(Error('暂时无法发送'));});},action:async(input:any)=>{w.__resumes.push(input);if(input.expectedPolicyGeneration!==snapshot.policy.generation)throw Error('CONFLICT');snapshot.policy={paused:false,generation:snapshot.policy.generation+1};snapshot.deliveries.forEach((d:any)=>{d.held=!input.deliveryIds.includes(d.id);});inputCallback?.({runId:run.id});return snapshot.policy;}}};
@@ -66,4 +66,36 @@ test('stop then switch model and Enter carries model B through a new turn, not s
  expect(await page.evaluate(()=>(window as any).__requests)).toEqual([]);
  expect(await page.evaluate(()=>(window as any).__resumes[0].deliveryIds)).toEqual([]);
  await expect(input).toHaveValue('');
+});
+
+for(const ending of ['stop','complete'])test(`running model selection applies after ${ending} without changing supplemental delivery`,async({page})=>{
+ await setup(page);
+ const model=page.getByRole('button',{name:'选择模型',exact:true});
+ await expect(model).toBeEnabled();await expect(page.getByRole('button',{name:'默认权限',exact:true})).toBeDisabled();
+ await model.click();await page.getByRole('option',{name:'Model B 服务 A',exact:true}).click();
+ await expect(model).toContainText('Model B');await expect(model).toContainText('下一轮');
+ await expect(page.getByText('所选模型将在下一轮生效；本轮及补充消息仍使用：fixture',{exact:true})).toBeVisible();
+ const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('补充背景');await input.press('Enter');
+ await expect(model).toBeDisabled();await expect.poll(()=>page.evaluate(()=>(window as any).__requests.length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).__starts)).toEqual([]);
+ await page.evaluate(()=>(window as any).__accept());await expect(model).toBeEnabled();
+ if(ending==='stop')await page.getByRole('button',{name:'停止',exact:true}).click();
+ else await page.evaluate(()=>(window as any).__complete());
+ await expect(model).not.toContainText('下一轮');await expect(model).toContainText('Model B');
+ await input.fill('继续');await input.press('Enter');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__starts.length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).__starts[0])).toMatchObject({model:'Model B',providerId:'a',prompt:'继续'});
+ expect(await page.evaluate(()=>(window as any).__requests.length)).toBe(1);
+});
+
+test('idle task changes providers only after confirmation',async({page})=>{
+ await setup(page,true);
+ const model=page.getByRole('button',{name:'选择模型',exact:true});
+ await model.click();await page.getByRole('option',{name:'Other model 服务 B',exact:true}).click();
+ const dialog=page.getByRole('alertdialog');await expect(dialog).toBeVisible();
+ await dialog.getByRole('button',{name:'切换模型服务',exact:true}).click();
+ await expect(model).toContainText('Other model');
+ const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('继续');await input.press('Enter');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__starts.length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).__starts[0])).toMatchObject({model:'Other model',providerId:'b',confirmProviderChange:true});
 });

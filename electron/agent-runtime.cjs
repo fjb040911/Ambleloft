@@ -135,6 +135,7 @@ class AgentRuntime {
     if(!run||run.archivedAt)throw Error('聊天不可用');
     const context=[...this.contexts.values()].find(c=>c.requestRunId===run.id||c.run?.id===run.id);
     if(context){
+      if(item.managedRepair)throw busy();
       if(context.done||context.cancelled||!context.rpc||context.rpc.closed||!run.turnId||!['running','waiting'].includes(run.status))throw busy();
       const target={threadId:run.threadId,turnId:run.turnId,turnKey:context.turnKey,mode:'steer'};
 

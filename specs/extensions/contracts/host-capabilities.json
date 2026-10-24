@@ -104,6 +104,11 @@
       "id": "liveLocalization",
       "status": "preview",
       "source": "core/localization/index.cjs"
+    },
+    {
+      "id": "managedRepair",
+      "status": "preview",
+      "source": "core/ui/managed-repair.cjs"
     }
   ],
   "limits": {
@@ -112,7 +117,7 @@
     "mcpApps": "Packaged task UI only; not arbitrary remote MCP or full ChatGPT Apps compatibility.",
     "extensionAuthentication": "OIDC resource grants and host HTTPS requests. Interactive reconnect on expiry; no refresh tokens, raw tokens or WebSocket credentials.",
     "backgroundJobs": "Opt-in, project-scoped, no-tool jobs; count budget, one request, no automatic retry after unknown outcomes. Source preview only.",
-    "declarativeUi": "Editor/collection snapshots and user-click chat delivery; no project repair mutex or per-row business status updates. Runtime ui_capabilities is authoritative.",
+    "declarativeUi": "Editor/collection snapshots and user-click chat delivery. Opt-in managedRepair v1 is local-project only, verifies enumerated report/rules/source files and serializes managed repairs within one host profile. No new-file detection, external-editor lock, remote execution guarantee or automatic repair verdict. Runtime ui_capabilities is authoritative.",
     "localization": "Dictionary file 256 KiB; 32 translations plus default, 2000 keys per locale, 1 MiB per module; referenced snapshot 256 KiB, deduplicated store 64 MiB; 32 dynamic arguments, 64 KiB encoded arguments; channel display limits still apply."
   },
   "uiVersion": 1

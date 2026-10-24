@@ -4,6 +4,43 @@ const http=require('node:http');
 const {randomUUID}=require('node:crypto');
 const {startChatBridge}=require('../electron/chat-bridge.cjs');
 
+test('tool streaming accepts fragments and repeated complete names but rejects unknown or ambiguous batches',async()=>{
+ let chunks=[];let correctedChunks=null;const records=[],requests=[];
+ const server=http.createServer(async(req,res)=>{
+  let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw);requests.push(body);
+  res.writeHead(200,{'Content-Type':'text/event-stream'});
+  for(const tool_calls of (body.messages.at(-1)?.content?.includes('No tool calls from that response')&&correctedChunks?correctedChunks:chunks))res.write('data: '+JSON.stringify({choices:[{delta:{tool_calls}}]})+'\n\n');
+  res.end('data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n');
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const bridge=await startChatBridge({baseUrl:`http://127.0.0.1:${server.address().port}`},randomUUID(),false,d=>records.push(d));
+ const tools=[{type:'function',name:'exec_command'},...['a','b'].map(name=>({type:'namespace',name,tools:[{type:'function',name:'search'}]}))];
+ const call=(name,args='{}',index=0)=>({index,id:'call-'+index,type:'function',function:{name,arguments:args}});
+ const request=async()=>{
+  const response=await fetch(bridge.config.baseUrl+'/responses',{method:'POST',headers:{Authorization:'Bearer '+bridge.config.apiKey},body:JSON.stringify({model:'fixture',input:'test',tools})});
+  return (await response.text()).split('\n').filter(line=>line.startsWith('data: ')).map(line=>JSON.parse(line.slice(6)));
+ };
+ try{
+  for(const names of [['exec_','command'],['exec_command','exec_command'],['a.search','a.search']]){
+   chunks=names.map((name,i)=>[call(name,i===0?'{"cmd":':'"pwd"}')]);
+   const events=await request();const completed=events.find(e=>e.type==='response.completed');assert.ok(completed);
+   const item=completed.response.output.find(item=>item.type==='function_call');
+   assert.equal(item.name,names[0]==='a.search'?'search':'exec_command');assert.equal(item.call_id,'call-0');assert.equal(item.arguments,'{"cmd":"pwd"}');
+   if(item.name==='search')assert.equal(item.namespace,'a');
+  }
+  chunks=[[call('mcp__amble_extensions__progress_list')]];correctedChunks=[[call('exec_command')]];
+  const before=requests.length,recovered=await request();assert.equal(requests.length-before,2);assert.ok(recovered.some(e=>e.type==='response.completed'));assert.equal(recovered.filter(e=>e.type==='response.output_item.added'&&e.item.type==='function_call').length,1);assert.equal(records.at(-1).toolCorrectionAttempts,1);correctedChunks=null;
+  for(const name of ['unknown_tool','search','exec_command_wrong','bad name with spaces']){
+   chunks=[[call('exec_command'),call(name,'{}',1)]];
+   const count=requests.length,events=await request();assert.equal(requests.length-count,2);assert.ok(events.some(e=>e.type==='error'));
+   assert.ok(!events.some(e=>e.item?.type==='function_call'||e.type==='response.completed'));
+   const diagnostic=records.at(-1);assert.equal(diagnostic.stage,'translate_tools');assert.equal(diagnostic.toolNameDetails.length,name.length);assert.equal(diagnostic.toolNameDetails.chunks,1);
+  }
+  chunks=[[call('exec_command'),call('a.search','invalid-json',1)]];
+  const invalid=await request();assert.ok(invalid.some(e=>e.type==='error'));assert.ok(!invalid.some(e=>e.item?.type==='function_call'));
+ }finally{bridge.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});
+
 test('Router headers survive streaming, follow-up, retry and bridge recreation in both protocols',async()=>{
  const received=[];
  const server=http.createServer(async(req,res)=>{
