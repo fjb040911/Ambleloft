@@ -4,13 +4,19 @@ const path = require('node:path');
 const { redact, isLocalHost } = require('./provider.cjs');
 
 const SHELL_ENV_ALLOWLIST = ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy'];
+// Rust-launched Windows shells need the OS/profile environment explicitly.
+// Keep this scoped to Windows; never inherit arbitrary application secrets.
+const shellEnvironmentKeys = platform => [...SHELL_ENV_ALLOWLIST, ...(platform === 'win32' ? ['SystemRoot', 'WINDIR', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'PATHEXT', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432'] : [])];
 
 const { findCodex, engineRuntime } = require('./engine.cjs');
 
-function codexEnvironment(config, home, inherited = process.env) {
+function codexEnvironment(config, home, inherited = process.env, platform = process.platform) {
   if (!path.isAbsolute(home)) throw new Error('引擎数据目录必须是绝对路径');
   const env = {};
-  for (const key of SHELL_ENV_ALLOWLIST) if (inherited[key]) env[key] = inherited[key];
+  for (const key of shellEnvironmentKeys(platform)) {
+    const source = platform === 'win32' ? Object.keys(inherited).find(name => name.toLowerCase() === key.toLowerCase()) : key;
+    if (source && inherited[source]) env[key] = inherited[source];
+  }
   env.CODEX_HOME = home;
   env.CODEX_SQLITE_HOME = home;
   env.NO_PROXY = [env.NO_PROXY, 'localhost', '127.0.0.1', '::1'].filter(Boolean).join(',');
@@ -20,7 +26,7 @@ function codexEnvironment(config, home, inherited = process.env) {
   if (config.apiKey) env.ATELIER_PROVIDER_KEY = config.apiKey;
   return env;
 }
-function configurationArgs(config, home, extensionMcp) {
+function configurationArgs(config, home, extensionMcp, platform = process.platform) {
   const runtime = engineRuntime();
   const values = {
     model: config.model, model_provider: 'atelier',
@@ -37,7 +43,7 @@ function configurationArgs(config, home, extensionMcp) {
     'mcp_servers.atelier_progress.env.ELECTRON_RUN_AS_NODE': '1',
     'features.default_mode_request_user_input': true,
     'analytics.enabled': false, web_search: config.webSearch || 'disabled', 'features.multi_agent': false,
-    'shell_environment_policy.inherit': 'all', 'shell_environment_policy.include_only': SHELL_ENV_ALLOWLIST, 'shell_environment_policy.exclude': ['ATELIER_PROVIDER_KEY','AMBLE_EXTENSION_AUTH'],
+    'shell_environment_policy.inherit': 'all', 'shell_environment_policy.include_only': shellEnvironmentKeys(platform), 'shell_environment_policy.exclude': ['ATELIER_PROVIDER_KEY','AMBLE_EXTENSION_AUTH'],
   };
   if(config.remoteOnly){values['features.shell_tool']=false;values['features.unified_exec']=false;values['features.shell_snapshot']=false;values['features.browser_use']=false;values['features.computer_use']=false;}
   if(extensionMcp){values['features.shell_snapshot']=false;values['mcp_servers.amble_extensions.url']=extensionMcp.url;values['mcp_servers.amble_extensions.env_http_headers.Authorization']='AMBLE_EXTENSION_AUTH';values['mcp_servers.amble_extensions.tool_timeout_sec']=extensionMcp.tool_timeout_sec;for(const name of ['creation_read','creation_update','creation_prepare','remote_list','remote_search','remote_read','remote_write','remote_exec','input_capabilities','input_list','input_request','input_read_answer','input_resolve_from_message','input_cancel','input_replace','extension_list_operations','extension_invoke_operation','forms_list','forms_present','forms_capabilities','forms_read_submission','ui_capabilities','ui_list','ui_present','ui_update','ui_read_submission','skills_install'])values['mcp_servers.amble_extensions.tools.'+name+'.approval_mode']='approve';}
