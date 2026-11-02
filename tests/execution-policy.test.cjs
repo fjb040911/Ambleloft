@@ -22,6 +22,21 @@ test('shell can inherit proxy/certificate settings but not model credentials or 
   assert.ok(!args.join(' ').includes('provider-secret'));
 });
 
+test('Windows engine and tools retain OS paths without widening other platforms or leaking secrets', () => {
+  const config={baseUrl:'https://example.com/v1',model:'fixture'};
+  const inherited={Path:'C:\\tools',SYSTEMROOT:'C:\\Windows',USERPROFILE:'C:\\Users\\qa',APPDATA:'C:\\Users\\qa\\AppData\\Roaming',LOCALAPPDATA:'C:\\Users\\qa\\AppData\\Local',TEMP:'C:\\Temp',UNRELATED_SECRET:'private',OPENAI_API_KEY:'secret'};
+  for(const platform of ['win32','darwin','linux']){
+    const env=codexEnvironment(config,os.tmpdir(),inherited,platform);
+    const args=configurationArgs(config,undefined,undefined,platform);
+    const entry=args.find(s=>s.startsWith('shell_environment_policy.include_only='));const allowed=JSON.parse(entry.slice(entry.indexOf('=')+1));
+    for(const key of ['SystemRoot','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP']){
+      assert.equal(allowed.includes(key),platform==='win32');assert.equal(!!env[key],platform==='win32');
+    }
+    if(platform==='win32'){assert.equal(env.PATH,'C:\\tools');assert.equal(env.SystemRoot,'C:\\Windows');}
+    for(const key of ['UNRELATED_SECRET','OPENAI_API_KEY']){assert.equal(env[key],undefined);assert.ok(!allowed.includes(key));}
+  }
+});
+
 test('native search is opt-in, persists per provider and is rejected for Chat Completions', async t => {
   const base = { baseUrl: 'https://example.com/v1', model: 'fixture' };
   assert.equal(normalizeProvider(base).webSearch, 'disabled');

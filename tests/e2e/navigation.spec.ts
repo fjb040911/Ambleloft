@@ -65,7 +65,7 @@ test('sidebar component preserves project and task pagination and keyboard acces
  const projects=page.getByRole('region',{name:'我的项目'});const tasks=page.getByRole('region',{name:'任务',exact:true});
  // Offscreen project rows are virtualized; verify pagination through its user-facing control.
  await expect(projects.getByRole('button',{name:'加载更多项目'})).toBeAttached();
- await projects.getByRole('button',{name:'加载更多项目'}).click();await expect(projects.getByRole('button',{name:'加载更多项目'})).toHaveCount(0);await expect(projects.getByRole('button',{name:'管理项目：项目 31',exact:true})).toBeAttached();
+ await projects.getByRole('button',{name:'加载更多项目'}).click();await expect(projects.getByRole('button',{name:'加载更多项目'})).toHaveCount(0);await projects.locator('#nav-projects [data-slot=sidebar-group-content] > div').nth(31).scrollIntoViewIfNeeded();await expect(projects.getByRole('button',{name:'管理项目：项目 31',exact:true})).toBeAttached();
  await expect(tasks.locator('.tree-task')).toHaveCount(30);
  await tasks.getByRole('button',{name:/加载更多/}).click();await expect(tasks.locator('[data-slot=sidebar-menu-item]')).toHaveCount(35);await expect(tasks.getByRole('button',{name:/加载更多/})).toHaveCount(0);
  const toggle=page.getByRole('button',{name:'任务',exact:true});await toggle.focus();await page.keyboard.press('Enter');await expect(toggle).toHaveAttribute('aria-expanded','false');
@@ -74,7 +74,7 @@ test('sidebar component preserves project and task pagination and keyboard acces
 
 test('project task and extension selection is mutually exclusive',async({page})=>{
  await page.addInitScript(()=>{
- (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[{id:'p',name:'测试项目',path:'/tmp',createdAt:'2026-09-30'}],tasks:[],theme:'light'}),listRuns:async()=>[{id:'r',title:'测试任务',projectId:'p',status:'completed',createdAt:'2026-09-30',messages:[],tools:[],approvals:[]}],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed:[{manifest:{id:'ext',name:'测试扩展',description:'',contributes:{}},enabled:true}],capabilities:{}})}};
+ (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',projects:[{id:'p',name:'测试项目',path:'/tmp',createdAt:'2026-09-30'}],tasks:[],theme:'light'}),listRuns:async()=>[{id:'r',title:'测试任务',projectId:'p',status:'completed',createdAt:'2026-09-30',messages:[],tools:[],approvals:[]}],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed:[{manifest:{id:'ext',name:'测试扩展',description:'',contributes:{}},home:{title:'测试扩展',available:true},trusted:true,enabled:true}],capabilities:{}})}};
  });
  await page.goto('/');
  const nav=page.locator('.workspace-navigation');
@@ -84,14 +84,14 @@ test('project task and extension selection is mutually exclusive',async({page})=
  await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
  await expect(nav.locator('.tree-task.selected')).toHaveCount(0);
  await expect(nav.locator('[aria-current=page]')).toHaveCount(1);
- await expect(nav.locator('.extension-nav-row.selected')).toHaveCount(1);
+ await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(1);
  await nav.locator('.project-tree-name').click();
- await expect(nav.locator('.extension-nav-row.selected')).toHaveCount(0);
+ await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(0);
  await expect(nav.locator('[aria-current=page]')).toHaveCount(1);
  await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
  await expect(nav.locator('.project-tree-row.selected')).toHaveCount(0);
  await nav.getByRole('button',{name:'折叠项目：测试项目'}).count().then(async n=>{if(!n)await nav.getByRole('button',{name:'展开项目：测试项目'}).click();});
  await nav.locator('.tree-task > button:first-child').click();
- await expect(nav.locator('.extension-nav-row.selected')).toHaveCount(0);
+ await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(0);
  await expect(nav.locator('.tree-task.selected')).toHaveCount(1);
 });

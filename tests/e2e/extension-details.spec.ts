@@ -6,8 +6,8 @@ test.beforeEach(async({page})=>{
  });
 });
 test('extension details render README, configuration and named project permissions',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();
- await page.locator('.extension-list-card').click();await expect(page.getByRole('heading',{name:'使用指南'})).toBeVisible();await page.getByRole('tab',{name:'权限',exact:true}).click();await expect(page.locator('.extension-permissions')).toContainText('品牌设计');await expect(page.locator('.extension-detail')).not.toContainText('private-id');
+ await page.goto('/');await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await expect(page.getByRole('heading',{name:'使用指南'})).toBeVisible();await page.getByRole('tab',{name:'权限',exact:true}).click();await expect(page.locator('.extension-permissions')).toContainText('品牌设计');await expect(page.locator('.extension-detail')).not.toContainText('private-id');
  await page.getByRole('tab',{name:'设置',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('中文');
  await page.getByLabel('language').fill('English');
  await page.getByLabel('format',{exact:true}).selectOption(JSON.stringify('text'));
@@ -25,46 +25,46 @@ test('extension details render README, configuration and named project permissio
  await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('button',{name:'管理权限'}).click();await expect(page.getByRole('dialog')).toContainText('品牌设计');await expect(page.getByRole('dialog')).not.toContainText('private-id');await page.keyboard.press('Escape');
  await page.screenshot({path:'test-results/extension-detail.png'});
  await page.getByRole('button',{name:'更多操作'}).click();await expect(page.getByRole('menu')).toBeVisible();await page.screenshot({path:'test-results/extension-menu-shadcn.png'});await page.keyboard.press('Escape');await page.getByRole('button',{name:'停用',exact:true}).click();await expect(page.locator('.extension-detail-title')).toContainText('已停用');
- await page.getByRole('button',{name:'返回扩展列表'}).click();await expect(page.locator('.extension-list-card')).toBeVisible();
+ await page.getByRole('button',{name:'返回已安装'}).click();await expect(page.getByRole('button',{name:'设置与权限',exact:true})).toBeVisible();
 });
 
 test('installation actions stay in the header and dirty configuration survives cancelled navigation',async({page})=>{
- await page.goto('/');await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();
- await expect(page.locator('.integration-heading').getByRole('button',{name:'安装扩展',exact:true})).toBeVisible();
+ await page.goto('/');await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await page.getByRole('button',{name:'从本地安装',exact:true}).click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'已安装扩展',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'安装扩展',exact:true}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('package');
- await page.getByRole('button',{name:'更多安装方式'}).click();await page.getByRole('menuitem',{name:'加载开发目录'}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('directory');
- await page.locator('.extension-list-card').click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'更多安装方式'}).click();await page.getByRole('menuitem',{name:'加载开发目录'}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('directory');await page.getByRole('button',{name:'返回已安装',exact:true}).click();
+ await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toHaveCount(0);
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByLabel('language').fill('English');
- await page.getByRole('button',{name:'返回扩展列表'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');
+ await page.getByRole('button',{name:'返回已安装'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');
  await page.getByRole('button',{name:'停用',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.locator('.extension-detail-title')).toContainText('已启用');
  await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('tab',{name:'设置',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');
- await page.getByRole('button',{name:'保存配置',exact:true}).click();await expect(page.getByText('已保存',{exact:true})).toBeVisible();await page.getByRole('button',{name:'返回扩展列表'}).click();await expect(page.locator('.extension-list-card')).toBeVisible();
+ await page.getByRole('button',{name:'保存配置',exact:true}).click();await expect(page.getByText('已保存',{exact:true})).toBeVisible();await page.getByRole('button',{name:'返回已安装'}).click();await expect(page.getByRole('button',{name:/^(管理|Manage) /})).toBeVisible();
 });
 
 test('English dark layout reflows inside narrow settings content at 130 percent text scale',async({page})=>{
  await page.addInitScript(()=>{const desktop=(window as any).desktop;const read=desktop.readWorkspace;desktop.readWorkspace=async()=>({...await read(),language:'en',theme:'dark',fontScale:130});});
- await page.setViewportSize({width:820,height:900});await page.goto('/');await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('navigation',{name:'Settings navigation'}).getByRole('button',{name:'Extensions',exact:true}).click();
+ await page.setViewportSize({width:820,height:900});await page.goto('/');await page.locator('.activity-rail').getByRole('button',{name:'Extensions',exact:true}).click();await page.getByRole('button',{name:'Skills & extensions',exact:true}).click();
  const noOverflow=async()=>{expect(await page.locator('.skill-extension-center').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);};
- await expect(page.locator('.extension-list-card')).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-list-narrow-dark.png'});
- await page.locator('.extension-list-card').click();await page.getByRole('tab',{name:'Settings',exact:true}).click();await expect(page.getByLabel('language')).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-settings-narrow-dark.png'});
+ await expect(page.getByRole('button',{name:/^(管理|Manage) /})).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-list-narrow-dark.png'});
+ await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await page.getByRole('tab',{name:'Settings',exact:true}).click();await expect(page.getByLabel('language')).toBeVisible();await noOverflow();await page.screenshot({path:'test-results/extensions-settings-narrow-dark.png'});
  await page.getByRole('tab',{name:'Permissions',exact:true}).click();await expect(page.locator('.extension-permissions')).toContainText('品牌设计');await noOverflow();
 });
 
 test('configuration authorization is scoped and detail errors clear when returning to list',async({page})=>{
  await page.goto('/');
  await page.evaluate(async()=>{const snapshot=await (window as any).desktop.extensions.list();snapshot.installed[0].grants=snapshot.installed[0].grants.filter((grant:any)=>grant.capability!=='configuration');(window as any).desktop.extensions.grants=async(input:unknown)=>{(window as any).__grantInput=input;throw Error("Error invoking remote method 'extensions:grants': Error: 请选择有效项目");};});
- await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();
- await page.locator('.extension-list-card').click();await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'授权扩展配置',exact:true}).click();
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'授权扩展配置',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).__grantInput)).toEqual({id:'demo',capabilities:['configuration']});
- await expect(page.getByRole('alert')).toHaveText('请选择有效项目');await page.getByRole('button',{name:'返回扩展列表'}).click();await expect(page.getByRole('alert')).toHaveCount(0);
- await page.locator('.extension-list-card').click();await expect(page.getByRole('alert')).toHaveCount(0);
+ await expect(page.getByRole('alert')).toHaveText('请选择有效项目');await page.getByRole('button',{name:'返回已安装'}).click();await expect(page.getByRole('alert').filter({hasText:'请选择有效项目'})).toHaveCount(0);
+ await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'请选择有效项目'})).toHaveCount(0);
 });
 
 test('permission dialog keeps failures visible and submits only the selected project',async({page})=>{
  await page.goto('/');
  await page.evaluate(()=>{(window as any).desktop.extensions.grants=async(input:any)=>{(window as any).__grantInput=input;if(!(window as any).__allowGrant)throw Error('授权失败，请重试');return {};};});
- await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();await page.locator('.extension-list-card').click();await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('button',{name:'管理权限',exact:true}).click();
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('button',{name:'管理权限',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'管理权限'});
  await expect(dialog.getByRole('button',{name:'确认授权'})).toBeDisabled();
  await expect(dialog).not.toContainText('private-id');
