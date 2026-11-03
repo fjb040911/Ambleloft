@@ -7,7 +7,7 @@ const {CatalogStore}=require('../core/catalog-store/service.cjs');
 const {WorkforceService,roleInstructions}=require('../core/workforce/service.cjs');
 const {verifyRoles,roleCatalog}=require('../core/workforce/contract.cjs');
 const {publish}=require('../scripts/publish-store.cjs');
-const {publishRoles}=require('../scripts/publish-roles.cjs');
+
 async function fixture(t){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-workforce-')),db=new Database(root);await db.call('ready');
  const skills=createSkills(root,db),catalog=new CatalogStore({directory:root,database:db,skills,extensions:{items:[]}});await catalog.initialize();
@@ -48,7 +48,8 @@ test('partial failure preserves successful global installs; retry does not dupli
  await f.workforce.activate({id:employee.id,expectedRevision:1});assert.equal((await f.skills.list()).length,1);assert.equal((await f.workforce.snapshot()).employees[0].status,'failed');
  broken=false;const oldJob=(await f.workforce.snapshot()).employees[0].job;await f.workforce.activate({id:employee.id,expectedRevision:1,skillKey:oldJob.steps[1].key});assert.equal((await f.workforce.read()).jobs.length,2);assert.equal((await f.skills.list()).length,2);assert.equal((await f.workforce.snapshot()).employees[0].job.steps[0].status,'reused');
 });
-test('signed role catalog and published skill archives work through the real installer',async t=>{
+test('signed role catalog and published skill archives work through the real installer',{skip:!require('node:fs').existsSync(path.join(__dirname,'../scripts/publish-roles.cjs'))?'Private publisher integration requires the platform repository':false},async t=>{
+ const {publishRoles}=require('../scripts/publish-roles.cjs');
  const f=await fixture(t),keys=crypto.generateKeyPairSync('ed25519'),keyFile=path.join(f.root,'key.pem'),output=path.join(f.root,'release');
  await fs.writeFile(keyFile,keys.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
  await publish({specFile:path.resolve('store/workforce-skills.json'),keyFile,output,reviewedBy:'automated contract validation'});
