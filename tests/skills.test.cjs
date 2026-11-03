@@ -137,3 +137,18 @@ test('builtin bundle is included in both desktop resource configurations and its
  for(const file of ['references/lifecycle.md','references/interaction-design.md','examples/travel.json','examples/travel-preferences.json','skill.nls.json','skill.nls.zh-CN.json'])assert.ok((await skills.readFile({id:skill.id,file})).text.length);
  for(const config of ['electron-builder.cjs','electron-builder.win.cjs'])assert.ok(require('../build/'+config).extraResources.some(r=>r.from==='resources/skills'&&r.to==='skills'));
 });
+
+test('system guidance is discoverable, localized and read-only without entering ordinary task skills',async t=>{
+ const {skills}=await fixture(t);
+ const [system]=await skills.listSystem();assert.equal(system.id,'builtin-task-creation-guide');assert.equal(system.displayName,'Task creation guide');assert.equal(system.enabled,true);
+ assert.equal((await skills.list()).some(s=>s.id===system.id),false);
+ assert.doesNotMatch((await skills.prepare()).instructions,/task-creation-guide/);
+ await assert.rejects(skills.prepare([system.id]));
+ assert.match((await skills.detail(system.id)).body,/Default to English/);
+ assert.match((await skills.readFile({id:system.id,file:'SKILL.md'})).text,/name: task-creation-guide/);
+ await assert.rejects(skills.readFile({id:system.id,file:'../task-guide.cjs'}));
+ await assert.rejects(skills.update({id:system.id,enabled:false}),/read-only/);
+ await assert.rejects(skills.remove(system.id));
+ skills.locale='zh-CN';assert.equal((await skills.listSystem())[0].displayName,'任务创建引导');
+ skills.locale='fr';assert.equal((await skills.listSystem())[0].displayName,'Task creation guide');
+});

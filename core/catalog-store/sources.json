@@ -1,0 +1,9 @@
+[
+  {
+    "id": "curated",
+    "title": "Ambleloft Store",
+    "baseUrl": "https://47.116.195.229/store/",
+    "keyId": "curated-v1",
+    "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA3BNeWlezBEnB26Hx2OfFbntz83FinCDvM7o2yn1bb6w=\n-----END PUBLIC KEY-----\n"
+  }
+]

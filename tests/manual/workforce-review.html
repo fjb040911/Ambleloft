@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><base href="/"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AI Coding · 真实协作试跑审阅</title></head><body><div id="root"></div><script type="module">
+const token='__TOKEN__';
+const invoke=async(action,input)=>{const response=await fetch('/__review/rpc/'+action,{method:'POST',headers:{'Content-Type':'application/json','x-workforce-review':token},body:JSON.stringify(input??{})});const data=await response.json();if(data.error)throw Error(data.error);return data.value;};
+const event=()=>()=>{},readonly=async()=>{throw Error('这是独立资料目录中的真实试跑记录，仅供审阅。请在桌面应用中创建或继续任务。');};
+const writes=names=>Object.fromEntries(names.map(name=>[name,readonly]));
+// Only display preferences are editable in this review; business records stay read-only.
+const preferenceKey='amble.workforce-review.preferences';
+const query=new URLSearchParams(location.search);
+const readPreferences=()=>{try{return JSON.parse(localStorage.getItem(preferenceKey)||'{}');}catch{return {};}};
+const preferences={...readPreferences()};
+for(const [param,key,allowed] of [['layout','layoutMode',['classic','activity']],['theme','theme',['light','dark','system']],['lang','language',['en','zh-CN']]])if(allowed.includes(query.get(param)))preferences[key]=query.get(param);
+const workspace=async()=>({...await invoke('workspace'),...preferences});
+const patchPreferences=async({changes})=>{
+ const allowed={layoutMode:['classic','activity'],theme:['light','dark','system'],language:['en','zh-CN']};
+ for(const change of changes){if(change.kind!=='settings'||change.action!=='patch'||Object.entries(change.value).some(([key,value])=>!allowed[key]?.includes(value)))return readonly();}
+ for(const change of changes)Object.assign(preferences,change.value);
+ localStorage.setItem(preferenceKey,JSON.stringify(preferences));return workspace();
+};
+const emptyProvider=()=>Promise.resolve({baseUrl:'',model:'',executable:'',hasKey:false,configured:false});
+window.desktop={readWorkspace:workspace,getDevice:async()=>({name:'真实试跑 · 只读审阅',chip:'独立资料目录',memoryGB:null,freeMemoryGB:null,platform:query.get('platform')==='win32'?'win32':'browser',arch:'—',mode:'preview'}),getProvider:emptyProvider,listProviders:async()=>({defaultId:null,providers:[]}),onRun:event,onCommand:event,listRuns:()=>invoke('runs'),getRunPage:async({id})=>(await invoke('runs')).find(run=>run.id===id),openLink:readonly,
+ patchWorkspace:patchPreferences,
+ ...writes(['startRun','stopRun','approveRun','editRun','saveWorkspace']),
+ workforce:{snapshot:()=>invoke('workforce'),roles:input=>invoke('roles',input),onChanged:event,...writes(['save','remove','activate','importLocal','importRepository','createDraft','saveDraft','discardDraft','suggestRole'])},
+ spaces:{snapshot:()=>invoke('spaces'),knowledge:input=>invoke('knowledge',input),document:input=>invoke('document',input),...writes(['start','save','saveDocument','adoptDocument','withdrawDocument','restoreDocument','savePlan','suggestPlan','controlPlan','reviewPlan'])}
+};
+if(['spaces','employees','store'].includes(query.get('view')))sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'workforce',activeGroup:'workforce',workforceView:query.get('view')}));
+else if(!sessionStorage.getItem('atelier.active-view.v1'))sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'workforce'}));
+</script><script type="module" src="/tests/manual/workforce-review.tsx"></script></body></html>

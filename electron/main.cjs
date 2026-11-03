@@ -28,6 +28,8 @@ let authenticationForShutdown;
 let quitting = false;
 let configBusy = false;
 let catalogService;
+let workforceService;
+let spaceService;
 let pendingStoreURL = process.argv.find(value => value.startsWith('ambleloft://')) || null;
 let pendingStoreOpen = null;
 let pendingStoreOpenError = null;
@@ -215,6 +217,20 @@ app.whenReady().then(async () => {
   try { catalogSources = await loadSources(); } catch { catalogSourceError = 'STORE_INVALID_SOURCE_FILE'; }
   catalogService = new CatalogStore({directory: app.getPath('userData'), database, skills, extensions: services.extensions, sources: catalogSources, publish: () => windows.broadcast(profileId, 'catalog-store:event')});
   await catalogService.initialize();
+  const {WorkforceService}=require('../core/workforce/service.cjs');
+  workforceService=new WorkforceService({directory:app.getPath('userData'),database,skills,catalog:catalogService,providers:services.providers,publish:()=>{windows.broadcast(profileId,'workforce:event');windows.broadcast(profileId,'skills:event');}});
+  await workforceService.initialize();runtime.workforce=workforceService;
+  const {SpaceService}=require('../core/workforce/spaces.cjs');
+  spaceService=new SpaceService({directory:app.getPath('userData'),database,workspace:store,workforce:workforceService,runtime,publish:()=>windows.broadcast(profileId,'workforce:event')});
+  runtime.spaces=spaceService;
+  ipcMain.handle('spaces:exportDocument',async(event,input)=>{const owner=authorize(event),doc=await spaceService.document(input);const result=await hostDialog('showSaveDialog',owner.window,{title:'导出文档',defaultPath:doc.title.replace(/[\\/:*?"<>|]/g,'-')+'.md',filters:[{name:'Markdown',extensions:['md']}]});if(result.canceled||!result.filePath)return null;await require('node:fs/promises').writeFile(result.filePath,doc.body+'\n\n<!-- Space document '+doc.id+' v'+doc.revision+' sha256:'+doc.hash+'; exported copy, not synchronized. -->\n');return {path:result.filePath};});
+  for(const action of ['stopDiscussionHost','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','saveTaskDraft','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','knowledge'])ipcMain.handle('spaces:'+action,(event,input)=>{authorize(event);return spaceService[action](input);});
+  ipcMain.handle('spaces:controlPlan',(event,input)=>{const owner=authorize(event);checkRuntime();return spaceService.controlPlan(input,{owner});});
+  ipcMain.handle('spaces:coordinateDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.coordinateDiscussion(input,{owner});});
+  ipcMain.handle('spaces:start',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.start(input,{owner});});
+  for(const action of ['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion'])ipcMain.handle('workforce:'+action,(event,input)=>{authorize(event);return workforceService[action](input);});
+  ipcMain.handle('workforce:importLocal',async event=>{const owner=authorize(event);const selection=await hostDialog('showOpenDialog',owner.window,{title:'选择包含 SKILL.md 的技能目录',properties:['openDirectory']});if(selection.canceled||!selection.filePaths[0])return null;return workforceService.previewImport(selection.filePaths[0]);});
+  ipcMain.handle('workforce:importRepository',async(event,input)=>{authorize(event);return workforceService.previewRepository(input);});
   if (pendingStoreURL) { receiveStoreURL(pendingStoreURL); pendingStoreURL = null; }
   ipcMain.handle('catalog-store:catalog', async (event, input) => { authorize(event); const result = await catalogService.catalog(input); return catalogSourceError ? {...result, error: catalogSourceError} : result; });
   ipcMain.handle('catalog-store:pendingOpenError', event => { authorize(event); const target = pendingStoreOpenError; pendingStoreOpenError = null; return target; });
@@ -280,7 +296,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('extensions:command',(event,id)=>{const owner=authorize(event);return extensionService().execute(id,pageHost.contexts.get(owner.id)?.projectId);});
 
-  for (const action of ['list','detail','readFile','update','remove']) ipcMain.handle('skills:'+action,async(event,input)=>{authorize(event);const result=await skills[action](input);if(['update','remove'].includes(action))await inputRequests.invalidateOrigin('skill:'+(typeof input==='string'?input:input.id));return result;});
+  for (const action of ['list','listSystem','detail','readFile','update','remove']) ipcMain.handle('skills:'+action,async(event,input)=>{authorize(event);const result=await skills[action](input);if(['update','remove'].includes(action))await inputRequests.invalidateOrigin('skill:'+(typeof input==='string'?input:input.id));return result;});
   runtime.installSkill=async(input,owner,signal)=>{
     const spec=require('./skill-repository.cjs').validate(input);
     if(!owner?.window||owner.window.isDestroyed())throw Error('请在当前窗口重新发起安装');
@@ -303,7 +319,7 @@ app.whenReady().then(async () => {
   for (const action of ['context','list','search','read','office','apps']) ipcMain.handle('files:'+action,(event,input)=>{authorize(event);return files[action](input);});
   ipcMain.handle('files:open',(event,input)=>{const window=authorize(event).window;return files.open(input,{shell,dialog:{showSaveDialog:(owner,options)=>hostDialog('showSaveDialog',owner,options),showOpenDialog:(owner,options)=>hostDialog('showOpenDialog',owner,options)},window});});
   let runtimeError = '';
-  try { await runtime.init(); await inputRequests.refreshSources(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
+  try { await runtime.init(); await spaceService.initialize(); await inputRequests.refreshSources(); await chatInputs.initialize(); } catch (error) { runtimeError = error.message; }
   const checkRuntime = () => { if (runtimeError) throw new Error(runtimeError); };
   ipcMain.handle('clipboard:write-text', (event, value) => {
     authorize(event);
@@ -428,6 +444,6 @@ app.on('before-quit', event => {
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();
   authenticationForShutdown?.close();
-  Promise.resolve().then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
+  Promise.resolve().then(()=>spaceService?.shutdown()).then(()=>workforceService?.shutdown()).then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
     .finally(async () => { await database?.close().catch(error => dialog.showErrorBox('关闭数据库失败', error.message)); app.quit(); });
 });

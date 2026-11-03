@@ -47,7 +47,7 @@ function RequestEditor({request,paused,generation,archived,refresh}:{request:Per
  </>;
 }
 
-export default function SupplementalInputDock({run,requests,policy,refresh,selection}:{run:AgentRun;requests:PersistentInputRequest[];policy?:{paused:boolean;generation:number};refresh():Promise<void>;selection?:{id:string;key:number}}){
+export default function SupplementalInputDock({compact=false,run,requests,policy,refresh,selection}:{compact?:boolean;run:AgentRun;requests:PersistentInputRequest[];policy?:{paused:boolean;generation:number};refresh():Promise<void>;selection?:{id:string;key:number}}){
  useLanguage();const [selected,setSelected]=useState(''),[collapsed,setCollapsed]=useState(false),[dismissed,setDismissed]=useState(''),region=useRef<HTMLElement>(null);
  const pending=requests.filter(r=>r.state==='pending'||inputRequestController(r).snapshot().dirty),native=run.questions||[];
  const options=[...native.map(r=>({id:'native:'+r.id,title:r.questions[0]?.question||t('等待你的回答')})),...pending.map(r=>({id:r.id,title:r.template.title}))];
@@ -65,6 +65,10 @@ export default function SupplementalInputDock({run,requests,policy,refresh,selec
    {dismissed===interrupted.id?<Button size="sm" variant="ghost" onClick={()=>setDismissed('')}>{t('查看上次未回答的问题')}</Button>:<Card size="sm"><CardHeader><div className="flex items-center justify-between gap-2"><CardTitle>{t('上次未回答的问题')}</CardTitle><Button size="icon" variant="ghost" aria-label={t('收起问题提示')} onClick={()=>setDismissed(interrupted.id)}><X/></Button></div><CardDescription>{t('任务停止后，原提问已失效。你可以在聊天中补充回答；仅发送“继续”不会补齐这些信息。')}</CardDescription></CardHeader><CardContent><ul className="list-disc space-y-2 pl-5">{interrupted.inputRecord!.questions.map(q=><li key={q.id} className="whitespace-pre-wrap break-words">{q.label}</li>)}</ul></CardContent></Card>}
   </section>;
  }
+ if(compact)return <section ref={region} tabIndex={-1} aria-label={t('待补充信息')} className="min-w-0 px-2 pb-2">
+  <QuestionQueue compact run={run} selectedId={active?.startsWith('native:')?active.slice(7):null}/>
+  {pending.map(request=><div key={request.id} hidden={active!==request.id} className="flex min-h-0 flex-col gap-3"><RequestEditor request={request} paused={!!policy?.paused} generation={policy?.generation||0} archived={!!run.archivedAt||run.status==='stopping'} refresh={refresh}/></div>)}
+ </section>;
  return <section ref={region} tabIndex={-1} aria-label={t('待补充信息')} className="mb-3 min-w-0">
   <Card size="sm" className={collapsed?"max-h-[55dvh] gap-0 data-[size=sm]:has-data-[slot=card-footer]:pb-3":"max-h-[55dvh]"}>
    <div className="flex min-h-8 shrink-0 items-center gap-2 px-4"><ClipboardList className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/><span className="text-sm font-medium leading-5">{t('待补充信息')}</span><Badge variant="secondary">{options.length}</Badge><div className="min-w-0 flex-1"/>

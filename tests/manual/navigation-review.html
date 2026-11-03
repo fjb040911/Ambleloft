@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>导航布局检查 · 隔离预览</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#eef0f3;font:14px system-ui;color:#262c35}
+  header{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 20px;background:white;border-bottom:1px solid #d5d9df}
+  label{display:flex;gap:8px;align-items:center}select,button{font:inherit;padding:6px 8px}
+  main{overflow:auto;padding:16px}iframe{display:block;margin:auto;height:calc(100dvh - 110px);min-height:480px;border:1px solid #d5d9df;background:white}
+</style>
+<header><strong>实际宿主界面 · 隔离预览</strong>
+  <label>窗口宽度<select id="width"><option>390</option><option selected>650</option><option>900</option><option>1280</option></select></label>
+  <label>布局<select id="layout"><option value="activity">活动栏</option><option value="classic">分组栏</option></select></label>
+  <label>外观<select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+  <label>语言<select id="language"><option value="zh-CN">中文</option><option value="en">English</option></select></label>
+  <label>平台样式<select id="platform"><option value="browser">通用</option><option value="win32">Windows</option></select></label>
+  <button id="apply">应用预览</button>
+</header>
+<main><iframe id="preview" title="Ambleloft 导航预览"></iframe></main>
+<script type="module">
+const field=id=>document.getElementById(id);
+const apply=()=>{const frame=field('preview');frame.style.width=field('width').value+'px';frame.src='/__review/?'+new URLSearchParams({layout:field('layout').value,theme:field('theme').value,lang:field('language').value,platform:field('platform').value});};
+field('apply').addEventListener('click',apply);apply();
+</script>
+</html>

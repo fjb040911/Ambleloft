@@ -11,8 +11,8 @@ test('composer groups models, adds context, preserves draft through settings',as
  await page.getByRole('button',{name:'选择模型',exact:true}).click();const menu=page.getByRole('dialog',{name:'模型列表'});
  await expect(menu.getByText('本地模型',{exact:true})).toHaveCount(0);await expect(page.getByText('自定义模型',{exact:true})).toHaveCount(0);
  await menu.getByRole('option',{name:'Model B 服务 A'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('Model B');
- await page.getByRole('button',{name:'添加内容',exact:true}).click();await expect(page.getByRole('button',{name:'关闭添加菜单'})).toBeVisible();await page.getByRole('button',{name:'文件和文件夹',exact:true}).click();await expect(page.locator('.composer-chips')).toContainText('brief.txt');await expect(page.getByRole('combobox',{name:'当前项目'})).toContainText('不关联项目');
- await page.getByRole('button',{name:'添加内容',exact:true}).click();await page.getByRole('button',{name:'技能',exact:true}).click();await page.keyboard.press('Escape');await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.getByLabel('界面语言')).toBeVisible();await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('我的草稿');
+ await page.getByRole('button',{name:'添加内容',exact:true}).click();await expect(page.getByRole('button',{name:'关闭添加菜单'})).toBeVisible();await page.getByRole('button',{name:'文件和文件夹',exact:true}).click();await expect(page.locator('[data-align=block-start] [data-slot=attachment]')).toContainText('brief.txt');await expect(page.getByRole('combobox',{name:'当前项目'})).toContainText('不关联项目');
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('我的草稿');
  await page.getByRole('button',{name:'发送任务',exact:true}).click();const sent=await page.evaluate(()=>(window as any).__sent);expect(sent.model).toBe('Model B');expect(sent.attachments[0].path).toBe('/tmp/brief.txt');
 });
 test('existing task confirms service and full access changes and submits next-turn options',async({page})=>{
@@ -63,6 +63,7 @@ test('composer grows, handles IME and retains running drafts until explicitly se
  expect((await home.boundingBox())!.height).toBeGreaterThan(initial);
  expect((await home.boundingBox())!.height).toBeLessThanOrEqual(200);
  await home.fill('中文输入');
+ await expect.poll(async()=>(await home.boundingBox())!.height).toBe(initial);
  await home.dispatchEvent('keydown',{key:'Enter',isComposing:true});
  expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
  await home.press('Shift+Enter');await expect(home).toHaveValue('中文输入\n');
@@ -102,4 +103,26 @@ test('permission modes clearly show selection, confirm full access and restore d
  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByLabel('界面语言').selectOption('en');await page.getByRole('button',{name:'Dark',exact:true}).click();await page.getByRole('button',{name:'Back to app',exact:true}).click();await page.setViewportSize({width:360,height:740});
  await page.getByRole('button',{name:'Default permissions',exact:true}).click();const english=page.getByRole('dialog',{name:'Permission mode'});
  await expect(english).toContainText('Permission mode');expect(await english.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/permission-modes-english-dark.png',animations:'disabled'});
+});
+
+test('prompt input isolates docs radius and focus from legacy theme in home and follow-up',async({page})=>{
+ await setup(page);
+ for(const surface of ['home','followup']){
+  if(surface==='followup')await page.locator('.tree-task > button:first-child').filter({hasText:'现有任务'}).click();
+  const composer=page.locator('.composer:visible'),group=composer.locator(':scope > [data-slot=input-group]'),input=composer.getByRole('textbox');
+  for(const theme of ['light','dark','system']){
+   await page.emulateMedia({colorScheme:'dark'});
+   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
+   await input.evaluate(el=>(el as HTMLElement).blur());
+   await expect(group).toHaveCSS('border-radius','18px');
+   await expect(group).toHaveCSS('border-color','rgba(0, 0, 0, 0)');
+   await input.focus();
+   await expect(group).toHaveCSS('border-color',theme==='light'?'oklch(0.708 0 0)':'oklch(0.556 0 0)');
+   await expect.poll(()=>group.evaluate(el=>getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 3px');
+   await expect(input).toHaveCSS('outline-style','none');
+   await expect(input).toHaveCSS('outline-offset','0px');
+   await expect(input).toHaveCSS('border-width','0px');
+   await page.screenshot({path:`test-results/prompt-focus-${surface}-${theme}.png`,animations:'disabled'});
+  }
+ }
 });

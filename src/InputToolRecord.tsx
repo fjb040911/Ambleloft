@@ -1,6 +1,6 @@
 import {InputProcessRecord} from './InputProcessRecord';
-import {Collapsible,CollapsibleTrigger,CollapsibleContent} from './components/ui/collapsible';
-import {Button} from './components/ui/button';
+import {TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent,TraceLine,TraceTitle} from './components/ui/trace';
+import {ProcessOutput} from './ProcessTool';
 import {t} from './i18n';
 import type {AgentRun,PersistentInputRequest} from './types';
 
@@ -30,6 +30,6 @@ export default function InputToolRecord({tool,requests}:{tool:AgentRun['tools'][
  const description=failed?'这一步未能完成，已保留记录。':busy?'正在处理，请稍候。':payload.ok!==true?'暂时无法显示这一步的结果。':name==='input_read_answer'?(value.state==='pending'?'还在等待你补充信息。':questions.length?'以下是你已经提交的回答。':'这份请求暂时没有可读取的回答。'):name==='input_request'?'已提出补充请求，可在输入框上方填写。':name==='input_cancel'?'已处理取消请求。':name==='input_replace'?'已提出调整，请查看待补充区的最新状态。':name==='input_resolve_from_message'?'已整理聊天中的回答，请以补充记录的确认状态为准。':name==='input_list'?'已查看当前任务的待补充事项。':'已检查当前可用的补充信息功能。';
  return <InputProcessRecord title={t(titles[name])} status={status} questions={failed?[]:questions}>
   <p className="ml-3 my-2 text-sm text-muted-foreground">{t(description)}</p>
-  <Collapsible className="ml-3 my-2"><CollapsibleTrigger render={<Button variant="ghost" size="sm"/>}>{t('技术详情')}</CollapsibleTrigger><CollapsibleContent><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs text-muted-foreground" tabIndex={0}>{tool.detail.slice(-12000)||t('暂无详情')}</pre></CollapsibleContent></Collapsible>
+  <TraceCollapsible><TraceCollapsibleTrigger><TraceLine><TraceTitle>{t('技术详情')}</TraceTitle></TraceLine></TraceCollapsibleTrigger><TraceCollapsibleContent keepMounted><ProcessOutput text={tool.detail.slice(-12000)||t('暂无详情')} label="技术详情" failed={failed}/></TraceCollapsibleContent></TraceCollapsible>
  </InputProcessRecord>;
 }

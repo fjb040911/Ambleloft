@@ -1,3 +1,4 @@
+import {InputGroupButton} from './components/ui/input-group';
 import {cn} from 'cn';
 import {useConfirm} from './Confirmation';
 import {useEffect,useRef,useState} from 'react';
@@ -9,21 +10,21 @@ import {Button} from './components/ui/button';
 import {ToggleGroup,ToggleGroupItem} from './components/ui/toggle-group';
 import {Popover,PopoverTrigger,PopoverContent,PopoverTitle,PopoverDescription} from './components/ui/popover';
 import {Command,CommandInput,CommandList,CommandEmpty,CommandGroup,CommandItem} from './components/ui/command';
-export interface ComposerOptions {selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean}
+export interface ComposerOptions {employeeId?:string;selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean}
 const popupLayout='w-80 max-w-[calc(100vw-24px)] max-h-[min(380px,var(--available-height))] overflow-y-auto motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none';
-export default function ComposerControls({catalog,value,onChange,disabled,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;modelDisabled?:boolean;modelPending?:boolean;openSettings(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
+export default function ComposerControls({catalog,value,onChange,disabled,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
  const confirm=useConfirm();
- const modelTrigger=useRef<HTMLButtonElement>(null),permissionTrigger=useRef<HTMLButtonElement>(null);
+ const permissionTrigger=useRef<HTMLButtonElement>(null);
  const {skills,error:skillsError}=useSkills();
  const [menu,setMenu]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState('');
  useEffect(()=>{setMenu(current=>(current==='models'?modelDisabled:disabled)?'':current);},[disabled,modelDisabled]);
  const select=async()=>{try{if(!window.desktop?.selectAttachments)throw new Error(t('请在桌面应用中添加文件和文件夹'));const files=await window.desktop.selectAttachments();onChange({...value,attachments:[...(value.attachments||[]),...files].filter((f,i,a)=>a.findIndex(x=>x.path===f.path)===i)});setError('');setMenu('');}catch(e){setError((e as Error).message);}};
  return <div className="composer-options">
-  {!!value.attachments?.length&&<div className="composer-chips">{value.attachments.map(file=><Button variant="secondary" size="sm" key={file.path} title={file.path} aria-label={`${t('移除附件')} ${file.name}`} disabled={disabled} onClick={()=>onChange({...value,attachments:value.attachments?.filter(f=>f.path!==file.path)})}><Folder size={13}/><span>{file.name}</span><X size={12}/></Button>)}</div>}
+
   {error&&<small role="alert">{error}</small>}
-  <div className="composer-option-row">
+  <div className="composer-option-row min-h-8">
    <Popover open={menu==='add'||menu==='skills'} onOpenChange={open=>{setMenu(open?'add':'');if(open)setQuery('');}}>
-    <PopoverTrigger render={<Button type="button" variant="ghost" size="icon-sm" disabled={disabled} aria-label={t(menu==='add'||menu==='skills'?'关闭添加菜单':'添加内容')}/>}>{menu==='add'||menu==='skills'?<X/>:<Plus/>}</PopoverTrigger>
+    <PopoverTrigger render={<InputGroupButton variant="outline" size="icon-sm" className="rounded-full" disabled={disabled} aria-label={t(menu==='add'||menu==='skills'?'关闭添加菜单':'添加内容')}/>}>{menu==='add'||menu==='skills'?<X/>:<Plus/>}</PopoverTrigger>
     <PopoverContent className={popupLayout} side="top" align="start" sideOffset={8} aria-label={t('添加内容')}>
      <PopoverTitle className="sr-only">{t('添加内容')}</PopoverTitle>
      {menu==='skills'?<><Command><CommandInput autoFocus aria-label={t('搜索技能')} placeholder={t('搜索技能')} value={query} onValueChange={setQuery}/><CommandList aria-label={t('技能')}><CommandEmpty>{t('未找到匹配的技能')}</CommandEmpty><CommandGroup heading={t('仅对本次请求指定使用')}>{skills.filter(c=>c.enabled).map(c=><CommandItem key={c.id} value={c.id} keywords={[c.name,c.description]} data-checked={value.selectedSkillIds?.includes(c.id)||false} disabled={!value.selectedSkillIds?.includes(c.id)&&(value.selectedSkillIds?.length||0)>=20} onSelect={()=>{const selected=value.selectedSkillIds||[];onChange({...value,selectedSkillIds:selected.includes(c.id)?selected.filter(id=>id!==c.id):[...selected,c.id]});}}><span className="min-w-0 flex-1 break-words">{c.name}<span className="block text-xs text-muted-foreground line-clamp-2">{c.description}</span></span></CommandItem>)}</CommandGroup></CommandList></Command>{skillsError&&<p role="alert">{skillsError}</p>}{!skills.some(c=>c.enabled)&&<PopoverDescription>{t('暂无已启用的技能。请到“技能与扩展”安装或启用。')}</PopoverDescription>}</>:<><Button variant="ghost" className="justify-start" onClick={()=>void select()}><Folder/>{t('文件和文件夹')}</Button><Button variant="ghost" className="justify-start" onClick={()=>setMenu('skills')}><Sparkles/>{t('技能')}</Button></>}
@@ -39,15 +40,24 @@ export default function ComposerControls({catalog,value,onChange,disabled,modelD
     </PopoverContent>
    </Popover>
    <div className="composer-model-anchor">
-    <Popover open={menu==='models'} onOpenChange={open=>setMenu(open?'models':'')}>
-     <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="max-w-full" disabled={modelDisabled} aria-label={t('选择模型')} ref={modelTrigger}/> }><span className="composer-model-name min-w-0 truncate">{value.model||t('选择模型')}</span>{modelPending&&<span className="text-xs text-muted-foreground">{t('下一轮')}</span>}<ChevronDown/></PopoverTrigger>
-     <PopoverContent className={popupLayout} side="top" align="end" sideOffset={8} aria-label={t('模型列表')}>
-      <PopoverTitle className="sr-only">{t('模型列表')}</PopoverTitle>
-      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{const crossing=(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setMenu('');if(!await confirm({title:t('切换模型服务'),description:t('切换服务后，当前任务历史将发送到新的模型服务。是否继续？'),action:t('切换模型服务'),returnFocus:modelTrigger.current}))return;}onChange({...value,providerId:p.id,model,confirmProviderChange:crossing});setMenu('');}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
-      {!catalog.providers.length&&<PopoverDescription>{t('尚未配置模型服务')}</PopoverDescription>}<Button variant="ghost" size="sm" onClick={()=>{setMenu('');openSettings('providers');}}>{t('配置模型服务')}</Button>
-     </PopoverContent>
-    </Popover>
+    <ModelPicker catalog={catalog} value={value} onChange={onChange} disabled={modelDisabled} pending={modelPending} openSettings={openSettings} previousProviderId={previousProviderId} previousBaseUrl={previousBaseUrl}/>
+
    </div>
   </div>
  </div>;
+}
+
+// Shared by ordinary task and space discussion composers.
+export function ModelPicker({catalog,value,onChange,disabled,pending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;pending?:boolean;openSettings?:(section:string)=>void;previousProviderId?:string;previousBaseUrl?:string}){
+ const confirm=useConfirm(),modelTrigger=useRef<HTMLButtonElement>(null);
+ const [open,setOpen]=useState(false);
+ useEffect(()=>{if(disabled)setOpen(false);},[disabled]);
+ return (    <Popover open={open} onOpenChange={setOpen}>
+     <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="max-w-full" disabled={disabled} aria-label={t('选择模型')} ref={modelTrigger}/> }><span className="composer-model-name min-w-0 truncate">{value.model||t('选择模型')}</span>{pending&&<span className="text-xs text-muted-foreground">{t('下一轮')}</span>}<ChevronDown/></PopoverTrigger>
+     <PopoverContent className={popupLayout} side="top" align="end" sideOffset={8} aria-label={t('模型列表')}>
+      <PopoverTitle className="sr-only">{t('模型列表')}</PopoverTitle>
+      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{const crossing=(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setOpen(false);if(!await confirm({title:t('切换模型服务'),description:t('切换服务后，当前任务历史将发送到新的模型服务。是否继续？'),action:t('切换模型服务'),returnFocus:modelTrigger.current}))return;}onChange({...value,providerId:p.id,model,confirmProviderChange:crossing});setOpen(false);}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
+      {!catalog.providers.length&&<PopoverDescription>{t('尚未配置模型服务')}</PopoverDescription>}{openSettings&&<Button variant="ghost" size="sm" onClick={()=>{setOpen(false);openSettings('providers');}}>{t('配置模型服务')}</Button>}
+     </PopoverContent>
+    </Popover>);
 }

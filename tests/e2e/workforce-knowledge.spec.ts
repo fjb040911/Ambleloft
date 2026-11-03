@@ -1,0 +1,42 @@
+import {test,expect} from '@playwright/test';
+const fixture='/tests/manual/project-space-qa.html?view=knowledge';
+test('short and empty knowledge results do not create blank page scrolling',async({page})=>{
+ await page.setViewportSize({width:1280,height:1000});await page.goto(fixture);
+ const scroller=page.locator('.qa-scroll');await expect(page.locator('.wf-knowledge-entry')).toHaveCount(1);
+ await expect(page.getByText(/当前使用本地原文检索/)).toHaveCount(0);
+ expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
+ await page.evaluate(()=>{window.desktop!.spaces!.knowledge=async()=>[];(window as any).spaceQA.emit();});
+ await expect(page.getByText('没有匹配的已采纳资料',{exact:true})).toBeVisible();
+ expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
+ await page.screenshot({path:'/tmp/knowledge-empty-scroll.png'});
+});
+for(const width of [390,1280])test(`knowledge excerpts use page scrolling and filters shrink naturally at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});await page.goto(fixture);
+ await page.evaluate(()=>{window.desktop!.spaces!.knowledge=async(input:any)=>input.query?[]:Array.from({length:12},(_,i)=>({id:'source-'+i,spaceId:'space',spaceName:'产品发布',title:'发布方案 '+i,revision:1,hash:'hash1',excerpt:'需要核对来源和适用范围。\n'.repeat(100)})) as any;(window as any).spaceQA.emit();});
+ const scroller=page.locator('.qa-scroll'),excerpt=page.locator('.wf-knowledge-excerpt').first();await expect(page.locator('.wf-knowledge-entry')).toHaveCount(12);
+ await excerpt.scrollIntoViewIfNeeded();const box=(await excerpt.boundingBox())!;
+ expect(box.height).toBeLessThan(140);expect(await excerpt.evaluate(el=>getComputedStyle(el).overflowY)).toBe('hidden');
+ const before=await scroller.evaluate(el=>el.scrollTop);await page.mouse.move(box.x+20,box.y+20);await page.mouse.wheel(0,500);
+ await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(before+100);
+ expect(await excerpt.evaluate(el=>el.scrollTop)).toBe(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+ if(width===390)expect((await page.locator('.wf-knowledge-filters > [data-slot=input-group]').boundingBox())!.width).toBeGreaterThan(300);
+ await page.getByRole('textbox',{name:'搜索已采纳知识'}).fill('不存在');
+ await expect(page.getByText('没有匹配的已采纳资料',{exact:true})).toBeVisible();
+ const blank=await page.locator('.wf-knowledge-results').evaluate(el=>{const scroll=el.closest('.qa-scroll')!;return scroll.scrollHeight>scroll.clientHeight?scroll.scrollHeight-(el.getBoundingClientRect().bottom-scroll.getBoundingClientRect().top+scroll.scrollTop):0;});expect(blank).toBeLessThanOrEqual(49);
+ await page.screenshot({path:`/tmp/knowledge-filtered-${width}.png`});
+});
+test('archived sources are labelled, searchable and read-only',async({page})=>{
+ await page.goto(fixture);await page.evaluate(async()=>{await window.desktop!.spaces!.lifecycle({id:'space',action:'archive'});});
+ await expect(page.getByText('来源空间已归档',{exact:true})).toBeVisible();
+ const scope=page.getByRole('combobox',{name:'空间范围',exact:true});await expect(scope).toContainText('所有空间（含归档）');
+ await expect(scope.locator('optgroup[label="已归档空间"]')).toContainText('产品发布（已归档）');
+ await scope.selectOption('space');await expect(page.locator('.wf-knowledge-entry')).toHaveCount(1);
+ await page.screenshot({path:'/tmp/knowledge-archived-source.png',fullPage:true});
+ const scroller=page.locator('.qa-scroll');await scroller.evaluate(el=>{el.scrollTop=100;});const top=await scroller.evaluate(el=>el.scrollTop);
+ await page.getByRole('button',{name:'查看原文与替代关系'}).click();
+ const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
+ await expect(dialog.getByRole('button',{name:'修订为新草稿'})).toBeDisabled();
+ await dialog.getByRole('button',{name:'关闭',exact:true}).click();
+ expect(await scroller.evaluate(el=>el.scrollTop)).toBe(top);
+});

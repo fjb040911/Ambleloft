@@ -10,6 +10,7 @@ function validateState(value) {
     throw new Error('工作台数据格式不正确');
   }
   for (const task of value.tasks) {
+    if(task.employeeId!==undefined&&(typeof task.employeeId!=='string'||task.employeeId.length>120))throw Error('草稿员工格式无效');
     if(task.selectedSkillIds!==undefined&&(!Array.isArray(task.selectedSkillIds)||task.selectedSkillIds.length>20||task.selectedSkillIds.some(id=>typeof id!=='string'||id.length>120)))throw new Error('草稿技能格式无效');
     if (typeof task.id !== 'string' || typeof task.prompt !== 'string' || task.prompt.length > 20000 ||
         typeof task.createdAt !== 'string' || typeof task.modelId !== 'string' ||

@@ -7,6 +7,8 @@ displayDescription: "%description%"
 
 # Supplemental information
 
+Language: follow the user's explicitly requested output language, otherwise the host locale or conversational language. Default to English when neither is available. Localize user-facing labels and help; preserve stable IDs, field names and option values.
+
 Use Ambleloft's persistent input tools to collect missing information in the area above the chat composer. These tools collect answers; they do not authorize or perform business operations.
 
 ## Plan the next useful interaction

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-11-01T13:26:07.061Z",
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "status": "needs-input",
+  "error": null,
+  "elapsedMs": 5713,
+  "firstReasoningMs": 850,
+  "reasoningUpdates": 31,
+  "phases": [
+    "waiting",
+    "reasoning",
+    "responding"
+  ],
+  "reasoningCharacters": 1605,
+  "questions": 1,
+  "experts": 0,
+  "plans": 0,
+  "scope": "Real configured model + SpaceService + SQLite. Fictional goal, no expert runtime, tools or user projects. Browser UI tested separately with isolated fixtures."
+}

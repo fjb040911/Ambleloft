@@ -4,7 +4,7 @@ test('layout preference persists and group switching preserves draft and navigat
  await page.goto('/');
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('布局切换保留输入');
  await page.getByRole('button',{name:'设置',exact:true}).click();
- await page.getByRole('button',{name:'活动栏 按项目、任务、扩展分别浏览。',exact:true}).click();
+ await page.getByRole('button',{name:'活动栏 按项目、任务、协作工作平台、扩展分别浏览。',exact:true}).click();
  await page.getByRole('button',{name:'返回应用',exact:true}).click();
  await expect(page.locator('.activity-rail')).toBeVisible();await expect(input).toHaveValue('布局切换保留输入');
  await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
@@ -70,5 +70,5 @@ test('activity task date groups and navigation labels follow interface language'
  test('fresh workspaces default to activity navigation',async({page})=>{
  await page.goto('/');await expect(page.locator('.activity-rail')).toBeVisible();
  await page.locator('.activity-rail').getByRole('button',{name:'设置',exact:true}).click();
- await expect(page.getByRole('button',{name:'活动栏 按项目、任务、扩展分别浏览。',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('button',{name:'活动栏 按项目、任务、协作工作平台、扩展分别浏览。',exact:true})).toHaveAttribute('aria-pressed','true');
  });

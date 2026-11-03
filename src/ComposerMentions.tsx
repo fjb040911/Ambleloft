@@ -1,24 +1,26 @@
 import {useEffect,useLayoutEffect,useRef,useState,type KeyboardEvent,type RefObject,type Dispatch,type SetStateAction} from 'react';
 import {useCommandState} from 'cmdk';
-import {BookOpen,Puzzle} from 'lucide-react';
+import {BookOpen,Puzzle,UserRound} from 'lucide-react';
 import {Command,CommandGroup,CommandItem,CommandList} from './components/ui/command';
 import {Popover,PopoverContent,PopoverTitle} from './components/ui/popover';
 import {useSkills} from './skills';
 import {t} from './i18n';
 import type {ExtensionSnapshot} from './types';
 
-type Mention={start:number;end:number;query:string};
-type Choice={key:string;id:string;kind:'skill'|'extension';name:string;description:string;search:string;disabled:boolean};
-// Only a standalone token immediately before the caret is a mention. Shell
-// interpolation, escaped dollars and prices remain ordinary composer text.
+type Mention={start:number;end:number;query:string;trigger:'$'|'@'};
+export type ExpertMentionOptions={items:{id:string;name:string;description:string}[];selectedIds:string[];onSelect(id:string):void;limit?:number};
+type Choice={key:string;id:string;kind:'skill'|'extension'|'expert';name:string;description:string;search:string;disabled:boolean};
+// Resolve at the caret, including Chinese text directly followed by @.
+// Email addresses, shell interpolation, escaped dollars and prices stay text.
 function mentionAt(value:string,start:number,end:number):Mention|null {
  if(start!==end)return null;
- const match=/(?:^|\s)\$([\p{L}\p{N}_.-]*)$/u.exec(value.slice(0,start));
- if(!match||/^\d/.test(match[1]))return null;
- return {start:start-match[1].length-1,end:start,query:match[1]};
+ const prefix=value.slice(0,start);
+ const match=/(?:^|\s)(\$)([\p{L}\p{N}_.-]*)$/u.exec(prefix)||/(?<![a-zA-Z0-9_.+@-])(@)([\p{L}\p{N}_.-]*)$/u.exec(prefix);
+ if(!match||(match[1]==='$'&&/^\d/.test(match[2])))return null;
+ return {start:start-match[2].length-1,end:start,query:match[2],trigger:match[1] as '$'|'@'};
 }
 
-export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[],onSelectSkill,enabled}:{value:string;onChange(value:string):void;inputRef:RefObject<HTMLTextAreaElement|null>;selectedSkillIds?:string[];onSelectSkill?:(id:string)=>void;enabled:boolean}){
+export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[],onSelectSkill,experts,enabled}:{value:string;onChange(value:string):void;inputRef:RefObject<HTMLTextAreaElement|null>;selectedSkillIds?:string[];onSelectSkill?:(id:string)=>void;experts?:ExpertMentionOptions;enabled:boolean}){
  const {skills,error:skillError}=useSkills();
  const [cursor,setCursor]=useState({start:0,end:0});
  const [focused,setFocused]=useState(false);
@@ -29,32 +31,35 @@ export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[]
  const [loading,setLoading]=useState(false);
  const listRef=useRef<HTMLDivElement>(null);
  const [ariaIds,setAriaIds]=useState<{list?:string;item?:string}>({});
- const mention=mentionAt(value,cursor.start,cursor.end);
+ const mention=enabled&&focused?mentionAt(value,cursor.start,cursor.end):null;
  const signature=JSON.stringify([value,cursor.start,cursor.end]);
- const open=enabled&&focused&&!!mention&&dismissed!==signature;
- const syncCursor=()=>{const el=inputRef.current;if(el)setCursor({start:el.selectionStart,end:el.selectionEnd});};
+ const isExpert=mention?.trigger==='@';
+ const open=enabled&&focused&&!!mention&&(isExpert?!!experts:!!onSelectSkill)&&dismissed!==signature;
+ const menuLabel=t(isExpert?'选择提及的专家':'选择技能或扩展');
+ const syncCursor=()=>{const el=inputRef.current;if(el){const start=el.selectionStart,end=el.selectionEnd;setCursor(current=>current.start===start&&current.end===end?current:{start,end});}};
  useEffect(()=>{
-  if(!open)return;
+  if(!open||isExpert)return;
   let alive=true,version=0;
   const load=async()=>{const current=++version;setLoading(true);try{const snapshot=await window.desktop?.extensions?.list();if(alive&&current===version){setExtensions(snapshot?.installed||[]);setExtensionError(false);}}catch{if(alive&&current===version){setExtensions([]);setExtensionError(true);}}finally{if(alive&&current===version)setLoading(false);}};
   void load();const off=window.desktop?.extensions?.onChanged?.(load);
   window.addEventListener('extensions:changed',load);
   return()=>{alive=false;off?.();window.removeEventListener('extensions:changed',load);};
- },[open]);
+ },[open,isExpert]);
  const query=(mention?.query||'').toLocaleLowerCase();
- const choices:Choice[]=[
+ const choices:Choice[]=!open?[]:(isExpert?(experts?.items||[]).map(expert=>({key:`expert:${expert.id}`,id:expert.id,kind:'expert' as const,name:expert.name,description:expert.description,search:[expert.name,expert.description].join(' '),disabled:!experts!.selectedIds.includes(expert.id)&&experts!.selectedIds.length>=(experts!.limit??8)})):[
   ...skills.filter(skill=>skill.enabled).map(skill=>({key:`skill:${skill.id}`,id:skill.id,kind:'skill' as const,name:skill.displayName||skill.name,description:skill.displayDescription||skill.description,search:[skill.name,skill.displayName,skill.description,skill.displayDescription,skill.id].join(' '),disabled:!selectedSkillIds.includes(skill.id)&&selectedSkillIds.length>=20})),
   ...extensions.filter(extension=>extension.enabled&&extension.trusted!==false).map(({manifest})=>({key:`extension:${manifest.id}`,id:manifest.id,kind:'extension' as const,name:manifest.name,description:manifest.description||manifest.id,search:[manifest.name,manifest.id,manifest.description].join(' '),disabled:false})),
- ].filter(choice=>choice.search.toLocaleLowerCase().includes(query));
+ ]).filter(choice=>choice.search.toLocaleLowerCase().includes(query));
  const available=choices.filter(choice=>!choice.disabled);
  const selected=available.find(choice=>choice.key===selection)||available[0];
  const dismiss=()=>setDismissed(signature);
  const choose=(choice:Choice)=>{
   if(!mention||choice.disabled||!enabled)return;
-  const replacement=choice.kind==='extension'?`${t('使用扩展')}「${choice.name}」(${choice.id}) `:'';
+  const replacement=choice.kind==='expert'?`@${choice.name} `:choice.kind==='extension'?`${t('使用扩展')}「${choice.name}」(${choice.id}) `:'';
   const next=value.slice(0,mention.start)+replacement+value.slice(mention.end);
   if(next.length>20000)return;
   if(choice.kind==='skill')onSelectSkill?.(choice.id);
+  if(choice.kind==='expert')experts?.onSelect(choice.id);
   dismiss();onChange(next);setSelection('');
   requestAnimationFrame(()=>{const el=inputRef.current;if(!el||el.value!==next)return;el.focus();const position=mention.start+replacement.length;el.setSelectionRange(position,position);syncCursor();});
  };
@@ -72,21 +77,22 @@ export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[]
  };
 
  const menu=<Popover open={open} onOpenChange={(next,details)=>{if(!next){if(details.event.target===inputRef.current&&details.reason!=='escape-key'){details.cancel();return;}dismiss();}}}>
-  <PopoverContent anchor={inputRef} side="top" align="start" sideOffset={8} initialFocus={false} finalFocus={false} className="w-[min(26rem,calc(100vw-2rem))] p-1" onMouseDown={event=>event.preventDefault()}>
-   <PopoverTitle className="sr-only">{t('选择技能或扩展')}</PopoverTitle>
+  <PopoverContent anchor={inputRef} side="top" align="start" sideOffset={8} initialFocus={false} finalFocus={false} className="w-[min(26rem,calc(100vw-2rem))] max-h-(--available-height) overflow-y-auto p-1" onMouseDown={event=>event.preventDefault()}>
+   <PopoverTitle className="sr-only">{menuLabel}</PopoverTitle>
    <Command shouldFilter={false} value={selected?.key||''} onValueChange={setSelection}>
-    <CommandList ref={listRef} label={t('选择技能或扩展')}>
-     {(['skill','extension'] as const).map(kind=>choices.some(choice=>choice.kind===kind)&&<CommandGroup key={kind} heading={t(kind==='skill'?'技能':'扩展')}>
-      {choices.filter(choice=>choice.kind===kind).map(choice=><CommandItem key={choice.key} value={choice.key} disabled={choice.disabled} data-checked={choice.kind==='skill'&&selectedSkillIds.includes(choice.id)} onSelect={()=>choose(choice)}>
-       {choice.kind==='skill'?<BookOpen/>:<Puzzle/>}<span className="min-w-0 flex-1"><span className="block truncate">{choice.name}</span><span className="block truncate text-xs text-muted-foreground">{choice.description}</span></span>
+    <CommandList ref={listRef} label={menuLabel}>
+     {(['expert','skill','extension'] as const).map(kind=>choices.some(choice=>choice.kind===kind)&&<CommandGroup key={kind} heading={t(kind==='expert'?'空间专家':kind==='skill'?'技能':'扩展')}>
+      {choices.filter(choice=>choice.kind===kind).map(choice=><CommandItem key={choice.key} value={choice.key} disabled={choice.disabled} data-checked={choice.kind==='expert'?experts?.selectedIds.includes(choice.id):choice.kind==='skill'&&selectedSkillIds.includes(choice.id)} onSelect={()=>choose(choice)}>
+       {choice.kind==='expert'?<UserRound/>:choice.kind==='skill'?<BookOpen/>:<Puzzle/>}<span className="min-w-0 flex-1"><span className="block truncate">{choice.name}</span><span className="block truncate text-xs text-muted-foreground">{choice.description}</span></span>
       </CommandItem>)}
      </CommandGroup>)}
-     {!choices.length&&<p className="px-3 py-5 text-center text-sm text-muted-foreground" role="status">{t(loading?'正在加载…':query?'没有匹配的技能或扩展':'暂无可用的技能或扩展')}</p>}
+     {!choices.length&&<p className="px-3 py-5 text-center text-sm text-muted-foreground" role="status">{t(isExpert?(query?'没有匹配的专家':'此空间尚未添加专家'):loading?'正在加载…':query?'没有匹配的技能或扩展':'暂无可用的技能或扩展')}</p>}
     </CommandList>
     <MentionAccessibility listRef={listRef} onIds={setAriaIds}/>
    </Command>
-   {(skillError||extensionError)&&<p className="px-3 text-xs text-muted-foreground" role="status">{t('部分列表未能加载，重新输入 $ 可重试。')}</p>}
-   {selectedSkillIds.length>=20&&<p className="px-3 text-xs text-muted-foreground" role="status">{t('最多选择 20 个技能，请先移除再添加。')}</p>}
+   {!isExpert&&(skillError||extensionError)&&<p className="px-3 text-xs text-muted-foreground" role="status">{t('部分列表未能加载，重新输入 $ 可重试。')}</p>}
+   {!isExpert&&selectedSkillIds.length>=20&&<p className="px-3 text-xs text-muted-foreground" role="status">{t('最多选择 20 个技能，请先移除再添加。')}</p>}
+   {isExpert&&experts&&experts.selectedIds.length>=(experts.limit??8)&&<p className="px-3 text-xs text-muted-foreground" role="status">{t('参与专家已达上限，请先移除再添加。')}</p>}
    <p className="px-3 pb-2 text-xs text-muted-foreground">{t('↑↓ 选择 · Enter 确认 · Esc 关闭')}</p>
   </PopoverContent>
  </Popover>;
