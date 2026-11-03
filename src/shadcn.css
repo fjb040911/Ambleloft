@@ -31,14 +31,14 @@
  --color-secondary: var(--hover);
  --color-secondary-foreground: var(--text);
  --color-border: var(--border);
- --color-input: var(--border);
- --color-ring: var(--focus);
+ --color-input: var(--input, var(--border));
+ --color-ring: var(--ring, var(--focus));
  --color-destructive: var(--orange-text);
  --radius-sm: 4px;
  --radius-md: 6px;
  --radius-lg: 8px;
  --radius-xl: 12px;
- --radius-2xl: 16px;
+ --radius-2xl: var(--ui-radius-2xl, 16px);
 }
 /* Scope base rules to shadcn surfaces; legacy screens retain their own reset. */
 [data-slot="dialog-content"], [data-slot="dialog-content"] * { border-style:solid; border-width:0; }
@@ -50,7 +50,7 @@
 .task-questionnaire [data-slot] { border-style: solid; border-width: 0; }
 .task-questionnaire [data-slot=questionnaire-item], .task-questionnaire [data-slot=questionnaire-title] { margin: 0; }
 .task-questionnaire [data-slot=questionnaire-item][hidden] { display: none !important; }
-.task-questionnaire { padding: var(--surface-padding); margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-surface-card); background: var(--raised); }
+.task-questionnaire:not([data-layout=inline]) { padding: var(--surface-padding); margin: 8px 0; border: 1px solid var(--border); border-radius: var(--radius-surface-card); background: var(--raised); }
 .questionnaire-body { max-height: 24vh; overflow-y: auto; overscroll-behavior: contain; }
 @layer utilities {
   .task-questionnaire [hidden] { display: none !important; }
@@ -64,3 +64,32 @@
 
 /* Button-rendered anchors need the same reset as buttons without global preflight. */
 .about-dialog a[data-slot="button"] { color:inherit; text-decoration:none; -webkit-app-region:no-drag; }
+
+/* Trace relies on Preflight border defaults; scope them to its own parts. */
+[data-slot^="trace"] { border-style:solid; border-width:0; border-color:var(--border); }
+
+
+/* CodeBlock Preflight defaults, limited to the new component. */
+[data-slot^="code-block"] { border-style:solid; border-width:0; border-color:var(--border); }
+[data-slot="code-block-content"] { margin:0; font-size:inherit; }
+[data-slot="code-block-code"] { font-family:inherit; font-size:inherit; }
+[data-slot="trace-collapsible-content"][hidden] { display:none; }
+
+/* Trace prose has its own Preflight scope and never inherits legacy Markdown rules. */
+.trace-markdown :is(h1,h2,h3,h4,h5,h6) { font-size:inherit; margin:0; }
+.trace-markdown blockquote { margin:0; border-style:solid; border-width:0; border-color:var(--border); }
+
+/* Prompt attachments use the same scoped Preflight defaults as AI Elements. */
+[data-slot^="attachment"] { border-style:solid; border-width:0; border-color:var(--border); }
+
+/* Official docs Prompt Input theme, scoped so legacy app tokens cannot recolor it.
+   https://ui.shadcn.com/docs/ai-elements/base/prompt-input */
+.composer {
+ --ui-radius-2xl: 1.125rem;
+ --input: oklch(0.922 0 0);
+ --ring: oklch(0.708 0 0);
+}
+[data-theme="dark"] .composer { --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); }
+@media (prefers-color-scheme: dark) {
+ :root:not([data-theme="light"]):not([data-theme="dark"]) .composer { --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); }
+}

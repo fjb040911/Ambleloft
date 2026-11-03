@@ -7,6 +7,8 @@ displayDescription: "%description%"
 
 # Skill master
 
+Language: follow the user's explicitly requested output language, otherwise the host locale or conversational language. Default to English when neither is available. Localize user-facing labels and help; preserve stable IDs, field names and option values.
+
 Help people describe an outcome and turn it into a small working capability. Speak in the user's language. Prefer concise choices and editable recommendations. Never require the user to understand Skill, Node, SDK or a manifest before starting.
 
 ## Start and resume

@@ -1,0 +1,36 @@
+{
+  "checkedAt": "2026-11-01T12:37:14.711Z",
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "status": "completed",
+  "steps": [
+    "delegate",
+    "delegate",
+    "reply"
+  ],
+  "experts": [
+    {
+      "employeeId": "requirements-reviewer",
+      "status": "completed",
+      "runId": "aa2b92e2-1c45-4c2a-adf2-7ea37961797b"
+    },
+    {
+      "employeeId": "contract-reviewer",
+      "status": "completed",
+      "runId": "c394d6c5-d187-4643-a0bd-a8b8e7b48725"
+    }
+  ],
+  "toolsExecuted": 0,
+  "plans": 0,
+  "scope": "Real configured model + host + AgentRuntime/Codex. Synthetic isolated expert profiles without Store skills; no user project content.",
+  "verification": {
+    "sequentialRuntimeCalls": true,
+    "secondExpertReceivedFirstOutput": true,
+    "userDecisionsPreserved": [
+      "/api/v1",
+      "18765"
+    ],
+    "permissionsGranted": false,
+    "storeInstallationTested": false
+  }
+}

@@ -1,5 +1,5 @@
 export type StoreText = {zh:string;en:string};
-export interface StoreListing {previewSteps?:Array<{title:StoreText;description:StoreText}>;id:string;kind:'skill'|'extension';entityName:string;title:StoreText;summary:StoreText;description:StoreText;publisher:string;license:string;tags:string[];trialPrompt:StoreText;runtime:StoreText;setup:StoreText;release:{hostRequirements?:{minVersion:string};platforms?:string[];architectures?:string[];version:string;status:'published'|'yanked'|'revoked';artifactPath:string;artifactSha256:string;artifactSize:number;packageDigest:string;reviewedAt:string;reviewedBy:string;changelog:StoreText}}
+export interface StoreListing {author?:string;origin?:string;repository?:{url:string;directory:string;commit:string;stars?:number;starsObservedAt?:string};validation?:{packageVerifiedAt?:string;sourceCheckedAt?:string};previewSteps?:Array<{title:StoreText;description:StoreText}>;id:string;kind:'skill'|'extension';entityName:string;title:StoreText;summary:StoreText;description:StoreText;publisher:string;license:string;tags:string[];trialPrompt:StoreText;runtime:StoreText;setup:StoreText;release:{hostRequirements?:{minVersion:string};platforms?:string[];architectures?:string[];version:string;status:'published'|'yanked'|'revoked';artifactPath:string;artifactSha256:string;artifactSize:number;packageDigest:string;reviewedAt:string;reviewedBy:string;changelog:StoreText}}
 export interface StoreInstallation {sourceId:string;listingId:string;releaseVersion:string;entityId:string;kind:'skill'|'extension';locallyModified:boolean;installedAt:string}
 export interface StoreCatalog {source:{id:string;title:string}|null;items:StoreListing[];stale:boolean;error?:string;installed:StoreInstallation[];busy:string[]}
 export interface StoreOpen {sourceId:string;listingId:string}
@@ -7,13 +7,13 @@ export interface StoreAPI {pendingOpenError():Promise<{code:'STORE_UNTRUSTED_SOU
 export type AppInfo = {version:string;channel:'development'|'packaged'|'browser';platform:string;osVersion:string;arch:string;commit:string|null;dirty:boolean|null;builtAt:string|null};
 export interface AutomationPolicy {paused:boolean;providerId:string;model:string;dailyLimit:number}
 export interface AutomationState {policy:AutomationPolicy;events:{id:string;status:string;attempts:number;data:{type:string;dropped?:number}}[];jobs:{id:string;eventKey:string;status:string;model:string;createdAt:number;error?:string;result?:unknown}[]}
-export interface Skill {builtIn?:{key:string;version:number;digest:string};displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
+export interface Skill {fixedRelease?:{sourceId:string;listingId:string;version:string;packageDigest:string;artifactSha256?:string};builtIn?:{key:string;version:number;digest:string;hostManaged?:boolean};displayName?:string;displayDescription?:string;id:string;name:string;description:string;enabled:boolean;version:number;revision:string;hash:string;path:string;files:string[];sourcePath:string;provenance?:{kind:'github';repository:string;directory:string;requestedRef:string;commit:string};createdAt:string;updatedAt:string}
 export interface SkillDetail extends Skill {body:string}
 export interface SkillSnapshot {displayName?:string;displayDescription?:string;id:string;name:string;description:string;version:number;hash:string;path:string;body:string}
 export interface SkillImportResult {skill?:Skill;duplicate?:Skill;token?:string}
 export interface SkillFilePreview {path:string;size:number;kind:'markdown'|'text'|'image'|'unsupported';text?:string;dataUrl?:string;reason?:string}
-export interface SkillsAPI {onChanged?(listener:()=>void):()=>void;readFile(input:{id:string;file:string}):Promise<SkillFilePreview>;list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}
-export type Page = 'home' | 'messages' | 'projects' | 'extension-view' | 'plugins' | 'devices' | 'settings';
+export interface SkillsAPI {listSystem?():Promise<Skill[]>;onChanged?(listener:()=>void):()=>void;readFile(input:{id:string;file:string}):Promise<SkillFilePreview>;list():Promise<Skill[]>;detail(id:string):Promise<SkillDetail>;import(options?:{replaceId?:string;asNew?:boolean;token?:string}):Promise<SkillImportResult|null>;update(input:{id:string;enabled?:boolean;version?:number;name?:string;description?:string;body?:string}):Promise<Skill>;remove(id:string):Promise<void>}
+export type Page = 'home' | 'messages' | 'projects' | 'extension-view' | 'plugins' | 'devices' | 'settings' | 'workforce';
 export type Theme = 'system' | 'light' | 'dark';
 export interface ModelLimits {contextWindow?:number;autoCompactTokenLimit?:number;maxOutputTokens?:number}
 export interface ProviderCatalog {defaultId:string|null;providers:ProviderConfig[]}
@@ -27,6 +27,8 @@ export interface FileChange {id:string;path:string;status:'added'|'modified'|'de
 export interface TurnFileChanges {turnKey:string;files:FileChange[];notice?:string}
 export interface TaskApp {id:string;turnKey:string;title:string;extensionName:string;extensionId:string;resourceUri:string}
 export interface AgentRun {
+  employee?:import('./workforce-types').EmployeeSnapshot;
+  collaboration?:{spaceId:string;spaceName:string;requestId:string;mode:'discussion'|'work'};
   taskApps?:TaskApp[];
   conversationId?:string;draftId?:string;
   fileChanges?:TurnFileChanges[];
@@ -41,7 +43,7 @@ export interface AgentRun {
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
   approvals: { id: string; method: string; detail: string; progress?:string }[];
 }
-export interface Task { conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
+export interface Task {employeeId?:string;employeeName?:string; conversationId?:string;revision?:number; selectedSkillIds?:string[]; archivedAt?:string|null; id: string; title: string; prompt: string; modelId: string; projectId: string | null; status: 'draft'; createdAt: string }
 export type DockerEnvironment={kind:'docker';endpoint:string;daemonId:string;containerId:string;containerName:string;imageId:string;user:string|null;shell:'auto'|'bash'|'sh'};
 export type RemoteEnvironment={kind:'host'}|DockerEnvironment;
 export interface Project { environment?:RemoteEnvironment; type?:'local'|'ssh';connectionId?:string; revision?:number; id: string; name: string; path: string; description?: string; createdAt: string }
@@ -52,6 +54,8 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      workforce?:import('./workforce-types').WorkforceAPI;
+      spaces?:import('./workforce-types').SpaceAPI;
       store?:StoreAPI;
       creation?:import('./CreationGuide').CreationAPI;
       inputs?: {
@@ -114,7 +118,7 @@ declare global {
       touchSearchItem?(input:{kind:string;id:string}):Promise<void>;
       searchWorkspace?(input:{query:string;kind:string;cursor?:string}):Promise<{items:SearchResult[];total:number;next:string|null}>;
       listRuns(): Promise<AgentRun[]>;
-      startRun(input: { draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
+      startRun(input: { employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
       accessArtifact(input:{runId:string;id:string;preview?:boolean}):Promise<(DeliveredFile&{text:string})|null>;
       stopRun(id: string): Promise<void>;
       answerRun(input:{runId:string;requestId:string;answers:Record<string,string>}):Promise<void>;

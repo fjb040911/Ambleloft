@@ -1,0 +1,3172 @@
+{
+  "schemaVersion": 1,
+  "kind": "role-skill-recommendation-proposal",
+  "status": "source-researched-not-published",
+  "installable": false,
+  "designDate": "2026-10-27",
+  "requiredLocales": [
+    "zh-CN",
+    "en"
+  ],
+  "evidenceScope": "GitHub API metadata, exact trees, SKILL.md and selected license/readme files. No source code executed; no packages built or host/model integration tested. Document hashes are not package or archive digests.",
+  "repositories": [
+    {
+      "repository": "coreyhaines31/marketingskills",
+      "url": "https://github.com/coreyhaines31/marketingskills",
+      "observedAt": "2026-10-27T11:56:50.157170+00:00",
+      "stars": 56800,
+      "forks": 8396,
+      "archived": false,
+      "pushedAt": "2026-10-26T19:16:55Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "17772c7a80b7b8c7a47af30f648374cd8bd8adc5",
+      "commitDate": "2026-10-26T19:16:42Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "phuryn/pm-skills",
+      "url": "https://github.com/phuryn/pm-skills",
+      "observedAt": "2026-10-27T11:56:49.768983+00:00",
+      "stars": 27420,
+      "forks": 2844,
+      "archived": false,
+      "pushedAt": "2026-10-16T12:28:37Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+      "commitDate": "2026-10-16T12:28:37Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "github/awesome-copilot",
+      "url": "https://github.com/github/awesome-copilot",
+      "observedAt": "2026-10-27T12:01:13.393803+00:00",
+      "stars": 40463,
+      "forks": 5223,
+      "archived": false,
+      "pushedAt": "2026-10-27T08:06:53Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "d75b41863510272ed217a3074c7045202b96e93f",
+      "commitDate": "2026-10-27T04:48:46Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "anthropics/skills",
+      "url": "https://github.com/anthropics/skills",
+      "observedAt": "2026-10-27T11:56:56.621098+00:00",
+      "stars": 184123,
+      "forks": 21780,
+      "archived": false,
+      "pushedAt": "2026-10-09T18:45:52Z",
+      "license": null,
+      "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+      "commitDate": "2026-10-09T18:45:49Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "vercel-labs/agent-skills",
+      "url": "https://github.com/vercel-labs/agent-skills",
+      "observedAt": "2026-10-27T11:56:56.495321+00:00",
+      "stars": 33088,
+      "forks": 2893,
+      "archived": false,
+      "pushedAt": "2026-10-27T04:16:22Z",
+      "license": null,
+      "commit": "6ec269328bc400712ee225a173a14b6b29128df7",
+      "commitDate": "2026-10-27T04:16:01Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "anthropics/knowledge-work-plugins",
+      "url": "https://github.com/anthropics/knowledge-work-plugins",
+      "observedAt": "2026-10-27T11:56:58.025409+00:00",
+      "stars": 33338,
+      "forks": 3665,
+      "archived": false,
+      "pushedAt": "2026-10-27T07:41:30Z",
+      "license": {
+        "key": "apache-2.0",
+        "name": "Apache License 2.0",
+        "spdx_id": "Apache-2.0",
+        "url": "https://api.github.com/licenses/apache-2.0",
+        "node_id": "MDc6TGljZW5zZTI="
+      },
+      "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+      "commitDate": "2026-10-27T00:20:46Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "wshobson/agents",
+      "url": "https://github.com/wshobson/agents",
+      "observedAt": "2026-10-27T11:56:58.516190+00:00",
+      "stars": 41861,
+      "forks": 4435,
+      "archived": false,
+      "pushedAt": "2026-10-26T01:08:14Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "commitDate": "2026-10-17T21:39:17Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "obra/superpowers",
+      "url": "https://github.com/obra/superpowers",
+      "observedAt": "2026-10-27T11:56:51.246358+00:00",
+      "stars": 305906,
+      "forks": 27247,
+      "archived": false,
+      "pushedAt": "2026-10-23T03:48:57Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+      "commitDate": "2026-10-21T21:00:49Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "pbakaus/impeccable",
+      "url": "https://github.com/pbakaus/impeccable",
+      "observedAt": "2026-10-27T11:56:50.751122+00:00",
+      "stars": 89844,
+      "forks": 5340,
+      "archived": false,
+      "pushedAt": "2026-10-27T08:28:52Z",
+      "license": {
+        "key": "apache-2.0",
+        "name": "Apache License 2.0",
+        "spdx_id": "Apache-2.0",
+        "url": "https://api.github.com/licenses/apache-2.0",
+        "node_id": "MDc6TGljZW5zZTI="
+      },
+      "commit": "d34c87e1a00989ae8dbdd7f6b30b70f23319e860",
+      "commitDate": "2026-10-27T07:31:56Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "Leonxlnx/taste-skill",
+      "url": "https://github.com/Leonxlnx/taste-skill",
+      "observedAt": "2026-10-27T11:57:01.130940+00:00",
+      "stars": 103333,
+      "forks": 6988,
+      "archived": false,
+      "pushedAt": "2026-10-26T12:28:18Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "12af471f627f866411b4bd785b19646d3672784c",
+      "commitDate": "2026-10-24T23:42:19Z",
+      "treeTruncated": false
+    },
+    {
+      "repository": "shadcn-ui/ui",
+      "url": "https://github.com/shadcn-ui/ui",
+      "observedAt": "2026-10-27T11:57:03.756462+00:00",
+      "stars": 126663,
+      "forks": 12543,
+      "archived": false,
+      "pushedAt": "2026-10-27T10:56:43Z",
+      "license": {
+        "key": "mit",
+        "name": "MIT License",
+        "spdx_id": "MIT",
+        "url": "https://api.github.com/licenses/mit",
+        "node_id": "MDc6TGljZW5zZTEz"
+      },
+      "commit": "d094cd36caf871f2fde3e339b87aa43b9af5a7d0",
+      "commitDate": "2026-10-27T10:56:40Z",
+      "treeTruncated": false
+    }
+  ],
+  "candidates": [
+    {
+      "candidateId": "pm/create-prd",
+      "entityName": "create-prd",
+      "title": {
+        "zh-CN": "需求文档",
+        "en": "Product requirements"
+      },
+      "purpose": {
+        "zh-CN": "把目标、范围和发布条件整理成可讨论的需求文档。",
+        "en": "Turn goals, scope and release conditions into a reviewable PRD."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-execution/skills/create-prd",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/create-prd/SKILL.md",
+        "skillDocumentSha256": "e3aa10a437ed7f748a957bd5d1eb06d8fa3f56dc728dcb93ce484387ecc3fa13"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "pm/user-stories",
+      "entityName": "user-stories",
+      "title": {
+        "zh-CN": "用户故事与验收",
+        "en": "User stories and acceptance"
+      },
+      "purpose": {
+        "zh-CN": "把需求拆成带验收条件的用户故事。",
+        "en": "Break requirements into user stories with acceptance criteria."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-execution/skills/user-stories",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/user-stories/SKILL.md",
+        "skillDocumentSha256": "8ce89cd81de5a3df7d504380d18c54cec6c59ccdb7fd18cbcb62b6b6183d0a55"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "pm/prioritize-features",
+      "entityName": "prioritize-features",
+      "title": {
+        "zh-CN": "需求优先级",
+        "en": "Feature prioritization"
+      },
+      "purpose": {
+        "zh-CN": "按影响、成本、风险及战略匹配解释取舍。",
+        "en": "Explain trade-offs using impact, effort, risk and strategic alignment."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-product-discovery/skills/prioritize-features",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-product-discovery/skills/prioritize-features/SKILL.md",
+        "skillDocumentSha256": "d05c001ea9d71ccf6aca975e0530a2a85545192b1eec9e06cc6d1339156c0f87"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "pm/summarize-interview",
+      "entityName": "summarize-interview",
+      "title": {
+        "zh-CN": "访谈整理",
+        "en": "Interview synthesis"
+      },
+      "purpose": {
+        "zh-CN": "已有访谈资料时提取用户问题与行动项。",
+        "en": "Extract user problems and actions from supplied interview evidence."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-product-discovery/skills/summarize-interview",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-product-discovery/skills/summarize-interview/SKILL.md",
+        "skillDocumentSha256": "5a2a0c8257f5e2f7ef098d4531acbbcd3087bb07bb87d4cabfe1a97ef1ad037c"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "pm/outcome-roadmap",
+      "entityName": "outcome-roadmap",
+      "title": {
+        "zh-CN": "结果导向路线图",
+        "en": "Outcome roadmap"
+      },
+      "purpose": {
+        "zh-CN": "需要路线图时把功能列表转为可衡量结果。",
+        "en": "Translate feature lists into outcomes when planning a roadmap."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-execution/skills/outcome-roadmap",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/outcome-roadmap/SKILL.md",
+        "skillDocumentSha256": "3d2da8f82f4cbe4c8d06593765e2fbb94913676e9a65663b7da9e53c9a0082c8"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/architecture-patterns",
+      "entityName": "architecture-patterns",
+      "title": {
+        "zh-CN": "架构模式",
+        "en": "Architecture patterns"
+      },
+      "purpose": {
+        "zh-CN": "比较模块边界与架构方案，给出适用条件。",
+        "en": "Compare boundaries and architecture options with their applicability."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/backend-development/skills/architecture-patterns",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/backend-development/skills/architecture-patterns/SKILL.md",
+        "skillDocumentSha256": "350caf22b856b7d2908a10a69a8cc13e743c757ba9838716051b4e29fc1d7595"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/api-design-principles",
+      "entityName": "api-design-principles",
+      "title": {
+        "zh-CN": "API 契约设计",
+        "en": "API contract design"
+      },
+      "purpose": {
+        "zh-CN": "明确接口结构、错误、分页与兼容约定。",
+        "en": "Specify API shapes, errors, pagination and compatibility."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/backend-development/skills/api-design-principles",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/backend-development/skills/api-design-principles/SKILL.md",
+        "skillDocumentSha256": "1f6166c23c0a0f32d703c19d84b3c30c2873daefb9e8732339a009934fa17013"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/architecture-decision-records",
+      "entityName": "architecture-decision-records",
+      "title": {
+        "zh-CN": "架构决策记录",
+        "en": "Architecture decision records"
+      },
+      "purpose": {
+        "zh-CN": "保留方案背景、选择和后果，便于追溯。",
+        "en": "Record context, decisions and consequences for traceability."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/documentation-generation/skills/architecture-decision-records",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/documentation-generation/skills/architecture-decision-records/SKILL.md",
+        "skillDocumentSha256": "79059f17da8b20cdf27327f6de0ea005c73c2c442f48f70688abca4c77cb6f8f"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/database-migration",
+      "entityName": "database-migration",
+      "title": {
+        "zh-CN": "数据库迁移",
+        "en": "Database migration"
+      },
+      "purpose": {
+        "zh-CN": "涉及数据结构变更时规划迁移与回滚。",
+        "en": "Plan migrations and rollback for data-schema changes."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/framework-migration/skills/database-migration",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/framework-migration/skills/database-migration/SKILL.md",
+        "skillDocumentSha256": "d388db68c9f86beba823247f910b6a91c2fe8e12ef9b30b6e49f4b1bf19f1ab1"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "im/impeccable",
+      "entityName": "impeccable",
+      "title": {
+        "zh-CN": "交互与设计审阅",
+        "en": "Interaction and design review"
+      },
+      "purpose": {
+        "zh-CN": "分析任务流程、视觉层级和边界状态，延续既有设计。",
+        "en": "Review task flows, visual hierarchy and edge states within the incumbent design."
+      },
+      "repository": {
+        "url": "https://github.com/pbakaus/impeccable",
+        "directory": ".agents/skills/impeccable",
+        "commit": "d34c87e1a00989ae8dbdd7f6b30b70f23319e860",
+        "documentUrl": "https://github.com/pbakaus/impeccable/blob/d34c87e1a00989ae8dbdd7f6b30b70f23319e860/.agents/skills/impeccable/SKILL.md",
+        "skillDocumentSha256": "fab04b31f946573b00a8559db1fc070f8ea5825254d491c2b13156e5661a86d7"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "repository-license",
+        "url": "https://github.com/pbakaus/impeccable/blob/d34c87e1a00989ae8dbdd7f6b30b70f23319e860/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include reference/ and scripts/; audit launcher and bundle or pin engine assets for each supported platform. Do not silently fetch mutable binaries."
+      ],
+      "runtimeRequirementsNotes": [
+        "Pinned Impeccable engine and matching checksum; browser access for visual review"
+      ],
+      "compatibilityNotes": [
+        "Launcher can download a binary on first use; host packaging and Windows/SSH/Docker support are not verified."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/responsive-design",
+      "entityName": "responsive-design",
+      "title": {
+        "zh-CN": "响应式布局",
+        "en": "Responsive layouts"
+      },
+      "purpose": {
+        "zh-CN": "覆盖窄窗口、容器尺寸与内容驱动布局。",
+        "en": "Cover narrow windows, container sizing and content-driven layouts."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/ui-design/skills/responsive-design",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/ui-design/skills/responsive-design/SKILL.md",
+        "skillDocumentSha256": "c8bd56f8fc0f122c4ff392b02617f0e6bb4a353b2d0189235c6ee77cdcfe8690"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/wcag-audit-patterns",
+      "entityName": "wcag-audit-patterns",
+      "title": {
+        "zh-CN": "无障碍检查",
+        "en": "Accessibility audit"
+      },
+      "purpose": {
+        "zh-CN": "补充键盘、对比度与读屏等可操作性检查。",
+        "en": "Check keyboard operation, contrast and screen-reader behavior."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/accessibility-compliance/skills/wcag-audit-patterns",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/accessibility-compliance/skills/wcag-audit-patterns/SKILL.md",
+        "skillDocumentSha256": "db263a3405deb95a63175f33da4a9d82d8595599fbee4a81979059b35a7cec40"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "taste/taste-skill",
+      "entityName": "design-taste-frontend",
+      "title": {
+        "zh-CN": "Taste 视觉方向",
+        "en": "Taste visual direction"
+      },
+      "purpose": {
+        "zh-CN": "需要探索新视觉方向时使用，不与现有设计约束争夺主导。",
+        "en": "Explore a new visual direction without overriding approved design constraints."
+      },
+      "repository": {
+        "url": "https://github.com/Leonxlnx/taste-skill",
+        "directory": "skills/taste-skill",
+        "commit": "12af471f627f866411b4bd785b19646d3672784c",
+        "documentUrl": "https://github.com/Leonxlnx/taste-skill/blob/12af471f627f866411b4bd785b19646d3672784c/skills/taste-skill/SKILL.md",
+        "skillDocumentSha256": "3435ed963b15a1b6447746ec8844ab2cd38d8d2e8ead3451937f42df01e408c4"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/Leonxlnx/taste-skill/blob/12af471f627f866411b4bd785b19646d3672784c/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include scripts and reference data; freeze runtime dependencies and audit asset-fetch behavior."
+      ],
+      "runtimeRequirementsNotes": [
+        "Node.js and browser access; network only when retrieving public reference assets"
+      ],
+      "compatibilityNotes": [
+        "Upstream v2 is marked experimental; keep optional. Choose one primary visual direction per task; preserve approved designs."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "ui/shadcn",
+      "entityName": "shadcn",
+      "title": {
+        "zh-CN": "shadcn 组件实践",
+        "en": "shadcn components"
+      },
+      "purpose": {
+        "zh-CN": "在使用 shadcn 的项目中正确查找、组合和验证组件。",
+        "en": "Discover, compose and verify components in shadcn projects."
+      },
+      "repository": {
+        "url": "https://github.com/shadcn-ui/ui",
+        "directory": "skills/shadcn",
+        "commit": "d094cd36caf871f2fde3e339b87aa43b9af5a7d0",
+        "documentUrl": "https://github.com/shadcn-ui/ui/blob/d094cd36caf871f2fde3e339b87aa43b9af5a7d0/skills/shadcn/SKILL.md",
+        "skillDocumentSha256": "93951e5e83f616a3e046491c00d770bd54c0a64164706cd1191822a233d27592"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/shadcn-ui/ui/blob/d094cd36caf871f2fde3e339b87aa43b9af5a7d0/LICENSE.md",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include rules, design-system references and scripts. Skill pin does not pin CLI invoked as @latest; resolve an approved tool version separately."
+      ],
+      "runtimeRequirementsNotes": [
+        "Node.js/package manager and project-compatible shadcn CLI"
+      ],
+      "compatibilityNotes": [
+        "Use in shadcn projects only; do not migrate unrelated projects. Frontmatter allowed-tools does not grant host permissions."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "pm/test-scenarios",
+      "entityName": "test-scenarios",
+      "title": {
+        "zh-CN": "验收场景设计",
+        "en": "Acceptance scenarios"
+      },
+      "purpose": {
+        "zh-CN": "从用户故事推导起始条件、步骤和预期结果。",
+        "en": "Derive starting conditions, steps and expected outcomes from user stories."
+      },
+      "repository": {
+        "url": "https://github.com/phuryn/pm-skills",
+        "directory": "pm-execution/skills/test-scenarios",
+        "commit": "07b34f64ee828df08953f505b7f747aef85ae7c6",
+        "documentUrl": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/test-scenarios/SKILL.md",
+        "skillDocumentSha256": "2dc10ebb6359604275f26234d3c66c9ccc952e501ad5b685c23a5c0f34f634d4"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "an/webapp-testing",
+      "entityName": "webapp-testing",
+      "title": {
+        "zh-CN": "浏览器功能测试",
+        "en": "Browser functional testing"
+      },
+      "purpose": {
+        "zh-CN": "用 Playwright 检查真实用户路径、截图与日志。",
+        "en": "Use Playwright to inspect user journeys, screenshots and logs."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/skills",
+        "directory": "skills/webapp-testing",
+        "commit": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+        "documentUrl": "https://github.com/anthropics/skills/blob/dbd4588f9e1033efb41dad4bef2f7947c8993d44/skills/webapp-testing/SKILL.md",
+        "skillDocumentSha256": "51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "skill-license",
+        "url": "https://github.com/anthropics/skills/blob/dbd4588f9e1033efb41dad4bef2f7947c8993d44/skills/webapp-testing/LICENSE.txt",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include scripts/with_server.py and all local resources; inspect helper before allowing execution."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python, Playwright, browser binaries and a test application"
+      ],
+      "compatibilityNotes": [
+        "Python/browser availability must be checked in the task environment; no browser run performed in this research."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "sp/verification-before-completion",
+      "entityName": "verification-before-completion",
+      "title": {
+        "zh-CN": "完成前验证",
+        "en": "Verification before completion"
+      },
+      "purpose": {
+        "zh-CN": "要求完成结论有本轮实际检查证据。",
+        "en": "Require fresh verification evidence before claiming completion."
+      },
+      "repository": {
+        "url": "https://github.com/obra/superpowers",
+        "directory": "skills/verification-before-completion",
+        "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+        "documentUrl": "https://github.com/obra/superpowers/blob/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/verification-before-completion/SKILL.md",
+        "skillDocumentSha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/obra/superpowers/blob/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "sp/systematic-debugging",
+      "entityName": "systematic-debugging",
+      "title": {
+        "zh-CN": "系统化排障",
+        "en": "Systematic debugging"
+      },
+      "purpose": {
+        "zh-CN": "复杂失败时先定位根因；配套技能依赖需先核对。",
+        "en": "Investigate root causes for difficult failures after resolving companion-skill dependencies."
+      },
+      "repository": {
+        "url": "https://github.com/obra/superpowers",
+        "directory": "skills/systematic-debugging",
+        "commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
+        "documentUrl": "https://github.com/obra/superpowers/blob/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/skills/systematic-debugging/SKILL.md",
+        "skillDocumentSha256": "51c6435d98c83c42c96ba7c35725a0b2c376cd487fb1a4e6bd0ddbe7e33ef202"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/obra/superpowers/blob/2ce8aa15d05bd57213e6f746f953aafb7ded7a8b/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Resolve superpowers:test-driven-development and superpowers:verification-before-completion references before enabling."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [
+        "Optional only until cross-skill dependency closure and host naming are validated. Do not install the entire orchestration framework."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "mk/product-marketing",
+      "entityName": "product-marketing",
+      "title": {
+        "zh-CN": "产品定位与受众",
+        "en": "Product positioning and audience"
+      },
+      "purpose": {
+        "zh-CN": "先固定受众、价值和语气，供后续文案复用。",
+        "en": "Establish audience, value and voice as reusable copy context."
+      },
+      "repository": {
+        "url": "https://github.com/coreyhaines31/marketingskills",
+        "directory": "skills/product-marketing",
+        "commit": "17772c7a80b7b8c7a47af30f648374cd8bd8adc5",
+        "documentUrl": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/product-marketing/SKILL.md",
+        "skillDocumentSha256": "19ece0fa75c72a5a8b6e90db80f506586f54cc93bae6bffbb1bd2ef4ae7d603c"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/; resolve product context within the authorized project. Do not upload business context to the public Store."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "mk/copywriting",
+      "entityName": "copywriting",
+      "title": {
+        "zh-CN": "产品文案创作",
+        "en": "Product copywriting"
+      },
+      "purpose": {
+        "zh-CN": "把产品价值转成清楚的标题、正文和行动引导。",
+        "en": "Translate product value into clear headlines, copy and calls to action."
+      },
+      "repository": {
+        "url": "https://github.com/coreyhaines31/marketingskills",
+        "directory": "skills/copywriting",
+        "commit": "17772c7a80b7b8c7a47af30f648374cd8bd8adc5",
+        "documentUrl": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/copywriting/SKILL.md",
+        "skillDocumentSha256": "13c580c2432a4499e9dfdcf5d553df7aa6589e90cf5bd869fb4fbde5caf9f567"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/; resolve product context within the authorized project. Do not upload business context to the public Store."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "mk/copy-editing",
+      "entityName": "copy-editing",
+      "title": {
+        "zh-CN": "文案编辑",
+        "en": "Copy editing"
+      },
+      "purpose": {
+        "zh-CN": "修正重复、歧义和语气，保持事实与表达一致。",
+        "en": "Remove repetition and ambiguity while preserving facts and voice."
+      },
+      "repository": {
+        "url": "https://github.com/coreyhaines31/marketingskills",
+        "directory": "skills/copy-editing",
+        "commit": "17772c7a80b7b8c7a47af30f648374cd8bd8adc5",
+        "documentUrl": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/copy-editing/SKILL.md",
+        "skillDocumentSha256": "2a072606d9d5662509ea6ef62c65719487dcb68876acab9286bde4d1af5c030f"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/; resolve product context within the authorized project. Do not upload business context to the public Store."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "mk/customer-research",
+      "entityName": "customer-research",
+      "title": {
+        "zh-CN": "用户语言与研究",
+        "en": "Customer research"
+      },
+      "purpose": {
+        "zh-CN": "有客户资料时提取真实用语与需求证据。",
+        "en": "Use customer evidence to identify authentic language and needs."
+      },
+      "repository": {
+        "url": "https://github.com/coreyhaines31/marketingskills",
+        "directory": "skills/customer-research",
+        "commit": "17772c7a80b7b8c7a47af30f648374cd8bd8adc5",
+        "documentUrl": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/skills/customer-research/SKILL.md",
+        "skillDocumentSha256": "905e65e67268448d88b3b96cf045c6b3615cdd87c1060e129b148a31aa627669"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/coreyhaines31/marketingskills/blob/17772c7a80b7b8c7a47af30f648374cd8bd8adc5/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/; resolve product context within the authorized project. Do not upload business context to the public Store."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "gh/documentation-writer",
+      "entityName": "documentation-writer",
+      "title": {
+        "zh-CN": "技术文档结构",
+        "en": "Technical documentation structure"
+      },
+      "purpose": {
+        "zh-CN": "区分教程、操作指南、参考和解释，面向读者任务组织文档。",
+        "en": "Separate tutorials, how-to guides, reference and explanation around reader tasks."
+      },
+      "repository": {
+        "url": "https://github.com/github/awesome-copilot",
+        "directory": "skills/documentation-writer",
+        "commit": "d75b41863510272ed217a3074c7045202b96e93f",
+        "documentUrl": "https://github.com/github/awesome-copilot/blob/d75b41863510272ed217a3074c7045202b96e93f/skills/documentation-writer/SKILL.md",
+        "skillDocumentSha256": "7e8244988c9f4eb63bf8c0edf160578544621eb96e5e51e2d848f1401c5de8f1"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/github/awesome-copilot/blob/d75b41863510272ed217a3074c7045202b96e93f/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Package the full skill directory and applicable license/notice files; inspect references before release."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [
+        "Upstream asks for outline approval and restricts external research. Honor existing user-approved plans; assess host adaptation rather than imposing repeated approval. Any content modification must retain upstream provenance and use a new package digest."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/openapi-spec-generation",
+      "entityName": "openapi-spec-generation",
+      "title": {
+        "zh-CN": "API 文档与规范",
+        "en": "API documentation and specifications"
+      },
+      "purpose": {
+        "zh-CN": "从代码或已采纳契约维护可核对的 OpenAPI 说明。",
+        "en": "Maintain verifiable OpenAPI specifications from code or adopted contracts."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/documentation-generation/skills/openapi-spec-generation",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/documentation-generation/skills/openapi-spec-generation/SKILL.md",
+        "skillDocumentSha256": "8071736973f8a99cbe8644e21f638493ac062c77d650d8fabc4a469285485d7e"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/changelog-automation",
+      "entityName": "changelog-automation",
+      "title": {
+        "zh-CN": "版本变更说明",
+        "en": "Release change documentation"
+      },
+      "purpose": {
+        "zh-CN": "依据实际提交和发布差异组织变更记录。",
+        "en": "Organize release notes from actual commits and changes."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/documentation-generation/skills/changelog-automation",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/documentation-generation/skills/changelog-automation/SKILL.md",
+        "skillDocumentSha256": "b9748be2063023ba754d47ab9e727bcfa053041fd6f83c524eb8ae4a257cb6a1"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/error-handling-patterns",
+      "entityName": "error-handling-patterns",
+      "title": {
+        "zh-CN": "错误处理与恢复",
+        "en": "Error handling and recovery"
+      },
+      "purpose": {
+        "zh-CN": "把失败、重试与降级落到服务实现。",
+        "en": "Implement failure handling, retry and degradation in services."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/developer-essentials/skills/error-handling-patterns",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/developer-essentials/skills/error-handling-patterns/SKILL.md",
+        "skillDocumentSha256": "5fb7f4d995fc05386a8c04b045f96fd3cb652cbd31fd52d78966f86323b373b8"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/nodejs-backend-patterns",
+      "entityName": "nodejs-backend-patterns",
+      "title": {
+        "zh-CN": "Node.js 服务实践",
+        "en": "Node.js service patterns"
+      },
+      "purpose": {
+        "zh-CN": "Node.js 项目中补充中间件、鉴权与服务组织。",
+        "en": "Apply middleware, authentication and service patterns to Node.js projects."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/javascript-typescript/skills/nodejs-backend-patterns",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/javascript-typescript/skills/nodejs-backend-patterns/SKILL.md",
+        "skillDocumentSha256": "d52e1150accdc27e916f0962c9ba0872fcbe8a7d849d905dcc795c0f9d05aeae"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/web-component-design",
+      "entityName": "web-component-design",
+      "title": {
+        "zh-CN": "组件结构与状态",
+        "en": "Component architecture"
+      },
+      "purpose": {
+        "zh-CN": "组织可复用组件、组合接口与状态边界。",
+        "en": "Structure reusable components, composition APIs and state boundaries."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/ui-design/skills/web-component-design",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/ui-design/skills/web-component-design/SKILL.md",
+        "skillDocumentSha256": "a7978f5e9e3fa7129cf3eb8d607cedece4e207011321893d9a3c5dd92cf32603"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/e2e-testing-patterns",
+      "entityName": "e2e-testing-patterns",
+      "title": {
+        "zh-CN": "端到端回归",
+        "en": "End-to-end regression"
+      },
+      "purpose": {
+        "zh-CN": "验证关键交互路径，避免仅凭界面外观判定完成。",
+        "en": "Verify critical interaction paths beyond visual similarity."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/developer-essentials/skills/e2e-testing-patterns",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/developer-essentials/skills/e2e-testing-patterns/SKILL.md",
+        "skillDocumentSha256": "b59a3d80c852f41bb73d6941410cd0fc98bbdb63a61d2ed0da2415f8dde0e1c7"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "v/react-best-practices",
+      "entityName": "vercel-react-best-practices",
+      "title": {
+        "zh-CN": "React 性能实践",
+        "en": "React performance practices"
+      },
+      "purpose": {
+        "zh-CN": "React/Next.js 项目中检查数据瀑布、渲染和包体积。",
+        "en": "Review waterfalls, rendering and bundle size in React/Next.js projects."
+      },
+      "repository": {
+        "url": "https://github.com/vercel-labs/agent-skills",
+        "directory": "skills/react-best-practices",
+        "commit": "6ec269328bc400712ee225a173a14b6b29128df7",
+        "documentUrl": "https://github.com/vercel-labs/agent-skills/blob/6ec269328bc400712ee225a173a14b6b29128df7/skills/react-best-practices/SKILL.md",
+        "skillDocumentSha256": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "skill-frontmatter-and-repository-readme",
+        "url": "https://github.com/vercel-labs/agent-skills/blob/6ec269328bc400712ee225a173a14b6b29128df7/skills/react-best-practices/SKILL.md",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include AGENTS.md and rules at the pinned commit; preserve license declaration and author attribution."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [
+        "Only relevant to React/Next.js; source license declaration checked, redistribution packaging remains a release review."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "data/explore-data",
+      "entityName": "explore-data",
+      "title": {
+        "zh-CN": "数据探索",
+        "en": "Data exploration"
+      },
+      "purpose": {
+        "zh-CN": "先检查结构、缺失和异常，避免直接得出结论。",
+        "en": "Inspect structure, missingness and anomalies before drawing conclusions."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/knowledge-work-plugins",
+        "directory": "data/skills/explore-data",
+        "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+        "documentUrl": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/skills/explore-data/SKILL.md",
+        "skillDocumentSha256": "af7590fa616360259da712b5ede5f79b817beb854c47a465f95774354988e8a2"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "plugin-license",
+        "url": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Preserve plugin-level data/CONNECTORS.md references when building standalone skills; do not flatten away ../../ dependencies."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python and required data/chart libraries for local files; database connector only for authorized live queries"
+      ],
+      "compatibilityNotes": [
+        "Cowork connector placeholders need host mapping; local-file route should work without an account. Runtime integration not tested."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "data/validate-data",
+      "entityName": "validate-data",
+      "title": {
+        "zh-CN": "分析结果校验",
+        "en": "Analysis validation"
+      },
+      "purpose": {
+        "zh-CN": "检查口径、计算、偏差与结论是否有依据。",
+        "en": "Check definitions, calculations, bias and support for conclusions."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/knowledge-work-plugins",
+        "directory": "data/skills/validate-data",
+        "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+        "documentUrl": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/skills/validate-data/SKILL.md",
+        "skillDocumentSha256": "1e424822043480375b80aef9416227b1c8083af749ca536568716265f79ca54b"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "plugin-license",
+        "url": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Preserve plugin-level data/CONNECTORS.md references when building standalone skills; do not flatten away ../../ dependencies."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python and required data/chart libraries for local files; database connector only for authorized live queries"
+      ],
+      "compatibilityNotes": [
+        "Cowork connector placeholders need host mapping; local-file route should work without an account. Runtime integration not tested."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "data/data-visualization",
+      "entityName": "data-visualization",
+      "title": {
+        "zh-CN": "数据可视化",
+        "en": "Data visualization"
+      },
+      "purpose": {
+        "zh-CN": "根据问题选择图表并表达不确定性。",
+        "en": "Choose charts for the question and communicate uncertainty."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/knowledge-work-plugins",
+        "directory": "data/skills/data-visualization",
+        "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+        "documentUrl": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/skills/data-visualization/SKILL.md",
+        "skillDocumentSha256": "5811e8b3547cda6bc8af118aaf0d7589e8861cdc9facce6372dc78aea99ab87d"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "plugin-license",
+        "url": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Preserve plugin-level data/CONNECTORS.md references when building standalone skills; do not flatten away ../../ dependencies."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python and required data/chart libraries for local files; database connector only for authorized live queries"
+      ],
+      "compatibilityNotes": [
+        "Cowork connector placeholders need host mapping; local-file route should work without an account. Runtime integration not tested."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "data/statistical-analysis",
+      "entityName": "statistical-analysis",
+      "title": {
+        "zh-CN": "统计分析",
+        "en": "Statistical analysis"
+      },
+      "purpose": {
+        "zh-CN": "对分布、趋势与假设进行有条件的统计解释。",
+        "en": "Interpret distributions, trends and hypotheses with appropriate statistical caveats."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/knowledge-work-plugins",
+        "directory": "data/skills/statistical-analysis",
+        "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+        "documentUrl": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/skills/statistical-analysis/SKILL.md",
+        "skillDocumentSha256": "91a15cfc144efffcd622b09827362a73993a3ff30e3a78114801832477c9f8a0"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "plugin-license",
+        "url": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Preserve plugin-level data/CONNECTORS.md references when building standalone skills; do not flatten away ../../ dependencies."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python and required data/chart libraries for local files; database connector only for authorized live queries"
+      ],
+      "compatibilityNotes": [
+        "Cowork connector placeholders need host mapping; local-file route should work without an account. Runtime integration not tested."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "data/sql-queries",
+      "entityName": "sql-queries",
+      "title": {
+        "zh-CN": "SQL 查询",
+        "en": "SQL queries"
+      },
+      "purpose": {
+        "zh-CN": "需要数据库分析时按方言编写和检查查询。",
+        "en": "Write and review dialect-appropriate SQL for database analysis."
+      },
+      "repository": {
+        "url": "https://github.com/anthropics/knowledge-work-plugins",
+        "directory": "data/skills/sql-queries",
+        "commit": "c75fda00ff0e41c8ee331ae312c8a07f1967653b",
+        "documentUrl": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/skills/sql-queries/SKILL.md",
+        "skillDocumentSha256": "dbd5a5e2d563d83ca6d4d033206f285f503296eabff4a35545cdb4cb5302bd9a"
+      },
+      "licenseEvidence": {
+        "declaredId": "Apache-2.0",
+        "basis": "plugin-license",
+        "url": "https://github.com/anthropics/knowledge-work-plugins/blob/c75fda00ff0e41c8ee331ae312c8a07f1967653b/data/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Preserve plugin-level data/CONNECTORS.md references when building standalone skills; do not flatten away ../../ dependencies."
+      ],
+      "runtimeRequirementsNotes": [
+        "Python and required data/chart libraries for local files; database connector only for authorized live queries"
+      ],
+      "compatibilityNotes": [
+        "Cowork connector placeholders need host mapping; local-file route should work without an account. Runtime integration not tested."
+      ],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/deployment-pipeline-design",
+      "entityName": "deployment-pipeline-design",
+      "title": {
+        "zh-CN": "交付流水线",
+        "en": "Deployment pipeline design"
+      },
+      "purpose": {
+        "zh-CN": "定义构建、检查、分阶段发布与回滚流程。",
+        "en": "Define build, verification, staged delivery and rollback workflows."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/cicd-automation/skills/deployment-pipeline-design",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/cicd-automation/skills/deployment-pipeline-design/SKILL.md",
+        "skillDocumentSha256": "9a56bd9401c1dc8ef5a15758d7234f211193097ddb3895d46d1ddcd730687b18"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/incident-runbook-templates",
+      "entityName": "incident-runbook-templates",
+      "title": {
+        "zh-CN": "故障处置手册",
+        "en": "Incident runbooks"
+      },
+      "purpose": {
+        "zh-CN": "把检测、排查、缓解与恢复步骤写成可执行手册。",
+        "en": "Document detection, diagnosis, mitigation and recovery procedures."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/incident-response/skills/incident-runbook-templates",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/incident-response/skills/incident-runbook-templates/SKILL.md",
+        "skillDocumentSha256": "fd9ca9b9bc958da514039d59e453b05182208c7410696273d2c62350ff3ad1aa"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/slo-implementation",
+      "entityName": "slo-implementation",
+      "title": {
+        "zh-CN": "服务可靠性指标",
+        "en": "Service reliability objectives"
+      },
+      "purpose": {
+        "zh-CN": "定义 SLI/SLO、错误预算和可验证的告警依据。",
+        "en": "Define SLIs/SLOs, error budgets and measurable alert conditions."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/observability-monitoring/skills/slo-implementation",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/observability-monitoring/skills/slo-implementation/SKILL.md",
+        "skillDocumentSha256": "538e560a1c10be5f643d0a048e4e828605420e9b1867a9d4449f8a3471c14049"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/github-actions-templates",
+      "entityName": "github-actions-templates",
+      "title": {
+        "zh-CN": "GitHub Actions",
+        "en": "GitHub Actions"
+      },
+      "purpose": {
+        "zh-CN": "项目采用 GitHub Actions 时提供具体流水线模板。",
+        "en": "Use concrete workflow templates for projects using GitHub Actions."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/cicd-automation/skills/github-actions-templates",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/cicd-automation/skills/github-actions-templates/SKILL.md",
+        "skillDocumentSha256": "fc3c06ddb2423804be275defbb8a2c35f1564ba28aaeb07dcf01ec9c4cc8f023"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    },
+    {
+      "candidateId": "eng/k8s-manifest-generator",
+      "entityName": "k8s-manifest-generator",
+      "title": {
+        "zh-CN": "Kubernetes 配置",
+        "en": "Kubernetes manifests"
+      },
+      "purpose": {
+        "zh-CN": "明确使用 Kubernetes 时生成并检查配置。",
+        "en": "Generate and review manifests when Kubernetes is explicitly in use."
+      },
+      "repository": {
+        "url": "https://github.com/wshobson/agents",
+        "directory": "plugins/kubernetes-operations/skills/k8s-manifest-generator",
+        "commit": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+        "documentUrl": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/plugins/kubernetes-operations/skills/k8s-manifest-generator/SKILL.md",
+        "skillDocumentSha256": "489acd7b8fef07286a9b7d37879252e340e297f51a718d1e4ff30cfaf3b5f262"
+      },
+      "licenseEvidence": {
+        "declaredId": "MIT",
+        "basis": "repository-license",
+        "url": "https://github.com/wshobson/agents/blob/0874a27b17a22e2b7c2e2bcd725768e0803cad06/LICENSE",
+        "redistributionReview": "pending"
+      },
+      "verification": {
+        "source": "document-and-tree-checked",
+        "artifact": "not-built",
+        "host": "not-tested",
+        "task": "not-tested"
+      },
+      "packagingRequirements": [
+        "Include references/details.md and any other local resources present; examples are guidance, not authorization to execute deployments."
+      ],
+      "runtimeRequirementsNotes": [
+        "Existing authorized project/file tools; external tools only if the task needs them"
+      ],
+      "compatibilityNotes": [],
+      "release": null,
+      "installable": false
+    }
+  ],
+  "roles": [
+    {
+      "roleId": "amble.product",
+      "name": {
+        "zh-CN": "产品经理",
+        "en": "Product Manager"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.product",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "pm/create-prd",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把目标、范围和发布条件整理成可讨论的需求文档。",
+            "en": "Turn goals, scope and release conditions into a reviewable PRD."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "把目标、范围和发布条件整理成可讨论的需求文档。",
+              "en": "Turn goals, scope and release conditions into a reviewable PRD."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "product.requirements",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "pm/user-stories",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把需求拆成带验收条件的用户故事。",
+            "en": "Break requirements into user stories with acceptance criteria."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "把需求拆成带验收条件的用户故事。",
+              "en": "Break requirements into user stories with acceptance criteria."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "product.requirements",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "pm/prioritize-features",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "按影响、成本、风险及战略匹配解释取舍。",
+            "en": "Explain trade-offs using impact, effort, risk and strategic alignment."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "按影响、成本、风险及战略匹配解释取舍。",
+              "en": "Explain trade-offs using impact, effort, risk and strategic alignment."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "product.prioritization",
+          "responsibilityIds": [
+            "r2"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "pm/summarize-interview",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "已有访谈资料时提取用户问题与行动项。",
+            "en": "Extract user problems and actions from supplied interview evidence."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "已有访谈资料时提取用户问题与行动项。",
+              "en": "Extract user problems and actions from supplied interview evidence."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "product.research",
+          "responsibilityIds": [
+            "r1"
+          ]
+        },
+        {
+          "id": "b05",
+          "candidateId": "pm/outcome-roadmap",
+          "rank": 5,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "需要路线图时把功能列表转为可衡量结果。",
+            "en": "Translate feature lists into outcomes when planning a roadmap."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "需要路线图时把功能列表转为可衡量结果。",
+              "en": "Translate feature lists into outcomes when planning a roadmap."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "product.prioritization",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "围绕一个模糊功能产出范围、用户故事与验收，能指出尚无证据的假设。",
+        "en": "Turn an ambiguous feature into scope, stories and acceptance while identifying unsupported assumptions."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.architecture",
+      "name": {
+        "zh-CN": "架构师",
+        "en": "Software Architect"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.architecture",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "eng/architecture-patterns",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "比较模块边界与架构方案，给出适用条件。",
+            "en": "Compare boundaries and architecture options with their applicability."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "比较模块边界与架构方案，给出适用条件。",
+              "en": "Compare boundaries and architecture options with their applicability."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.architecture",
+          "responsibilityIds": [
+            "r1",
+            "r3"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "eng/api-design-principles",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "为跨模块协作固定接口职责与错误契约，减少实现时的边界争议。",
+            "en": "Fix cross-module responsibilities and error contracts before implementation."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "明确接口结构、错误、分页与兼容约定。",
+              "en": "Specify API shapes, errors, pagination and compatibility."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.contracts",
+          "responsibilityIds": [
+            "r2"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/architecture-decision-records",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "保留方案背景、选择和后果，便于追溯。",
+            "en": "Record context, decisions and consequences for traceability."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "保留方案背景、选择和后果，便于追溯。",
+              "en": "Record context, decisions and consequences for traceability."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.architecture",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "eng/database-migration",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "涉及数据结构变更时规划迁移与回滚。",
+            "en": "Plan migrations and rollback for data-schema changes."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "涉及数据结构变更时规划迁移与回滚。",
+              "en": "Plan migrations and rollback for data-schema changes."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.migration",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "讨论 model-router 与 api-gateway 边界，产出契约与有来源的决策记录。",
+        "en": "Discuss model-router/api-gateway boundaries and produce contracts and sourced decisions."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.web-ui",
+      "name": {
+        "zh-CN": "Web UI 设计师",
+        "en": "Web UI Designer"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.web-ui",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "im/impeccable",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "分析任务流程、视觉层级和边界状态，延续既有设计。",
+            "en": "Review task flows, visual hierarchy and edge states within the incumbent design."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "分析任务流程、视觉层级和边界状态，延续既有设计。",
+              "en": "Review task flows, visual hierarchy and edge states within the incumbent design."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "design.interaction",
+          "responsibilityIds": [
+            "r1",
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "eng/responsive-design",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "覆盖窄窗口、容器尺寸与内容驱动布局。",
+            "en": "Cover narrow windows, container sizing and content-driven layouts."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "覆盖窄窗口、容器尺寸与内容驱动布局。",
+              "en": "Cover narrow windows, container sizing and content-driven layouts."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "design.systems",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/wcag-audit-patterns",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "补充键盘、对比度与读屏等可操作性检查。",
+            "en": "Check keyboard operation, contrast and screen-reader behavior."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "补充键盘、对比度与读屏等可操作性检查。",
+              "en": "Check keyboard operation, contrast and screen-reader behavior."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "design.accessibility",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "taste/taste-skill",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "需要探索新视觉方向时使用，不与现有设计约束争夺主导。",
+            "en": "Explore a new visual direction without overriding approved design constraints."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "需要探索新视觉方向时使用，不与现有设计约束争夺主导。",
+              "en": "Explore a new visual direction without overriding approved design constraints."
+            },
+            "whenNot": {
+              "zh-CN": "不与 Impeccable 同时发起互相冲突的视觉重做；已有设计优先。",
+              "en": "Avoid competing visual redesigns with Impeccable; approved designs take precedence."
+            }
+          },
+          "capabilityId": "design.systems",
+          "responsibilityIds": [
+            "r1",
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b05",
+          "candidateId": "ui/shadcn",
+          "rank": 5,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "在使用 shadcn 的项目中正确查找、组合和验证组件。",
+            "en": "Discover, compose and verify components in shadcn projects."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "在使用 shadcn 的项目中正确查找、组合和验证组件。",
+              "en": "Discover, compose and verify components in shadcn projects."
+            },
+            "whenNot": {
+              "zh-CN": "项目未采用 shadcn 时不据此更换组件库。",
+              "en": "Do not switch component libraries when the project does not use shadcn."
+            }
+          },
+          "capabilityId": "design.systems",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "审阅角色添加流程，覆盖空态、错误、390px 与键盘路径，不重做既有视觉体系。",
+        "en": "Review employee creation, including empty/error states, 390px and keyboard paths, preserving the design system."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.qa",
+      "name": {
+        "zh-CN": "测试工程师",
+        "en": "QA Engineer"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.qa",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "pm/test-scenarios",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "从用户故事推导起始条件、步骤和预期结果。",
+            "en": "Derive starting conditions, steps and expected outcomes from user stories."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "从用户故事推导起始条件、步骤和预期结果。",
+              "en": "Derive starting conditions, steps and expected outcomes from user stories."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "quality.test-design",
+          "responsibilityIds": [
+            "r1"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "an/webapp-testing",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "用 Playwright 检查真实用户路径、截图与日志。",
+            "en": "Use Playwright to inspect user journeys, screenshots and logs."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "用 Playwright 检查真实用户路径、截图与日志。",
+              "en": "Use Playwright to inspect user journeys, screenshots and logs."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "quality.automation",
+          "responsibilityIds": [
+            "r2"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "sp/verification-before-completion",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "要求完成结论有本轮实际检查证据。",
+            "en": "Require fresh verification evidence before claiming completion."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "要求完成结论有本轮实际检查证据。",
+              "en": "Require fresh verification evidence before claiming completion."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "quality.automation",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "sp/systematic-debugging",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "复杂失败时先定位根因；配套技能依赖需先核对。",
+            "en": "Investigate root causes for difficult failures after resolving companion-skill dependencies."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "复杂失败时先定位根因；配套技能依赖需先核对。",
+              "en": "Investigate root causes for difficult failures after resolving companion-skill dependencies."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "quality.test-design",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "测试员工提交失败和重试，提供真实浏览器路径、断言和未验证项。",
+        "en": "Test failed employee submission and retry with real browser steps, assertions and explicit gaps."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.copy",
+      "name": {
+        "zh-CN": "文案专家",
+        "en": "Copywriting Specialist"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.copy",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "mk/product-marketing",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "先固定受众、价值和语气，供后续文案复用。",
+            "en": "Establish audience, value and voice as reusable copy context."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "先固定受众、价值和语气，供后续文案复用。",
+              "en": "Establish audience, value and voice as reusable copy context."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.copywriting",
+          "responsibilityIds": [
+            "r1"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "mk/copywriting",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把产品价值转成清楚的标题、正文和行动引导。",
+            "en": "Translate product value into clear headlines, copy and calls to action."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "把产品价值转成清楚的标题、正文和行动引导。",
+              "en": "Translate product value into clear headlines, copy and calls to action."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.copywriting",
+          "responsibilityIds": [
+            "r2"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "mk/copy-editing",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "修正重复、歧义和语气，保持事实与表达一致。",
+            "en": "Remove repetition and ambiguity while preserving facts and voice."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "修正重复、歧义和语气，保持事实与表达一致。",
+              "en": "Remove repetition and ambiguity while preserving facts and voice."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.editing",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "mk/customer-research",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "有客户资料时提取真实用语与需求证据。",
+            "en": "Use customer evidence to identify authentic language and needs."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "有客户资料时提取真实用语与需求证据。",
+              "en": "Use customer evidence to identify authentic language and needs."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.copywriting",
+          "responsibilityIds": [
+            "r1"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "依据真实产品能力写双语首页文案，保留事实与愿景边界。",
+        "en": "Write bilingual homepage copy grounded in product capabilities, distinguishing current features from vision."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.tutorial",
+      "name": {
+        "zh-CN": "技术文档专家",
+        "en": "Technical Documentation Specialist"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.tutorial",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "gh/documentation-writer",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "区分教程、操作指南、参考和解释，面向读者任务组织文档。",
+            "en": "Separate tutorials, how-to guides, reference and explanation around reader tasks."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "区分教程、操作指南、参考和解释，面向读者任务组织文档。",
+              "en": "Separate tutorials, how-to guides, reference and explanation around reader tasks."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.technical-writing",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "eng/openapi-spec-generation",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "从代码或已采纳契约维护可核对的 OpenAPI 说明。",
+            "en": "Maintain verifiable OpenAPI specifications from code or adopted contracts."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "从代码或已采纳契约维护可核对的 OpenAPI 说明。",
+              "en": "Maintain verifiable OpenAPI specifications from code or adopted contracts."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.reference-validation",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/changelog-automation",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "依据实际提交和发布差异组织变更记录。",
+            "en": "Organize release notes from actual commits and changes."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "依据实际提交和发布差异组织变更记录。",
+              "en": "Organize release notes from actual commits and changes."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "content.reference-validation",
+          "responsibilityIds": [
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "编写三步差旅表单教程和 API 参考，核对示例、版本和错误路径。",
+        "en": "Write a three-step travel-form tutorial and API reference, checking examples, versions and errors."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.integration",
+      "name": {
+        "zh-CN": "后端与集成工程师",
+        "en": "Backend and Integration Engineer"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.integration",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "eng/api-design-principles",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把已采纳契约落实到服务校验、响应及兼容行为，并检查实现差异。",
+            "en": "Implement adopted contracts in service validation, responses and compatibility, checking deviations."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "明确接口结构、错误、分页与兼容约定。",
+              "en": "Specify API shapes, errors, pagination and compatibility."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.backend",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "eng/error-handling-patterns",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把失败、重试与降级落到服务实现。",
+            "en": "Implement failure handling, retry and degradation in services."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "把失败、重试与降级落到服务实现。",
+              "en": "Implement failure handling, retry and degradation in services."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.integration",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/nodejs-backend-patterns",
+          "rank": 3,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "Node.js 项目中补充中间件、鉴权与服务组织。",
+            "en": "Apply middleware, authentication and service patterns to Node.js projects."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "Node.js 项目中补充中间件、鉴权与服务组织。",
+              "en": "Apply middleware, authentication and service patterns to Node.js projects."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.backend",
+          "responsibilityIds": [
+            "r1",
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "eng/database-migration",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "涉及数据结构变更时规划迁移与回滚。",
+            "en": "Plan migrations and rollback for data-schema changes."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "涉及数据结构变更时规划迁移与回滚。",
+              "en": "Plan migrations and rollback for data-schema changes."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.database",
+          "responsibilityIds": [
+            "r1",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "实现虚构差旅提交接口，验证校验、幂等与失败恢复。",
+        "en": "Implement a synthetic travel-submission API and verify validation, idempotency and failure recovery."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.frontend",
+      "name": {
+        "zh-CN": "前端工程师",
+        "en": "Frontend Engineer"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.frontend",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "eng/web-component-design",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "组织可复用组件、组合接口与状态边界。",
+            "en": "Structure reusable components, composition APIs and state boundaries."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "组织可复用组件、组合接口与状态边界。",
+              "en": "Structure reusable components, composition APIs and state boundaries."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.frontend",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "ui/shadcn",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "在使用 shadcn 的项目中正确查找、组合和验证组件。",
+            "en": "Discover, compose and verify components in shadcn projects."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "在使用 shadcn 的项目中正确查找、组合和验证组件。",
+              "en": "Discover, compose and verify components in shadcn projects."
+            },
+            "whenNot": {
+              "zh-CN": "项目未采用 shadcn 时不据此更换组件库。",
+              "en": "Do not switch component libraries when the project does not use shadcn."
+            }
+          },
+          "capabilityId": "engineering.frontend",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/e2e-testing-patterns",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "验证关键交互路径，避免仅凭界面外观判定完成。",
+            "en": "Verify critical interaction paths beyond visual similarity."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "验证关键交互路径，避免仅凭界面外观判定完成。",
+              "en": "Verify critical interaction paths beyond visual similarity."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "quality.browser-testing",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "v/react-best-practices",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "React/Next.js 项目中检查数据瀑布、渲染和包体积。",
+            "en": "Review waterfalls, rendering and bundle size in React/Next.js projects."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "React/Next.js 项目中检查数据瀑布、渲染和包体积。",
+              "en": "Review waterfalls, rendering and bundle size in React/Next.js projects."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "engineering.web-performance",
+          "responsibilityIds": [
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "按既有设计实现技能选择器，验证跨页选择、关闭恢复和窄窗口。",
+        "en": "Implement the skill picker within the existing design and verify selection, cancellation and narrow windows."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.data",
+      "name": {
+        "zh-CN": "数据分析师",
+        "en": "Data Analyst"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.data",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "data/explore-data",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "先检查结构、缺失和异常，避免直接得出结论。",
+            "en": "Inspect structure, missingness and anomalies before drawing conclusions."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "先检查结构、缺失和异常，避免直接得出结论。",
+              "en": "Inspect structure, missingness and anomalies before drawing conclusions."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "analysis.data",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "data/validate-data",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "检查口径、计算、偏差与结论是否有依据。",
+            "en": "Check definitions, calculations, bias and support for conclusions."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "检查口径、计算、偏差与结论是否有依据。",
+              "en": "Check definitions, calculations, bias and support for conclusions."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "analysis.data",
+          "responsibilityIds": [
+            "r1",
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "data/data-visualization",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "根据问题选择图表并表达不确定性。",
+            "en": "Choose charts for the question and communicate uncertainty."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "根据问题选择图表并表达不确定性。",
+              "en": "Choose charts for the question and communicate uncertainty."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "analysis.visualization",
+          "responsibilityIds": [
+            "r3"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "data/statistical-analysis",
+          "rank": 4,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "对分布、趋势与假设进行有条件的统计解释。",
+            "en": "Interpret distributions, trends and hypotheses with appropriate statistical caveats."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "对分布、趋势与假设进行有条件的统计解释。",
+              "en": "Interpret distributions, trends and hypotheses with appropriate statistical caveats."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "analysis.data",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b05",
+          "candidateId": "data/sql-queries",
+          "rank": 5,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "需要数据库分析时按方言编写和检查查询。",
+            "en": "Write and review dialect-appropriate SQL for database analysis."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "需要数据库分析时按方言编写和检查查询。",
+              "en": "Write and review dialect-appropriate SQL for database analysis."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "analysis.data",
+          "responsibilityIds": [
+            "r1",
+            "r2"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "分析含缺失与重复值的虚构任务数据，输出可复现统计、图表与局限。",
+        "en": "Analyze synthetic task data with missing/duplicate values and produce reproducible statistics, charts and limitations."
+      },
+      "taskValidation": "not-run"
+    },
+    {
+      "roleId": "amble.devops",
+      "name": {
+        "zh-CN": "DevOps 工程师",
+        "en": "DevOps Engineer"
+      },
+      "definitionRef": "expert-roles.authoring.json#amble.devops",
+      "status": "proposal",
+      "bindings": [
+        {
+          "id": "b01",
+          "candidateId": "eng/deployment-pipeline-design",
+          "rank": 1,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "定义构建、检查、分阶段发布与回滚流程。",
+            "en": "Define build, verification, staged delivery and rollback workflows."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "定义构建、检查、分阶段发布与回滚流程。",
+              "en": "Define build, verification, staged delivery and rollback workflows."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "operations.delivery",
+          "responsibilityIds": [
+            "r1",
+            "r3"
+          ]
+        },
+        {
+          "id": "b02",
+          "candidateId": "eng/incident-runbook-templates",
+          "rank": 2,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "把检测、排查、缓解与恢复步骤写成可执行手册。",
+            "en": "Document detection, diagnosis, mitigation and recovery procedures."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "把检测、排查、缓解与恢复步骤写成可执行手册。",
+              "en": "Document detection, diagnosis, mitigation and recovery procedures."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "operations.recovery",
+          "responsibilityIds": [
+            "r2",
+            "r3"
+          ]
+        },
+        {
+          "id": "b03",
+          "candidateId": "eng/slo-implementation",
+          "rank": 3,
+          "defaultSelected": true,
+          "priority": "core",
+          "reason": {
+            "zh-CN": "定义 SLI/SLO、错误预算和可验证的告警依据。",
+            "en": "Define SLIs/SLOs, error budgets and measurable alert conditions."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "定义 SLI/SLO、错误预算和可验证的告警依据。",
+              "en": "Define SLIs/SLOs, error budgets and measurable alert conditions."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "operations.observability",
+          "responsibilityIds": [
+            "r2"
+          ]
+        },
+        {
+          "id": "b04",
+          "candidateId": "eng/github-actions-templates",
+          "rank": 4,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "项目采用 GitHub Actions 时提供具体流水线模板。",
+            "en": "Use concrete workflow templates for projects using GitHub Actions."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "项目采用 GitHub Actions 时提供具体流水线模板。",
+              "en": "Use concrete workflow templates for projects using GitHub Actions."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "operations.delivery",
+          "responsibilityIds": [
+            "r1"
+          ]
+        },
+        {
+          "id": "b05",
+          "candidateId": "eng/k8s-manifest-generator",
+          "rank": 5,
+          "defaultSelected": false,
+          "priority": "recommended",
+          "reason": {
+            "zh-CN": "明确使用 Kubernetes 时生成并检查配置。",
+            "en": "Generate and review manifests when Kubernetes is explicitly in use."
+          },
+          "usage": {
+            "mode": "when-relevant",
+            "when": {
+              "zh-CN": "明确使用 Kubernetes 时生成并检查配置。",
+              "en": "Generate and review manifests when Kubernetes is explicitly in use."
+            },
+            "whenNot": {
+              "zh-CN": "不适用于当前任务时不强行使用；不得覆盖既有项目约束、权限或用户决定。",
+              "en": "Skip when irrelevant; preserve project constraints, permissions and user decisions."
+            }
+          },
+          "capabilityId": "operations.delivery",
+          "responsibilityIds": [
+            "r1",
+            "r3"
+          ]
+        }
+      ],
+      "representativeTask": {
+        "zh-CN": "为测试 API 设计构建、发布、观测与回滚演练，默认不操作生产。",
+        "en": "Design build, delivery, observability and rollback drills for a test API without operating production."
+      },
+      "taskValidation": "not-run"
+    }
+  ],
+  "notSelected": [
+    {
+      "repository": "anthropics/skills",
+      "skills": [
+        "docx",
+        "xlsx"
+      ],
+      "reason": "Pinned skill frontmatter declares Proprietary and the license contains redistribution restrictions; excluded from the public default catalog."
+    },
+    {
+      "repository": "anthropics/skills",
+      "skills": [
+        "doc-coauthoring"
+      ],
+      "reason": "No license file in the pinned skill directory; root README says many skills are Apache without a clear per-skill grant. Prefer GitHub documentation-writer for this proposal; publication review needed before reuse."
+    },
+    {
+      "repository": "obra/superpowers",
+      "skills": [
+        "brainstorming",
+        "using-superpowers",
+        "subagent-driven-development"
+      ],
+      "reason": "Broad workflow gates and orchestration overlap with Ambleloft; do not bind the whole framework by default."
+    }
+  ]
+}

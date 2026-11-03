@@ -1,0 +1,118 @@
+{
+  "checkedAt": "2026-11-01T13:50:24.154Z",
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "hostStatus": "ready",
+  "hostRuleVersion": "discussion-host-v2",
+  "hostReply": "已具备整理为可编辑任务提案的条件：范围、接口/页面交付、远端核查、测试与验收边界都已明确。本轮不邀请专家分析，也不开始实施。下一步请使用“整理并检查任务 / Prepare and check tasks”，检查任务范围、负责人、项目归属、依赖顺序和验收证据；确认无误后再保存或启动计划。",
+  "guideStatus": "ready",
+  "guideRuleVersion": "task-creation-guide-v3",
+  "summary": "已具备足够信息生成可编辑任务提案：先确定接口契约，再核查远端环境，随后并行推进远端服务与本地网页实现，最后分“远端服务独立验证”和“本地端到端证据整理”两步验证；用户保留最终验收。下一步请审阅下方负责人、项目归属、依赖和验收标准，然后保存计划或确认启动；本轮不实施。",
+  "questions": [],
+  "missing": [],
+  "packages": [
+    {
+      "id": "contract",
+      "mode": "discussion",
+      "title": "定义接口契约",
+      "instruction": "基于已确认范围，整理创建报修、按创建时间倒序列表、单条详情和健康检查的请求与响应、字段校验、错误语义及只读“待处理”状态约定，形成供前后端共同引用的契约版本。仅做分析，不修改项目。",
+      "deliverables": "一页接口契约，包含端点、请求与响应示例、缺失必填字段的可识别校验错误、记录不存在错误、健康检查、只读“待处理”状态约定，以及环境假设和待核查项。",
+      "acceptance": "契约覆盖设备名称、地点、问题描述三个必填字段；列表明确按创建时间倒序；详情包含记录标识、只读状态“待处理”和创建时间；接口不包含登录和状态流转；错误语义可供前后端一致实现。",
+      "verification": "接口工程师对照已确认需求逐项自查，并请界面工程师确认契约可实现；确认记录附在契约交付说明中。",
+      "constraints": "不得把端口、运行时或目录情况写成已确认事实；不开始编码、部署或邀请专家分析。",
+      "ownerId": "api",
+      "projectId": null,
+      "dependencies": [],
+      "documentRefs": []
+    },
+    {
+      "id": "remote-env",
+      "mode": "work",
+      "title": "核查远端测试环境与端口占用",
+      "instruction": "在远端测试项目中通过 SSH 做非破坏性核查：运行时及版本、代码和数据目录候选与权限、目标端口监听和占用情况、SSH 隧道联调前提。若端口冲突或权限不足，报告并选择不冲突的回环端口或请求用户决定，不得停止其他服务。",
+      "deliverables": "环境核查报告，包含执行命令与输出摘要、运行时版本、选定目录、端口状态、隧道前置条件、冲突项和建议。",
+      "acceptance": "报告足以支持后续选定一个可用回环端口和具备写权限的目录；每项结论有命令输出或等价证据；明确未停止或影响其他服务。",
+      "verification": "在远端只读检查运行时、目录和端口状态，复跑关键命令并在报告中附证据；若发生冲突，确认替代端口仍仅绑定回环地址。",
+      "constraints": "仅限该项目授权范围；只做非破坏性核查；不得停止其他服务、改动系统级配置或暴露公网。",
+      "ownerId": "api",
+      "projectId": "remote-api",
+      "dependencies": [
+        "contract"
+      ],
+      "documentRefs": []
+    },
+    {
+      "id": "remote-api-impl",
+      "mode": "work",
+      "title": "实现远端接口与 SQLite 持久化",
+      "instruction": "按契约实现创建、倒序列表、详情和健康检查接口，使用 SQLite 持久化；服务只绑定核查确认的回环地址和端口，提供启动方式并记录部署步骤。测试至少覆盖必填校验、创建后查询和重启后读取。",
+      "deliverables": "接口代码、自动化测试、部署记录，以及契约联调和重启持久化的样例证据。",
+      "acceptance": "所有端点按契约工作；缺失必填字段返回可识别错误；列表按创建时间倒序；不存在的记录返回未找到；重启后已有记录仍可通过列表和详情读取；健康检查成功；服务仅绑定回环地址；部署记录包含启动方式、端口、隧道联调结果和重启证据。",
+      "verification": "运行自动化测试；通过 SSH 隧道执行创建、列表、详情和健康检查；重启服务后再次查询同一记录；检查实际监听地址和端口；保存命令与输出。",
+      "constraints": "不得监听公网地址；不得停止其他服务；端口冲突时报告并以选定回环端口重试，无法满足时标记阻塞；不添加登录或状态流转。",
+      "ownerId": "api",
+      "projectId": "remote-api",
+      "dependencies": [
+        "contract",
+        "remote-env"
+      ],
+      "documentRefs": []
+    },
+    {
+      "id": "local-ui-impl",
+      "mode": "work",
+      "title": "实现本地报修网页",
+      "instruction": "按契约实现本地网页：提交设备名称、地点和问题描述；提供必填校验和请求失败提示；创建成功后刷新倒序列表；支持查看详情；状态仅只读显示“待处理”；接口基址可配置以便通过 SSH 隧道联调。",
+      "deliverables": "网页代码、界面测试和本地运行说明。",
+      "acceptance": "三个字段均为必填并有可见校验；列表严格按创建时间倒序；详情展示与契约一致；状态不可编辑且仅显示“待处理”；网络或接口失败有可见提示；接口基址可通过配置切换到隧道地址；不包含登录或状态操作。",
+      "verification": "运行界面测试或构建检查；使用契约样例或本地模拟检查表单校验、倒序、详情和错误提示；保存测试输出。真实接口联调由后续端到端验证任务覆盖。",
+      "constraints": "仅修改本地网页项目；不臆造后端字段；不硬编码远端地址；不实现登录和状态流转。",
+      "ownerId": "ui",
+      "projectId": "local-ui",
+      "dependencies": [
+        "contract"
+      ],
+      "documentRefs": []
+    },
+    {
+      "id": "remote-service-qa",
+      "mode": "work",
+      "title": "独立验证远端服务与重启持久化",
+      "instruction": "在远端测试项目中按验收标准独立核验接口实现，不修改实现代码；通过 SSH 验证契约、必填校验、创建后查询、重启持久化、健康检查和回环监听，整理证据与偏差，并在完成重启验证后保持服务可继续联调。",
+      "deliverables": "远端验证报告，包含测试清单、命令与输出、隧道联调结果、重启前后记录对照、已知问题和偏差。",
+      "acceptance": "每项要求均有可复核证据；重启前创建的记录在重启后仍可按列表和详情读取；必填校验与记录不存在错误可复现；健康检查成功；实际监听仅为回环地址；发现偏差时明确说明，不宣称通过。",
+      "verification": "独立重跑自动化测试并执行最小接口调用序列；重启服务验证持久化；检查监听地址；保留日志、输出版本和执行时间。",
+      "constraints": "只验证不改实现；不得停止其他服务；若环境冲突导致无法验证，报告阻塞证据和未覆盖项。",
+      "ownerId": "qa",
+      "projectId": "remote-api",
+      "dependencies": [
+        "remote-api-impl"
+      ],
+      "documentRefs": []
+    },
+    {
+      "id": "e2e-verification",
+      "mode": "work",
+      "title": "整理本地界面与隧道端到端验收证据",
+      "instruction": "在远端验证任务完成重启并保持服务运行后，使用本地网页经 SSH 隧道逐项检查必填校验、创建后列表倒序、详情、只读“待处理”和请求失败提示，并确认网页可读取重启后仍存在的记录；汇总供用户验收的证据，不代替用户验收。",
+      "deliverables": "端到端验证报告、截图或操作日志、测试输出、已知问题和验收证据索引。",
+      "acceptance": "必填字段缺失均有可见拦截；创建后列表按时间倒序且详情可打开；状态仅只读显示“待处理”；失败场景有提示；远端重启后已有记录仍可被网页读取；每项结论有证据，已知问题如实列出，并明确等待用户最终验收。",
+      "verification": "运行界面测试或构建检查；经 SSH 隧道实际提交并查询记录；对照列表顺序和详情内容；模拟缺字段和网络失败；引用远端验证报告中的重启前后证据并记录网页读取结果。",
+      "constraints": "仅修改本地网页项目中的测试或证据文件；不在本任务中重启或修改远端服务；不得停止其他服务；不把验证报告表述为用户已验收。",
+      "ownerId": "qa",
+      "projectId": "local-ui",
+      "dependencies": [
+        "local-ui-impl",
+        "remote-service-qa"
+      ],
+      "documentRefs": []
+    }
+  ],
+  "executions": 0,
+  "scope": "Real configured model + host + task guide + isolated SQLite. Fictional input only; no real project access or execution. Browser UI is verified separately using fixtures.",
+  "savedPlanStatus": "draft",
+  "reviewNotes": [
+    "Host-to-guide transition, single-project work packages, valid owners, persisted draft plan and zero execution verified.",
+    "Semantic review remains necessary: the contract package still suggests asking the UI expert to confirm feasibility without a separate assigned review package. This is a proposal to review, not evidence that this consultation occurred or will be automatically scheduled."
+  ]
+}

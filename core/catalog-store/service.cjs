@@ -4,7 +4,9 @@ const crypto = require('node:crypto');
 const {PackageStore} = require('../extensions/packages.cjs');
 const {validateSource, verifyEnvelope, checkCompatibility, hashDirectory, MAX_CATALOG, MAX_ARTIFACT} = require('./catalog.cjs');
 
-async function loadSources(file = process.env.AMBLE_STORE_SOURCE_FILE) {
+// Packaged and source builds share the pinned, public Store. An explicit local
+// configuration still overrides it; invalid overrides fail closed.
+async function loadSources(file = process.env.AMBLE_STORE_SOURCE_FILE ?? path.join(__dirname, 'sources.json')) {
   if (!file) return [];
   const stat = await fs.stat(file); if (!stat.isFile() || stat.size > 16000) throw Error('STORE_INVALID_SOURCE_FILE');
   const values = JSON.parse(await fs.readFile(file, 'utf8'));
@@ -68,7 +70,7 @@ class CatalogStore {
     });
     this.mappingQueue = action.catch(() => {}); return action;
   }
-  saveMapping(row) { return this.changeMappings(rows => [...rows.filter(value => value.sourceId !== row.sourceId || value.listingId !== row.listingId), row]); }
+  saveMapping(row) { return this.changeMappings(rows => [...rows.filter(value => value.sourceId !== row.sourceId || value.listingId !== row.listingId || value.releaseVersion !== row.releaseVersion), row]); }
   async recoverMappings() {
     const rows = await this.mappings(); if (!rows.some(row => row.pending)) return rows;
     const skills = await this.skills.list(), recovered = [];

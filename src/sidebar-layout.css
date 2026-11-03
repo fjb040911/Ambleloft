@@ -9,13 +9,16 @@
 .sidebar .sidebar-bottom { padding-top:12px; }
 .sidebar .sidebar-footer { margin-top:0; }
 .nav-caption.caption-action { display:flex; align-items:center; gap:4px; margin:0 0 4px; padding:0 4px; }
-.nav-group-toggle { flex:1; min-width:0; min-height:32px; gap:8px; padding:4px 6px; border:0; background:transparent; text-align:left; cursor:pointer; }
+.nav-group-toggle { flex:1; min-width:0; min-height:32px; gap:8px; padding:4px 6px; font-size:12px; font-weight:500; color:var(--muted); border:0; background:transparent; text-align:left; cursor:pointer; }
 .nav-group-toggle > svg { flex:none; width:16px; height:16px; padding:0; }
-.nav-group-toggle > svg:last-child { width:12px; height:12px; }
+.nav-group-toggle > .nav-group-chevron { width:12px; height:12px; margin-left:auto; }
+.nav-group-toggle[aria-expanded=true] > .nav-group-chevron { transform:rotate(90deg); }
+.nav-group-toggle > span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nav-group-toggle:hover { background:var(--hover); color:var(--text); }
+.workspace-group-title { padding:8px 24px 12px; font-size:14px; font-weight:600; line-height:20px; }
 .nav-empty { color:var(--muted); font-size:.75rem; line-height:1.5; margin:6px 10px 8px; }
 .project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:32px; border-radius:var(--radius-list); }
 .project-tree-row:hover,.tree-task:hover { background:var(--hover); }
-.sidebar :is(.project-tree-row,.tree-task,.extension-nav-row).selected { background:var(--navigation-selected); color:var(--text); }
 .project-tree-name,.tree-task > button:first-child { min-height:32px; min-width:0; flex:1; background:transparent; color:inherit; }
 .project-tree-name > .project-tree-title,.tree-task > button > span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sidebar .tree-toggle { display:flex; align-items:center; justify-content:center; flex:none; width:28px; min-width:28px; height:32px; padding:4px; }
@@ -60,3 +63,40 @@
 .project-tree-name .ssh-nav-state[data-state=connected] { color:var(--green-text); }
 .project-tree-name .ssh-nav-state:is([data-state=error],[data-state=authentication],[data-state=untrusted],[data-state=missing],[data-state=unavailable]) { color:var(--orange-text); }
 @container project-navigation (max-width:240px) { .project-tree-name .ssh-nav-state > span { display:none; } }
+
+/* macOS-inspired navigation: quiet surfaces, readable hierarchy and soft selection. */
+.workspace-navigation {
+ --nav-selection:color-mix(in srgb,var(--accent) 17%,var(--sidebar));
+ --nav-pressed:color-mix(in srgb,var(--accent) 24%,var(--sidebar));
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ font-optical-sizing:auto;
+}
+.workspace-navigation .project-tree-row { margin-top:.5rem; }
+.workspace-navigation .project-tree-name { font-weight:500; }
+.workspace-navigation :is(.project-tree-row,.tree-task) { min-height:2.25rem; border-radius:.5rem; }
+.workspace-navigation :is(.project-tree-name,.tree-task > button:first-child) { min-height:2.25rem; }
+.workspace-navigation .project-children { margin-block:.125rem .625rem; }
+.workspace-navigation .tree-task > button > span:nth-child(2) { font-size:.875rem; line-height:1.5; }
+.workspace-navigation :is(.project-tree-row,.tree-task).selected {
+ background:var(--nav-selection); color:var(--text);
+}
+.workspace-navigation .tree-task small { color:var(--secondary); }
+.workspace-navigation :is(.project-tree-row,.tree-task):has(> [data-slot="sidebar-menu-button"]:active, > .tree-toggle:active) { background:var(--nav-pressed); }
+.workspace-navigation .tree-toggle { background:transparent; }
+.workspace-navigation .tree-toggle { color:var(--secondary); }
+.workspace-navigation .project-tree-row.selected .tree-toggle { color:var(--accent); }
+.workspace-navigation .nav-group-toggle { font-size:.75rem; font-weight:600; color:var(--secondary); }
+.workspace-navigation .extension-navigation { padding:.25rem 0 1rem; }
+.workspace-navigation .extension-nav-search { margin:0 0 1rem; }
+.workspace-navigation .extension-nav-caption { padding:0 .5rem; margin-bottom:.5rem; font-size:.75rem; font-weight:600; color:var(--secondary); }
+.workspace-navigation .extension-nav-row[data-slot] { padding:.5rem; gap:.625rem; }
+.workspace-navigation .extension-nav-copy small { line-height:1.5; font-weight:400; color:var(--secondary); }
+.workspace-navigation :is(.workforce-nav-row,.extension-nav-row) > svg { color:var(--accent); }
+@media(pointer:coarse) {
+ .workspace-navigation :is(.project-tree-row,.tree-task),
+ .workspace-navigation .tree-task > button:first-child,
+ .workspace-navigation :is(.workforce-nav-row,.extension-nav-row)[data-slot] { min-height:2.75rem; }
+}
+@media(prefers-contrast:more) {
+ .workspace-navigation :is(.workforce-nav-row,.extension-nav-row)[data-active] { outline:1px solid currentColor; outline-offset:-1px; }
+}

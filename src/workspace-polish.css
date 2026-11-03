@@ -205,19 +205,11 @@ body { font-optical-sizing: auto; }
   content: ''; position: absolute; inset: -16px 0 auto; height: 16px; pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--surface));
 }
-.turn-duration, .process-entry > small,
-.delivered-file small, .activity-clock, .activity-history-toggle { font-size: var(--text-caption); }
 .question-card { padding: 1rem; }
 .question-card label { min-height: 36px; padding: .375rem .5rem; border-radius: var(--radius-control); line-height: 1.6; }
 .question-card label:has(input:checked) { background: var(--selection); }
 .question-card label:focus-within { outline: 2px solid var(--focus); }
 .question-options small { font-size: var(--text-caption); }
-.delivered-file { flex-wrap: wrap; gap: .75rem; }
-.delivered-file > div { flex-basis: 180px; }
-.delivered-file-name { display: inline-block; max-width: 100%; padding: 3px 0; text-align: left; font-size: .875rem; font-weight: 600; line-height: 1.6; color: var(--accent); overflow-wrap: anywhere; border-radius: var(--radius-xs); }
-.delivered-file-name:hover { text-decoration: underline; text-underline-offset: 3px; }
-.delivered-file-name:active { background: var(--selection); }
-.process-entry.is-live details > summary { color: var(--accent); }
 
 /* Files: keep manipulation attached to the pointer rather than chasing a transition. */
 .file-panel-slot { transition-timing-function: var(--motion-settle); }
@@ -378,7 +370,6 @@ body { font-optical-sizing: auto; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .conversation-dock::before { display: none; }
-  .process-heading { background: var(--sidebar); }
 }
 @media (prefers-contrast: more) {
   .content-page, .settings-workspace, .conversation-page, .project-file-panel, .modal {
@@ -392,12 +383,6 @@ body { font-optical-sizing: auto; }
 .artifact-text-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; font: .8125rem/1.7 ui-monospace, monospace; }
 
 /* Composer controls keep their targets usable when context or model names grow. */
-.composer-option-row { flex-wrap: wrap; row-gap: .5rem; }
-.composer-model-anchor { max-width: 100%; }
-.composer-model-anchor > button { max-width: 100%; }
-.composer-chips { max-height: 112px; overflow-y: auto; padding: 3px; }
-.composer-chips button { max-width: 100%; min-height: 32px; }
-.composer-chips button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-options > small[role='alert'] { display: block; padding: .5rem; color: var(--orange-text); line-height: 1.6; }
 .composer button:disabled { transform: none; filter: none; }
 @container (max-width: 420px) {
@@ -512,9 +497,7 @@ body { font-optical-sizing: auto; }
 
 
 /* InputGroup owns input, focus and button styling. Keep only composer layout here. */
-.composer { min-width: 0; margin: 0; }
-.composer .chat-composer-input { line-height: 1.6; font-size: .9375rem; }
-.composer-bottom { align-items: flex-end; gap: .5rem; }
+.composer { min-width:min(300px,100%); margin:0; }
 .composer-hint { margin: .375rem .25rem 0; min-height: 1rem; font-size: .6875rem; line-height: 1.5; color: var(--secondary); }
 .composer-option-row { font-weight: normal; }
 .message.assistant { padding: 4px 0 6px; }
@@ -599,7 +582,6 @@ body { font-optical-sizing: auto; }
 .settings-workspace .settings-sidebar nav { padding-top:12px; }
 
 /* Keep composer actions on one line; model names yield space before controls do. */
-.composer { min-width:min(300px,100%); }
 .composer .composer-option-row { flex-wrap:nowrap; gap:4px; }
 .composer .composer-option-row > button { flex-shrink:0; }
 .composer .composer-model-anchor { flex:1; min-width:0; display:flex; justify-content:flex-end; }

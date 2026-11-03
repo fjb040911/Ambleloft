@@ -1,3 +1,4 @@
+import {CodeBlock as TraceCodeBlock,CodeBlockContent} from './components/ui/code-block';
 import {Button} from './components/ui/button';
 import {t, useLanguage} from './i18n';
 import { memo, type ReactNode, isValidElement } from 'react';
@@ -28,10 +29,10 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const format = ['mermaid', 'echarts', 'drawio', 'svg'].includes(language) ? language : language === 'xml' && /<mx(GraphModel|file)/.test(source) ? 'drawio' : '';
   return format ? <Artifact language={format} source={source} /> : <div className="code-block"><div className="artifact-toolbar"><span>{language}</span><CopyButton text={source} /></div><pre>{children}</pre></div>;
 }
-export default memo(function Markdown({ text, resourceUrl, onFileLink }: { text: string; resourceUrl?:(path:string)=>string; onFileLink?:(path:string)=>void }) {
+export default memo(function Markdown({ text, resourceUrl, onFileLink, context }: { context?:'trace'; text: string; resourceUrl?:(path:string)=>string; onFileLink?:(path:string)=>void }) {
   useLanguage();
-  return <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { strict: false, trust: false }], [rehypeHighlight, { detect: false }]]} components={{
-    pre: CodeBlock,
+  return <div className={context==='trace'?"trace-markdown text-sm leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_blockquote]:border-l [&_blockquote]:pl-3 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold":"markdown"}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { strict: false, trust: false }], [rehypeHighlight, { detect: false }]]} components={{
+    pre: context==='trace'?({children})=><TraceCodeBlock size="sm"><CodeBlockContent wrap className="max-h-64">{textOf(children).replace(/\n$/,'')}</CodeBlockContent></TraceCodeBlock>:CodeBlock,
     a: ({ children, href }) => /^https?:\/\//i.test(href || '') ? <a href={href} title={href} target="_blank" rel="noopener noreferrer" onClick={event => { if (window.desktop) { event.preventDefault(); void window.desktop.openLink(href!).catch(() => {}); } }}>{children}</a> : onFileLink && href ? <a href={href} title={href} onClick={event=>{event.preventDefault();onFileLink(href);}}>{children}</a> : <span title={href}>{children}</span>,
     img: ({ alt, src }) => resourceUrl && src && !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(src) ? <img src={resourceUrl(src)} alt={alt||''} loading="lazy"/> : <span className="image-placeholder">{t('图片：')}{alt || t('未命名')}{t('（外部图片暂不自动加载）')}</span>,
     table: ({ children }) => <div className="table-scroll"><table>{children}</table></div>,

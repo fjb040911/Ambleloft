@@ -3,7 +3,7 @@ import {t} from './i18n';
 import type {AgentRun} from './types';
 import {Questionnaire,QuestionnaireActions,QuestionnaireChoice,QuestionnaireChoiceDescription,QuestionnaireChoices,QuestionnaireError,QuestionnaireInput,QuestionnaireItem,QuestionnaireNext,QuestionnairePrevious,QuestionnaireProgress,QuestionnaireSubmit,QuestionnaireTitle} from './components/ui/questionnaire';
 
-function QuestionForm({runId,request}:{runId:string;request:NonNullable<AgentRun['questions']>[number]}) {
+function QuestionForm({runId,request,compact=false}:{compact?:boolean;runId:string;request:NonNullable<AgentRun['questions']>[number]}) {
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  const [answered,setAnswered]=useState<Record<string,boolean>>({});
  const [item,setItem]=useState(request.questions[0]?.id);
@@ -19,9 +19,9 @@ function QuestionForm({runId,request}:{runId:string;request:NonNullable<AgentRun
   try{if(!window.desktop)throw new Error(t('请在桌面版中回答'));await window.desktop.answerRun({runId,requestId:request.id,answers});}
   catch(e){setError((e as Error).message);}finally{setBusy(false);}
  }
- return <Questionnaire className="task-questionnaire" aria-label={t('任务澄清')} aria-busy={busy} items={items} item={item} onItemChange={setItem} onSubmit={event=>void submit(event)}>
- <div className="flex items-center justify-between gap-3"><strong>{t('等待你的回答')}</strong>{items.length>1&&<QuestionnaireProgress aria-live="polite">{t('问题')} {index+1} / {items.length}</QuestionnaireProgress>}</div>
- <div className="questionnaire-body">
+ return <Questionnaire className="task-questionnaire" data-layout={compact?'inline':'card'} aria-label={t('任务澄清')} aria-busy={busy} items={items} item={item} onItemChange={setItem} onSubmit={event=>void submit(event)}>
+ {(!compact||items.length>1)&&<div className="flex items-center justify-between gap-3">{!compact&&<strong>{t('等待你的回答')}</strong>}{items.length>1&&<QuestionnaireProgress aria-live="polite">{t('问题')} {index+1} / {items.length}</QuestionnaireProgress>}</div>}
+ <div className={compact?"min-w-0":"questionnaire-body"}>
  {request.questions.map(q=><QuestionnaireItem key={q.id} name={q.id} required disabled={busy} onStatusChange={status=>setAnswered(previous=>previous[q.id]===(status==='answered')?previous:{...previous,[q.id]:status==='answered'})}>
  <QuestionnaireTitle>{q.question}</QuestionnaireTitle>
  <QuestionnaireChoices>
@@ -35,4 +35,4 @@ function QuestionForm({runId,request}:{runId:string;request:NonNullable<AgentRun
  <QuestionnaireActions><QuestionnairePrevious disabled={busy}>{t('上一题')}</QuestionnairePrevious><QuestionnaireNext disabled={busy||!answered[item]}>{t('下一题')}</QuestionnaireNext><QuestionnaireSubmit disabled={busy||request.questions.some(q=>!answered[q.id])}>{t(busy?'正在提交…':'提交回答')}</QuestionnaireSubmit></QuestionnaireActions>
  </Questionnaire>;
 }
-export default function QuestionQueue({run,selectedId}:{run:AgentRun;selectedId?:string|null}) {return <div className="question-queue">{run.questions?.map(request=><div key={run.id+request.id} hidden={selectedId!==undefined&&selectedId!==request.id}><QuestionForm runId={run.id} request={request}/></div>)}</div>;}
+export default function QuestionQueue({run,selectedId,compact=false}:{compact?:boolean;run:AgentRun;selectedId?:string|null}) {return <div className={compact?"min-w-0":"question-queue"}>{run.questions?.map(request=><div key={run.id+request.id} hidden={selectedId!==undefined&&selectedId!==request.id}><QuestionForm compact={compact} runId={run.id} request={request}/></div>)}</div>;}

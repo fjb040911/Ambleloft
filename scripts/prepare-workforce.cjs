@@ -1,0 +1,5 @@
+const {build}=require('esbuild');const fs=require('node:fs/promises'),path=require('node:path');
+(async()=>{const result=await build({entryPoints:['core/workforce/graph.cjs'],outfile:'build/workforce-graph.cjs',bundle:true,platform:'node',target:'node22',format:'cjs',metafile:true});
+ const packages=new Set();for(const file of Object.keys(result.metafile.inputs)){const match=file.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/);if(match)packages.add(match[1]);}
+ const licenses=[];for(const name of [...packages].sort()){const root=path.join('node_modules',name),pkg=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8'));const files=await fs.readdir(root);const license=files.find(f=>/^licen[cs]e(?:\.|$)/i.test(f));licenses.push(`${name} ${pkg.version}\n${license?await fs.readFile(path.join(root,license),'utf8'):pkg.license||'See package repository'}`);}
+ await fs.writeFile('build/workforce-graph-LICENSES.txt',licenses.join('\n\n'));console.log('Workforce graph bundled with dependency licenses');})().catch(e=>{console.error(e);process.exitCode=1;});

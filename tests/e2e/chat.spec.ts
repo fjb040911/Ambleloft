@@ -63,15 +63,15 @@ test('user bubble contains only text and each finished turn has its own duration
  await prepare(page,'第一轮回答');
  await expect(page.locator('.message.user .message-label')).toHaveCount(0);
  await expect(page.locator('.message.user')).toHaveText('请展示结果');
- await expect(page.locator('.turn-duration')).toHaveCount(0);
+ await expect(page.locator('.trace-duration')).toHaveCount(0);
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;
   run.messages[0].timing={startedAt:'2026-09-10T00:00:00Z',durationMs:65000,outcome:'completed'};
   run.messages.push({id:'u2',role:'user',text:'第二个问题',timing:{startedAt:'2026-09-10T00:02:00Z',durationMs:5000,outcome:'completed'}},{id:'a2',role:'assistant',text:'第二轮回答'});
   run.status='completed';run.approvals=[];(window as any).__emit();
  });
- await expect(page.locator('.turn-duration')).toHaveText(['用时 1 分 5 秒','用时 0 分 5 秒']);
- const items=await page.locator('.conversation-turn .turn-duration, .conversation-turn article').allTextContents();
+ await expect(page.locator('.trace-duration')).toHaveText(['用时 1 分 5 秒','用时 0 分 5 秒']);
+ const items=await page.locator('.conversation-turn .trace-duration, .conversation-turn [data-slot=message], .conversation-turn .message.user').allTextContents();
  expect(items.findIndex(t=>t.includes('用时 1 分 5 秒'))).toBeLessThan(items.findIndex(t=>t.includes('第一轮回答')));
 });
 
@@ -126,25 +126,30 @@ test('progress stays until completion and can be reopened alongside plans and fi
  });
  const panel=page.getByRole('region',{name:'任务执行过程'});
  await expect(panel).toContainText('有个 Python 3.11 可用。');
+ await panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]').click();
  await expect(panel).toContainText('Downloading python-docx');
- await panel.locator('summary').click();
  await expect(panel.locator('.thinking-window pre')).toHaveText('检查可用环境');
  await expect(panel.locator('.process-milestone')).toHaveText(['有个 Python 3.11 可用。','安装进行中，等待完成。']);
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='completed';(window as any).__emit();});
- await expect(panel.locator('summary')).toBeVisible();
+ await expect(panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]')).toBeVisible();
  await expect(panel.locator('.process-entry-title')).toHaveText(['思考摘要']);
  await expect(panel.getByRole('button',{name:/查看已完成操作/})).toHaveCount(0);
- await expect(page.locator('.message.assistant')).toHaveCount(0);
+ await expect(page.locator('[data-slot=message][data-align=start]')).toHaveCount(0);
  await page.screenshot({path:'test-results/turn-process.png'});
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages.push({id:'f',role:'assistant',phase:'final_answer',text:'## 文档已完成'});(window as any).__emit();});
  await expect(panel).toBeVisible();await expect(page.locator('.markdown h2')).toHaveText('文档已完成');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.plans=[{turnKey:'u',explanation:'整理结果',steps:[{step:'调研资料',status:'completed'},{step:'撰写文档',status:'inProgress'}]}];(window as any).__emit();});
  await expect(page.getByLabel('任务清单')).toContainText('撰写文档');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.artifacts=[{id:'file',turnKey:'u',kind:'delivery',name:'report.md',path:'/fixture/report.md',size:1024}];(window as any).desktop.accessArtifact=async()=>({name:'report.md',text:'# 可预览的结果'});(window as any).__emit();});
- await expect(panel).toHaveCount(0);await expect(page.getByLabel('交付文件')).toContainText('report.md');
+ await expect(panel).toBeHidden();await expect(page.getByLabel('交付文件')).toContainText('report.md');
  await page.locator('.turn-progress-toggle').click();await expect(panel).toBeVisible();await expect(page.getByLabel('任务清单')).toContainText('未确认完成');await expect(panel.locator('.thinking-window')).toHaveCount(0);await expect(panel).not.toContainText('检查可用环境');
- await expect(panel.locator('summary')).toBeVisible();await expect(panel).toContainText('有个 Python 3.11 可用。');await expect(panel).toContainText('安装进行中，等待完成。');
- await page.locator('.turn-progress-toggle').click();await expect(panel).toHaveCount(0);await expect(page.locator('.markdown h2')).toHaveText('文档已完成');await expect(page.getByLabel('交付文件')).toBeVisible();await page.locator('.turn-progress-toggle').click();
+ const traceBody=panel.locator('.process-milestone .trace-markdown').first();
+ expect(await traceBody.evaluate(el=>getComputedStyle(el).fontSize)).toBe(await panel.locator('[data-slot=trace-line]').first().evaluate(el=>getComputedStyle(el).fontSize));
+ const traceDetail=page.locator('[data-slot=trace-collapsible-content-inner]').first();
+ expect(await traceDetail.evaluate(el=>getComputedStyle(el).borderLeftColor)).not.toBe(await traceDetail.evaluate(el=>getComputedStyle(el).color));
+
+ await expect(panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]')).toBeVisible();await expect(panel).toContainText('有个 Python 3.11 可用。');await expect(panel).toContainText('安装进行中，等待完成。');
+ await page.locator('.turn-progress-toggle').click();await expect(panel).toBeHidden();await expect(page.locator('.markdown h2')).toHaveText('文档已完成');await expect(page.getByLabel('交付文件')).toBeVisible();await page.locator('.turn-progress-toggle').click();
  await page.getByRole('button',{name:'预览 report.md',exact:true}).click();await expect(page.getByRole('dialog')).toContainText('可预览的结果');await page.getByRole('button',{name:'关闭',exact:true}).click();
  await page.screenshot({path:'test-results/progress-completed.png'});
  expect(await page.evaluate(()=>(window as any).__demoRun.messages.length)).toBe(5);
@@ -158,7 +163,7 @@ test('unclassified providers resolve on completion; failed turns retain their pr
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='failed';run.error='安装失败';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeVisible();await expect(page.getByRole('alert')).toContainText('安装失败');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.error='';run.messages.push({id:'last',role:'assistant',text:'安装完成，文档已生成。'});(window as any).__emit();});
- await expect(page.locator('.process-panel')).toHaveCount(0);await expect(page.locator('.message.assistant')).toContainText('安装完成，文档已生成。');
+ await expect(page.locator('.process-panel')).toBeHidden();await expect(page.locator('[data-slot=message][data-align=start]')).toContainText('安装完成，文档已生成。');
 });
 
 test('persistent activity survives folded logs and distinguishes silence, tools and approval',async({page})=>{
@@ -166,7 +171,7 @@ test('persistent activity survives folded logs and distinguishes silence, tools 
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'执行任务',timing:{startedAt:new Date().toISOString()}}];run.lastEventAt=new Date().toISOString();(window as any).__emit();});
  const activity=page.getByLabel('当前运行状态');await expect(activity).toContainText('任务进行中，可随时停止');
  await expect(page.getByLabel('任务执行过程')).toContainText('尚未收到模型的过程内容');
- await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toHaveCount(0);await expect(activity).toBeVisible();
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeHidden();await expect(activity).toBeVisible();
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.tools=[{id:'t',turnKey:'u',type:'commandExecution',label:'python report.py',status:'inProgress',detail:''}];(window as any).__emit();});
  await expect(activity).toContainText('report.py');await expect(activity.locator('[data-slot=spinner]')).toBeVisible();
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.lastEventAt=new Date(Date.now()-30000).toISOString();(window as any).__emit();});
@@ -191,14 +196,14 @@ test('thinking scrolls independently, disappears after interruption, and tools s
  await window.evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
  await page.evaluate(()=>{(window as any).__demoRun.messages[2].text+='\n更多分析';(window as any).__emit();});
  await expect.poll(()=>window.evaluate(el=>el.scrollTop)).toBe(0);
- const tool=page.locator('.process-entry details summary');
+ const tool=page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]');
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
- await expect(tool.locator('.activity-spinner')).toBeVisible();
+ await expect(tool.locator('[data-slot=spinner]')).toBeVisible();
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
  await page.screenshot({path:'test-results/process-abc.png'});
  await page.evaluate(()=>{(window as any).__demoRun.status='interrupted';(window as any).__emit();});
- await expect(page.locator('.process-panel')).toHaveCount(0);await page.locator('.turn-progress-toggle').click();
+ await expect(page.locator('.process-panel')).toBeHidden();await page.locator('.turn-progress-toggle').click();
  await expect(window).toHaveCount(0);await expect(page.locator('.process-milestone')).toBeVisible();await expect(tool).toBeVisible();
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
  await page.locator('.turn-progress-toggle').click();await page.locator('.turn-progress-toggle').click();await expect(window).toHaveCount(0);
@@ -238,12 +243,12 @@ test('older turns load by cursor and long history retains mounted state with bro
  await expect.poll(async()=>Math.abs(await anchorTop()-14)).toBeLessThan(1);
  expect(await page.evaluate(()=>(window as any).__historyInput.before)).toBe('u30');
  await expect(page.locator('.conversation-turn')).toHaveCount(60);
- expect(await page.locator('.message.assistant').count()).toBeGreaterThanOrEqual(30);
+ expect(await page.locator('[data-slot=message][data-align=start]').count()).toBeGreaterThanOrEqual(30);
  await expect(page.locator('[data-turn-id="u0"] > div')).toHaveCSS('content-visibility','auto');
  await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first().click();
- await expect(page.locator('[data-turn-id="u0"] .message.assistant')).toBeVisible();
+ await expect(page.locator('[data-turn-id="u0"] [data-slot=message][data-align=start]')).toBeVisible();
  await page.getByRole('button',{name:'回到最新消息'}).click();
- await expect(page.locator('[data-turn-id="u59"] .message.assistant')).toBeVisible();
+ await expect(page.locator('[data-turn-id="u59"] [data-slot=message][data-align=start]')).toBeVisible();
 });
 
 
@@ -480,7 +485,7 @@ test('turn file changes open a readonly panel with text diff and Office status',
  await panel.getByRole('button',{name:'展开面板'}).click();await expect(panel).toHaveClass(/expanded/);
  await page.setViewportSize({width:800,height:600});
  const close=panel.getByRole('button',{name:'关闭变更面板'});const rect=await close.boundingBox();expect(rect!.x+rect!.width).toBeLessThanOrEqual(800);
- await close.click();await expect(panel).toHaveCount(0);await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
+ await close.click();await expect(panel).toBeHidden();await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
 });
 
 test('finished turns expose copy, optional skills and their own model',async({page})=>{
@@ -588,12 +593,12 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  for(const name of ['项目','任务']){
   const heading=page.getByRole('button',{name,exact:true});
   await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');
-  await expect(page.locator('.message.assistant')).toContainText('保持当前任务');
+  await expect(page.locator('[data-slot=message][data-align=start]')).toContainText('保持当前任务');
   await heading.click();await expect(heading).toHaveAttribute('aria-expanded','true');
  }
 });
 
-test('loading markers shimmer while running and respect reduced motion and approval pauses',async({page})=>{
+test('activity and thinking indicators animate only while running and respect reduced motion',async({page})=>{
  await prepare(page,'完成');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;
@@ -615,10 +620,14 @@ test('loading markers shimmer while running and respect reduced motion and appro
   run.messages.push({id:'thinking',role:'assistant',kind:'reasoning',reasoningFormat:'text',text:'正在分析输入'});
   (window as any).__emit();
  });
- const thinking=page.locator('.process-entry.reasoning [data-slot="marker"]');
+ const thinking=page.locator('.process-entry.reasoning [data-slot="trace-line"]');
+ const thinkingTitle=thinking.locator('[data-slot="trace-title"]');
  await expect(thinking).toContainText('思考过程');
- await expect(thinking.locator('.shimmer')).toBeVisible();
- await expect(thinking.locator('.shimmer')).toHaveCSS('animation-name','tw-shimmer');
+ await expect(thinking).toHaveAttribute('data-status','running');
+ await expect(thinkingTitle).toBeVisible();
+ await expect(thinkingTitle).toHaveCSS('animation-name','tw-shimmer');
+ const thinkingPosition=await thinkingTitle.evaluate(el=>getComputedStyle(el).backgroundPosition);
+ await expect.poll(()=>thinkingTitle.evaluate(el=>getComputedStyle(el).backgroundPosition)).not.toBe(thinkingPosition);
  await page.screenshot({path:'test-results/loading-marker.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
  expect(await shimmer.evaluate(el=>getComputedStyle(el).backgroundImage)).not.toBe('none');
@@ -626,8 +635,15 @@ test('loading markers shimmer while running and respect reduced motion and appro
  await page.emulateMedia({reducedMotion:'reduce'});
  await expect(status.locator('.shimmer')).toHaveCSS('animation-name','none');
  await expect(status.locator('[data-slot="spinner"]')).toHaveCSS('animation-name','none');
+ await expect(thinkingTitle).toHaveCSS('animation-name','none');
+ await expect(thinking.locator('[data-slot="spinner"]')).toHaveCSS('animation-name','none');
+ expect(await thinkingTitle.evaluate(el=>getComputedStyle(el).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
  expect(await status.locator('.shimmer').evaluate(el=>getComputedStyle(el).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await expect(thinkingTitle).toHaveCSS('animation-name','tw-shimmer');
  await page.evaluate(()=>{(window as any).__demoRun.status='waiting';(window as any).__emit();});
+ await expect(thinkingTitle).toHaveCSS('animation-name','none');
+ await expect(thinking.locator('[data-slot="spinner"]')).toHaveCount(0);
  await expect(status).toContainText('需要你批准');
  await expect(page.locator('[data-slot="marker"] .shimmer')).toHaveCount(0);
  await expect(page.locator('[data-slot="marker"] [data-slot="spinner"]')).toHaveCount(0);
@@ -660,15 +676,15 @@ test('tool summaries describe actions while commands and output remain expandabl
  {id:'compact',turnKey:'u',type:'contextCompaction',label:'上下文压缩',status:'inProgress',detail:''}
  ];(window as any).__emit();});
  const rows=page.locator('.process-entry.commandExecution');
- await expect(rows.nth(0).locator('summary')).toContainText('读取文件');
- await expect(rows.nth(0).locator('summary')).toContainText('design.md');
- await expect(rows.nth(0).locator('summary')).not.toContainText('/bin/zsh');
+ await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).toContainText('读取文件');
+ await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).toContainText('design.md');
+ await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).not.toContainText('/bin/zsh');
  await expect(rows.nth(0).locator('pre').first()).not.toBeVisible();
- await rows.nth(0).locator('summary').click();
+ await rows.nth(0).locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(rows.nth(0).getByLabel('执行命令')).toHaveText("/bin/zsh -lc 'cat docs/design.md'");
  await expect(rows.nth(0).locator('pre').last()).toHaveText('file contents');
- await expect(rows.nth(1).locator('summary')).toContainText('读取文件');
- await expect(rows.nth(2).locator('summary')).toContainText('运行命令');
+ await expect(rows.nth(1).locator('[data-slot=trace-collapsible-trigger]')).toContainText('读取文件');
+ await expect(rows.nth(2).locator('[data-slot=trace-collapsible-trigger]')).toContainText('运行命令');
  await expect(page.locator('.process-entry.contextCompaction')).toContainText('正在压缩上下文');
  await page.evaluate(()=>{(window as any).__demoRun.tools.at(-1).status='completed';(window as any).__emit();});
  await expect(page.locator('.process-entry.contextCompaction')).toContainText('上下文已压缩');
@@ -758,7 +774,7 @@ test('terminal approval copies exact commands and retains failed decisions for r
  await prepare(page,'等待授权');
  const card=page.getByRole('region',{name:'执行授权'});
  await card.getByRole('button',{name:'复制命令'}).click();expect(await page.evaluate(()=>(window as any).__copiedText)).toBe('echo approved');
- await card.getByRole('button',{name:'查看请求详情'}).click();const dialog=page.getByRole('dialog',{name:'授权请求详情'});await expect(dialog).toContainText('echo approved');await expect(dialog).toContainText('不会开启完全访问');await page.keyboard.press('Escape');
+ await card.getByRole('button',{name:'查看请求详情'}).click();const details=card.getByRole('region',{name:'授权请求详情'});await expect(details).toContainText('echo approved');await expect(details).toContainText('不会开启完全访问');await expect(page.getByRole('dialog')).toHaveCount(0);await card.getByRole('button',{name:'收起请求详情'}).click();
  await page.evaluate(()=>{const w=window as any;w.__originalApprove=w.desktop.approveRun;w.__approvalCalls=0;w.desktop.approveRun=()=>{w.__approvalCalls++;return new Promise((resolve,reject)=>{w.__rejectApproval=reject;});};});
  await card.getByRole('button',{name:'拒绝',exact:true}).click();await expect(card.getByRole('button',{name:'正在拒绝…'})).toBeDisabled();await expect(card.getByRole('button',{name:'批准本次'})).toBeDisabled();expect(await page.evaluate(()=>(window as any).__approvalCalls)).toBe(1);
  await page.evaluate(()=>(window as any).__rejectApproval(new Error('连接暂时中断')));await expect(card.getByRole('alert')).toContainText('连接暂时中断');await expect(card.getByRole('button',{name:'拒绝',exact:true})).toBeEnabled();
@@ -774,12 +790,12 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  const strong=reply.locator('strong');
  expect(await strong.evaluate(el=>getComputedStyle(el).fontSize)).toBe(await strong.evaluate(el=>getComputedStyle(el.parentElement!).fontSize));
  const row=page.locator('.process-entry.commandExecution');
- await row.locator('summary').focus();await page.keyboard.press('Enter');
+ await expect(row.locator('[data-slot=trace-collapsible-trigger]')).toHaveAttribute('aria-expanded','true');
  await expect(row.getByLabel('工具输出')).toBeVisible();
  for(const width of [1240,640]){
   await page.setViewportSize({width,height:840});
   await row.scrollIntoViewIfNeeded();
-  const boxes=await row.locator('summary').evaluate(el=>{const title=el.querySelector('.activity-tool-title')!.getBoundingClientRect();const status=el.querySelector('.activity-tool-status')!.getBoundingClientRect();return {right:title.right,left:status.left,overflow:el.scrollWidth-el.clientWidth};});
+  const boxes=await row.locator('[data-slot=trace-collapsible-trigger]').evaluate(el=>{const title=el.querySelector('.activity-tool-title')!.getBoundingClientRect();const status=el.querySelector('.activity-tool-status')!.getBoundingClientRect();return {right:title.right,left:status.left,overflow:el.scrollWidth-el.clientWidth};});
   expect(boxes.right).toBeLessThanOrEqual(boxes.left);expect(boxes.overflow).toBeLessThanOrEqual(1);
   const activity=await page.locator('.run-activity').evaluate(el=>({label:el.querySelector('[data-slot="marker-content"]')!.getBoundingClientRect().bottom,detail:el.querySelector('.activity-target')!.getBoundingClientRect().top}));
   expect(activity.detail).toBeGreaterThanOrEqual(activity.label);
@@ -787,7 +803,7 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  }
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
  await page.screenshot({path:'test-results/chat-layout-dark.png'});
- await row.locator('summary').focus();await page.keyboard.press('Enter');
+ await row.locator('[data-slot=trace-collapsible-trigger]').focus();await page.keyboard.press('Enter');
  await expect(row.getByLabel('工具输出')).not.toBeVisible();
 });
 
@@ -814,12 +830,12 @@ test('running summary exposes the current step while failed tools automatically 
  await prepare(page,'');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=run.messages.slice(0,1);run.plans=[{turnKey:'u',explanation:'执行计划',steps:[{step:'读取资料',status:'completed'},{step:'生成报告',status:'inProgress'}]}];run.tools=[{id:'report',turnKey:'u',type:'commandExecution',label:'python report.py',status:'inProgress',detail:'Generating report'}];(window as any).__emit();});
  await expect(page.locator('.turn-progress-toggle')).toContainText('生成报告');await expect(page.locator('.turn-progress-toggle')).toContainText('1/2');await expect(page.locator('.process-panel')).toBeVisible();
- await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toHaveCount(0);
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeHidden();
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='failed';(window as any).__demoRun.tools[0].detail='Report generation failed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeVisible();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
- await page.locator('.process-entry.commandExecution summary').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
+ await page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.tools[0].status='completed';(window as any).__emit();});
- await expect(page.locator('.process-panel')).toHaveCount(0);await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.process-panel')).toBeHidden();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
 });
 
 test('queued execution follows application language',async({page})=>{
@@ -847,4 +863,34 @@ test('approval card keeps command and decisions readable across themes and narro
  expect(await englishCard.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/approval-english-dark.png'});
  await page.setViewportSize({width:360,height:740});await expect(englishCard.getByRole('button',{name:'Approve once',exact:true})).toBeVisible();expect(await englishCard.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.approvals[0].method='item/fileChange/requestApproval';run.approvals[0].detail='{}';(window as any).__emit();});await expect(englishCard).toContainText('Allow file changes?');
+});
+
+test('Trace history preserves tool disclosure and isolates terminal and markdown styles',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='running';r.approvals=[];r.messages=[{id:'u',role:'user',text:'检查过程'},{id:'p',role:'assistant',phase:'commentary',text:'## 步骤\n\n**检查**\n\n- 项目\n\n> 引用',order:1}];r.tools=[{id:'tool',turnKey:'u',type:'commandExecution',label:'node check.js',status:'inProgress',detail:'first output',order:2}];(window as any).__emit();});
+ const entry=page.locator('.process-entry.commandExecution');
+ await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await expect(entry.locator('[data-slot=code-block]')).toHaveCount(2);
+ await entry.getByRole('button').click();
+ await page.evaluate(()=>{(window as any).__demoRun.tools[0].detail+='\nnext output';(window as any).__emit();});
+ await expect(entry.getByLabel('工具输出')).toBeHidden();
+ await entry.getByRole('button').click();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeHidden();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await expect(page.locator('.process-panel .markdown')).toHaveCount(0);
+ await expect(page.locator('.trace-markdown h2')).toHaveText('步骤');
+ await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='completed';r.tools[0].status='completed';(window as any).__emit();});
+ await expect(page.locator('.process-panel')).toBeHidden();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await expect.poll(()=>page.locator('.turn-progress > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-content]').evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(100);
+ await page.screenshot({path:'test-results/trace-history.png',animations:'disabled'});
+});
+
+test('Trace tools distinguish denied, pending and unfinished historical calls',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=['declined','pending','inProgress','failed'].map((status,i)=>({id:String(i),turnKey:'u',type:'commandExecution',label:'command '+i,status,detail:i===3?'failure':''}));(window as any).__emit();});
+ const rows=page.locator('.process-entry.commandExecution');
+ await expect(rows.nth(0)).toContainText('已拒绝');await expect(rows.nth(0).getByRole('button')).toHaveCount(0);
+ await expect(rows.nth(2).locator('[data-slot=trace-line]')).toHaveAttribute('data-status','error');
+ await expect(rows.nth(3).locator('[data-slot=trace-line]')).toHaveAttribute('data-status','error');
 });
