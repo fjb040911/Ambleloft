@@ -93,3 +93,7 @@
 @media (prefers-color-scheme: dark) {
  :root:not([data-theme="light"]):not([data-theme="dark"]) .composer { --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); }
 }
+
+/* Bubble border defaults without global Tailwind Preflight. */
+[data-slot^="bubble"] { border-style:solid; border-width:0; border-color:var(--border); }
+.file-chat-floating [data-message-role="user"] { margin-top:8px; }

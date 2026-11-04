@@ -9,6 +9,7 @@ for(const [width,en,dark] of [[1440,false,false],[390,false,true],[1440,true,tru
  const graph=page.locator('.wf-plan-graph');const node=graph.locator('[data-package-id="bundle"]');
  if(width===390){await expect.poll(async()=>Number((await graph.getByRole('status',{name:en?'Zoom level':'缩放比例'}).textContent())?.replace('%',''))).toBeGreaterThanOrEqual(80);await graph.scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/workforce-graph-initial-${en}.png`});}
  await expect(node).toContainText(en?'Awaiting prerequisites':'等待前置验收');await expect(node).toContainText('发布文案');
+ await graph.getByRole('button',{name:en?'Read at 100 percent':'原始比例阅读'}).click();await expect(graph.getByRole('status',{name:en?'Zoom level':'缩放比例'})).toHaveText('100%');
  await graph.getByRole('button',{name:en?'Zoom in graph':'放大流程图'}).click();await graph.getByRole('button',{name:en?'Fit graph':'查看全图'}).click();
  await graph.getByRole('button',{name:new RegExp(en?'Locate attention':'定位待处理')}).click();await expect(graph.locator('[data-package-id="copy"]')).toBeFocused();
  await graph.locator('[data-package-id="copy"]').press('ArrowRight');await expect(graph.locator('[data-package-id="testing"]')).toBeFocused();
@@ -28,7 +29,7 @@ test('selection survives refresh and graph gestures cannot mutate dependencies',
  await page.getByRole('button',{name:'返回流程图',exact:true}).click();
  const node=graph.locator('[data-package-id="copy"]');await node.press('Delete');await expect(graph.locator('.wf-graph-node')).toHaveCount(3);const box=(await node.boundingBox())!;await page.mouse.move(box.x+30,box.y+30);await page.mouse.down();await page.mouse.move(box.x+90,box.y+80,{steps:8});await page.mouse.up();expect(await graph.locator('.react-flow__node').evaluateAll(els=>els.map(el=>(el as HTMLElement).style.transform))).toEqual(positions);expect(await mutationCalls(page)).toEqual([]);
 });
-test('status updates retain positions, viewport, selected task and per-plan view preference',async({page})=>{
+test('status updates retain positions, viewport, selected task across navigation',async({page})=>{
  await page.setViewportSize({width:1600,height:1000});await enter(page);await tasks(page);
  const graph=page.locator('.wf-plan-graph'),nodes=graph.locator('.react-flow__node');
  await graph.getByRole('button',{name:'放大流程图'}).click();
@@ -37,8 +38,6 @@ test('status updates retain positions, viewport, selected task and per-plan view
  await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.plans[0].packages[0].status='accepted';qa.emit();});
  await expect(graph.locator('[data-package-id="bundle"]')).toContainText('前置任务已全部验收');expect(await nodes.evaluateAll(els=>els.map(el=>(el as HTMLElement).style.transform))).toEqual(positions);expect(await graph.locator('.react-flow__viewport').getAttribute('style')).toBe(viewport);
  await expect(graph.locator('.wf-graph-edge')).toHaveClass(/is-accepted/);
- await page.getByRole('button',{name:'列表',exact:true}).click();await expect(page.locator('.wf-work-item')).toHaveCount(3);await page.getByRole('tab',{name:'概览',exact:true}).click();await page.getByRole('tab',{name:'任务',exact:true}).click();await expect(page.locator('.wf-work-item')).toHaveCount(3);
- await page.getByRole('button',{name:'流程图',exact:true}).click();await expect(graph.locator('.react-flow__viewport')).toHaveAttribute('style',viewport!);
  await page.getByRole('tab',{name:'概览',exact:true}).click();await page.getByRole('button',{name:'查看流程图',exact:true}).click();await expect(graph).toBeVisible();expect(await mutationCalls(page)).toEqual([]);
 });
 test('waiting authorization is not an ordinary dependency wait; archived graph still works',async({page})=>{
@@ -49,8 +48,8 @@ test('waiting authorization is not an ordinary dependency wait; archived graph s
 });
 test('thirty nodes, multiple plans, missing associations and refresh failure retain readable state',async({page})=>{
  await enter(page);await page.evaluate(()=>{const qa=(window as any).spaceQA,p=structuredClone(qa.snapshot.plans[0]),definition=p.packages[0].definition;p.id='large-plan';p.name='批量联调';p.packages=Array.from({length:30},(_,i)=>({id:'task-'+i,definition:{...definition,id:'task-'+i,title:'工作包 '+i,ownerId:'removed',projectId:'removed',dependencies:i<3?[]:['task-'+(i-3)]},status:'pending',attempts:[]}));qa.snapshot.plans.push(p);qa.emit();});
- await page.getByRole('tab',{name:'任务',exact:true}).click();const large=page.locator('#wf-plan-large-plan'),first=page.locator('#wf-plan-launch');await expect(large.locator('.wf-graph-node')).toHaveCount(30);await expect(large.locator('.react-flow__edge')).toHaveCount(27);await expect(large.locator('.wf-graph-node').first()).toContainText('专家已移除');await expect(large.locator('.wf-graph-node').first()).toContainText('项目已移除');
- await large.getByRole('button',{name:'列表',exact:true}).click();await expect(large.locator('.wf-work-item')).toHaveCount(30);await expect(first.locator('.wf-graph-node')).toHaveCount(3);
+ await page.getByRole('tab',{name:'任务',exact:true}).click();await page.getByRole('combobox',{name:'选择协作计划'}).selectOption('large-plan');const large=page.locator('#wf-plan-large-plan'),first=page.locator('#wf-plan-launch');await expect(large.locator('.wf-graph-node')).toHaveCount(30);await expect(large.locator('.react-flow__edge')).toHaveCount(27);await expect(large.locator('.wf-graph-node').first()).toContainText('专家已移除');await expect(large.locator('.wf-graph-node').first()).toContainText('项目已移除');
+ await page.getByRole('combobox',{name:'选择协作计划'}).selectOption('launch');await expect(large).toHaveCount(0);await expect(first.locator('.wf-graph-node')).toHaveCount(3);
  await page.evaluate(()=>{window.desktop!.spaces!.snapshot=async()=>{throw Error('测试：刷新暂不可用');};(window as any).spaceQA.emit();});await expect(page.getByRole('alert')).toContainText('测试：刷新暂不可用');await expect(first.locator('.wf-graph-node')).toHaveCount(3);expect(await mutationCalls(page)).toEqual([]);
 });
 test('repair-workflow fork and join remains read-only and exposes every blocking dependency',async({page})=>{
@@ -60,10 +59,10 @@ test('repair-workflow fork and join remains read-only and exposes every blocking
  const detail=page.getByRole('region',{name:'任务详情与验收'});await expect(detail.getByRole('region',{name:'调度依据'})).toContainText('远端环境核验 · 执行失败');await page.screenshot({path:'/tmp/workforce-repair-graph-detail.png'});await detail.getByRole('button',{name:'返回流程图'}).click();await graph.getByRole('button',{name:'查看全图'}).click();await graph.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/workforce-repair-graph.png'});expect(await mutationCalls(page)).toEqual([]);
 });
 test('unsaved plan preview displays live dependencies, detects cycles and never saves',async({page})=>{
- await enter(page);await tasks(page);await page.evaluate(()=>{const qa=(window as any).spaceQA;const p=qa.snapshot.plans[0];localStorage.setItem('workforce-plan-draft:space:new',JSON.stringify({revision:0,value:{name:'预览计划',goal:'验证依赖',packages:p.packages.map((w:any)=>w.definition)}}));});
- await page.getByRole('button',{name:'制定协作计划',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'继续分配工作'}).click();await dialog.getByText('预览依赖流程',{exact:false}).click();
+ await enter(page);await tasks(page);await page.evaluate(()=>{const qa=(window as any).spaceQA;const p=qa.snapshot.plans[0];p.status='paused';qa.emit();localStorage.setItem('workforce-plan-draft:space:launch',JSON.stringify({revision:p.revision,value:{name:'预览计划',goal:'验证依赖',packages:p.packages.map((w:any)=>w.definition)}}));});
+ await page.getByRole('button',{name:'发布准备的计划操作',exact:true}).click();await page.getByRole('menuitem',{name:'修订计划',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'继续分配工作'}).click();await dialog.getByText('预览依赖流程',{exact:false}).click();
  const graph=dialog.locator('.wf-plan-graph');await expect(graph.locator('.wf-graph-node')).toHaveCount(3);await expect(graph.locator('.wf-graph-node-status').first()).toHaveText('计划预览');await expect(graph.locator('.is-accepted')).toHaveCount(0);
- await dialog.locator('.wf-package-editor').first().locator('summary').click();await dialog.locator('.wf-package-editor').first().getByRole('checkbox',{name:'发布包整理',exact:true}).check();
+ if(await dialog.locator('.wf-package-editor').first().getAttribute('open')===null)await dialog.locator('.wf-package-editor').first().locator('summary').click();await dialog.locator('.wf-package-editor').first().getByRole('checkbox',{name:'发布包整理',exact:true}).check();
  await expect(graph.getByRole('alert')).toContainText('存在循环依赖');await expect(dialog.getByRole('button',{name:'检查计划',exact:true})).toBeDisabled();await expect(graph.locator('.wf-graph-canvas')).toHaveCount(0);expect(await mutationCalls(page)).toEqual([]);
 });
 test('long titles and 200% font scaling preserve graph controls and complete detail',async({page})=>{
@@ -132,11 +131,12 @@ test('running nodes expose persistent input requests and clear them on input eve
  await page.evaluate(()=>{
   const qa=(window as any).spaceQA;qa.inputPending=true;qa.inputListeners=new Set();
   const p=qa.snapshot.plans[0].packages[1];p.status='running';p.attempts=[{id:'input-attempt',runId:'input-run'}];
-  const old=window.desktop!.getRunPage!;window.desktop!.getRunPage=async input=>({...await old(input),id:input.id,status:'running',approvals:[],questions:[]});
-  window.desktop!.inputs={list:async({runId}:any)=>({policy:{paused:false,generation:0},deliveries:[],requests:runId==='input-run'&&qa.inputPending?[{id:'form',state:'pending'}]:[]}),onChanged:(fn:any)=>{qa.inputListeners.add(fn);return()=>qa.inputListeners.delete(fn);}} as any;qa.emit();
+  const old=window.desktop!.getRunPage!;window.desktop!.getRunPage=async input=>({...await old({id:'evidence'}),id:input.id,status:'running',approvals:[],questions:[]});
+  window.desktop!.inputs={list:async({runId}:any)=>({policy:{paused:false,generation:0},deliveries:[],requests:runId==='input-run'&&qa.inputPending?[{id:'form',state:'pending',runId:'input-run',conversationId:'input-run',originKey:'model',revision:1,reason:'请补充环境信息',draft:{},draftTouched:false,locale:'zh-CN',createdAt:'2026-11-03',template:{version:1,id:'form-template',title:'环境信息',steps:[{id:'step',title:'补充',fields:[{name:'answer',label:'环境地址',type:'text'}]}],submit:{kind:'chat',label:'提交'}}}]:[]}),onChanged:(fn:any)=>{qa.inputListeners.add(fn);return()=>qa.inputListeners.delete(fn);}} as any;qa.emit();
  });
  await tasks(page);const graph=page.locator('.wf-plan-graph'),node=graph.locator('[data-package-id="bundle"]');
  await expect(node).toContainText('待补充信息');await expect(node).toHaveAttribute('data-tone','attention');
+ await expect(page.getByRole('region',{name:'计划控制与待处理'}).locator('summary')).toContainText('待授权或补充 (1)');
  const locate=graph.getByRole('button',{name:/定位待处理/});await expect(locate).toContainText('3');
  await locate.click();await locate.click();await expect(node).toBeFocused();
  await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.inputPending=false;qa.inputListeners.forEach((fn:any)=>fn({runId:'input-run'}));});

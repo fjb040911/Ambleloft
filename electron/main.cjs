@@ -224,7 +224,7 @@ app.whenReady().then(async () => {
   spaceService=new SpaceService({directory:app.getPath('userData'),database,workspace:store,workforce:workforceService,runtime,publish:()=>windows.broadcast(profileId,'workforce:event')});
   runtime.spaces=spaceService;
   ipcMain.handle('spaces:exportDocument',async(event,input)=>{const owner=authorize(event),doc=await spaceService.document(input);const result=await hostDialog('showSaveDialog',owner.window,{title:'导出文档',defaultPath:doc.title.replace(/[\\/:*?"<>|]/g,'-')+'.md',filters:[{name:'Markdown',extensions:['md']}]});if(result.canceled||!result.filePath)return null;await require('node:fs/promises').writeFile(result.filePath,doc.body+'\n\n<!-- Space document '+doc.id+' v'+doc.revision+' sha256:'+doc.hash+'; exported copy, not synchronized. -->\n');return {path:result.filePath};});
-  for(const action of ['stopDiscussionHost','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','saveTaskDraft','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','knowledge'])ipcMain.handle('spaces:'+action,(event,input)=>{authorize(event);return spaceService[action](input);});
+  for(const action of ['stopDiscussionHost','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','knowledge'])ipcMain.handle('spaces:'+action,(event,input)=>{authorize(event);return spaceService[action](input);});
   ipcMain.handle('spaces:controlPlan',(event,input)=>{const owner=authorize(event);checkRuntime();return spaceService.controlPlan(input,{owner});});
   ipcMain.handle('spaces:coordinateDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.coordinateDiscussion(input,{owner});});
   ipcMain.handle('spaces:start',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.start(input,{owner});});
@@ -357,6 +357,15 @@ app.whenReady().then(async () => {
     try { return await probeProvider(await provider.secret(id)); } finally { configBusy = false; }
   });
   ipcMain.handle('agent:edit', (event, input) => { authorize(event); checkRuntime(); return runtime.edit(input).then(list=>list.map(summary)); });
+  ipcMain.handle('agent:export-diagnostics', async (event, input) => {
+    const owner=authorize(event);checkRuntime();
+    const run=runtime.runs.find(r=>r.id===input?.id);if(!run)throw new Error('任务不存在');
+    const report=require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion());
+    const result=await hostDialog('showSaveDialog',owner.window,{title:input?.language==='en'?'Export diagnostic data':'导出诊断数据',defaultPath:'ambleloft-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json',filters:[{name:'JSON',extensions:['json']}]});
+    if(result.canceled||!result.filePath)return null;
+    await require('node:fs/promises').writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
+    return {saved:true};
+  });
   ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在');if(project.type==='ssh')throw Error('请通过项目文件面板浏览远端目录'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
   ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
   const searchSnapshots=new Map();

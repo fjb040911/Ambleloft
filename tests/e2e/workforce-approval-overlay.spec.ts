@@ -19,6 +19,16 @@ for(const width of [1280,390])test(`approval float preserves layout and navigati
  await surface.getByRole('button',{name:'收起请求',exact:true}).click();await expect(approve).toBeHidden();
  expect(await input.boundingBox()).toEqual(initial);expect(await page.locator('.wf-node-conversation').boundingBox()).toEqual(chat);
  await page.getByRole('button',{name:'查看并处理',exact:true}).click();await expect(approve).toBeVisible();
+ // Long requests leave a visible part of the transcript and follow composer growth.
+ const panel=await surface.boundingBox();expect(panel!.y).toBeGreaterThan(chat!.y+20);
+ const messageHeight=await page.locator('.conversation-scroll').evaluate(el=>el.clientHeight);
+ await input.fill(Array.from({length:7},(_,i)=>`草稿第 ${i} 行`).join('\n'));
+ await expect.poll(async()=>{const panel=await surface.boundingBox(),dock=await page.locator('.conversation-dock').boundingBox();return Math.abs(panel!.y+panel!.height-(dock!.y+4));}).toBeLessThan(2);
+ await surface.getByRole('button',{name:'收起请求',exact:true}).focus();await page.keyboard.press('Escape');
+ await expect(approve).toBeHidden();await expect(surface.getByRole('button',{name:'查看并处理',exact:true})).toBeFocused();
+ await input.fill('可以继续编辑草稿');
+ await expect.poll(()=>page.locator('.conversation-scroll').evaluate(el=>el.clientHeight)).toBe(messageHeight);
+ await surface.getByRole('button',{name:'查看并处理',exact:true}).click();
  await page.screenshot({path:`/tmp/approval-float-${width}.png`});
  await page.getByRole('button',{name:'返回流程图',exact:true}).click();await expect(page.locator('.wf-graph-node[data-package-id="copy"]')).toBeVisible();
  await expect(page.locator('.wf-request-surface.is-floating')).toHaveCount(0);

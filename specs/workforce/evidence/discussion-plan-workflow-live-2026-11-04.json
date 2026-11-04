@@ -1,0 +1,61 @@
+{
+  "scope": "Real configured models and application services; synthetic tasks in isolated SQLite databases. No project access, runtime execution, or deployment. Browser behavior tested separately.",
+  "results": [
+    {
+      "provider": "pro6000",
+      "model": "DeepSeek-v4-flash",
+      "passed": true,
+      "executions": 0,
+      "steps": [
+        {
+          "action": "plan",
+          "status": "ready",
+          "elapsedMs": 135249
+        },
+        {
+          "action": "reply",
+          "status": "completed",
+          "elapsedMs": 12443
+        },
+        {
+          "action": "plan",
+          "status": "ready",
+          "elapsedMs": 129824
+        },
+        {
+          "action": "status",
+          "status": "completed",
+          "elapsedMs": 36761
+        }
+      ]
+    },
+    {
+      "provider": "DeepSeek",
+      "model": "deepseek-flash",
+      "passed": true,
+      "executions": 0,
+      "steps": [
+        {
+          "action": "plan",
+          "status": "ready",
+          "elapsedMs": 21510
+        },
+        {
+          "action": "reply",
+          "status": "completed",
+          "elapsedMs": 9633
+        },
+        {
+          "action": "plan",
+          "status": "ready",
+          "elapsedMs": 19466
+        },
+        {
+          "action": "status",
+          "status": "completed",
+          "elapsedMs": 10240
+        }
+      ]
+    }
+  ]
+}

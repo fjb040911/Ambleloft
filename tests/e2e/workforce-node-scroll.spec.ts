@@ -22,6 +22,11 @@ for(const width of [1280,390])test(`node messages scroll while composer stays vi
  await page.waitForTimeout(150);expect(await review.boundingBox()).toEqual(bounds);
  await input.fill('补充说明');await expect(input).toHaveValue('补充说明');
  const group=input.locator('xpath=..');await input.focus();
+ // No keyboard-help row or page footer should consume the message viewport.
+ const groupBox=await group.boundingBox();
+ expect(900-groupBox!.y-groupBox!.height).toBeLessThanOrEqual(16);
+ expect(await input.evaluate(el=>{const hint=document.getElementById(el.getAttribute('aria-describedby')!);return hint?.getBoundingClientRect().height;})).toBeLessThanOrEqual(1);
+
  await expect.poll(()=>group.evaluate(el=>getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 3px');
  // The outer focus ring must fit every clipping ancestor, including the dock.
  const clipped=await group.evaluate(el=>{const box=el.getBoundingClientRect();const failures:string[]=[];for(let parent=el.parentElement;parent;parent=parent.parentElement){const style=getComputedStyle(parent);if(!['hidden','auto','scroll','clip'].includes(style.overflowX))continue;const rect=parent.getBoundingClientRect();if(box.left-3<rect.left+parent.clientLeft-0.5||box.right+3>rect.left+parent.clientLeft+parent.clientWidth+0.5)failures.push(parent.className);}return failures;});

@@ -42,7 +42,7 @@ function configurationArgs(config, home, extensionMcp, platform = process.platfo
     'mcp_servers.atelier_progress.args': [runtime.packaged ? path.join(runtime.resourcesPath, 'tools/plan-server.cjs') : path.join(__dirname, 'plan-server.cjs')],
     'mcp_servers.atelier_progress.env.ELECTRON_RUN_AS_NODE': '1',
     'features.default_mode_request_user_input': true,
-    'analytics.enabled': false, web_search: config.webSearch || 'disabled', 'features.multi_agent': false,
+    'analytics.enabled': false, web_search: config.webSearch || 'disabled', 'features.multi_agent': true,
     'shell_environment_policy.inherit': 'all', 'shell_environment_policy.include_only': shellEnvironmentKeys(platform), 'shell_environment_policy.exclude': ['ATELIER_PROVIDER_KEY','AMBLE_EXTENSION_AUTH'],
   };
   if(config.remoteOnly){values['features.shell_tool']=false;values['features.unified_exec']=false;values['features.shell_snapshot']=false;values['features.browser_use']=false;values['features.computer_use']=false;}

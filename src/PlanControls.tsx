@@ -6,9 +6,9 @@ import {useConfirm} from './Confirmation';
 import type {WorkPlan} from './workforce-types';
 import type {ProviderCatalog} from './types';
 
-export default function PlanControls({plan,catalog,readOnly,busy,onOpenTask,select,change}:{plan:WorkPlan;catalog:ProviderCatalog;readOnly:boolean;busy:boolean;onOpenTask(id:string):void;select(id:string):void;change(permission:'default'|'full'):Promise<void>}){
+export default function PlanControls({requestKinds,plan,catalog,readOnly,busy,onOpenTask,select,change}:{requestKinds:Record<string,string>;plan:WorkPlan;catalog:ProviderCatalog;readOnly:boolean;busy:boolean;onOpenTask(id:string):void;select(id:string,detailTab?:'review'):void;change(permission:'default'|'full'):Promise<void>}){
  const L=useCopy(),confirm=useConfirm();
- const waiting=plan.packages.filter(p=>p.status==='waiting'),reviews=plan.packages.filter(p=>p.status==='review');
+ const waiting=plan.packages.filter(p=>p.status==='waiting'||!!requestKinds[p.attempts.at(-1)?.runId||'']&&!['unknown','loading'].includes(requestKinds[p.attempts.at(-1)?.runId||''])),reviews=plan.packages.filter(p=>p.status==='review');
  return <section className="wf-plan-command-center" aria-label={L('计划控制与待处理','Plan controls and requests')}>
   <label className="wf-actions">{L('计划授权模式','Plan permission')}
    <NativeSelect aria-label={L('计划授权模式','Plan permission')} disabled={readOnly||busy} value={plan.permission||'default'} onChange={e=>{const permission=e.target.value as 'default'|'full';void(async()=>{
@@ -17,9 +17,9 @@ export default function PlanControls({plan,catalog,readOnly,busy,onOpenTask,sele
    })();}}><NativeSelectOption value="default">{L('按需审批','Ask when needed')}</NativeSelectOption><NativeSelectOption value="full">{L('完全访问','Full access')}</NativeSelectOption></NativeSelect>
   </label>
   <p className="wf-muted">{L('SSH 后续工具请求即时生效；本地当前执行保持原模式，新执行使用新模式。已有请求仍需单独处理。','Future SSH requests use the new mode immediately. Active local executions retain their policy until a new execution. Pending requests still need a decision.')}</p>
-  <details open={waiting.length>0?true:undefined}><summary>{L('待处理节点','Nodes needing input')} ({waiting.length}) · {L('待验收','Awaiting review')} ({reviews.length})</summary>
+  <details open={waiting.length>0?true:undefined}><summary>{L('待授权或补充','Approval or input needed')} ({waiting.length}) · {L('待验收','Awaiting review')} ({reviews.length})</summary>
    {waiting.map(p=><section key={p.id}><div className="wf-section-title"><h4>{p.definition.title}</h4><Button variant="ghost" onClick={()=>select(p.id)}>{L('打开任务','Open task')}</Button></div><TaskDelivery mode="actions" readOnly={readOnly} runId={p.attempts.at(-1)?.runId} catalog={catalog} onOpenTask={onOpenTask}/></section>)}
-   {reviews.map(p=><Button key={p.id} variant="outline" onClick={()=>select(p.id)}>{p.definition.title} · {L('检查交付并验收','Review delivery')}</Button>)}
+   {reviews.map(p=><Button key={p.id} variant="outline" onClick={()=>select(p.id,'review')}>{p.definition.title} · {L('检查交付并验收','Review delivery')}</Button>)}
    {!waiting.length&&!reviews.length&&<p className="wf-muted">{L('当前没有需要处理的请求','No requests need attention')}</p>}
   </details>
  </section>;

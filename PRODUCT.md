@@ -2,6 +2,25 @@
 
 <!-- impeccable:product-schema 1 -->
 
+## Current implementation and evidence override (2026-11-03)
+
+This section supersedes historical “design only” status statements below, while preserving the decisions and their evidence boundaries. Product positioning remains a foundation for software companies building business Agents. The collaboration workbench organizes how those Agents are planned, built and reviewed; Skills, declarative UI and extensions provide their business-facing capabilities.
+
+- Curated roles with default fixed skills, automatic preparation, personal-choice preservation and task snapshots are implemented. The [2026-10-27 record](specs/workforce/implementation-2026-10-27.md) documents test Store publication and real installation of ten roles’ skill combinations. This is not proof of current installer coverage, all external tools or every role’s output quality.
+- Current expert creation uses **Define role → Configure skills → Confirm configuration**. Custom roles enter these steps directly; the earlier AI-assisted brainstorming page is no longer the entry flow. Filled template steps are directly accessible. Existing experts use single-page incremental editing; see [editing rules](specs/workforce/expert-editing-2026-11-01.md) and `src/WorkforceRoleEditor.tsx`.
+- Project spaces logically associate existing projects. [Host-led discussions](specs/workforce/discussion-host-2026-11-01.md) clarify goals, coordinate actual experts and preserve source references. The recorded real-model trial verifies sequential specialist analysis, not complete remote delivery. Saving a plan and authorizing execution remain distinct.
+- The [read-only dependency graph](specs/workforce/plan-graph-delivery-2026-11-02.md) is implemented. Current working-tree UI uses the graph as the plan workspace and opens a node work page; the older list/graph toggle is not the current tutorial path. Actual dependencies, valid acceptance and stale references govern scheduling. Graph gestures do not modify the plan.
+- Historical knowledge means scoped retrieval of authorized sources through the current source-memory provider. Do not claim all-project autonomous memory or imply that Hindsight/Mem0 is deployed.
+- [Native Codex subagents](specs/analysis/read-only-assistants-2026-11-03.md) are temporary task delegates, separate from reusable experts. Current integration has real-engine tests with controlled local model responses; this does not establish real-model task quality or Windows, SSH/Docker and installer validation.
+
+The primary collaboration example is now one developer maintaining the host, SDK, samples, an SSH-connected extension service, website and guides. Emphasize specialist partners working together around a centrally stated goal. The reviewed sequence is shared goal/contract → accepted host implementation → independent SDK/service/website branches → sample after SDK and service acceptance → guide after sample acceptance → integration and delivery review. Dependencies must be saved explicitly. Runtime handoff provides bounded direct-predecessor summaries, acceptance records and pinned references; it is not automatic repository synchronization, artifact copying or package publication. The older repair-ticket example remains a business-form exercise rather than the main collaboration story.
+
+Public materials must distinguish current source, recorded isolated tests, recorded real integrations and distributed installers. The current source includes unpublished working-tree changes. Use release notes for download coverage. The curated test Store is not an open community publishing platform; site content must not promise current availability without checking the host’s trusted catalog. No public SDK API is added by describing these host workflows.
+
+### Video direction override (2026-11-03)
+
+All product films, including the multi-project collaboration film and the earlier business-integration film, are **product vision / concept demonstrations**. They may portray ideal future experiences beyond current implementation, including richer context/artifact handoff and automated verification. Label them accordingly: “Concept demonstration; some experiences are planned.” Do not treat video scenes as current feature or deployment acceptance evidence. Current-source tutorials, API contracts and verification records remain factual and keep their existing dependency and permission rules. Isolated UI screenshots retain their own fixture captions and are not relabeled as live execution recordings.
+
 ## Platform
 
 web

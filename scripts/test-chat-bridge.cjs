@@ -18,7 +18,10 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
   send({reasoning_content:'Check environment.',reasoning:'Check environment.'});
   await new Promise(r=>setTimeout(r,40));
   if(mode==='error'){res.end();return;}
-  if(mode==='tool'&&!data.messages.some(m=>m.role==='tool')){
+  if(mode==='loop'){
+   assert.ok(data.tools.some(t=>t.function.name==='write_stdin'),'engine advertises polling tool');
+   send({tool_calls:[{index:0,id:'call_loop_'+requests.length,type:'function',function:{name:'exec_command',arguments:JSON.stringify({cmd:'echo loop-probe-'+requests.length})}}]},'tool_calls');
+  }else if(mode==='tool'&&!data.messages.some(m=>m.role==='tool')){
    const tool=data.tools.find(t=>(t.function.name==='exec_command'||t.function.name.startsWith('exec_command_')));assert.ok(tool);
    send({content:'I will check the working directory.'});
    send({tool_calls:[{index:0,id:'call_fixture',type:'function',function:{name:tool.function.name,arguments:'{"cmd":"pwd",'}}]});
@@ -73,7 +76,15 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
   assert.ok(usage,'engine reports token usage');
   assert.equal(usage.params.tokenUsage.modelContextWindow,95000,'configured context window reaches the real engine (95% usable)');
   mode='error';const error=await runtime.start({prompt:'Broken stream.'});assert.equal((await finished(error.id)).status,'failed');
+  mode='loop';const loopRun=await runtime.start({prompt:'Synthetic no-progress loop test.'});result=await finished(loopRun.id);
+  assert.equal(result.status,'interrupted',result.error);assert.match(result.error,/重复调用/);
+  assert.equal(result.tools.filter(t=>t.type==='commandExecution').length,12,'pause after twelve no-op commands');
+  assert.ok(result.modelRequests.some(d=>d.loopGuard?.action==='warn'));
+  assert.equal(result.modelRequests.at(-1).loopGuard.action,'pause');
+  assert.ok(result.modelRequests.some(d=>d.tools?.some(t=>t.name==='write_stdin')));
+  mode='text';await runtime.start({runId:loopRun.id,prompt:'Continue with a different strategy.'});result=await finished(loopRun.id);
+  assert.equal(result.status,'completed',result.error);
   mode='hang';const count=requests.length;const pending=await runtime.start({prompt:'Wait.'});const until=Date.now()+10000;while(requests.length===count&&Date.now()<until)await new Promise(r=>setTimeout(r,50));assert.ok(requests.length>count);await runtime.stop(pending.id);assert.equal((await finished(pending.id)).status,'interrupted');
-  console.log('PASS real Codex bridge: reasoning stream, deduplication, commentary, command execution, reasoning replay, resume, MCP plan, native user question and answer, image tool result and failure recovery, configured context window, broken stream and cancellation');
+  console.log('PASS real Codex bridge: reasoning stream, deduplication, commentary, command execution, reasoning replay, resume, MCP plan, native user question and answer, image tool result and failure recovery, configured context window, broken stream, loop pause/resume and cancellation');
  }finally{await runtime.shutdown();server.closeAllConnections();server.close();await fs.rm(directory,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

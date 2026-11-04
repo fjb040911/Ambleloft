@@ -1,0 +1,29 @@
+import {test,expect} from '@playwright/test';
+for(const expert of [false,true])test(`native subagent progress and individual stop (${expert?'expert':'chat'})`,async({page})=>{
+ await page.addInitScript(({expert})=>{
+  const run:any={id:'demo',title:'分析验收',model:'fixture',baseUrl:'http://127.0.0.1/v1',cwd:'/fixture',createdAt:new Date().toISOString(),status:'running',error:'',approvals:[],messages:[{id:'u',role:'user',text:'并行审查'}],tools:[{id:'analysis-test',nativeThreadId:'native-child-1',turnKey:'u',order:1,type:'analysis',label:'交互审查',analysisAgent:{id:'analysis-test',name:'交互审查',avatar:0},status:'running',analysisTask:'检查交互',analysisReads:['src/App.tsx','src/Conversation.tsx'],detail:'读取 src/App.tsx'}],...(expert?{employee:{id:'expert',name:'审查专家'}}:{})};
+  run.tools.push({id:'analysis-evidence',nativeThreadId:'native-child-2',turnKey:'u',order:2,type:'analysis',label:'证据审查',analysisAgent:{id:'analysis-evidence',name:'证据审查',avatar:1},status:'completed',detail:'证据检查完成'});
+  (window as any).__analysisRun=run;let callback:any;
+  (window as any).desktop={getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),getDevice:async()=>({name:'Test',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:expert?'dark':'light'}),listRuns:async()=>[structuredClone(run)],onRun:(fn:any)=>{callback=fn;(window as any).__analysisEmit=()=>callback(structuredClone(run));return()=>{}},onCommand:()=>()=>{},saveWorkspace:async()=>{},stopRun:async(id:string)=>{(window as any).__stopped=id;run.tools[0].status='interrupted';run.tools[0].detail='Analysis stopped';callback(structuredClone(run));}};
+ },{expert});
+ await page.goto('/');await page.locator('.tree-task > button:first-child').filter({hasText:'分析验收'}).click();if(expert)await page.setViewportSize({width:390,height:840});
+ await expect(page.getByRole('img',{name:'交互审查 · 子代理头像'})).toBeVisible();
+ await expect(page.getByRole('img',{name:'证据审查 · 子代理头像'})).toHaveAttribute('data-avatar','1');
+ await page.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'}).click();await expect(page.getByText('检查交互',{exact:true})).toBeVisible();await expect(page.locator('[data-agent-id="analysis-test"]').getByText('继承当前任务权限',{exact:true})).toBeVisible();
+ await expect(page.locator('[data-agent-id="analysis-test"] details')).toHaveCount(0);
+ await expect(page.locator('[data-agent-id="analysis-test"] > [data-slot=trace-collapsible]')).toHaveCount(1);
+ const agent=page.locator('[data-agent-id="analysis-test"]');const trigger=agent.locator('[data-slot=trace-collapsible-trigger]');
+ await expect(agent.locator('[data-slot=trace-line]').first()).toHaveAttribute('data-status','running');await expect(agent.locator('[data-slot=trace-collapsible-content] [data-slot=trace-line]')).toHaveCount(2);
+ await trigger.focus();await page.keyboard.press('Enter');await expect(trigger).toHaveAttribute('aria-expanded','false');
+ await page.evaluate(()=>{const w=window as any;w.__analysisRun.tools[0].detail='新的分析输出';w.__analysisEmit();});await expect(trigger).toHaveAttribute('aria-expanded','false');
+ await page.keyboard.press('Enter');await expect(agent.getByText('新的分析输出')).toBeVisible();await expect(trigger).toHaveAttribute('aria-expanded','true');
+ expect(await agent.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
+ await agent.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));});
+ await expect(agent.getByRole('button',{name:'停止分析',exact:true})).toBeInViewport();
+ await page.screenshot({path:expert?'/tmp/amble-analysis-expert.png':'/tmp/amble-analysis-chat.png'});
+ await page.getByRole('button',{name:'停止分析',exact:true}).click();await expect(page.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'})).toContainText('已停止');
+ expect(await page.evaluate(()=>(window as any).__stopped)).toBe('analysis-test');await expect(page.getByRole('button',{name:'停止分析',exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any;w.__analysisRun.status='completed';w.__analysisRun.tools[0].status='completed';w.__analysisEmit();});
+ await expect(page.getByRole('img',{name:'交互审查 · 子代理头像'})).toBeVisible();
+ await expect(page.locator('.analysis-agent:visible [data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'})).toContainText('已完成');
+});

@@ -2,6 +2,8 @@
 
 本目录存放可公开的设计规范、协议契约与开发交付材料，随代码进行版本管理。
 
+- [客户端整包差分更新流程 v1](./client-update-flow-v1.md)（GitHub Releases 分发、排空安装与恢复；待实施）
+
 - [Extension 平台](./extensions/README.md)
 - [SSH / Docker 工作环境](./remote-workspaces/README.md)（实现与模拟验证，真实环境验收待执行）
 - [协作工作平台：业务实现与验证](./workforce/implementation-2026-10-26.md)（当前入口、真实 LangGraph/模型交接及剩余缺口）

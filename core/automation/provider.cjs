@@ -1,28 +1,73 @@
 const {usesChat}=require('../../electron/chat-bridge.cjs');
-// Direct, single model request. Never starts an Agent or exposes tools/credentials.
+const {parseStructuredOutput,outputError}=require('./structured-output.cjs');
+const capabilities=require('./output-capabilities.cjs');
+const Ajv=require('ajv');
+const {inferenceDeadline,abortable}=require('./inference-deadline.cjs');
+// One shared budget for protocol/format negotiation and a single content repair.
+// Nothing outside this inference is retried; all mutations remain with callers.
 async function generate(config,job,signal,onProgress){
+ const deadline=inferenceDeadline(signal,{timeoutMs:job.timeoutMs});
+ try{return await abortable(generateWithinDeadline(config,job,deadline.signal,onProgress),deadline.signal);}
+ finally{deadline.dispose();}
+}
+async function generateWithinDeadline(config,job,signal,onProgress){
+ let validate;try{validate=new Ajv({strict:false,allErrors:true,logger:false}).compile(job.outputSchema);}catch{throw Object.assign(Error('INVALID_SCHEMA'),{definitive:true});}
+ let protocol=usesChat(config)?'chat':'responses',available=capabilities.formats(job.outputSchema);
+ let unsupported=[];
+ const choose=()=>{unsupported=capabilities.profile(config,protocol,!!onProgress)?.unsupported||[];const found=available.findIndex(mode=>!unsupported.includes(mode));return found<0?available.length-1:found;};
+ let index=choose(),repair='',repaired=false,switched=false;
+ for(let attempt=0;attempt<4;attempt++){
+  signal.throwIfAborted();const mode=available[index];
+  try{
+   const result=await request({...config,protocol},repair?{...job,prompt:job.prompt+'\n'+repair}:job,signal,onProgress,mode);
+   if(!validate(result)){
+    const error=outputError('schema-mismatch',0,'schema');
+    error.diagnostics.issues=validate.errors.slice(0,6).map(e=>({schemaPath:e.schemaPath,keyword:e.keyword}));throw error;
+   }
+   signal.throwIfAborted();
+   await capabilities.remember(config,{protocol,streaming:!!onProgress,mode,unsupported});
+   signal.throwIfAborted();return result;
+  }catch(error){
+   error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode};
+   signal.throwIfAborted();if(attempt===3)throw error;
+   const probeRoute=job.probeProtocol&&error.message==='PROVIDER_REJECTED'&&error.diagnostics?.httpStatus===404;
+   if((error.message==='PROTOCOL_UNSUPPORTED'||probeRoute)&&(!config.protocol||config.protocol==='auto')&&!switched){protocol=protocol==='chat'?'responses':'chat';switched=true;index=choose();}
+   else if(['FORMAT_UNSUPPORTED','SCHEMA_UNSUPPORTED'].includes(error.message)&&index<available.length-1){if(error.message==='FORMAT_UNSUPPORTED')unsupported=[...new Set([...unsupported,mode])];index++;}
+   else if(job.repairInvalidOutput&&!repaired&&error.message==='INVALID_OUTPUT'&&['content','schema'].includes(error.diagnostics.stage)){
+    repaired=true;repair='The previous response did not satisfy the output contract. Return one complete JSON value matching the schema, without commentary or Markdown fences.';
+    if(error.diagnostics.issues)repair+=' Validation errors (schema locations only): '+JSON.stringify(error.diagnostics.issues);
+   }else throw error;
+   await onProgress?.({phase:'waiting',reasoning:'',reasoningFormat:'summary'});
+  }
+ }
+}
+async function request(config,job,signal,onProgress,mode){
  const chat=usesChat(config),instruction='Return only JSON matching this schema: '+JSON.stringify(job.outputSchema)+'\n'+job.prompt;
  const requested=Number.isInteger(job.maxOutputTokens)?Math.max(256,Math.min(16384,job.maxOutputTokens)):2048;
  const maximum=Math.min(requested,config.effectiveLimits?.maxOutputTokens||requested);
  const input=JSON.stringify(job.input),body=chat?{model:config.model,messages:[{role:'system',content:instruction},{role:'user',content:input}],max_tokens:maximum,stream:false}:{model:config.model,instructions:instruction,input,max_output_tokens:maximum,stream:false,store:false};
+ capabilities.applyFormat(body,mode,job.outputSchema,chat);
  if(onProgress){
   body.stream=true;
   if(chat&&/^deepseek/i.test(config.model))body.thinking={type:config.reasoningSummary===false?'disabled':'enabled'};
   if(!chat&&config.reasoningSummary!==false)body.reasoning={summary:'auto'};
  }
  const response=await fetch(config.baseUrl+(chat?'/chat/completions':'/responses'),{method:'POST',headers:{'Content-Type':'application/json',...(config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},body:JSON.stringify(body),signal,redirect:'error'});
- if(!response.ok){await response.body?.cancel();throw Object.assign(Error('PROVIDER_REJECTED'),{definitive:true});}
+ if(!response.ok)throw await capabilities.httpError(response);
  if(onProgress&&response.headers.get('content-type')?.includes('text/event-stream'))return require('./provider-stream.cjs').readStructuredStream(response,{chat,signal,onProgress,reasoning:config.reasoningSummary!==false});
  const reader=response.body.getReader();let bytes=0;const chunks=[];
  try{while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.length;if(bytes>256*1024)throw Error('Response too large');chunks.push(Buffer.from(value));}}finally{await reader.cancel().catch(()=>{});}
- let data;try{data=JSON.parse(Buffer.concat(chunks).toString());}catch{throw Object.assign(Error('INVALID_OUTPUT'),{definitive:true});}
+ signal?.throwIfAborted();
+ let data;try{data=JSON.parse(Buffer.concat(chunks).toString());}catch{throw outputError('invalid-envelope',bytes,'transport');}
+ if(!data||typeof data!=='object')throw outputError('invalid-envelope',bytes,'transport');
  if(data.choices?.[0]?.finish_reason==='length'||data.incomplete_details?.reason==='max_output_tokens')throw Object.assign(Error('OUTPUT_LIMIT'),{definitive:true});
- if(data.status&&data.status!=='completed'||data.choices?.[0]?.finish_reason&&data.choices[0].finish_reason!=='stop')throw Object.assign(Error('INVALID_OUTPUT'),{definitive:true});
+ if(data.status&&data.status!=='completed'||data.choices?.[0]?.finish_reason&&data.choices[0].finish_reason!=='stop')throw outputError('unexpected-finish',bytes,'completion');
+ if(data.choices?.[0]?.message?.refusal||(data.output||[]).some(i=>(i.content||[]).some(c=>c.type==='refusal')))throw Object.assign(Error('MODEL_REFUSAL'),{definitive:true,diagnostics:{stage:'completion',reason:'refusal'}});
  const text=chat?data.choices?.[0]?.message?.content:(data.output||[]).filter(i=>i.type==='message').flatMap(i=>i.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('');
  if(onProgress&&config.reasoningSummary!==false){
   const reasoning=chat?(data.choices?.[0]?.message?.reasoning_content||data.choices?.[0]?.message?.reasoning||''):(data.output||[]).filter(i=>i.type==='reasoning').flatMap(i=>i.summary||[]).map(c=>c.text||'').join('\n');
   if(reasoning)await onProgress({phase:'responding',reasoning,reasoningFormat:chat?'text':'summary'});
  }
- try{return JSON.parse(text);}catch{throw Object.assign(Error('INVALID_OUTPUT'),{definitive:true});}
+ return parseStructuredOutput(text);
 }
 module.exports={generate};

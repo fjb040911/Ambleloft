@@ -199,8 +199,8 @@ body { font-optical-sizing: auto; }
 .conversation-content, .conversation-dock { max-width: 840px; }
 .conversation-content { padding: .5rem 1.75rem 1.5rem; }
 .conversation-content .markdown { font-size: .9375rem; line-height: 1.8; }
-.message.user { width: fit-content; max-width: 90%; margin-left: auto; padding: var(--message-padding-block) var(--message-padding-inline); overflow-wrap: anywhere; }
-.message > .user-text { font-size: .9375rem; line-height: 1.5; font-weight: 500; }
+
+
 .conversation-dock::before {
   content: ''; position: absolute; inset: -16px 0 auto; height: 16px; pointer-events: none;
   background: linear-gradient(to bottom, transparent, var(--surface));
@@ -353,8 +353,8 @@ body { font-optical-sizing: auto; }
   .theme-options { flex-direction: column; }
   .theme-option { min-height: 48px; }
   .conversation-content { padding: .5rem 1rem 1.25rem; }
-  .conversation-dock { padding: .5rem 1rem .75rem; }
-  .message.user { max-width: 96%; }
+  .conversation-dock { padding: .5rem 1rem; }
+
 }
 @media (max-width: 680px) {
   .settings-workspace { grid-template-columns: 168px minmax(0, 1fr); }
@@ -478,7 +478,7 @@ body { font-optical-sizing: auto; }
 .file-chat-floating .conversation-dock { padding: 8px; overflow: auto; min-height: 0; flex-shrink: 1; }
 .file-chat-floating .conversation-dock::before { display: none; }
 .file-chat-floating .jump-latest { display: none; }
-.file-chat-floating .message.user { margin-top: 8px; }
+
 @media(max-width:600px) { .file-chat-floating.conversation-page { right: 8px; bottom: 8px; width: calc(100% - 16px); } }
 .file-chat-toggle > svg { flex-shrink: 0; }
 
@@ -498,7 +498,7 @@ body { font-optical-sizing: auto; }
 
 /* InputGroup owns input, focus and button styling. Keep only composer layout here. */
 .composer { min-width:min(300px,100%); margin:0; }
-.composer-hint { margin: .375rem .25rem 0; min-height: 1rem; font-size: .6875rem; line-height: 1.5; color: var(--secondary); }
+.composer-notice { margin: .375rem .25rem 0; min-height: 1rem; font-size: .6875rem; line-height: 1.5; color: var(--secondary); }
 .composer-option-row { font-weight: normal; }
 .message.assistant { padding: 4px 0 6px; }
 .message.assistant .markdown > :first-child { margin-top: 0; }

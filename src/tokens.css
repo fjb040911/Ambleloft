@@ -56,16 +56,17 @@
 
   --content-font-size: calc(14px * var(--font-scale, 1));
 }
+/* Neutral charcoal surfaces: canvas < sidebar < chrome, with raised controls. */
 :root[data-theme='dark'] {
   color-scheme: dark;
   --primary: var(--text);
   --primary-foreground: var(--surface);
   --message-background: #303030;
   --message-foreground: #ffffff;
-  --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
-  --activity-rail: #191b20; --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
-  --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;
-  --hover: #2b2f38; --accent: #729ce8; --selection: #2e3c57; --focus: #8aaefa;
+  --surface: #181818; --raised: #242424; --raised-translucent: #242424;
+  --activity-rail: #262626; --sidebar: #202020; --text: #ededed; --secondary: #b8b8b8; --muted: #999999;
+  --border: #3a3a3a; --border-soft: #2e2e2e; --composer-border: #484848;
+  --hover: #303030; --accent: #729ce8; --selection: #363636; --focus: #8aaefa;
   --blue-bg: #29364a; --blue-text: #a7c2f4; --purple-bg: #373044; --purple-text: #c3b1e8;
   --orange-bg: #403529; --orange-text: #e0bc90; --green-bg: #293b33; --green-text: #9acdaf;
 }
@@ -76,10 +77,10 @@
     --primary-foreground: var(--surface);
     --message-background: #303030;
     --message-foreground: #ffffff;
-    --surface: #1c1e23; --raised: #24272e; --raised-translucent: #24272e;
-    --activity-rail: #191b20; --sidebar: #202228; --text: #e8eaf0; --secondary: #b5bac5; --muted: #929baa;
-    --border: #373b45; --border-soft: #30343c; --composer-border: #434a58;
-    --hover: #2b2f38; --accent: #729ce8; --selection: #2e3c57; --focus: #8aaefa;
+    --surface: #181818; --raised: #242424; --raised-translucent: #242424;
+    --activity-rail: #262626; --sidebar: #202020; --text: #ededed; --secondary: #b8b8b8; --muted: #999999;
+    --border: #3a3a3a; --border-soft: #2e2e2e; --composer-border: #484848;
+    --hover: #303030; --accent: #729ce8; --selection: #363636; --focus: #8aaefa;
     --blue-bg: #29364a; --blue-text: #a7c2f4; --purple-bg: #373044; --purple-text: #c3b1e8;
     --orange-bg: #403529; --orange-text: #e0bc90; --green-bg: #293b33; --green-text: #9acdaf;
   }

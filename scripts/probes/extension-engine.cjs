@@ -22,16 +22,16 @@ async function main() {
       let raw = ''; for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw); requests.push(body);
       const names = (body.tools || []).flatMap(t => t.type==='namespace'?t.tools.map(f=>f.name):[t.function?.name || t.name]);
-      const name = mcpMode?names.find(n=>n.startsWith(tools[round]?.name||'__none__')):tools[round]?.name;
+      const name = mcpMode?names.find(n=>(n===tools[round]?.name||n.endsWith('__'+(tools[round]?.name||'__none__')))):tools[round]?.name;
       const call = name && names.includes(name);
       round++;
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       if (stage === 'chat') {
-        const delta = call ? { tool_calls: [{ index: 0, id: `call_${round}`, type: 'function', function: { name, arguments: mcpMode&&name?.startsWith('extension_invoke_operation')?JSON.stringify({operationId:'fixture.operation',input:{}}):'{}' } }] } : { content: 'probe complete' };
+        const delta = call ? { tool_calls: [{ index: 0, id: `call_${round}`, type: 'function', function: { name, arguments: mcpMode&&name?.endsWith('extension_invoke_operation')?JSON.stringify({operationId:'fixture.operation',input:{}}):'{}' } }] } : { content: 'probe complete' };
         res.write('data: ' + JSON.stringify({ choices: [{ index: 0, delta, finish_reason: call ? 'tool_calls' : 'stop' }] }) + '\n\n');
         res.end('data: [DONE]\n\n');
       } else {
-        const item = call ? { type: 'function_call', ...(mcpMode?{namespace:'mcp__amble_extensions'}:{}), id: `fc_${round}`, call_id: `call_${round}`, name, arguments: mcpMode&&name?.startsWith('extension_invoke_operation')?JSON.stringify({operationId:'fixture.operation',input:{}}):'{}', status: 'completed' }
+        const item = call ? { type: 'function_call', ...(mcpMode?{namespace:'mcp__amble_extensions'}:{}), id: `fc_${round}`, call_id: `call_${round}`, name, arguments: mcpMode&&name?.endsWith('extension_invoke_operation')?JSON.stringify({operationId:'fixture.operation',input:{}}):'{}', status: 'completed' }
           : { type: 'message', id: `msg_${round}`, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'probe complete', annotations: [] }] };
         const response = { id: `resp_${Date.now()}`, object: 'response', status: 'in_progress', output: [] };
         let sequence_number = 0;
@@ -46,6 +46,7 @@ async function main() {
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   async function verifyNoCredential(directory,credential){for(const entry of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,entry.name);if(entry.isDirectory())await verifyNoCredential(target,credential);else if(entry.isFile())assert.equal((await fs.readFile(target)).includes(Buffer.from(credential)),false,'MCP credential persisted: '+path.relative(root,target));}}
   async function connect(home, experimentalApi = true, withMcp=mcpMode) {
+    if (rpc && rpc.child.exitCode === null && rpc.child.signalCode === null) await require('node:events').once(rpc.child, 'exit');
     if(channel){channel.close();await verifyNoCredential(root,channel.config.http_headers.Authorization.slice(7));}channel=withMcp?await createAgentChannel({list:async()=>{calls.push({mcp:'list'});return 'probe-tool-result';},invoke:async()=>{calls.push({mcp:'invoke'});return 'probe-tool-result';}}):null;
     rpc = new CodexRPC({ executable, config: bridge.config, home, cwd: root, extensionMcp:channel?.config,
       notification: m => { if (m.method === 'turn/completed') completed = m.params.turn; },

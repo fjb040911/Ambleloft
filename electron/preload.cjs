@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
-  spaces:Object.fromEntries(['coordinateDiscussion','stopDiscussionHost','exportDocument','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','saveTaskDraft','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','controlPlan','knowledge','start'].map(action=>[action,input=>ipcRenderer.invoke('spaces:'+action,input)])),
+  spaces:Object.fromEntries(['coordinateDiscussion','stopDiscussionHost','exportDocument','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','controlPlan','knowledge','start'].map(action=>[action,input=>ipcRenderer.invoke('spaces:'+action,input)])),
   workforce:{...Object.fromEntries(['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion','importLocal','importRepository'].map(action=>[action,input=>ipcRenderer.invoke('workforce:'+action,input)])),onChanged:listener=>{const h=()=>listener();ipcRenderer.on('workforce:event',h);return()=>ipcRenderer.removeListener('workforce:event',h);}},
   creation:{...Object.fromEntries(['read','install','trial'].map(action=>[action,input=>ipcRenderer.invoke('creation:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('creation:event',h);return()=>ipcRenderer.removeListener('creation:event',h);}},
   ssh:{...Object.fromEntries(['list','save','connect','disconnect','browse','validate','key','dockerList','dockerEnter','dockerStart'].map(action=>[action,input=>ipcRenderer.invoke('ssh:'+action,input)])),onChanged:listener=>{const h=()=>listener();ipcRenderer.on('ssh:event',h);return()=>ipcRenderer.removeListener('ssh:event',h);}},
@@ -35,6 +35,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   saveProvider: input => ipcRenderer.invoke('provider:save', input),
   testProvider: id => ipcRenderer.invoke('provider:test', id),
   editRun: input => ipcRenderer.invoke('agent:edit', input),
+  exportRunDiagnostics: input => ipcRenderer.invoke('agent:export-diagnostics', input),
   openProject: id => ipcRenderer.invoke('project:open', id),
   getRunPage: input => ipcRenderer.invoke('agent:history',input),
   touchSearchItem: input => ipcRenderer.invoke('workspace:search-touch',input),

@@ -1,0 +1,70 @@
+import {test,expect,type Page} from '@playwright/test';
+async function enter(page:Page,theme='light'){
+ await page.goto('/tests/manual/project-space-qa.html?theme='+theme);
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();
+ await page.getByRole('tab',{name:'讨论',exact:true}).click();
+}
+for(const theme of ['light','dark'])test(`discussion sidebar resizes, collapses and remembers width in ${theme}`,async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await enter(page,theme);
+ const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),main=page.getByRole('region',{name:'讨论对话'}),input=page.getByLabel('这次想推进什么？');
+ await sidebar.getByRole('tab',{name:'当前方案'}).click();await input.fill('保留未发送内容');await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});
+ const separator=page.getByRole('separator',{name:'调整讨论侧栏宽度'});
+ const initial=(await sidebar.boundingBox())!.width,handle=(await separator.boundingBox())!;
+ await page.mouse.move(handle.x+handle.width/2,Math.min(handle.y+100,500));await page.mouse.down();await page.mouse.move(handle.x-100,Math.min(handle.y+100,500),{steps:8});await page.mouse.up();
+ await expect.poll(async()=>(await sidebar.boundingBox())!.width).toBeGreaterThan(initial+70);
+ const resized=(await sidebar.boundingBox())!.width,before=(await main.boundingBox())!.width;
+ await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await expect(sidebar).toBeHidden();await expect(separator).toBeHidden();
+ expect((await main.boundingBox())!.width).toBeGreaterThan(before+resized-5);await expect(input).toHaveValue('保留未发送内容');
+ await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect(sidebar).toBeVisible();
+ await expect(sidebar.getByRole('tab',{name:'当前方案'})).toHaveAttribute('aria-selected','true');
+ await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-resized)).toBeLessThan(1);
+ await separator.focus();await page.keyboard.press('ArrowLeft');
+ await expect.poll(async()=>(await sidebar.boundingBox())!.width).toBeGreaterThan(resized+5);
+ const keyboardWidth=(await sidebar.boundingBox())!.width;
+ await page.screenshot({path:`/tmp/discussion-sidebar-${theme}.png`});
+ await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await page.reload();
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();
+ await expect(page.getByRole('button',{name:'展开讨论侧栏',exact:true})).toBeVisible();await expect(sidebar).toBeHidden();await expect(input).toHaveValue('保留未发送内容');
+ await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-keyboardWidth)).toBeLessThan(1);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+test('narrow context remains optional and does not overwrite desktop preferences',async({page})=>{
+ await page.addInitScript(()=>{localStorage.setItem('workforce.discussion-sidebar.v1',JSON.stringify({collapsed:true,width:350}));});
+ await page.setViewportSize({width:390,height:850});await enter(page);
+ const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),input=page.getByLabel('这次想推进什么？');
+ await expect(page.locator('.wf-context-desktop-toggle')).toHaveCount(0);await input.fill('窄屏草稿');await expect(sidebar).toBeHidden();await expect(page.getByRole('separator',{name:'调整讨论侧栏宽度'})).toHaveCount(0);
+ await page.getByRole('button',{name:'查看讨论与相关内容'}).click();await expect(sidebar).toBeVisible();
+ await page.getByRole('button',{name:'收起讨论上下文'}).click();await expect(sidebar).toBeHidden();
+ await page.setViewportSize({width:1280,height:850});await expect(page.getByRole('button',{name:'展开讨论侧栏',exact:true})).toBeVisible();await expect(input).toHaveValue('窄屏草稿');
+ await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect.poll(async()=>(await sidebar.boundingBox())!.width).toBeCloseTo(350,0);
+ await page.setViewportSize({width:390,height:850});await expect(sidebar).toBeHidden();await expect(input).toHaveValue('窄屏草稿');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+});
+
+for(const theme of ['light','dark'])test(`drag-collapse can reopen from the sticky tabs in ${theme}`,async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await enter(page,theme);
+ await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.requests.find((r:any)=>r.id==='discussion').participants[0].output='讨论内容与验收标准。\n\n'.repeat(120);qa.emit();});
+ const navigation=page.locator('.wf-space-navigation'),sidebar=page.getByRole('complementary',{name:'讨论上下文'}),scroller=page.locator('.qa-scroll');
+ const close=page.getByRole('button',{name:'收起讨论侧栏',exact:true}),open=page.getByRole('button',{name:'展开讨论侧栏',exact:true});
+ await expect(navigation.getByRole('button',{name:'收起讨论侧栏',exact:true})).toHaveCount(1);
+ await expect(page.locator('.wf-discussion-header .wf-context-desktop-toggle')).toHaveCount(0);
+ await sidebar.getByRole('tab',{name:'当前方案'}).click();await page.getByLabel('这次想推进什么？').fill('未发送的讨论内容');
+ const initialWidth=(await sidebar.boundingBox())!.width;
+ await page.getByLabel('这次想推进什么？').evaluate(el=>el.blur());
+ await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight)).toBeGreaterThan(2000);
+ await scroller.evaluate(el=>{el.scrollTop=650;});await expect.poll(async()=>(await navigation.boundingBox())!.y).toBeLessThan(2);
+ await expect(close).toBeInViewport();expect((await page.locator('.wf-discussion-header').boundingBox())!.y).toBeLessThan(0);
+ const handle=(await page.getByRole('separator',{name:'调整讨论侧栏宽度'}).boundingBox())!,layout=(await page.locator('.wf-discussion-layout').boundingBox())!;
+ await page.mouse.move(handle.x+handle.width/2,200);await page.mouse.down();await page.mouse.move(layout.x+layout.width-40,200,{steps:10});await page.mouse.up();
+ await expect(sidebar).toBeHidden();await expect(open).toBeInViewport();await expect(open).toHaveText('展开侧栏');
+ const top=await scroller.evaluate(el=>el.scrollTop),button=(await open.boundingBox())!,nav=(await navigation.boundingBox())!;
+ expect(button.x+button.width).toBeCloseTo(nav.x+nav.width,0);expect(button.y).toBeGreaterThanOrEqual(nav.y);expect(button.y+button.height).toBeLessThanOrEqual(nav.y+nav.height);
+ await page.screenshot({path:`/tmp/discussion-sticky-expand-${theme}.png`});
+ // Click its visible position so the driver does not auto-scroll the sticky button.
+ const openBounds=(await open.boundingBox())!;await page.mouse.click(openBounds.x+openBounds.width/2,openBounds.y+openBounds.height/2);await expect(sidebar).toBeVisible();await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-initialWidth)).toBeLessThan(1);
+ await expect(sidebar.getByRole('tab',{name:'当前方案'})).toHaveAttribute('aria-selected','true');await expect(page.getByLabel('这次想推进什么？')).toHaveValue('未发送的讨论内容');
+ expect(Math.abs(await scroller.evaluate(el=>el.scrollTop)-top)).toBeLessThan(2);
+ await page.getByRole('tab',{name:'文档与产物',exact:true}).click();await expect(page.locator('.wf-context-desktop-toggle')).toHaveCount(0);
+ await page.getByRole('tab',{name:'讨论',exact:true}).click();await expect(close).toBeInViewport();
+});

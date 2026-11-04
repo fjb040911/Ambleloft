@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-// Action regressions use the retained list; graph interaction is tested separately.
+// Enter node details through the current graph; graph gestures are tested separately.
 test.beforeEach(async({page})=>{await page.addInitScript(()=>sessionStorage.setItem('workforce.plan-views:space',JSON.stringify({launch:'list'})));});
 async function setup(page:Page,kind:'approval'|'question'|'missing'|'form'='approval',query=''){
  await page.goto('/tests/manual/project-space-qa.html'+query);
@@ -23,7 +23,7 @@ async function setup(page:Page,kind:'approval'|'question'|'missing'|'form'='appr
   qa.emit();
  },kind);
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:/^(任务|Tasks)$/}).click();
- await page.locator('.wf-work-item[data-package-id="copy"]').click();
+ await page.locator('.wf-graph-node[data-package-id="copy"]').click();
  if(kind!=='missing')await expect(page.getByRole('region',{name:/^(处理任务请求|Handle task requests)$/,exact:true})).toBeVisible();
  return page.getByRole('region',{name:/^(任务详情与验收|Task details and review)$/});
 }
@@ -106,4 +106,20 @@ test('empty request surface disappears and a fresh batch opens automatically',as
  await page.evaluate(()=>{const w=window as any;w.__taskRun.approvals=[{id:'fourth-batch',method:'commandExecution',detail:'{"command":"date"}'}];w.__taskEmit();});
  await expect(surface).toContainText('date');await expect(surface.getByRole('button',{name:'批准本次',exact:true})).toBeVisible();
  expect(await surface.evaluate(el=>getComputedStyle(el).borderTopWidth)).toBe('0px');
+});
+
+for(const kind of ['question','form'] as const)test(`existing async ${kind} is input-needed, not a three-hour model call`,async({page})=>{
+ const detail=await setup(page,kind);
+ await page.evaluate(()=>{const w=window as any,run=w.__taskRun;run.status='running';run.createdAt=new Date(Date.now()-3*60*60*1000).toISOString();run.lastEventAt=new Date(Date.now()-2*60*60*1000).toISOString();if(run.questions?.length)run.questions[0].blocking=false;w.__taskEmit();});
+ const activity=detail.getByLabel('当前运行状态');
+ await expect(activity).toContainText('有待补充信息');await expect(activity).not.toContainText('等待新的响应');
+ await expect(activity.locator('.activity-clock')).toHaveCount(0);await expect(activity.locator('[data-slot=spinner]')).toHaveCount(0);
+ await expect(detail.locator('.wf-node-summary')).toContainText('待补充信息');
+ await expect(detail.getByText('等待模型响应',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>['start','control','answer','input','approve'].includes(c.action)))).toEqual([]);
+ if(kind==='question'){
+  await detail.screenshot({path:'/tmp/task-async-input-status.png'});
+  await page.getByLabel('使用哪个测试环境？').fill('隔离测试环境');await page.getByRole('button',{name:'提交回答'}).click();
+  await expect(activity).not.toContainText('有待补充信息');await expect(activity).toContainText('本轮历时');
+ }
 });

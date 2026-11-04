@@ -12,9 +12,6 @@
 .home-start .composer-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 16px; min-height:44px; padding:6px 10px 0; }
 .home-project-context { min-width:0; max-width:100%; }
 .home-start .project-picker-trigger { max-width:260px; font-weight:400; color:var(--secondary); }
-.home-start .composer-hint { margin:0; text-align:right; opacity:0; }
-.home-start .composer:focus-within .composer-hint,
-.home-start .composer[aria-busy=true] .composer-hint { opacity:1; }
 .home-page.home-start .composer-note { display:flex; justify-content:center; align-items:center; gap:4px 8px; padding:0; margin-top:8px; }
 .home-start .composer-note .composer-status { flex:0 1 auto; }
 .home-start .draft-context-bar { margin-bottom:12px; }
@@ -27,13 +24,11 @@
  .home-page.home-start { padding:48px 20px 28px; }
  .home-start .composer-model-name { max-width:150px; }
  .home-start .composer-footer { gap:2px 8px; padding-inline:4px; }
- .home-start .composer-hint { font-size:.625rem; }
 }
 @media(max-width:460px) {
  .home-page.home-start { padding:32px 12px 24px; }
  .home-start .composer-option-row { gap:4px; }
  .home-start .composer-model-name { max-width:100px; }
- .home-start .composer-hint { text-align:left; }
 }
 
 .home-page.home-start.is-sending { min-height:0; display:flex; flex-direction:column; flex:1; padding-top:24px; }

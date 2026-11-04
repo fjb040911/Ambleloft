@@ -33,7 +33,10 @@ export interface WorkforceAPI{
  onChanged(listener:()=>void):()=>void;
 }
 export type SpaceMember={employeeId:string;assignment:string;projectIds:string[]};
-export type SpaceValue={name:string;purpose:string;projectIds:string[];members:SpaceMember[]};
+export type ProjectRelation={targetProjectId:string;kind:'api'|'artifact'|'contract';description:string};
+export type ProjectContext={roles:{projectId:string;responsibility:string}[];relations:(ProjectRelation&{sourceProjectId:string})[]};
+export type ProjectBinding={reusedFrom?:'space'|'history';responsibility:string;relations:ProjectRelation[];confirmed:boolean};
+export type SpaceValue={projectContext?:ProjectContext;name:string;purpose:string;projectIds:string[];members:SpaceMember[]};
 export type Space=SpaceValue&{archivedAt?:string|null;id:string;revision:number;createdAt:string;updatedAt:string};
 export type SpaceDocument={sourceDiscussionId?:string|null;deletedAt?:string;conditions?:string;sourceRefs?:{id:string;revision:number;hash:string}[];kind?:'document'|'decision'|'experience';id:string;spaceId:string;title:string;revision:number;hash:string;state:'draft'|'review'|'adopted'|'superseded'|'unknown'|'withdrawn';latestRevision?:number;adoptedRevision:number|null;adoptions:{revision:number;previousRevision:number|null;at:string}[];versions:{revision:number;hash:string;title:string;createdAt:string;state?:SpaceDocument["state"];sourceRunId:string|null}[];updatedAt:string;sourceRunId?:string|null};
 export type DiscussionContribution={
@@ -42,24 +45,31 @@ export type DiscussionContribution={
  context:{completeHistory?:boolean;version:string;assignment:string;priorRequestIds:string[];historyTruncated:boolean;historySpaceIds:string[];
  documents:{id:string;title:string;revision:number;hash:string}[]}|null;
 };
-export type DiscussionHost={activity?:{id:string;phase:'waiting'|'reasoning'|'responding'|'experts'|'complete';reasoning:string;reasoningFormat:'text'|'summary';startedAt:string};status:string;ruleVersion:string;revision:number;model?:string;error?:string;steps:{id:string;text:string;action:string;at:string}[];brief:{goal:string;items:{id:string;kind:'decision'|'proposal'|'question'|'verification';text:string;sourceIds:string[]}[]}|null;question?:{requestKey:string;reason:string;source:{definition:{title:string;fields:import('./FormFields').FormFieldDefinition[]}};prefill:Record<string,string>;answeredBy?:string}|null};
+export type DiscussionTaskContext={draftId?:string;draftRevision?:number;planId?:string;planRevision?:number;packageId?:string};
+export type DiscussionProgress={planId:string;revision:number;name:string;status:string;observedAt:string;nodes:{id:string;title:string;status:string;reason:string;accepted:boolean;approvalCount:number;inputCount:number;runId:string|null}[]};
+export type DiscussionHost={task?:{restarted?:boolean;draftId:string;draftRevision:number;summary:string;changes:{added:string[];removed:string[];changed:string[];goalChanged:boolean}|null};progress?:DiscussionProgress|null;activity?:{id:string;phase:'waiting'|'reasoning'|'responding'|'experts'|'planning'|'complete';reasoning:string;reasoningFormat:'text'|'summary';startedAt:string;lastProgressAt?:string;finishedAt?:string};status:string;ruleVersion:string;revision:number;model?:string;error?:string;steps:{id:string;text:string;action:string;at:string}[];brief:{goal:string;items:{id:string;kind:'decision'|'proposal'|'question'|'verification';text:string;sourceIds:string[]}[]}|null;question?:{requestKey:string;reason:string;source:{definition:{title:string;fields:import('./FormFields').FormFieldDefinition[]}};prefill:Record<string,string>;answeredBy?:string}|null};
 export type SpaceParticipant={employeeId:string;runId?:string;status:string;error?:string;output:string;updatedAt?:string;instruction?:string;reason?:string;
  contribution?:DiscussionContribution;role?:{name:string;revision:number;skills:Pick<SkillSnapshot,'id'|'name'|'version'>[]}};
-export type SpaceRequest={replyTo?:string|null;round?:number;id:string;spaceId:string;prompt:string;mode:'discussion'|'work';projectId:string|null;
+export type SpaceRequest={intent?:'explain-node'|'restart-guide';taskContext?:DiscussionTaskContext;replyTo?:string|null;round?:number;id:string;spaceId:string;prompt:string;mode:'discussion'|'work';projectId:string|null;
  composer?:{permission:'default'|'full';attachments:{name:string;path:string}[];selectedSkillIds:string[];skills:SkillSnapshot[]};
  discussion?:{schemaVersion:1;id:string;mode:'consultation'|'host';provenance:'recorded'|'legacy'};host?:DiscussionHost;
  staleReferences?:{id:string;revision:number;currentRevision:number|null}[];
  documentRefs:{id:string;title:string;revision:number;hash:string}[];createdAt:string;participants:SpaceParticipant[]};
 export type SpaceSnapshot={taskDrafts?:TaskDraft[];discussionStates?:Record<string,{status:'open'|'closed'|'deleted';revision:number;updatedAt:string}>;spaces:Space[];documents:SpaceDocument[];requests:SpaceRequest[];plans?:WorkPlan[]};
-export type TaskDraft={sourceDocuments?:{id:string;title:string;revision:number;hash:string;state:string}[];id:string;spaceId:string;discussionId:string|null;revision:number;status:'needs-input'|'ready'|'created';planId?:string;value:PlanValue;messages:{role:string;text:string}[];source:unknown[];assessment?:{summary:string;missing:string[];ready:boolean;revision:number;question:{source:{definition:{title:string;fields:import('./FormFields').FormFieldDefinition[]}}}|null}};
+export type TaskRelationGuide={requestKey:string;spaceRevision:number;nodes:{packageId:string;title:string;reason:string;fields:import('./FormFields').FormFieldDefinition[];prefill:import('./FormFields').FormValues}[]};
+export type TaskClarification={source:{definition:{title:string;fields:import('./FormFields').FormFieldDefinition[]}}};
+export type TaskDraft={requirementsPending?:boolean;pendingQuestion?:TaskClarification|null;basePlanId?:string;basePlanRevision?:number;relationGuide?:TaskRelationGuide|null;sourceDocuments?:{id:string;title:string;revision:number;hash:string;state:string}[];id:string;spaceId:string;discussionId:string|null;revision:number;status:'needs-input'|'ready'|'created';planId?:string;value:PlanValue;messages:{role:string;text:string}[];source:unknown[];assessment?:{summary:string;missing:string[];ready:boolean;revision:number;question:TaskClarification|null}};
 export interface SpaceAPI{
- coordinateDiscussion(input:{permission?:'default'|'full';attachments?:{name:string;path:string}[];selectedSkillIds?:string[];clientRequestId:string;spaceId:string;prompt:string;replyTo?:string;answerTo?:string;answers?:Record<string,string|number|boolean>;documentRefs?:{id:string;revision?:number;hash?:string}[];providerId?:string;model?:string;locale?:string}):Promise<SpaceSnapshot>;
+ coordinateDiscussion(input:{intent?:'explain-node'|'restart-guide';taskContext?:DiscussionTaskContext;permission?:'default'|'full';attachments?:{name:string;path:string}[];selectedSkillIds?:string[];clientRequestId:string;spaceId:string;prompt:string;replyTo?:string;answerTo?:string;answers?:Record<string,string|number|boolean>;documentRefs?:{id:string;revision?:number;hash?:string}[];providerId?:string;model?:string;locale?:string}):Promise<SpaceSnapshot>;
  stopDiscussionHost(input:{requestId:string}):Promise<unknown>;
- createTaskDraft(input:{spaceId:string;discussionId?:string;commandId:string}):Promise<TaskDraft>;
+ createTaskDraft(input:{basePlanId?:string;basePlanRevision?:number;newPlan?:boolean;spaceId:string;discussionId?:string;commandId:string}):Promise<TaskDraft>;
+ saveProjectContext(input:{id:string;expectedRevision:number;value:ProjectContext}):Promise<Space>;
+ checkTaskDraft(input:{id:string;expectedRevision:number;locale?:string}):Promise<TaskDraft>;
  saveTaskDraft(input:{id:string;expectedRevision:number;value:PlanValue}):Promise<TaskDraft>;
- guideTask(input:{locale?:string;id:string;expectedRevision:number;requestId:string;message?:string;providerId?:string;model?:string}):Promise<TaskDraft>;
+ answerTaskRelations(input:{id:string;expectedRevision:number;requestKey:string;packageId:string;answers:import('./FormFields').FormValues;locale?:string}):Promise<TaskDraft>;
+ guideTask(input:{phase?:'relations';locale?:string;id:string;expectedRevision:number;requestId:string;message?:string;providerId?:string;model?:string}):Promise<TaskDraft>;
  cancelTaskGuide(input:{id:string;requestId:string}):Promise<unknown>;
- createGuidedPlan(input:{id:string;expectedRevision:number}):Promise<WorkPlan>;
+ createGuidedPlan(input:{pauseBeforeApply?:boolean;id:string;expectedRevision:number;basisConfirmation?:{context:string;documents:{id:string;revision:number;hash:string;expectedRevision:number;expectedAdoptedRevision:number|null}[]}}):Promise<WorkPlan>;
  lifecycle(input:{id:string;expectedRevision:number;action:'archive'|'restore'|'delete'}):Promise<Space|{id:string;deleted:true}>;
  snapshot():Promise<SpaceSnapshot>;
  submitDocumentReview(input:{id:string;revision:number;expectedRevision:number}):Promise<SpaceDocument>;
@@ -79,7 +89,7 @@ export interface SpaceAPI{
  start(input:{permission?:'default'|'full';attachments?:{name:string;path:string}[];selectedSkillIds?:string[];replyTo?:string;historySpaceIds?:string[];clientRequestId:string;spaceId:string;prompt:string;mode:'discussion'|'work';employeeIds:string[];projectId?:string;documentIds?:string[];documentRefs?:{id:string;revision?:number;hash?:string}[];providerId?:string;model?:string}):Promise<SpaceSnapshot>;
 }
 
-export type PackageDefinition={verification?:string;constraints?:string;id:string;title:string;instruction:string;ownerId:string;mode:'discussion'|'work';projectId:string|null;dependencies:string[];documentRefs:{id:string;revision:number;hash?:string}[];deliverables:string;acceptance:string};
+export type PackageDefinition={projectBinding?:ProjectBinding;verification?:string;constraints?:string;id:string;title:string;instruction:string;ownerId:string;mode:'discussion'|'work';projectId:string|null;dependencies:string[];documentRefs:{id:string;revision:number;hash?:string}[];deliverables:string;acceptance:string};
 export type PlanValue={name:string;goal:string;packages:PackageDefinition[]};
 export type PackageAttempt={id:string;number:number;planRevision:number;requestId:string;runId?:string;status:string;startedAt:string;finishedAt?:string;resultHash?:string;codeEvidence?:{remote:boolean;target:{path:string};input?:{digest?:string;head?:string;complete:boolean};output?:{digest?:string;head?:string;complete:boolean}};inputRefs:PackageDefinition['documentRefs']};
 export type WorkPackage={stopReason?:'plan-pause'|'plan-stop';permission?:'default'|'full';id:string;definition:PackageDefinition;status:string;stale?:boolean;reason?:string;attempts:PackageAttempt[];acceptance?:{note:string;accepted:boolean;resultHash:string;attemptId:string;at:string}};

@@ -93,7 +93,7 @@ try {
   assert.equal(info.packaged, true); assert.equal(info.name, 'Ambleloft'); assert.equal(await realpath(info.home), await realpath(dataDir));
   await page.evaluate(config => window.desktop.saveProvider({ ...config, name: 'Packaged fixture', executable: '/Applications/Codex.app/Contents/Resources/codex' }), config);
   const provider = await page.evaluate(() => window.desktop.getProvider());
-  assert.equal(provider.bundledEngine, true); assert.equal(provider.engineVersion, '0.153.4'); assert.equal(provider.engineError, '');
+  assert.equal(provider.bundledEngine, true); assert.equal(provider.engineVersion, '0.166.0'); assert.equal(provider.engineError, '');
   assert.equal(provider.detectedExecutable, enginePath);
   async function start(prompt, runId) { return page.evaluate(input => window.desktop.startRun(input), { prompt, runId }); }
   async function wait(runId, statuses = ['completed', 'failed', 'interrupted']) {
