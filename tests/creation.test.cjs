@@ -76,7 +76,7 @@ test('rechecks snapshot and active state after a slow user confirmation',async t
  await assert.rejects(f.creation.install('r',state.revision,{...approve,confirmSkill:async()=>{await fs.appendFile(path.join(state.prepared.path,'SKILL.md'),'changed during confirmation');return {};}}),/文件已变化/);assert.equal((await f.skills.list()).length,0);
 });
 test('model channel persists progress but never exposes installation or trial approval',async t=>{
- const f=await fixture(t);const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');const channel=await createAgentChannel({creation:f.creation.bind('r',()=>{})});t.after(()=>channel.close());
+ const f=await fixture(t);await f.creation.ensure('r');const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');const channel=await createAgentChannel({creation:f.creation.bind('r',()=>{})});t.after(()=>channel.close());
  const rpc=async(method,params)=>(await (await fetch(channel.config.url,{method:'POST',headers:{...channel.config.http_headers,'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})).json()).result;
  const list=await rpc('tools/list');assert.deepEqual(list.tools.map(t=>t.name),['creation_read','creation_update','creation_prepare']);
  const read=await rpc('tools/call',{name:'creation_read',arguments:{}});const state=JSON.parse(read.content[0].text);assert.equal(state.revision,1);
@@ -110,4 +110,24 @@ test('configuration and credential changes invalidate a confirmed extension tria
  const reopened=new CreationService(f);state=await reopened.read('r');assert.equal(state.trialStale,true);assert.equal(state.trial,'pending');assert.ok(!JSON.stringify(state).includes('private-key-name'));assert.ok(!JSON.stringify(state).includes('encrypted-test-only'));
  state=await f.creation.confirmTrial('r',state.revision);const installedRevision=item.revisions.find(r=>r.digest===item.active);await fs.appendFile(path.join(f.extensions.packages.root,installedRevision.relativePath,'extension.json'),' ');
  state=await reopened.read('r');assert.equal(state.trialStale,true);assert.equal(state.readiness.versionCurrent,false);await assert.rejects(reopened.confirmTrial('r',state.revision),/版本已变化/);
+});
+
+test('model reads and updates cannot implicitly start a creation workflow',async t=>{
+ const f=await fixture(t);let events=0;f.creation.publish=()=>events++;
+ const bound=f.creation.bind('r',()=>{});
+ assert.equal(await bound.call('creation_read',{}),null);
+ await assert.rejects(bound.call('creation_update',brief(1)),/创建进度已变化/);
+ assert.equal(await f.database.call('readSetting',{key:'creation.v1.r'}),null);
+ assert.equal(events,0);
+ const started=await f.creation.ensure('r');assert.equal(started.hostInitiated,true);
+ assert.equal((await bound.call('creation_read',{})).revision,1);
+});
+test('legacy accidental blank briefs are hidden without deleting authored or explicit creation progress',async t=>{
+ const f=await fixture(t);const blank={runId:'r',projectId:'p',revision:1,stage:'brief',title:'',kind:'skill',summary:'',nextStep:'',trialPrompt:'',limitations:'',trial:'pending'};
+ const write=value=>f.database.call('writeSetting',{key:'creation.v1.r',value});await write(blank);
+ assert.equal(await f.creation.read('r'),null);
+ assert.deepEqual(await f.database.call('readSetting',{key:'creation.v1.r'}),blank);
+ f.runtime.runs[0].messages=[{role:'user',skills:[{id:'builtin-skill-master'}]}];
+ assert.equal((await f.creation.read('r')).stage,'brief');f.runtime.runs[0].messages=[];
+ await write({...blank,summary:'An actual creation brief'});assert.equal((await f.creation.read('r')).summary,'An actual creation brief');
 });

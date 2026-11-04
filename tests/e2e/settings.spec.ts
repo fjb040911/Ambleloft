@@ -1,4 +1,20 @@
 import {test,expect} from '@playwright/test';
+test('provider test reports its verified scope and clears stale success after editing',async({page})=>{
+ await setup(page);
+ await page.evaluate(()=>{(window as any).desktop.testProvider=async()=>({message:'端点与结构化输出测试通过。',capability:{model:'model-a',protocol:'chat',mode:'json'}});});
+ await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'模型提供商',exact:true}).click();await page.getByRole('button',{name:'编辑',exact:true}).first().click();
+ await expect(page.getByText(/最多发送 4 条固定测试请求/)).toBeVisible();
+ await page.getByRole('button',{name:'测试已保存端点'}).click();
+ await expect(page.getByText('端点与结构化输出测试通过。',{exact:true})).toBeVisible();
+ await expect(page.getByText(/model-a · Chat Completions · JSON 输出验证通过/)).toBeVisible();
+ await expect(page.getByText(/仅验证当前模型的非流式结构化输出/)).toBeVisible();
+ await page.screenshot({path:'test-results/provider-capabilities.png',fullPage:true});
+ await page.getByLabel('模型 ID',{exact:true}).fill('different-model');
+ await expect(page.getByText(/JSON 输出验证通过/)).toHaveCount(0);await expect(page.getByText('端点与结构化输出测试通过。',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'测试已保存端点'})).toBeDisabled();
+ await page.getByLabel('模型 ID',{exact:true}).fill('model-a');
+ await page.evaluate(()=>{(window as any).desktop.testProvider=async()=>{throw Error('模型服务拒绝了身份验证，请检查 API Key 和访问权限。');};});
+ await page.getByRole('button',{name:'测试已保存端点'}).click();await expect(page.getByRole('alert')).toContainText('身份验证');await expect(page.getByText(/JSON 输出验证通过/)).toHaveCount(0);
+});
 async function setup(page:import('@playwright/test').Page){
  await page.addInitScript(()=>{
   const stamp=new Date().toISOString();let callback:any;
@@ -24,7 +40,7 @@ test('settings preserve conversation DOM, draft and scroll while appearance and 
  await expect(page.getByRole('textbox',{name:'Continue task'})).toHaveValue('未发送草稿保持原文');
  expect(await page.locator('.conversation-page').evaluate(el=>(el as any).__identity)).toBe('retained');
  expect(Math.abs(await page.locator('.conversation-scroll').evaluate(el=>el.scrollTop)-220)).toBeLessThan(4);
- await expect(page.locator('.message.user')).toHaveText('原始提问不要翻译');
+ await expect(page.locator('[data-message-role=user]')).toHaveText('原始提问不要翻译');
  await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByLabel('Interface language').selectOption('zh-CN');
  await page.getByRole('button',{name:'模型提供商',exact:true}).click();await page.getByRole('button',{name:'设为默认'}).click();
  await page.getByRole('button',{name:'返回应用'}).click();await expect(page.getByRole('button',{name:'选择模型',exact:true})).toContainText('model-a');

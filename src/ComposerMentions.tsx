@@ -60,8 +60,12 @@ export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[]
   if(next.length>20000)return;
   if(choice.kind==='skill')onSelectSkill?.(choice.id);
   if(choice.kind==='expert')experts?.onSelect(choice.id);
-  dismiss();onChange(next);setSelection('');
-  requestAnimationFrame(()=>{const el=inputRef.current;if(!el||el.value!==next)return;el.focus();const position=mention.start+replacement.length;el.setSelectionRange(position,position);syncCursor();});
+  const position=mention.start+replacement.length;
+  // Keep the next render's mention range in sync with the replacement. Otherwise
+  // Enter before the animation frame can select the same mention a second time.
+  setCursor({start:position,end:position});
+  setDismissed(JSON.stringify([next,position,position]));onChange(next);setSelection('');
+  requestAnimationFrame(()=>{const el=inputRef.current;if(!el||el.value!==next)return;el.focus();el.setSelectionRange(position,position);syncCursor();});
  };
  const onKeyDown=(event:KeyboardEvent<HTMLTextAreaElement>)=>{
   if(!open||event.nativeEvent.isComposing||event.nativeEvent.keyCode===229)return false;

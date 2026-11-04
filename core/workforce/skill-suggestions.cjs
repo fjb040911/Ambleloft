@@ -49,7 +49,7 @@ const methods={
    const summaries=candidates.map(s=>({id:s.id,version:s.release.version,name:s.entityName,title:s.title,summary:s.summary}));
    const config=await this.providers.secret(input.providerId,input.model);if(signal.aborted)throw Error('SUGGESTION_CANCELLED');
    const schema={type:'object',properties:{items:{type:'array',maxItems:10,items:{type:'object',properties:{id:{type:'string'},version:{type:'string'},reason:{type:'string'},match:{type:'string',enum:['high','additional']},responsibility:{type:'string'}},required:['id','version','reason','match','responsibility'],additionalProperties:false}},unmatchedCapabilities:{type:'array',maxItems:5,items:{type:'string'}}},required:['items','unmatchedCapabilities'],additionalProperties:false};
-   const raw=await Promise.race([(this.generateRole||generate)(config,{prompt:'Match only supplied skills to the role. Return only candidate id and version, a concise reason, match label and relevant responsibility. Never invent sources, versions or installable skills. Unmatched capabilities are plain search terms, not skills. Do not install or change selections.',input:{fields,candidates:summaries},outputSchema:schema,maxOutputTokens:8192},signal),cancelled(signal)]);
+   const raw=await Promise.race([(this.generateRole||generate)(config,{prompt:'Match only supplied skills to the role. Return only candidate id and version, a concise reason, match label and relevant responsibility. Never invent sources, versions or installable skills. Unmatched capabilities are plain search terms, not skills. Do not install or change selections.',input:{fields,candidates:summaries},outputSchema:schema,maxOutputTokens:8192,repairInvalidOutput:true},signal),cancelled(signal)]);
    if(signal.aborted)throw Error('SUGGESTION_CANCELLED');
    if(!raw||!Array.isArray(raw.items)||raw.items.length>10||!Array.isArray(raw.unmatchedCapabilities)||raw.unmatchedCapabilities.length>5)throw Error('SUGGESTION_INVALID_OUTPUT');
    const current=await this.read(),latestDraft=current.drafts.find(d=>d.id===input.draftId)||this.editDrafts?.get(input.draftId);
@@ -70,7 +70,7 @@ const methods={
    const result={requestId:input.requestId,draftId:input.draftId,draftRevision:revision,snapshotId:snapshot.manifest.snapshotId,inputDigest,ruleVersion:RULE_VERSION,status:'ready',items,unmatchedCapabilities};
    this.skillSuggestionResults.set(input.requestId,result);if(this.skillSuggestionResults.size>100)this.skillSuggestionResults.delete(this.skillSuggestionResults.keys().next().value);
    return result;
-  }finally{if(this.skillSuggestionRequests.get(input.requestId)?.controller===controller)this.skillSuggestionRequests.delete(input.requestId);this.suggestionControllers.delete(controller);}
+  }catch(error){throw require('../automation/structured-output.cjs').localizeStructuredError(error,input.locale);}finally{if(this.skillSuggestionRequests.get(input.requestId)?.controller===controller)this.skillSuggestionRequests.delete(input.requestId);this.suggestionControllers.delete(controller);}
  }
 };
 module.exports={skillSuggestionMethods:methods,retrieve,roleFields,RULE_VERSION};

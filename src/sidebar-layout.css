@@ -66,8 +66,8 @@
 
 /* macOS-inspired navigation: quiet surfaces, readable hierarchy and soft selection. */
 .workspace-navigation {
- --nav-selection:color-mix(in srgb,var(--accent) 17%,var(--sidebar));
- --nav-pressed:color-mix(in srgb,var(--accent) 24%,var(--sidebar));
+ --nav-selection:light-dark(color-mix(in srgb,var(--accent) 17%,var(--sidebar)),var(--selection));
+ --nav-pressed:light-dark(color-mix(in srgb,var(--accent) 24%,var(--sidebar)),color-mix(in srgb,var(--text) 16%,var(--sidebar)));
  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
  font-optical-sizing:auto;
 }

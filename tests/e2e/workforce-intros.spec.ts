@@ -9,8 +9,8 @@ for(const view of ['spaces','experts','store','knowledge'])for(const config of [
  await expect(intro).toHaveAttribute('data-tone',({spaces:'lilac',experts:'mint',store:'cream',knowledge:'pink'} as Record<string,string>)[view]);
  await intro.screenshot({path:`/tmp/workforce-intro-${view}-${config.name}.png`});
  if(view==='knowledge'){
-  const en=!!config.query;await intro.getByRole('button',{name:en?'Search adopted sources':'搜索已采纳资料'}).click();
-  await expect(page.getByRole('textbox',{name:en?'Search adopted knowledge':'搜索已采纳知识'})).toBeFocused();
+  const en=!!config.query;await intro.getByRole('button',{name:en?'Search execution references':'搜索执行依据'}).click();
+  await expect(page.getByRole('textbox',{name:en?'Search execution references':'搜索执行依据'})).toBeFocused();
   await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});
   await intro.getByRole('button',{name:en?'View project spaces':'查看项目空间'}).click();
   await expect(page.locator('.wf-intro')).toHaveAttribute('data-tone','lilac');

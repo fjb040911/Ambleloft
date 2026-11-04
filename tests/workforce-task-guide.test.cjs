@@ -12,7 +12,17 @@ async function setup(t){
 }
 const value=()=>({name:'Review contract',goal:'Verify the API contract before implementation',packages:[{id:'review',title:'Review API',instruction:'Compare documented endpoints and report discrepancies; do not change code',ownerId:'expert',mode:'discussion',projectId:null,dependencies:[],documentRefs:[],deliverables:'Endpoint comparison and discrepancy list',acceptance:'Every documented endpoint is accounted for, with unresolved discrepancies labeled',verification:'Compare each endpoint with the supplied specification and cite the relevant section',constraints:'Do not change project files'}]});
 const response=(extra={})=>({summary:'The task is ready for your review.',ready:true,questions:[],value:value(),...extra});
+async function confirmProject(f,d){const v=structuredClone(d.value);for(const p of v.packages)if(p.mode==='work')p.projectBinding={responsibility:'Implement the agreed project scope',relations:[],confirmed:true};const saved=await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:v});return f.service.checkTaskDraft({id:saved.id,expectedRevision:saved.revision});}
 const guide=(f,draft,extra={})=>f.service.guideTask({id:draft.id,expectedRevision:draft.revision,requestId:randomUUID(),...extra});
+test('progressive clarification keeps the question and submitted answer after inference failure',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async(_c,req)=>{assert.equal(req.outputSchema.properties.questions.maxItems,1);return response({ready:false,questions:[{label:'Which delivery scope?',help:'Choose the first release.'}]});};
+ const first=await guide(f,f.draft);const question=first.assessment.question;
+ f.service.generateTaskGuide=async()=>{throw Error('PROVIDER_RATE_LIMIT');};
+ await assert.rejects(guide(f,first,{message:'First release only'}),/rate-limited/);
+ const failed=(await f.service.read()).taskDrafts.find(d=>d.id===first.id);assert.deepEqual(failed.pendingQuestion,question);assert.equal(failed.requirementsPending,true);assert.equal(failed.messages.at(-1).text,'First release only');
+ f.service.generateTaskGuide=async(_c,req)=>{assert.ok(req.input.messages.some(m=>m.text==='First release only'));return response();};
+ const recovered=await guide(f,failed,{message:'Continue using my saved answer'});assert.equal(recovered.pendingQuestion,null);assert.equal(recovered.requirementsPending,false);assert.equal(recovered.status,'ready');assert.equal(f.runtime.runs.length,0);
+});
 test('built-in rules are injected only in discussions, not implementation tasks',()=>{
  assert.match(spaceInstructions({mode:'discussion'}),/Task creation guide/);
  assert.doesNotMatch(spaceInstructions({mode:'work'}),/Task creation guide/);
@@ -36,7 +46,7 @@ test('task allocation receives real expertise and environment kind without conne
   assert.doesNotMatch(JSON.stringify(req.input),/not-for-model|private-container|\/private\//);
   return response();
  };
- const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v3');assert.equal(f.runtime.runs.length,0);
+ const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v5');assert.equal(f.runtime.runs.length,0);
 });
 test('semantic gaps produce valid declarative forms, even with all fields populated',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which specification should be used?',help:'The two revisions conflict.'}]});
@@ -122,9 +132,9 @@ test('discussion documents are pinned through guide and task creation; changed a
  await f.service.change(s=>s.requests.push({id:'source',spaceId:f.space.id,mode:'discussion',prompt:'Use the API basis',documentRefs:[{id:doc.id,revision:1,hash:doc.hash}],createdAt:'2026-10-30',participants:[]}));
  const draft=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'source',commandId:randomUUID()});
  f.service.generateTaskGuide=async(_c,req)=>{assert.equal(req.input.documents[0].body,'Fixed requirement');const v=value();Object.assign(v.packages[0],{mode:'work',projectId:'project',documentIds:[doc.id]});return response({value:v});};
- const d=await guide(f,draft);assert.equal(d.value.packages[0].documentRefs[0].hash,doc.hash);
+ const d=await confirmProject(f,await guide(f,draft));assert.equal(d.value.packages[0].documentRefs[0].hash,doc.hash);
  await f.service.saveDocument({id:doc.id,spaceId:f.space.id,expectedRevision:1,title:doc.title,body:'New requirement',adopted:true});
- await assert.rejects(f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision}),/当前已采纳/);
+ await assert.rejects(f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision}),/执行依据/);
  assert.equal((await f.service.read()).plans.length,0);assert.equal((await f.service.read()).taskDrafts.find(v=>v.id===d.id).sourceDocuments[0].body,'Fixed requirement');
 });
 test('cancellation during credential loading returns promptly and never calls a model',async t=>{
@@ -154,4 +164,158 @@ test('task guidance passes English fallback and explicit Chinese locale to the m
  expected='zh-CN';d=await guide(f,d,{locale:'zh-CN'});assert.equal(d.assessment.question.source.definition.title,'补充任务信息');
  assert.match(spaceInstructions({mode:'discussion'},'en'),/User interface locale: en/);
  assert.match(spaceInstructions({mode:'discussion'},'zh-CN'),/User interface locale: zh-CN/);
+});
+
+async function basisDraft(t){
+ const f=await setup(t),doc=await f.service.saveDocument({spaceId:f.space.id,title:'Basis draft',body:'Verified scope'});
+ await f.service.change(s=>s.requests.push({id:'basis-discussion',spaceId:f.space.id,mode:'discussion',prompt:'Implement this basis',documentRefs:[{id:doc.id,revision:1,hash:doc.hash}],createdAt:'2026-11-03',participants:[]}));
+ const draft=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'basis-discussion',commandId:randomUUID()});
+ f.service.generateTaskGuide=async()=>{const v=value();Object.assign(v.packages[0],{mode:'work',projectId:'project',documentIds:[doc.id]});return response({value:v});};
+ const d=await confirmProject(f,await guide(f,draft));assert.equal(d.status,'ready');
+ return {...f,doc,d,basisConfirmation:{context:JSON.stringify([[],[]]),documents:[{id:doc.id,revision:1,hash:doc.hash,expectedRevision:1,expectedAdoptedRevision:null}]}};
+}
+test('unadopted references require explicit confirmation and commit atomically with the plan',async t=>{
+ const f=await basisDraft(t),input={id:f.d.id,expectedRevision:f.d.revision};
+ await assert.rejects(f.service.createGuidedPlan(input),/执行依据/);
+ assert.equal((await f.service.read()).documents[0].adoptedRevision,null);
+ const p=await f.service.createGuidedPlan({...input,basisConfirmation:f.basisConfirmation});
+ assert.equal((await f.service.read()).documents[0].adoptedRevision,1);assert.equal(p.packages[0].definition.documentRefs[0].hash,f.doc.hash);
+ const again=await f.service.createGuidedPlan({...input,basisConfirmation:f.basisConfirmation});assert.equal(again.id,p.id);assert.equal((await f.service.read()).documents[0].adoptions.length,1);assert.equal(f.runtime.runs.length,0);
+});
+test('changed document or impact context rejects confirmation without partial adoption',async t=>{
+ const f=await basisDraft(t),input={id:f.d.id,expectedRevision:f.d.revision,basisConfirmation:f.basisConfirmation};
+ await assert.rejects(f.service.createGuidedPlan({...input,basisConfirmation:{...f.basisConfirmation,context:'stale'}}),/关联任务已变化/);
+ await f.service.saveDocument({id:f.doc.id,spaceId:f.space.id,expectedRevision:1,title:'Changed',body:'New version'});
+ await assert.rejects(f.service.createGuidedPlan(input),/执行依据/);
+ const s=await f.service.read();assert.equal(s.plans.length,0);assert.equal(s.documents[0].adoptedRevision,null);
+});
+test('confirmed reference replacement retains old task inputs and marks the old basis stale',async t=>{
+ const f=await basisDraft(t),first=await f.service.createGuidedPlan({id:f.d.id,expectedRevision:f.d.revision,basisConfirmation:f.basisConfirmation});
+ const doc=await f.service.saveDocument({id:f.doc.id,spaceId:f.space.id,expectedRevision:1,title:'Basis v2',body:'Updated scope'});
+ await f.service.change(s=>s.requests.push({id:'new-discussion',spaceId:f.space.id,mode:'discussion',prompt:'Use v2',documentRefs:[{id:doc.id,revision:2,hash:doc.hash}],createdAt:'2026-11-03',participants:[]}));
+ const draft=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'new-discussion',commandId:randomUUID()}),d=await confirmProject(f,await guide(f,draft));
+ const confirmation={context:JSON.stringify([[[first.id,first.revision]],[]]),documents:[{id:doc.id,revision:2,hash:doc.hash,expectedRevision:2,expectedAdoptedRevision:1}]};
+ await assert.rejects(f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision}),/执行依据/);
+ const second=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision,basisConfirmation:confirmation});await f.service.plans.reconcile(first.id);
+ const s=await f.service.read(),old=s.plans.find(p=>p.id===first.id);assert.equal(s.documents[0].adoptedRevision,2);assert.equal(second.packages[0].definition.documentRefs[0].revision,2);assert.equal(old.packages[0].definition.documentRefs[0].revision,1);assert.ok(old.packages[0].stale);assert.equal(f.runtime.runs.length,0);
+});
+
+test('AI project suggestions remain unconfirmed; node editing and deterministic check create without regenerating',async t=>{
+ const f=await setup(t);let calls=0;
+ await f.service.saveProjectContext({id:f.space.id,expectedRevision:1,value:{roles:[{projectId:'project',responsibility:'API implementation'}],relations:[]}});
+ f.service.generateTaskGuide=async(_c,request)=>{calls++;assert.equal(request.input.projectContext.roles[0].responsibility,'API implementation');const v=value();Object.assign(v.packages[0],{mode:'work',projectId:'',projectBinding:{responsibility:'API implementation',relations:[],confirmed:true}});return response({value:v});};
+ let d=await guide(f,f.draft);assert.equal(d.status,'needs-input');assert.equal(d.value.packages[0].projectId,'');assert.equal(d.value.packages[0].projectBinding.confirmed,false);
+ const v=structuredClone(d.value);Object.assign(v.packages[0],{projectId:'project',projectBinding:{responsibility:'API implementation',relations:[],confirmed:true}});
+ d=await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:v});d=await f.service.checkTaskDraft({id:d.id,expectedRevision:d.revision});
+ assert.equal(d.status,'ready');assert.equal(calls,1);
+ const plan=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});assert.equal(plan.packages[0].definition.projectBinding.confirmed,true);assert.equal(f.runtime.runs.length,0);
+});
+test('deterministic checking cannot discard unanswered requirements or stale space revisions',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which API version?',help:'Affects compatibility'}]});
+ let d=await guide(f,f.draft);d=await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:d.value});d=await f.service.checkTaskDraft({id:d.id,expectedRevision:d.revision});assert.equal(d.status,'needs-input');assert.ok(d.assessment.question);assert.match(d.assessment.missing.join(' '),/需求问题/);
+ f.service.generateTaskGuide=async()=>response();d=await guide(f,d,{message:'Use v2'});assert.equal(d.status,'ready');
+ await f.service.saveProjectContext({id:f.space.id,expectedRevision:1,value:{roles:[],relations:[]}});
+ await assert.rejects(f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision}),/重新检查/);
+ d=await f.service.checkTaskDraft({id:d.id,expectedRevision:d.revision});assert.equal(d.status,'ready');
+});
+
+test('legacy pending questions survive deterministic checks without migration fields',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which target?',help:''}]});
+ const generated=await guide(f,f.draft);
+ await f.service.change(s=>{const d=s.taskDrafts[0];delete d.requirementsPending;delete d.pendingQuestion;});
+ const checked=await f.service.checkTaskDraft({id:generated.id,expectedRevision:generated.revision});assert.equal(checked.status,'needs-input');assert.ok(checked.assessment.question);assert.match(checked.assessment.missing.join(' '),/需求问题/);
+});
+
+const workValue=()=>{const v=value();Object.assign(v.packages[0],{mode:'work',projectId:'project',projectBinding:{responsibility:'API implementation',relations:[],confirmed:false}});return v;};
+const relationAnswer=(f,d,answers=d.relationGuide.nodes[0].prefill)=>f.service.answerTaskRelations({id:d.id,expectedRevision:d.revision,requestKey:d.relationGuide.requestKey,packageId:d.relationGuide.nodes[0].packageId,answers});
+test('relationship declarations confirm atomically, persist in space, and carry into a new discussion',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({value:workValue()});
+ let d=await guide(f,f.draft);assert.equal(d.status,'needs-input');assert.equal(d.relationGuide.nodes.length,1);
+ const before=structuredClone(d.value);d=await relationAnswer(f,d);
+ assert.equal(d.status,'ready');assert.equal(d.relationGuide,null);assert.equal(d.value.packages[0].instruction,before.packages[0].instruction);
+ assert.equal((await f.service.read()).spaces[0].projectContext.roles[0].responsibility,'API implementation');
+ await f.service.change(s=>s.requests.push({id:'next-discussion',spaceId:f.space.id,mode:'discussion',prompt:'Another delivery',documentRefs:[],participants:[],createdAt:new Date().toISOString()}));
+ const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'next-discussion',commandId:randomUUID()});
+ f.service.generateTaskGuide=async(_c,req)=>{assert.equal(req.input.knownBindings.bindings[0].source,'space');const v=workValue();v.packages[0].id='new-work';return response({value:v});};
+ const inherited=await guide(f,next);assert.equal(inherited.status,'ready');assert.equal(inherited.relationGuide,null);assert.equal(inherited.value.packages[0].projectBinding.reusedFrom,'space');assert.equal(f.runtime.runs.length,0);
+});
+test('relation-only model patches preserve task content and cannot clear semantic questions',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({value:workValue(),ready:false,questions:[{label:'Which API version?',help:'Select the delivery version'}]});
+ let d=await guide(f,f.draft),original=structuredClone(d.value);
+ f.service.generateTaskGuide=async(_c,req)=>{assert.deepEqual(req.input.gaps,['review']);assert.ok(req.outputSchema.properties.nodes);return {summary:'Clarify responsibility',nodes:[{packageId:'review',projectId:'project',responsibility:'Maintain API',relations:[],reason:'Review the proposed project responsibility',instruction:'Must be ignored'}]};};
+ d=await guide(f,d,{phase:'relations',message:'Use the existing API project'});
+ assert.equal(d.value.packages[0].instruction,original.packages[0].instruction);assert.equal(d.assessment.question.source.definition.fields[0].label,'Which API version?');
+ d=await relationAnswer(f,d);assert.equal(d.status,'needs-input');assert.ok(d.assessment.question);assert.equal(d.relationGuide,null);
+});
+test('relationship answers validate authoritative options and reject stale space revisions without writes',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({value:workValue()});const d=await guide(f,f.draft);
+ await assert.rejects(relationAnswer(f,d,{...d.relationGuide.nodes[0].prefill,projectId:'outside'}));
+ assert.deepEqual((await f.service.read()).spaces[0].projectContext,{roles:[],relations:[]});
+ await f.service.change(s=>s.spaces[0].revision++);
+ await assert.rejects(relationAnswer(f,d),/更新/);assert.equal((await f.service.read()).taskDrafts[0].revision,d.revision);
+});
+test('targeted relation inference cannot modify confirmed nodes and stale answers cannot replay',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response({value:workValue()});const pending=await guide(f,f.draft),d=await relationAnswer(f,pending);
+ await assert.rejects(relationAnswer(f,pending),/更新/);
+ f.service.generateTaskGuide=async()=>({summary:'Rewrite',nodes:[{packageId:'review',projectId:'project',responsibility:'Different',relations:[],reason:'Changed'}]});
+ await assert.rejects(guide(f,d,{phase:'relations'}),/已确认/);
+ assert.equal((await f.service.read()).taskDrafts[0].value.packages[0].projectBinding.responsibility,'API implementation');
+});
+test('cross-project prerequisite requires a handoff; switching a project invalidates dependent confirmations',async t=>{
+ const f=await setup(t);f.service.workspace.read=async()=>({projects:[{id:'project',name:'API'},{id:'web',name:'Web'}]});
+ await f.service.change(s=>{const sp=s.spaces[0];sp.projectIds.push('web');sp.members[0].projectIds.push('web');sp.revision++;});
+ const v=workValue();v.packages.push({...v.packages[0],id:'client',projectId:'web',dependencies:['review'],projectBinding:{responsibility:'Web client',relations:[],confirmed:false}});
+ f.service.generateTaskGuide=async()=>response({value:v});let d=await guide(f,f.draft);
+ const client=d.relationGuide.nodes.find(n=>n.packageId==='client');assert.equal(client.prefill.target0,'project');
+ await assert.rejects(f.service.answerTaskRelations({id:d.id,expectedRevision:d.revision,requestKey:d.relationGuide.requestKey,packageId:'client',answers:{...client.prefill,relationshipMode:'independent'}}),/前置/);
+ d=await f.service.answerTaskRelations({id:d.id,expectedRevision:d.revision,requestKey:d.relationGuide.requestKey,packageId:'client',answers:{...client.prefill,description0:'Consume API contract and verify endpoints'}});
+ assert.equal(d.value.packages[1].projectBinding.confirmed,true);
+ d=await relationAnswer(f,d,{...d.relationGuide.nodes[0].prefill,projectId:'web'});
+ assert.equal(d.value.packages[1].projectBinding.confirmed,false);assert.ok(d.relationGuide.nodes.some(n=>n.packageId==='client'));
+});
+test('unambiguous history is reusable, conflicts and new handoffs require confirmation',()=>{
+ const R=require('../core/workforce/relation-guide.cjs'),space={id:'space',projectIds:['project','other'],members:[{employeeId:'expert',projectIds:['project','other']}]};
+ const p=workValue().packages[0];p.projectBinding.confirmed=true;
+ const state={plans:[{spaceId:'space',packages:[{definition:p}]}]};
+ let known=R.knownBindings(state,space);assert.equal(known.bindings[0].source,'history');
+ assert.equal(R.inherit([p],space,known)[0].projectBinding.confirmed,true);
+ const changed={...p,projectBinding:{...p.projectBinding,responsibility:'Changed role'}};state.plans.push({spaceId:'space',packages:[{definition:changed}]});
+ known=R.knownBindings(state,space);assert.deepEqual(known.conflicts,['project']);assert.equal(R.inherit([p],space,known)[0].projectBinding.confirmed,false);
+ const other={...p,id:'other-task',projectId:'other'},dependent={...p,dependencies:['other-task']};
+ assert.equal(R.inherit([other,dependent],space,{bindings:[{projectId:'project',binding:p.projectBinding,source:'history'}]})[1].projectBinding.confirmed,false);
+});
+
+test('another round in the same discussion creates a new plan draft and reuses the confirmed space agreement',async t=>{
+ const f=await setup(t);
+ await f.service.change(s=>s.requests.push({id:'conversation',spaceId:f.space.id,mode:'discussion',prompt:'First delivery',documentRefs:[],participants:[],createdAt:'2026-11-01'}));
+ let d=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'conversation',commandId:randomUUID()});f.service.generateTaskGuide=async()=>response({value:workValue()});
+ d=await relationAnswer(f,await guide(f,d));const plan=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
+ await f.service.change(s=>s.requests.push({id:'next-round',replyTo:'conversation',spaceId:f.space.id,mode:'discussion',prompt:'Add the next delivery',documentRefs:[],participants:[],createdAt:'2026-11-02'}));
+ const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'next-round',commandId:randomUUID()});assert.notEqual(next.id,d.id);assert.equal(next.discussionId,'conversation');assert.equal(next.source.length,2);
+ const result=await guide(f,next);assert.equal(result.status,'ready');assert.equal(result.value.packages[0].projectBinding.reusedFrom,'space');assert.equal((await f.service.read()).plans[0].id,plan.id);assert.equal(f.runtime.runs.length,0);
+});
+test('historical confirmation is rechecked when another draft creates a conflict during inference',async t=>{
+ const f=await setup(t),v=workValue();v.packages[0].projectBinding.confirmed=true;
+ await f.service.change(s=>s.taskDrafts.push({...structuredClone(f.draft),id:'historical',value:v}));
+ f.service.generateTaskGuide=async()=>{const changed=workValue();changed.packages[0].projectBinding={responsibility:'Conflicting responsibility',relations:[],confirmed:true};await f.service.change(s=>s.taskDrafts.push({...structuredClone(f.draft),id:'conflicting',value:changed}));return response({value:workValue()});};
+ const result=await guide(f,f.draft);assert.equal(result.status,'needs-input');assert.equal(result.value.packages[0].projectBinding.confirmed,false);assert.equal(result.relationGuide.nodes.length,1);
+});
+
+test('discussion planning streams progress without the standalone guide deadline',async t=>{
+ const f=await setup(t);f.service.taskGuideTimeoutMs=20;f.service.hostIdleTimeoutMs=100;
+ f.service.generateTaskGuide=async(_config,job,_signal,onProgress)=>{
+  assert.equal(job.timeoutMs,null);assert.equal(typeof onProgress,'function');
+  for(let i=1;i<=8;i++){await new Promise(r=>setTimeout(r,25));onProgress({receivedCharacters:i,phase:'responding'});}
+  return response();
+ };
+ const result=await f.service.guideTask({id:f.draft.id,expectedRevision:f.draft.revision,requestId:randomUUID(),message:'Use the confirmed goal'},{discussion:true});
+ assert.equal(result.status,'ready');assert.equal(f.runtime.runs.length,0);assert.equal(f.service.taskGuideControllers.size,0);
+});
+test('silent discussion planning preserves input and cannot apply a late draft',async t=>{
+ const f=await setup(t);f.service.hostIdleTimeoutMs=30;let release;
+ f.service.generateTaskGuide=()=>new Promise(resolve=>{release=resolve;});
+ await assert.rejects(f.service.guideTask({id:f.draft.id,expectedRevision:f.draft.revision,requestId:randomUUID(),message:'Keep my answer'},{discussion:true}),e=>e.code==='MODEL_RESPONSE_TIMEOUT');
+ release(response());await new Promise(r=>setTimeout(r,10));
+ const saved=(await f.service.read()).taskDrafts.find(d=>d.id===f.draft.id);
+ assert.equal(saved.messages.at(-1).text,'Keep my answer');assert.equal(saved.status,'needs-input');assert.equal(saved.value.packages.length,0);assert.equal(f.service.taskGuideControllers.size,0);
 });

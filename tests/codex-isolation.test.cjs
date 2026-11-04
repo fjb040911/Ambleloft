@@ -13,13 +13,13 @@ test('packaged application never falls back to an external executable', async t 
   await assert.rejects(findCodex(process.execPath, runtime), /不会使用系统 Codex/);
   const engine = path.join(resourcesPath, 'engine');
   await fs.mkdir(path.join(engine, 'bin'), { recursive: true });
-  await fs.writeFile(path.join(engine, 'manifest.json'), JSON.stringify({ version: '0.153.4', platform: process.platform, arch: process.arch }));
+  await fs.writeFile(path.join(engine, 'manifest.json'), JSON.stringify({ version: '0.166.0', platform: process.platform, arch: process.arch }));
   const executable = path.join(engine, 'bin', process.platform === 'win32' ? 'codex.exe' : 'codex');
   await fs.writeFile(executable, 'fixture', { mode: 0o755 });
   assert.equal(await findCodex(process.execPath, runtime), await fs.realpath(executable));
   await fs.writeFile(path.join(engine, 'manifest.json'), JSON.stringify({ version: 'wrong', platform: process.platform, arch: process.arch }));
   await assert.rejects(findCodex(process.execPath, runtime), /不会使用系统 Codex/);
-  await fs.writeFile(path.join(engine, 'manifest.json'), JSON.stringify({ version: '0.153.4', platform: process.platform, arch: process.arch }));
+  await fs.writeFile(path.join(engine, 'manifest.json'), JSON.stringify({ version: '0.166.0', platform: process.platform, arch: process.arch }));
   await fs.unlink(executable);
   await fs.symlink(process.execPath, executable);
   await assert.rejects(findCodex('', runtime), /不会使用系统 Codex/);

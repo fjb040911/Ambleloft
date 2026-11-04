@@ -1,17 +1,52 @@
 <div align="center">
   <img src="public/brand/icon-128.png" width="80" height="80" alt="Ambleloft" />
   <h1>Ambleloft</h1>
-  <p><strong>Bring your apps into AI conversations.</strong></p>
+  <p><strong>A new way into the software you already have.</strong></p>
   <p>An open-source desktop AI agent and a foundation for software companies building their own business agents.</p>
-  <p><a href="https://ambleloft.com/en/">Official website</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">Downloads & release notes</a> · <a href="https://ambleloft.com/en/docs/overview/">Developer guides</a> · <a href="#start-with-skill-master">Create with Skill Master</a></p>
+  <p><a href="https://ambleloft.com/en/">Official website</a> · <a href="https://github.com/fjb040911/Ambleloft/releases">Downloads & release notes</a> · <a href="https://ambleloft.com/en/docs/overview/">Developer guides</a> · <a href="https://ambleloft.com/en/#product-demo">Explore the multi-project vision</a></p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
 Ambleloft is a free, open-source desktop AI agent and an open extension platform. Work with project files, review tool activity, confirm actions, and inspect results in conversation. Software teams can build on that workspace to give their existing products a conversational interface.
 
-**Define the business entry point in a Skill. Specify fields and steps in a declarative form. Connect your services through a Node extension.** Your application owns the business rules and final outcome; Ambleloft provides the conversation, interaction components, and extension runtime.
+**Bring specialist AI partners together to plan, build, and review your business agent. Define its entry point in a Skill, specify fields and steps in a declarative form, and connect services through a Node extension.** Your application owns the business rules and final outcome; Ambleloft provides the conversation, interaction components, and extension runtime.
 
-This repository contains the **0.8.0 development preview**. For the capabilities described here, start with the [source setup](#run-from-source). Installer scope is documented in each release. The desktop core is free; model and external service charges are separate.
+This page describes the **current source**. To try new capabilities such as the collaboration workbench, start with the [source setup](#run-from-source). Check release notes to see which entries are included in an installer. The desktop core is free; model and external service charges are separate.
+
+Website films present the **product vision and an ideal way of working**, including planned experiences. These concept demonstrations are not evidence of current functionality or verified deployment. Use the source guides and release notes for practical instructions.
+
+## Specialist partners working together on your projects
+
+When you maintain the host, SDK, samples, an SSH service, website and guides yourself, one host change can mean switching projects, repeating context to different agents, and tracking progress manually.
+
+Bring the shared goal, existing projects and specialist partners into one project space. Describe the change centrally; the host helps prepare reviewable work nodes and dependencies. Repositories stay in place. Once you confirm and start the plan, experts work on their assigned parts.
+
+- **Start with relevant skills.** Inspect a role’s responsibilities, deliverables and recommended skills. Keep or adjust the combination, then prepare its fixed packages on submission. Your choices are retained, and existing tasks keep their original snapshots.
+- **Share the goal and review the assignments.** The host coordinates actual responsibilities and proposes owners, execution projects, source references and acceptance criteria. Clarify missing facts or @ an expert directly. Review and explicitly start the plan before execution.
+- **Make handoffs and progress visible.** The graph shows dependencies, execution states and blockers. Downstream tasks receive accepted predecessor summaries and review records, alongside their own pinned references. Inspect actual results before accepting a finished run.
+
+A capability-alignment plan can follow this sequence:
+
+**Shared goal and interface agreement → host implementation and acceptance → SDK, SSH connected service and website branches → sample after both SDK and service acceptance → guide after sample acceptance → integration and delivery review.**
+
+Save these prerequisites as plan dependencies so independent projects can progress when ready. Give each handoff a clear artifact location, version, retrieval method and verification result for the next specialist to check and use.
+
+A first trial:
+
+![Collaboration tasks and dependencies in a project space](.github/assets/collaboration-en.png)
+
+*Current frontend components with isolated sample data. Shows local/SSH task dependencies and review states; it is not evidence of completed remote work.*
+
+1. [Run the source app and connect a model](#run-from-source), then open Collaboration workbench.
+2. Open My experts → Add expert, inspect a role and complete Define role → Configure skills → Confirm configuration. Wait for the selected skills to be ready.
+3. Create a project space. Link the host, SDK, sample, remote service, website and guide directories, select experts and assign responsibilities under Team and projects.
+4. Describe the host change centrally in Discussion with its contract and verification method, without naming speakers first. Inspect the host’s decisions, suggestions and sources.
+5. Prepare tasks from the discussion. Review deliverables, owners, projects, dependencies and acceptance criteria, then explicitly save or start the plan.
+6. Open graph nodes to handle questions and approvals, inspect real results and accept the delivery or request rework.
+
+[Complete collaboration exercise](https://ambleloft.com/en/docs/collaboration-start/) · [Add and maintain experts](https://ambleloft.com/en/docs/ai-experts/) · [Execution and review](https://ambleloft.com/en/docs/execution-review/)
+
+Experts reuse responsibilities, skills and working methods. Historical material is queried within authorized scope and retains its sources. Native subagents are temporary delegates within a task; they do not automatically become library experts. A sufficiently detailed discussion does not authorize plan execution.
 
 ## The agent understands intent. Your software owns the rules.
 
@@ -66,7 +101,10 @@ For custom HTML/JS interfaces, use the supported [MCP Apps subset](specs/extensi
 
 The built-in [supplemental information Skill](resources/skills/supplemental-input/SKILL.md) helps the Agent ask for missing details during open-ended tasks. Developer-defined business forms use their own templates and contracts.
 
-## Our direction: connect conversations, systems, and the people doing the work
+<details>
+<summary>Product vision and earlier concept films</summary>
+
+### Our direction: connect conversations, systems, and the people doing the work
 
 We want software companies to deliver business Agents on a shared foundation, bringing their domain knowledge and existing services into conversation.
 
@@ -77,13 +115,15 @@ This is the product direction. Cross-device coordination and unattended server-s
 [Explore the product vision on the website](https://ambleloft.com/en/#product-film) · [Check current source capabilities](specs/extensions/current-capabilities.md)
 
 <details>
-<summary>Watch the earlier form interaction demo (80 seconds)</summary>
+<summary>Watch the earlier form interaction concept (80 seconds)</summary>
 
-[![Travel form interaction demo](.github/assets/intro-en.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)
+[![Travel form interaction concept](.github/assets/intro-en.png)](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4)
 
 [English](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-en.mp4) · [简体中文](https://github.com/fjb040911/Ambleloft/releases/download/v0.3.1/ambleloft-intro-zh-CN.mp4). Both versions have captions and no audio.
 
-This earlier video uses real application UI, demo data, and a simulated desktop bridge. Its two-step form returns answers to chat. The business-service example below uses a separate three-step flow and a local demo service.
+This earlier concept film uses application UI, demo data and a simulated desktop bridge to illustrate a two-step form returning answers to chat. It is not evidence of current feature acceptance. The business-service example below uses a separate three-step flow and a local demo service.
+
+</details>
 
 </details>
 
@@ -91,6 +131,7 @@ This earlier video uses real application UI, demo data, and a simulated desktop 
 
 | Your goal | Start here |
 | --- | --- |
+| Organize experts across projects | [Collaboration workbench guide](https://ambleloft.com/en/docs/collaboration-start/) |
 | Use the desktop Agent for a task | [Run from source](#run-from-source), then [connect a model](#connect-a-model) |
 | Define a form in a Skill | [Declarative business form tutorial](https://ambleloft.com/en/docs/declarative-ui/) |
 | Create a skill or connect a business service with AI guidance | [Start with Skill Master](#start-with-skill-master) |
@@ -138,7 +179,7 @@ npm test
 npm run pack
 ```
 
-In a compatible host, open **Settings → Extensions → Install**, select the package, confirm trust, and grant the required permissions. [Run the host from source](#run-from-source) for the current extension preview.
+In a compatible host, open **Skills & extensions → Install from local**, select the package, confirm trust, and grant the required permissions. [Run the host from source](#run-from-source) for the current extension preview.
 
 <details>
 <summary>How an extension fits together</summary>
@@ -171,7 +212,7 @@ Use a Skill to describe when to use your capability, a form or page to collect i
 3. Start its local demo service and configure the service URL in extension settings.
 4. Ask to submit travel expenses, complete the three-step flow, and query the resulting records.
 
-This sample uses fictional data and a local demo service. It also demonstrates read-only reconciliation after a lost response. The earlier form video above shows a separate two-step UI demo that returns input to chat.
+This sample uses fictional data and a local demo service. It also demonstrates read-only reconciliation after a lost response. The earlier concept film above illustrates a separate two-step interaction; it does not replace this sample’s verification records.
 
 </details>
 
@@ -194,7 +235,7 @@ Ambleloft provides model connections, project files, conversation history, and e
 
 *Application UI with synthetic project content and a simulated desktop bridge.*
 
-Switch layouts in **Settings → General → Navigation layout**. The activity bar is the default. Switching layouts or activity groups keeps your current conversation and draft. The activity bar uses icons with tooltips and separate project, task, and extension entry points. Standalone tasks are grouped by time. Narrow windows use a sidebar drawer with Escape-to-close and focus restoration.
+Switch layouts in **Settings → General → Navigation layout**. The activity bar is the default. Switching layouts or activity groups keeps your current conversation and draft. The activity bar uses icons with tooltips and separate project, task, collaboration workbench, and extension entry points. Standalone tasks are grouped by time. Narrow windows use a sidebar drawer with Escape-to-close and focus restoration.
 
 File diffs compare directory snapshots before and after a turn. They may include external edits and have size and count limits. They support review, not Git commits or rollback.
 
@@ -202,11 +243,11 @@ File diffs compare directory snapshots before and after a turn. They may include
 
 ## Current preview
 
-**0.8.0 development preview.** The current host source and its contracts define the capability baseline. Check each release’s notes for installer coverage.
+**Current source preview.** Source, contracts and capability-specific verification records define this baseline. Check release notes for installer coverage.
 
 - **Platforms:** macOS Apple Silicon is the primary validated environment. Windows and Linux require platform-specific build and native-runtime validation; check release notes for available packages.
 - **Extensions:** forms, operations, isolated pages, settings, message actions, and OIDC integration are developer previews. MCP Apps support is a limited subset, not full ChatGPT Apps or arbitrary remote MCP compatibility.
-- **Tooling:** use SDK/CLI and samples aligned with the host capability you are developing against. Follow the [extension setup guide](https://ambleloft.com/en/docs/first-extension/) and the selected sample’s dependency instructions. APIs are evolving and a marketplace is not available. The [automation guide](specs/extensions/background-automation-guide.md) documents project grants, model opt-in, and job limits.
+- **Tooling:** use SDK/CLI and samples aligned with the host capability you are developing against. Follow the [extension setup guide](https://ambleloft.com/en/docs/first-extension/) and the selected sample’s dependency instructions. APIs are evolving. The host provides curated role and skill/extension catalogs from its trusted sources; open community publishing is not available. Default role skills have recorded test Store installation evidence, which does not verify every platform or external dependency. The [automation guide](specs/extensions/background-automation-guide.md) documents project grants, model opt-in, and job limits.
 
 Ambleloft connects to existing model endpoints. Model downloads and inference-runtime management are outside the current scope. Model and external service charges are separate.
 

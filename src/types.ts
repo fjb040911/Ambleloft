@@ -38,7 +38,7 @@ export interface AgentRun {
   id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
   messages: { inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
-  tools: { commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
+  tools: { nativeThreadId?:string; nativeIdentityError?:string; analysisAgent?:{id:string;name:string;avatar:number}; analysisTask?:string; analysisReads?:string[]; commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
   approvals: { id: string; method: string; detail: string; progress?:string }[];
@@ -111,10 +111,11 @@ declare global {
       setDefaultProvider(id:string): Promise<ProviderCatalog>;
       removeProvider(id:string): Promise<ProviderCatalog>;
       saveProvider(input: ProviderInput): Promise<ProviderConfig>;
-      testProvider(id?:string): Promise<{ message: string }>;
+      testProvider(id?:string): Promise<{ message: string;capability?:{model:string;protocol:'chat'|'responses';mode:'schema'|'json'|'prompt';streaming:boolean;verifiedAt:number} }>;
       editRun(input: {id: string; title?: string; projectId?: string | null; remove?: boolean; archived?:boolean}): Promise<AgentRun[]>;
       openProject(id: string): Promise<void>;
       getRunPage?(input:{id:string;before?:string;limit?:number}):Promise<AgentRun>;
+      exportRunDiagnostics?(input:{id:string;language:string}):Promise<{saved:boolean}|null>;
       touchSearchItem?(input:{kind:string;id:string}):Promise<void>;
       searchWorkspace?(input:{query:string;kind:string;cursor?:string}):Promise<{items:SearchResult[];total:number;next:string|null}>;
       listRuns(): Promise<AgentRun[]>;

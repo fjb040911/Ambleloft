@@ -1,3 +1,5 @@
+import RunDiagnosticsButton from './RunDiagnosticsButton';
+import UserMessage from './UserMessage';
 import TaskRequestSurface from './TaskRequestSurface';
 import ComposerAttachments from './ComposerAttachments';
 import {TraceDescription} from './components/ui/trace';
@@ -171,15 +173,15 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
           {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><div key={r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={openInput}/></div>)}
           {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage text={pendingMessage.text}/>}
           {referenceError&&<div role="alert" className="error-banner">{referenceError}</div>}
-          {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{run.error}{run.status==='failed'&&<div className="settings-actions"><Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button><Button type="button" variant="outline" onClick={()=>{setPrompt('请核实当前任务已完成的操作，并从未完成的步骤继续。');jump();}}>{t('准备继续任务')}</Button></div>}</div>}
+          {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</div>}
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
-  const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><article className="message user bg-message text-message-foreground" aria-label={t("你的消息")}><SkillTags snapshots={turn.user.skills}/><div className="user-text">{(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}</div></article>
+  const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>
             <TurnProgress allRequests={deliveries.snapshot?.requests||[]} requests={(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1))} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<Message role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></MessageContent></Message>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
-            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language]);
+            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language]);
   const renderTurn=(turn:typeof turns[number])=>renderedTurns.get(turn.user.id);
   const requestKeys=[...run.approvals.map(r=>'approval:'+r.id),...(run.questions||[]).map(r=>'question:'+r.id),...(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id)];
   const pendingCount=requestKeys.length;
@@ -239,7 +241,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
     {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<p role="alert">{historyError}</p>}
     {turns.map((turn,index)=><div className="conversation-turn" key={turn.user.id} data-embedded-first={index===0&&!before&&turn.user.text===embeddedPrompt||undefined}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
-    {active&&run.approvals.length===0&&<RunActivity run={run} turn={turns.at(-1)} visible={visible} compact/>}
+    {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact/>}
     {!hidePendingActions&&pendingSurface}
   </div>;
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
@@ -264,7 +266,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
     <div className="conversation-dock">
       {pendingInPanel&&pendingSurface}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
-      {active&&run.approvals.length===0&&<RunActivity run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
+      {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {!pendingInPanel&&pendingSurface}
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}

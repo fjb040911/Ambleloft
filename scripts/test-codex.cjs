@@ -15,6 +15,11 @@ const { probeProvider } = require('../electron/provider.cjs');
     let body = ''; for await (const chunk of req) body += chunk;
     let data; try { data = JSON.parse(body); } catch { res.writeHead(400); res.end(); return; }
     requests.push(data);
+    if (data.stream === false) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'probe', object: 'response', status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ status: 'ok', count: 2 }) }] }] }));
+      return;
+    }
     if (mode === 'error') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Fixture unauthorized', type: 'invalid_request_error' } })); return; }
     if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }
     const itemId = `msg_${requests.length}`;

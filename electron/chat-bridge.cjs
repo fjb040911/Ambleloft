@@ -1,8 +1,11 @@
 const {applyImageInputPolicy}=require('./model-capabilities.cjs');
-// Protocol translation only. Codex owns the agent loop, tools and approvals.
+// Codex owns tool execution and approvals. The bridge translates protocols,
+// records metadata and stops further requests when a no-progress loop persists.
 const http = require('node:http');
+const {ToolLoopGuard, PAUSE_MESSAGE, REMINDER, safeName} = require('./tool-loop-guard.cjs');
+const {toolCatalog, callDiagnostic, responseObserver} = require('./run-diagnostics.cjs');
 const { randomUUID, createHash } = require('node:crypto');
-const usesChat = config => config.protocol === 'chat' || ((!config.protocol || config.protocol === 'auto') && /^deepseek/i.test(config.model));
+const usesChat = config => config.protocol === 'chat' || ((!config.protocol || config.protocol === 'auto') && (config.detectedProtocol ? config.detectedProtocol === 'chat' : /^deepseek/i.test(config.model)));
 const toolName = item => {
   const readable=item.namespace?`${item.namespace}__${item.name}`:item.name;
   // Keep names copyable for Chat models; random-looking suffixes are prone to
@@ -136,17 +139,32 @@ async function readUpstreamError(response,key){
 async function startChatBridge(config, sessionId = randomUUID(), passthrough = false, onDiagnostic = () => {}) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) throw new Error("模型会话 ID 无效");
   const token=randomUUID();const active=new Set();
+  const loopGuard=new ToolLoopGuard();
   const server=http.createServer(async(req,res)=>{
     if(req.headers.authorization!==`Bearer ${token}`){res.writeHead(401);res.end();return;}
     if(req.method!=='POST'||req.url!=='/v1/responses'){res.writeHead(404);res.end();return;}
     const controller=new AbortController();active.add(controller);res.on('close',()=>controller.abort());
-    const diagnostic={requestId:randomUUID(),sessionId,startedAt:new Date().toISOString(),protocol:passthrough?'responses':'chat',stage:'request',events:0,done:false,finishReason:null};
+    const diagnostic={threadId:req.headers['thread-id'],parentThreadId:req.headers['x-codex-parent-thread-id'],requestId:randomUUID(),sessionId,startedAt:new Date().toISOString(),protocol:passthrough?'responses':'chat',stage:'request',events:0,done:false,finishReason:null};
     const started=performance.now();
     const report=()=>{diagnostic.durationMs=Math.round(performance.now()-started);try{onDiagnostic({...diagnostic});}catch{}};
     let seq=0;const emit=(type,fields)=>{if(!res.destroyed)res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:seq++,...fields})}\n\n`);};
     try {
       let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>32*1024*1024)throw new Error('请求过大');}
-      const data=applyImageInputPolicy(JSON.parse(raw),config);if(config.effectiveLimits?.maxOutputTokens)data.max_output_tokens=config.effectiveLimits.maxOutputTokens;const {body,definitions}=passthrough ? {body:normalizeToolSelection(data)} : translateRequest(data,config);
+      let data=applyImageInputPolicy(JSON.parse(raw),config);
+      diagnostic.diagnosticVersion=1;
+      const fingerprint=value=>loopGuard.fingerprint(value);
+      diagnostic.tools=toolCatalog(data.tools,fingerprint);
+      diagnostic.toolChoice=typeof data.tool_choice==='string'?safeName(data.tool_choice):data.tool_choice?.type||'auto';
+      Object.assign(diagnostic,loopGuard.inspect(data,req.headers['thread-id']||'root'));
+      if(diagnostic.loopGuard?.action==='pause'){
+        diagnostic.stage='loop_guard';
+        throw Object.assign(new Error(PAUSE_MESSAGE),{code:'tool_loop_detected'});
+      }
+      if(diagnostic.loopGuard?.action==='warn'){
+        data={...data,input:[...(typeof data.input==='string'?[{role:'user',content:data.input}]:data.input||[]),{role:'developer',content:REMINDER}]};
+      }
+      if(config.effectiveLimits?.maxOutputTokens)data.max_output_tokens=config.effectiveLimits.maxOutputTokens;
+      const {body,definitions}=passthrough ? {body:normalizeToolSelection(data)} : translateRequest(data,config);
       const requestBody=JSON.stringify(body);
       diagnostic.requestBytes=Buffer.byteLength(requestBody);
       if(!passthrough){
@@ -164,7 +182,8 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       if(passthrough){
         res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'application/json','Cache-Control':'no-cache'});
-        for await(const chunk of upstream.body){if(res.destroyed)break;res.write(chunk);}
+        const observe=responseObserver(diagnostic,fingerprint);
+        for await(const chunk of upstream.body){if(res.destroyed)break;observe(chunk);res.write(chunk);}
         diagnostic.stage='forwarded';res.end();return;
       }
       res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
@@ -204,6 +223,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         if(!['stop','tool_calls','length'].includes(finish))throw new Error(`模型未正常完成：${finish}`);
         // Never execute a truncated tool call.
         if(finish==='length'&&calls.size)throw new Error('工具参数被输出长度限制截断，未执行');
+        diagnostic.calls=[...(diagnostic.calls||[]),...[...calls.values()].slice(0,64).map(call=>callDiagnostic(call.name,resolveStreamTool(call.nameParts,definitions)?.name,call.args,fingerprint,attempt))].slice(0,64);
         const unknown=[...calls.values()].filter(call=>!resolveStreamTool(call.nameParts,definitions));
         if(unknown.length&&attempt===0){
           diagnostic.toolCorrectionAttempts=1;
@@ -246,6 +266,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       response.status=finish==='length'?'incomplete':'completed';
       if(finish==='length')response.incomplete_details={reason:'max_output_tokens'};
       response.usage={input_tokens:usage?.prompt_tokens||0,output_tokens:usage?.completion_tokens||0,total_tokens:usage?.total_tokens||0};
+      diagnostic.usage=response.usage;
       emit(finish==='length'?'response.incomplete':'response.completed',{response});diagnostic.stage='completed';res.end();
     }catch(error){
       diagnostic.failed=true;diagnostic.cancelled=controller.signal.aborted;

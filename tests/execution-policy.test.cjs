@@ -64,6 +64,8 @@ test('new and resumed threads receive execution policy without relaxing sandbox 
     assert.match(thread.params.developerInstructions, /supported approval mechanism/);
     assert.match(thread.params.developerInstructions, /After approval, continue the original task/);
     assert.match(thread.params.developerInstructions, /After denial, respect the decision/);
+    assert.match(thread.params.developerInstructions, /Mermaid output contract/);
+    assert.match(thread.params.developerInstructions, /C\["documents\/\{space\}\/\{doc\}\/\{hash\}\.md"\]/);
     assert.equal(calls.filter(c => c.method === 'turn/start').length, 1);
   }
 });

@@ -1,0 +1,13 @@
+{
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "scope": "Synthetic restart then new goal; isolated database, no execution",
+  "executions": 0,
+  "passed": true,
+  "elapsedMs": 8837,
+  "action": "ask",
+  "status": "needs-input",
+  "briefItemCount": 4,
+  "allSourcesValid": true,
+  "questions": 1
+}

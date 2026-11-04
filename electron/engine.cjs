@@ -4,7 +4,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const os = require('node:os');
 const run = promisify(execFile);
-const ENGINE_VERSION = '0.153.4';
+const ENGINE_VERSION = '0.166.0';
 
 function engineRuntime() {
   const app = process.versions.electron && require('electron').app;

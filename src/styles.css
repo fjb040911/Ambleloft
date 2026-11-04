@@ -13,7 +13,7 @@
 .conversation-page { max-width: 960px; margin: auto; padding: 30px 40px 40px; }
 .conversation-scope { font-size: calc(11px * var(--font-scale, 1)); color: var(--secondary); display: flex; gap: 6px; align-items: center; margin: 22px 0; overflow-wrap: anywhere; }
 .message { margin: 18px 0; padding: 18px 20px; border-radius: var(--radius-card); background: var(--raised); border: 1px solid var(--border-soft); }
-.message.user { border: 0; }
+
 .message strong { font-size: inherit; color: inherit; font-weight: 600; }
 .message > div { white-space: pre-wrap; overflow-wrap: anywhere; font-size: calc(15px * var(--font-scale, 1)); line-height: 1.85; margin-top: 10px; }
 .message.assistant { margin-top: 0; padding-top: 0;}
@@ -256,8 +256,8 @@ h1 { font-size: calc(30px * var(--font-scale, 1)); font-weight: 600; letter-spac
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
 @media (prefers-reduced-transparency: reduce) { .modal::backdrop { backdrop-filter: none; background: #20252cd9; } }
-@media (prefers-contrast: more) { :root { --border: #737780; --border-soft: #737780; --muted: #4b5059; } :root[data-theme='dark'] { --muted: #c8cbd2; } button:focus-visible { outline-width: 3px; } }
-@media (prefers-contrast: more) and (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --muted: #c8cbd2; } }
+@media (prefers-contrast: more) { :root { --border: #737780; --border-soft: #737780; --muted: #4b5059; } :root[data-theme='dark'] { --muted: #cccccc; } button:focus-visible { outline-width: 3px; } }
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --muted: #cccccc; } }
 
 /* The transcript owns scrolling; approvals and composer share a stationary dock. */
 main.chat-main { overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
@@ -266,12 +266,12 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; flex-direction:
 .chat-main .conversation-page { width: 100%; max-width: none; height: 100%; min-height: 0; padding: 0; display: flex; flex-direction: column; }
 .conversation-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation-content { max-width: 920px; padding: 0 28px 26px; margin: auto; }
-.conversation-dock { position: relative; flex-shrink: 0; width: 100%; max-width: 920px; margin: 0 auto; padding: 10px 28px 18px; background: var(--surface); }
+.conversation-dock { position: relative; flex-shrink: 0; width: 100%; max-width: 920px; margin: 0 auto; padding: 8px 28px 8px; background: var(--surface); }
 .jump-latest { position: absolute; right: 30px; top: -38px; box-shadow: 0 3px 12px #0001; background: var(--raised); }
-.message { padding: 18px 0; background: transparent; border: 0; }.message.user { padding: 12px 16px; margin-left: 12%; border-radius: var(--radius-message); }
+.message { padding: 18px 0; background: transparent; border: 0; }
 .message-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .message > .message-label { margin-top: 0; }.message-label .text-button { font-size: var(--content-font-size); color: var(--muted); }
-.message > .markdown { white-space: normal; margin: 0; }.message > .user-text { white-space: pre-wrap; margin-top: 0; }
+.message > .markdown { white-space: normal; margin: 0; }
 .markdown { font-size: var(--content-font-size); line-height: 1.8; overflow-wrap: anywhere; }
 .markdown p { margin: 9px 0; }.markdown h1,.markdown h2,.markdown h3,.markdown h4 { color: var(--text); margin: 22px 0 10px; letter-spacing: 0; line-height: 1.4; }.markdown h1 { font-size: calc(23px * var(--font-scale, 1)); }.markdown h2 { font-size: calc(19px * var(--font-scale, 1)); }.markdown h3 { font-size: calc(16px * var(--font-scale, 1)); }
 .markdown strong { font-size: inherit; font-weight: 650; color: inherit; }.markdown ul,.markdown ol { padding-left: 24px; margin: 10px 0; }.markdown li { margin: 5px 0; }.markdown blockquote { border-left: 3px solid var(--accent); padding-left: 15px; margin: 12px 0; color: var(--secondary); }
@@ -284,7 +284,7 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; flex-direction:
 .hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #a05bc3; }.hljs-string,.hljs-attr { color: #3a9065; }.hljs-number,.hljs-title { color: #477dd0; }.hljs-comment { color: var(--muted); }
 .stream-status { display: flex; align-items: center; gap: 7px; margin: 18px 0; }
 .spin { animation: spin 1.5s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }@media(prefers-reduced-motion:reduce) { .spin { animation: none; } }
-@media(max-width:900px) { .conversation-content { padding: 0 16px 20px; }.conversation-dock { padding: 8px 16px 12px; }.artifact-toolbar { flex-wrap: wrap; } }
+@media(max-width:900px) { .conversation-content { padding: 0 16px 20px; }.conversation-dock { padding: 8px 16px; }.artifact-toolbar { flex-wrap: wrap; } }
 
 /* Continuous corners where supported; radius tokens remain the fallback. */
 @supports (corner-shape: squircle) {

@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
+import {createRequire} from 'node:module';
 const xml = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="a" value="开始" vertex="1" parent="1" style="rounded=1;"><mxGeometry x="20" y="20" width="120" height="60" as="geometry"/></mxCell><mxCell id="b" value="完成" vertex="1" parent="1"><mxGeometry x="240" y="20" width="120" height="60" as="geometry"/></mxCell><mxCell id="e" edge="1" source="a" target="b" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell></root></mxGraphModel>';
 const rich = '# 渲染验收\n\n**重点内容** 和 `inline`。\n\n| 项目 | 结果 |\n|---|---|\n| 测试 | 成功 |\n\n- [x] 已完成\n\n公式：$E=mc^2$\n\n```typescript\nconst hello = "world";\n```\n\n```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```\n\n```echarts\n{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{},"series":[{"type":"bar","data":[3,7]}]}\n```\n\n```drawio\n'+xml+'\n```\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60"><rect width="200" height="60" fill="#e3ecfa"/><text x="20" y="35">Vector preview</text></svg>\n```';
-async function prepare(page: import('@playwright/test').Page, text = rich) {
-  await page.addInitScript(({ text }) => {
+async function prepare(page: import('@playwright/test').Page, text = rich, language: 'zh-CN'|'en' = 'zh-CN') {
+  await page.addInitScript(({ text, language }) => {
     const run: any = { id:'demo', title:'任务体验验收', model:'fixture', baseUrl:'http://127.0.0.1/v1', cwd:'/fixture', createdAt:new Date().toISOString(), status:'waiting', error:'', tools:[], approvals:[{id:'approve',method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo approved',cwd:'/fixture',reason:'确认本次操作'})}], messages:[{id:'u',role:'user',text:'请展示结果'},{id:'r',role:'assistant',kind:'reasoning',status:'completed',text:'先检查输入，再整理结果。'},{id:'a',role:'assistant',phase:'final_answer',text}] };
     (window as any).__formReads=0;(window as any).__formSubscriptions=0;
     let callback: any;
@@ -10,14 +11,14 @@ async function prepare(page: import('@playwright/test').Page, text = rich) {
     (window as any).__emit = () => callback(structuredClone(run));
     (window as any).desktop = {
       getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),
-      getDevice:async()=>({name:'Test Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),
+      getDevice:async()=>({name:'Test Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({language,layoutMode:'classic',tasks:[],projects:[],theme:'light'}),
       listRuns:async()=>[structuredClone(run)],onRun:(fn:any)=>{callback=fn;return()=>{}},onCommand:()=>()=>{},
       approveRun:async(input:any)=>{(window as any).__decision=input;run.approvals=[];run.status='completed';callback(structuredClone(run));},
       forms:{list:async()=>{(window as any).__formReads++;return[];},onChanged:(fn:any)=>{(window as any).__formsChanged=fn;(window as any).__formSubscriptions++;return()=>{(window as any).__formSubscriptions--;};}},
       copyText:async(text:string)=>{(window as any).__copiedText=text;},
       saveWorkspace:async()=>{},stopRun:async()=>{},
     };
-  }, {text});
+  }, {text,language});
   await page.goto('/');
   await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
 }
@@ -61,8 +62,8 @@ test('broken and executable content falls back without running',async({page})=>{
 
 test('user bubble contains only text and each finished turn has its own duration',async({page})=>{
  await prepare(page,'第一轮回答');
- await expect(page.locator('.message.user .message-label')).toHaveCount(0);
- await expect(page.locator('.message.user')).toHaveText('请展示结果');
+ await expect(page.locator('[data-message-role=user] .message-label')).toHaveCount(0);
+ await expect(page.locator('[data-message-role=user]')).toHaveText('请展示结果');
  await expect(page.locator('.trace-duration')).toHaveCount(0);
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;
@@ -71,7 +72,7 @@ test('user bubble contains only text and each finished turn has its own duration
   run.status='completed';run.approvals=[];(window as any).__emit();
  });
  await expect(page.locator('.trace-duration')).toHaveText(['用时 1 分 5 秒','用时 0 分 5 秒']);
- const items=await page.locator('.conversation-turn .trace-duration, .conversation-turn [data-slot=message], .conversation-turn .message.user').allTextContents();
+ const items=await page.locator('.conversation-turn .trace-duration, .conversation-turn [data-slot=message], .conversation-turn [data-message-role=user]').allTextContents();
  expect(items.findIndex(t=>t.includes('用时 1 分 5 秒'))).toBeLessThan(items.findIndex(t=>t.includes('第一轮回答')));
 });
 
@@ -89,6 +90,23 @@ test('Mermaid arithmetic labels survive sanitization and copy returns exact sour
  await page.locator('.artifact').getByRole('button',{name:'复制',exact:true}).click();
  await expect(page.locator('.artifact').getByRole('button',{name:'已复制',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>(window as any).__copiedText)).toBe(source);
+});
+
+test('Mermaid instruction example renders quoted placeholders and literal quotes with the host renderer',async({page})=>{
+ const {developerInstructions}=createRequire(process.cwd()+'/package.json')('./electron/agent-instructions.cjs');
+ const examples=[...developerInstructions.matchAll(/```mermaid\n([\s\S]*?)```/g)].map(match=>match[1].trim());
+ expect(examples).toHaveLength(1);
+ const invalid='flowchart LR\n A[文档写入] --> C[正文按 sha256 落盘<br/>documents/{space}/{doc}/{hash}.md]';
+ await prepare(page,'```mermaid\n'+invalid+'\n```\n\n```mermaid\n'+examples[0]+'\n```');
+ await expect(page.locator('.artifact-error')).toHaveCount(1);
+ await expect(page.locator('.artifact-error')).toContainText('Parse error');
+ const image=page.getByAltText('Mermaid 图表');await expect(image).toHaveCount(1);
+ const labels=await image.evaluate(el=>{
+  const doc=new DOMParser().parseFromString(decodeURIComponent((el as HTMLImageElement).src.split(',').slice(1).join(',')),'image/svg+xml');
+  return [...doc.querySelectorAll('text')].map(n=>n.textContent).join(' ');
+ });
+ expect(labels).toContain('documents/{space}/{doc}/{hash}.md');
+ expect(labels).toContain('workforce.spaces.v1');expect(labels).toContain('“引用”');expect(labels).toContain('完成');
 });
 
 test('turn anchors preview the question and jump without moving the composer',async({page})=>{
@@ -556,7 +574,7 @@ test('parallel streaming keeps sidebar order and selection stable after pointer 
   const runs=[make('A','2026-09-24T00:00:00Z'),make('B','2026-09-24T00:01:00Z')];
   let emit:any;const w=window as any;
   w.__stream=(id:string,index:number)=>{const run=runs.find(r=>r.id===id)!;run.updatedAt=new Date(Date.UTC(2026,8,24,0,2,index)).toISOString();run.messages[1].text+='更新';emit(structuredClone(run));};
-  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
+  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({language,layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
  });
  await page.goto('/');
  const rows=page.locator('.tree-task > button:first-child');
@@ -893,4 +911,56 @@ test('Trace tools distinguish denied, pending and unfinished historical calls',a
  await expect(rows.nth(0)).toContainText('已拒绝');await expect(rows.nth(0).getByRole('button')).toHaveCount(0);
  await expect(rows.nth(2).locator('[data-slot=trace-line]')).toHaveAttribute('data-status','error');
  await expect(rows.nth(3).locator('[data-slot=trace-line]')).toHaveAttribute('data-status','error');
+});
+
+test('user Bubble keeps message theme and typography across themes and narrow layouts',async({page})=>{
+ await prepare(page,'回答');
+ for(const theme of ['light','dark'])for(const width of [1240,390]){
+  await page.setViewportSize({width,height:840});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+  const message=page.locator('[data-message-role=user]').first(),bubble=message.locator('[data-slot=bubble-content]');
+  await expect(message).toHaveAttribute('data-align','end');await expect(bubble).toHaveCSS('background-color',theme==='light'?'rgb(0, 0, 0)':'rgb(48, 48, 48)');await expect(bubble).toHaveCSS('color','rgb(255, 255, 255)');
+  await expect(bubble).toHaveCSS('font-size','15px');await expect(bubble).toHaveCSS('font-weight','500');await expect(bubble).toHaveCSS('line-height','22.5px');await expect(bubble).toHaveCSS('border-width','0px');
+  await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[0].text='第一行\n'+('很长的用户消息'.repeat(40));(window as any).__emit();});
+  expect(await message.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  const outer=await message.boundingBox(),inner=await bubble.boundingBox();expect(Math.abs(outer!.x+outer!.width-inner!.x-inner!.width)).toBeLessThan(2);
+  await page.screenshot({path:`test-results/user-bubble-${theme}-${width}.png`});
+ }
+});
+
+for (const language of ['zh-CN','en'] as const) test(`loop pause offers diagnostic export and manual continuation (${language})`,async({page})=>{
+  await prepare(page,'Fixture answer',language);
+  await page.evaluate(()=>{
+    const w=window as any;
+    w.desktop.exportRunDiagnostics=async(input:any)=>{w.__diagnosticInput=input;return {saved:true};};
+    w.__demoRun.status='interrupted';w.__demoRun.approvals=[];
+    w.__demoRun.error='检测到重复调用且没有有效进展，任务已暂停。请核实已执行的操作后再继续，或导出诊断数据。';w.__emit();
+  });
+  const exportLabel=language==='en'?'Export diagnostic data':'导出诊断数据';
+  const alert=page.locator('.error-banner');
+  await expect(alert).toContainText(language==='en'?'task has been paused':'任务已暂停');
+  await alert.getByRole('button',{name:exportLabel,exact:true}).click();
+  await expect(alert.getByRole('status')).toHaveText(language==='en'?'Diagnostic data exported':'诊断数据已导出');
+  expect(await page.evaluate(()=>(window as any).__diagnosticInput)).toEqual({id:'demo',language});
+  await alert.getByRole('button',{name:language==='en'?'Prepare to continue':'准备继续任务'}).click();
+  await expect(page.locator('[data-slot="input-group-control"]')).not.toBeEmpty();
+  await page.getByTitle(language==='en'?'Model used for this turn':'本次使用的模型').click();
+  const dialog=page.getByRole('dialog');
+  await expect(dialog).toContainText(language==='en'?'credentials are excluded':'不包含聊天正文');
+  await page.evaluate(()=>{(window as any).desktop.exportRunDiagnostics=async()=>null;});
+  await dialog.getByRole('button',{name:exportLabel,exact:true}).click();
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await page.evaluate(()=>{(window as any).desktop.exportRunDiagnostics=async()=>{throw Error('private filesystem path');};});
+  await dialog.getByRole('button',{name:exportLabel,exact:true}).click();
+  await expect(dialog.getByRole('alert')).toHaveText(language==='en'?'Could not export diagnostic data. Please try again.':'诊断数据导出失败，请重试');
+  await page.screenshot({path:`/tmp/ambleloft-diagnostics-${language}.png`});
+});
+
+for(const width of [1240,600])test(`chat composer keeps bottom space for messages ${width}`,async({page})=>{
+ await prepare(page,'空间检查');await page.setViewportSize({width,height:840});
+ await page.getByRole('button',{name:'批准本次',exact:true}).click();
+ const input=page.getByRole('textbox',{name:'继续对话'});
+ await input.fill('第一行');await input.press('Shift+Enter');await input.press('a');
+ await expect(input).toHaveValue('第一行\na');
+ const geometry=await input.evaluate(el=>{const group=el.closest('[data-slot=input-group]')!.getBoundingClientRect(),page=el.closest('.conversation-page')!.getBoundingClientRect(),hint=document.getElementById(el.getAttribute('aria-describedby')!)!;return {gap:page.bottom-group.bottom,hintHeight:hint.getBoundingClientRect().height,description:hint.textContent};});
+ expect(geometry.gap).toBeLessThanOrEqual(10);expect(geometry.hintHeight).toBeLessThanOrEqual(1);expect(geometry.description).toContain('Shift+Enter');
 });

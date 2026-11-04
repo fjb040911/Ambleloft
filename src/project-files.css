@@ -83,7 +83,7 @@
  #main-content .composer-note {flex-wrap:wrap;}
  #main-content .composer-note .text-button,.keyboard-hint {white-space:nowrap;}
  #main-content .conversation-content {padding:0 18px 20px;}
- #main-content .conversation-dock {padding:8px 14px 12px;}
+ #main-content .conversation-dock {padding:8px 14px;}
 }
 .file-pdf-viewer {display:flex;flex-direction:column;flex:1;min-height:0;}
 .file-pdf-controls {display:flex;align-items:center;justify-content:center;gap:12px;padding:10px;font-size: calc(11px * var(--font-scale, 1));}

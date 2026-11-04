@@ -1,4 +1,5 @@
 const {normalizeModelImageInputs}=require('./model-capabilities.cjs');
+const outputCapabilities=require('../core/automation/output-capabilities.cjs');
 const {normalizeLimits,resolveLimits}=require('./model-limits.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -75,6 +76,7 @@ function createProviderStore(directory, encryption, database) {
       if(input.apiKey){if(!encryption.isEncryptionAvailable())throw new Error('系统加密存储不可用，未保存 API Key');encryptedKey=encryption.encryptString(input.apiKey).toString('base64');}
       else if(!input.clearKey&&old?.encryptedKey){if(old.baseUrl!==config.baseUrl)throw new Error('端点已更换，请重新填写 API Key 或明确移除密钥，避免将旧密钥发送到新服务');encryptedKey=old.encryptedKey;}
       const saved={...config,id,name:input.name?.trim()||old?.name||config.model,models:unique,encryptedKey};
+      saved.outputProfiles=(old?.outputProfiles||[]).filter(p=>unique.includes(p.model)&&outputCapabilities.valid(p,outputCapabilities.key({...saved,model:p.model})));
       state.providers=old?state.providers.map(p=>p.id===id?saved:p):[...state.providers,saved];state.defaultId ||= id;
       return publicConfig(saved);
     }); },
@@ -87,23 +89,38 @@ function createProviderStore(directory, encryption, database) {
       if(model&&!(stored.models||[stored.model]).includes(model))throw new Error('模型已从服务配置中移除，请恢复配置后再继续会话');
       let apiKey='';
       if(stored.encryptedKey){if(!encryption.isEncryptionAvailable())throw new Error('系统加密存储不可用，无法读取 API Key');try{apiKey=encryption.decryptString(Buffer.from(stored.encryptedKey,'base64'));}catch{throw new Error('API Key 无法解密，请在设置中重新填写');}}
-      return {...config, effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,apiKey};
+      const capabilityKey=outputCapabilities.key({...stored,...config});
+      const outputProfiles=(stored.outputProfiles||[]).filter(p=>outputCapabilities.valid(p,capabilityKey));
+      const detected=outputProfiles.toSorted((a,b)=>b.verifiedAt-a.verifiedAt)[0]?.protocol;
+      const result={...config,effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,apiKey,outputProfiles,...(config.protocol==='auto'&&detected?{detectedProtocol:detected}:{})};
+      return outputCapabilities.bind(result,profile=>mutate(state=>{
+        const current=state.providers.find(p=>p.id===stored.id);
+        if(!current||!(current.models||[current.model]).includes(config.model)||outputCapabilities.key({...current,model:config.model})!==capabilityKey)return;
+        const record={key:capabilityKey,model:config.model,...profile};
+        current.outputProfiles=[...(current.outputProfiles||[]).filter(p=>outputCapabilities.valid(p,outputCapabilities.key({...current,model:p.model}))&&!(p.key===record.key&&p.protocol===record.protocol&&p.streaming===record.streaming)),record].slice(-200);
+      }));
     },
   };
 }
 function redact(message, key) { return key ? String(message).split(key).join('[REDACTED]') : String(message); }
 async function probeProvider(config) {
-  const chat=require('./chat-bridge.cjs').usesChat(config);
-  let response;
-  try {
-    response = await fetch(`${config.baseUrl}/${chat?'chat/completions':'responses'}`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(25000),
-      headers: { 'Content-Type': 'application/json', ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}) },
-      body: JSON.stringify(chat?{model:config.model,messages:[{role:'user',content:'Reply exactly OK.'}],stream:false}:{ model: config.model, input: 'Reply exactly OK.', stream: false, store: false }) });
-  } catch { throw new Error('端点连接失败或超时，请检查地址、网络和证书'); }
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`端点返回 HTTP ${response.status}。请检查 API Key、模型 ID 与所选服务协议支持。`); }
-  const data = await response.json();
-  if(chat){if(!Array.isArray(data.choices)||!data.choices[0]?.message||data.error)throw new Error('端点未返回有效的 Chat Completions 结果');return {message:'Chat Completions 端点测试成功。思考与工具调用仍取决于服务兼容性。'};}
-  if (data.object !== 'response' || !Array.isArray(data.output) || data.error || data.status === 'failed') throw new Error('端点未返回有效的 Responses API 结果；仅 Chat Completions 接口无法直接使用');
-  return { message: 'Responses 端点测试成功。流式与工具调用仍取决于该服务的兼容性。' };
+  // Fixed, non-business fixture. Verify schema and protocol through the same
+  // bounded adapter used by planning, rather than accepting any HTTP 200.
+  const {generate}=require('../core/automation/provider.cjs');
+  const {structuredErrorMessage}=require('../core/automation/structured-output.cjs');
+  const schema={type:'object',additionalProperties:false,required:['status','count'],properties:{status:{type:'string',enum:['ok']},count:{type:'integer',enum:[2]}}};
+  // Retest the strongest representable format, even when a cached fallback exists.
+  config.outputProfiles=[];
+  try{
+    await generate(config,{prompt:'Return JSON with status "ok" and count 2. This is a connection and structured output compatibility test.',input:{test:true},outputSchema:schema,maxOutputTokens:1024,repairInvalidOutput:true,probeProtocol:true},AbortSignal.timeout(45000));
+    const capability=config.outputProfiles.find(p=>!p.streaming);
+    return {message:'端点与结构化输出测试通过。',capability:{model:config.model,...capability}};
+  }catch(error){
+    if(error.name==='TimeoutError'||error.name==='AbortError')throw Error('端点测试超时，请检查地址、网络或模型响应速度。');
+    const message=structuredErrorMessage(error);
+    if(message!==error.message)throw Error(message);
+    throw Error('端点未通过协议或结构化输出测试，请检查地址、模型和服务协议。'+(error.diagnostics?.httpStatus?' HTTP '+error.diagnostics.httpStatus:''));
+  }
 }
+
 module.exports = { writeJSON, normalizeProvider, createProviderStore, fingerprint, redact, probeProvider, isLocalHost };

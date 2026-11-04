@@ -5,7 +5,7 @@ async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amb
  const service=new SpaceService({directory:root,database:db,workspace:{read:async()=>({projects})},workforce:{read:async()=>({employees:[{id:'one'},{id:'two'}]})},runtime});await service.initialize();clearInterval(service.plans.timer);
  const space=await service.save({value:{name:'Multi-repo',purpose:'Verify delivery',projectIds:['a','b','alias'],members:['one','two'].map(employeeId=>({employeeId,assignment:'Design and build',projectIds:['a','b','alias']}))}});
  t.after(async()=>{await service.shutdown();await db.close();await fs.rm(root,{recursive:true,force:true});});return {service,db,runtime,space};}
-const unit=(id,projectId,dependencies=[])=>({id,title:id,ownerId:'one',mode:'work',projectId,instruction:'Implement this unit',dependencies,documentRefs:[],deliverables:'Code and checks',acceptance:'Correct tests with evidence'});
+const unit=(id,projectId,dependencies=[])=>({projectBinding:{responsibility:'Implement assigned module',confirmed:true,relations:['a','b','alias'].filter(target=>target!==projectId).map(targetProjectId=>({targetProjectId,kind:'artifact',description:'Read accepted predecessor deliverables and verify the handoff'}))},id,title:id,ownerId:'one',mode:'work',projectId,instruction:'Implement this unit',dependencies,documentRefs:[],deliverables:'Code and checks',acceptance:'Correct tests with evidence'});
 const control=(service,plan,action,packageId)=>service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action,packageId},{});
 async function accept(f,plan,packageId){const r=f.runtime.runs.find(r=>r.collaboration.requestId===plan.packages.find(p=>p.id===packageId).attempts.at(-1).requestId);r.status='completed';r.messages=[{role:'assistant',text:'Produced implementation'}];r.tools=[{name:'exec',output:'tests passed',exitCode:0}];await f.service.plans.reconcile(plan.id);const current=(await f.service.read()).plans[0],p=current.packages.find(p=>p.id===packageId),a=p.attempts.at(-1);await f.service.reviewPlan({planId:plan.id,packageId,attemptId:a.id,resultHash:a.resultHash,note:'Reviewed the recorded test and diff',accepted:true});return current;}
 test('LangGraph waits for accepted dependencies, then runs independent projects; a retry preserves other work',async t=>{
@@ -118,4 +118,64 @@ test('failed node retry uses the selected model without changing other nodes',as
  const current=(await f.service.read()).plans[0];await f.service.controlPlan({id:plan.id,expectedRevision:current.revision,commandId:randomUUID(),action:'retry',packageId:'first',modelChoice:{providerId:'backup',model:'working-model'}},{});
  assert.equal(inputs.at(-1).providerId,'backup');assert.equal(inputs.at(-1).model,'working-model');
  const saved=(await f.service.read()).plans[0];assert.equal(saved.packages[1].modelChoice,undefined);assert.equal(saved.packages[0].attempts.length,2);
+});
+
+test('project relationships persist independently, reject conflicts and do not grant member access',async t=>{
+ const f=await fixture(t),value={roles:[{projectId:'a',responsibility:'Web client'}],relations:[{sourceProjectId:'a',targetProjectId:'b',kind:'api',description:'Consume /v1 after the API contract is accepted'}]};
+ const saved=await f.service.saveProjectContext({id:f.space.id,expectedRevision:1,value});
+ assert.equal(saved.revision,2);assert.deepEqual(saved.members,f.space.members);
+ assert.deepEqual((await f.service.read()).spaces[0].projectContext,value);
+ await assert.rejects(f.service.saveProjectContext({id:f.space.id,expectedRevision:1,value}),/空间已更新/);
+ await assert.rejects(f.service.saveProjectContext({id:f.space.id,expectedRevision:2,value:{...value,relations:[{...value.relations[0],targetProjectId:'outside'}]}}),/不同的项目/);
+ assert.equal((await f.service.read()).spaces[0].revision,2);
+ const renamed=await f.service.save({id:saved.id,expectedRevision:2,value:{...saved,name:'Renamed'}});assert.deepEqual(renamed.projectContext,value);
+ const unlinked=await f.service.save({id:saved.id,expectedRevision:3,value:{...renamed,projectIds:['a'],members:renamed.members.map(m=>({...m,projectIds:['a']}))}});assert.deepEqual(unlinked.projectContext.relations,[]);
+});
+test('start and dispatch require explicit relationships, and runtime uses the frozen plan snapshot',async t=>{
+ const f=await fixture(t),node=unit('consumer','a');delete node.projectBinding;
+ let plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Relationship check',goal:'Use the related service',packages:[node]}});
+ await assert.rejects(control(f.service,plan,'start'),/确认项目关系/);assert.equal(f.runtime.runs.length,0);
+ // Direct dispatch cannot bypass a blocked start.
+ await f.service.change(s=>{s.plans[0].status='running';});await f.service.plans.dispatch(plan.id,node.id);assert.equal(f.runtime.runs.length,0);
+ await control(f.service,plan,'pause');
+ node.projectBinding={responsibility:'Web client',confirmed:true,relations:[{targetProjectId:'b',kind:'api',description:'Use the agreed endpoint'}]};
+ plan=await f.service.savePlan({id:plan.id,expectedRevision:1,spaceId:f.space.id,value:{name:plan.name,goal:plan.goal,packages:[node]}});
+ await f.service.saveProjectContext({id:f.space.id,expectedRevision:1,value:{roles:[{projectId:'a',responsibility:'A newer responsibility'}],relations:[]}});
+ await control(f.service,plan,'start');assert.equal(f.runtime.runs.length,1);
+ const ctx=f.runtime.runs[0].collaboration.projectContext;
+ assert.equal(ctx.source,'plan-snapshot');assert.equal(ctx.binding.responsibility,'Web client');assert.equal(ctx.binding.relations[0].targetProjectId,'b');assert.deepEqual(ctx.projects.map(p=>p.id),['a','b']);
+ assert.deepEqual((await f.service.read()).plans[0].packages[0].definition.projectBinding,node.projectBinding);
+});
+test('cross-project prerequisites require a declared handoff and permissions remain enforced',async t=>{
+ const f=await fixture(t),source=unit('producer','b'),consumer=unit('consumer','a',['producer']);consumer.projectBinding.relations=[];
+ let plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Handoff',goal:'Verify handoff',packages:[source,consumer]}});
+ await assert.rejects(control(f.service,plan,'start'),/前置任务项目/);
+ consumer.projectBinding.relations=[{targetProjectId:'b',kind:'artifact',description:'Verify the delivered file hash before reading'}];
+ plan=await f.service.savePlan({id:plan.id,expectedRevision:1,spaceId:f.space.id,value:{name:plan.name,goal:plan.goal,packages:[source,consumer]}});
+ await f.service.change(s=>{s.spaces[0].members.find(m=>m.employeeId==='one').projectIds=['a'];});
+ await assert.rejects(control(f.service,plan,'start'),/获授权/);assert.equal(f.runtime.runs.length,0);
+});
+
+test('revising a node replaces the definition, clears retry notes and keeps accepted upstream evidence',async t=>{
+ const f=await fixture(t);const first=unit('build','a'),last={...unit('verify','b',['build']),instruction:'Old local tunnel checks',constraints:'Do not deploy'};
+ let plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Delivery',goal:'Old tunnel goal',packages:[first,last]}});
+ await control(f.service,plan,'start');plan=(await f.service.read()).plans[0];await accept(f,plan,'build');await f.service.plans.pulse(plan.id);
+ const run=f.runtime.runs.at(-1);run.messages=[{role:'assistant',text:'OLD ASSISTANT DEPLOYMENT RESTRICTION'}];run.status='interrupted';await f.service.plans.reconcile(plan.id);
+ await f.service.change(s=>s.plans[0].packages[1].rework='OLD RETRY NOTE');
+ const value={name:plan.name,goal:'Publicly accessible web and API',packages:[{...first,verification:'',constraints:''},{...last,instruction:'Verify the publicly deployed client and real API',constraints:'Use fictional data',verification:'Browser tests against public URL'}]};
+ await assert.rejects(f.service.savePlan({id:plan.id,spaceId:f.space.id,expectedRevision:plan.revision,value}),/暂停/);
+ await control(f.service,plan,'pause');const before=structuredClone((await f.service.read()).plans[0]);
+ const revised=await f.service.savePlan({id:plan.id,spaceId:f.space.id,expectedRevision:plan.revision,value});
+ assert.equal(revised.status,'draft');assert.equal(revised.revision,2);assert.equal(revised.packages[0].status,'accepted');assert.deepEqual(revised.packages[0].acceptance,before.packages[0].acceptance);
+ assert.equal(revised.packages[1].rework,undefined);assert.equal(revised.packages[1].definition.constraints,'Use fictional data');assert.deepEqual(revised.packages[1].attempts,before.packages[1].attempts);assert.equal(revised.versions[0].value.packages[1].constraints,'Do not deploy');
+ assert.equal(f.runtime.runs.length,2);
+ await control(f.service,revised,'start');assert.equal(f.runtime.runs.length,3);
+ const request=(await f.service.read()).requests.find(r=>r.id===f.runtime.runs.at(-1).collaboration.requestId);
+ assert.match(request.prompt,/Verify the publicly deployed client/);assert.doesNotMatch(request.prompt,/Old local tunnel checks|Do not deploy|OLD RETRY NOTE|OLD ASSISTANT/);assert.match(request.prompt,/任务定义已修订/);
+});
+test('revising upstream invalidates accepted dependents but preserves every historical attempt',async t=>{
+ const f=await fixture(t);let plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Delivery',goal:'Verify change',packages:[unit('build','a'),unit('verify','b',['build'])]}});
+ await control(f.service,plan,'start');await accept(f,(await f.service.read()).plans[0],'build');await f.service.plans.pulse(plan.id);await accept(f,(await f.service.read()).plans[0],'verify');await control(f.service,plan,'pause');
+ const before=(await f.service.read()).plans[0];const revised=await f.service.savePlan({id:plan.id,expectedRevision:1,spaceId:f.space.id,value:{name:plan.name,goal:plan.goal,packages:before.packages.map(p=>p.id==='build'?{...p.definition,instruction:'Build a new public client'}:p.definition)}});
+ assert.deepEqual(revised.packages.map(p=>p.status),['pending','pending']);assert.ok(revised.packages.every(p=>!p.acceptance));assert.deepEqual(revised.packages.map(p=>p.attempts),before.packages.map(p=>p.attempts));
 });

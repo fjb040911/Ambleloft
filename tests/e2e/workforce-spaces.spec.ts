@@ -65,8 +65,9 @@ test('empty team without experts explains the next step',async({page})=>{
  await page.evaluate(async()=>{const api=window.desktop!.workforce!,snapshot=await api.snapshot();api.snapshot=async()=>({...snapshot,employees:[]});await window.desktop!.spaces!.lifecycle({id:'space',action:'archive'});});
  await page.getByRole('button',{name:/下一轮规划 明确下一轮/}).click();
  await page.getByRole('tab',{name:'团队与项目'}).click();
- const empty=page.locator('.wf-team-empty');await expect(empty.getByText(/先在“我的专家”中添加专家/)).toBeVisible();
- await expect(empty.getByRole('button',{name:'选择成员与分工'})).toHaveCount(0);
+ const empty=page.locator('.wf-team-empty');await expect(empty.getByText(/可从角色库添加/)).toBeVisible();
+ await empty.getByRole('button',{name:'选择成员与分工'}).click();
+ await expect(page.getByRole('dialog',{name:'空间成员与分工'}).getByRole('button',{name:'从角色库添加专家'})).toBeVisible();
 });
 test('archived empty team remains read-only',async({page})=>{
  await page.goto(fixture);
@@ -81,11 +82,11 @@ test('document comparison survives viewing original evidence',async({page})=>{
  await enter(page);await page.locator('.wf-basis-list button').click();await page.getByRole('button',{name:'对照当前采纳版'}).click();await page.getByRole('button',{name:'查看来源任务与角色'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'返回项目空间'}).click();await expect(page.locator('.wf-document-comparison')).toBeVisible();
 });
 test('continuing a discussion keeps its pinned revision, even with a newer draft',async({page})=>{
- await enter(page);await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.getByRole('button',{name:'继续讨论',exact:true}).click();await page.getByRole('button',{name:'参考资料',exact:true}).click();await expect(page.getByRole('dialog',{name:'参考资料与历史空间'})).toContainText('发布方案 v1');await page.keyboard.press('Escape');await page.getByRole('button',{name:'发起讨论',exact:true}).click();await expect(page.getByRole('alert')).toContainText('测试网络失败');const calls=await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='coordinateDiscussion'));expect(calls[0].input.documentRefs).toEqual([{id:'basis',title:'发布方案',revision:1,hash:'hash1'}]);
+ await enter(page);await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.getByLabel('这次想推进什么？').fill('请继续梳理这份方案');await page.getByRole('button',{name:'参考资料',exact:true}).click();await expect(page.getByRole('dialog',{name:'参考资料与历史空间'})).toContainText('发布方案 v1');await page.keyboard.press('Escape');await page.getByRole('button',{name:'发起讨论',exact:true}).click();await expect(page.getByRole('alert')).toContainText('测试网络失败');const calls=await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='coordinateDiscussion'));expect(calls[0].input.documentRefs).toEqual([{id:'basis',title:'发布方案',revision:1,hash:'hash1'}]);
 });
 for(const width of [390,800,1280])test(`switching space tabs keeps the navigation anchored at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:800});await enter(page);
- const scroller=page.locator('.qa-scroll'),tabs=page.locator('.wf-space-tabs > [data-slot=tabs-list]');
+ const scroller=page.locator('.qa-scroll'),tabs=page.locator('.wf-space-navigation');
  // Stale per-tab offsets must not be restored when switching panels.
  await page.evaluate(()=>{sessionStorage.setItem('workforce.scroll:space:discussion','1200');sessionStorage.setItem('workforce.scroll:space:documents','0');});
  await scroller.evaluate(el=>{el.scrollTop=70;});const partial=(await tabs.boundingBox())!.y;
@@ -93,6 +94,7 @@ for(const width of [390,800,1280])test(`switching space tabs keeps the navigatio
   await page.getByRole('tab',{name,exact:true}).click();await expect.poll(async()=>(await tabs.boundingBox())!.y).toBeCloseTo(partial,0);await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeCloseTo(70,0);
  }
  await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.requests.find((r:any)=>r.id==='discussion').participants[0].output='讨论内容。\n\n'.repeat(120);qa.emit();});
+ await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight)).toBeGreaterThan(2000);
  await scroller.evaluate(el=>{el.scrollTop=1000;});await expect.poll(async()=>(await tabs.boundingBox())!.y).toBeCloseTo(0,0);
  for(const name of ['文档与产物','团队与项目','任务','概览','讨论']){
   await page.getByRole('tab',{name,exact:true}).click();await expect.poll(async()=>(await tabs.boundingBox())!.y).toBeCloseTo(0,0);
@@ -215,7 +217,7 @@ for(const width of [390,800,1280])test(`expert mention is a keyboard-controlled 
  await composer.fill('user@example.com');await expect(popup).toBeHidden();await composer.fill('请@测试');await expect(popup).toBeVisible();await composer.press('Escape');
  await composer.fill('请 @');await expect(popup).toBeVisible();await page.screenshot({animations:'disabled',path:`/tmp/discussion-mention-${width}.png`});
  await composer.press('Escape');await page.getByRole('button',{name:'回复操作'}).first().click();await expect(page.getByRole('menuitem',{name:'保存为文档草稿'})).toBeVisible();await page.keyboard.press('Escape');
- await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});const tabs=await page.locator('.wf-space-tabs > [data-slot=tabs-list]').boundingBox(),header=await page.locator('.wf-discussion-header').boundingBox();expect(header!.y-(tabs!.y+tabs!.height)).toBeLessThan(width>800?40:90);
+ await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});const tabs=await page.locator('.wf-space-navigation').boundingBox(),header=await page.locator('.wf-discussion-header').boundingBox();expect(header!.y-(tabs!.y+tabs!.height)).toBeLessThan(width>800?40:90);
  await page.screenshot({animations:'disabled',path:`/tmp/discussion-layout-${width}.png`});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
@@ -225,7 +227,7 @@ for(const width of [390,800,1280])test(`space tabs share headings and sticky pag
  // Old collapse preferences must no longer hide the shared space heading.
  await page.evaluate(()=>{sessionStorage.setItem('workforce.space-view:space',JSON.stringify({tab:'overview',memberFilter:null,headerCollapsed:true}));const qa=(window as any).spaceQA;qa.snapshot.requests.find((r:any)=>r.id==='discussion').participants[0].output='讨论内容与验收标准。\n\n'.repeat(120);qa.emit();});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();
- const heading=page.locator('.wf-space-detail-heading'),tabs=page.locator('.wf-space-tabs > [data-slot=tabs-list]'),scroller=page.locator('.qa-scroll');
+ const heading=page.locator('.wf-space-detail-heading'),tabs=page.locator('.wf-space-navigation'),scroller=page.locator('.qa-scroll');
  const initialHeading=await heading.boundingBox(),initialTabs=await tabs.boundingBox();
  for(const title of ['文档与产物','任务','团队与项目','讨论','概览','讨论']){
   await page.getByRole('tab',{name:title,exact:true}).click();await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBe(0);
@@ -240,7 +242,7 @@ for(const width of [390,800,1280])test(`space tabs share headings and sticky pag
  await expect(page.locator('.wf-request-list')).toHaveCSS('overflow-y','visible');await expect(send).toHaveCSS('width','32px');await expect(send).toHaveCSS('height','32px');
  await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-sticky-${width}.png`});
  await page.getByRole('button',{name:'回到最新消息'}).click();await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(5);
- const lastAction=await page.getByRole('button',{name:'继续讨论',exact:true}).boundingBox();expect(lastAction!.y+lastAction!.height).toBeLessThanOrEqual((await composer.boundingBox())!.y);
+ await expect(page.getByRole('button',{name:'继续讨论',exact:true})).toHaveCount(0);const lastReply=await page.locator('.wf-request-list').boundingBox();expect(lastReply!.y+lastReply!.height).toBeLessThanOrEqual((await composer.boundingBox())!.y+1);
  await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-bottom-${width}.png`});
  await page.getByRole('tab',{name:'文档与产物',exact:true}).click();await expect(page.locator('.wf-discussion-composer')).toHaveCount(0);await page.getByRole('tab',{name:'讨论',exact:true}).click();await expect(input).toHaveValue('保留这份草稿');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
@@ -261,7 +263,7 @@ for(const width of [390,1280])test(`discussion context tabs stay visible while t
  await page.evaluate(()=>{const qa=(window as any).spaceQA,r=qa.snapshot.requests.find((r:any)=>r.id==='discussion');r.participants[0].output='核对目标与验收标准。\n\n'.repeat(120);qa.snapshot.requests.push(...Array.from({length:30},(_,i)=>({...structuredClone(r),id:'history-'+i,prompt:'历史讨论 '+i})));qa.emit();});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();
  if(width<800)await page.getByRole('button',{name:'查看讨论与相关内容'}).click();
- const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),navigation=sidebar.getByRole('tablist'),scroller=page.locator('.qa-scroll'),globalTabs=page.locator('.wf-space-tabs > [data-slot=tabs-list]');
+ const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),navigation=sidebar.getByRole('tablist'),scroller=page.locator('.qa-scroll'),globalTabs=page.locator('.wf-space-navigation');
  await expect(sidebar.locator('.wf-context-item')).toHaveCount(31);
  if(width>800){
   await scroller.evaluate(el=>{el.scrollTop=650;});
@@ -272,11 +274,11 @@ for(const width of [390,1280])test(`discussion context tabs stay visible while t
  await expect.poll(()=>panel.evaluate(el=>el.scrollTop)).toBeGreaterThan(100);expect((await navigation.boundingBox())!.y).toBeCloseTo(before!.y,0);
  expect(await scroller.evaluate(el=>el.scrollTop)).toBe(outerTop);
  await page.screenshot({animations:'disabled',path:`/tmp/discussion-context-sticky-${width}.png`});
- for(const name of ['本讨论的文档','本讨论的任务','话题']){
+ for(const name of ['本讨论的文档','本讨论的相关计划','话题']){
   await sidebar.getByRole('tab',{name}).click();await expect(sidebar.getByRole('tab',{name})).toHaveAttribute('aria-selected','true');
   expect((await navigation.boundingBox())!.y).toBeCloseTo(before!.y,0);expect(await scroller.evaluate(el=>el.scrollTop)).toBe(outerTop);
  }
- if(width>800){await scroller.evaluate(el=>{el.scrollTop=el.scrollHeight;});const a=await navigation.boundingBox(),b=await globalTabs.boundingBox();expect(a!.y).toBeGreaterThanOrEqual(b!.y+b!.height);await expect(sidebar.getByRole('tab',{name:'本讨论的任务'})).toBeInViewport();}
+ if(width>800){await scroller.evaluate(el=>{el.scrollTop=el.scrollHeight;});const a=await navigation.boundingBox(),b=await globalTabs.boundingBox();expect(a!.y).toBeGreaterThanOrEqual(b!.y+b!.height);await expect(sidebar.getByRole('tab',{name:'本讨论的相关计划'})).toBeInViewport();}
  else{await page.getByRole('button',{name:'收起讨论上下文'}).click();await expect(sidebar).toBeHidden();}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });

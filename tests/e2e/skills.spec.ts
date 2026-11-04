@@ -12,7 +12,7 @@ test('skill tags are separate from text, survive failure and apply to only the s
  await page.locator('.composer [aria-label="已选技能"] [data-slot=attachment-trigger]').first().click();await expect(page.getByRole('dialog',{name:'meeting-summary'})).toContainText('Summarize the meeting.');await page.getByRole('dialog',{name:'meeting-summary'}).getByRole('button',{name:'关闭',exact:true}).click();expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
  await page.screenshot({path:'test-results/skills-composer.png'});
  await page.evaluate(()=>(window as any).__fail=true);await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(page.locator('.composer [aria-label="已选技能"] [data-slot=attachment]')).toHaveCount(1);
- await page.evaluate(()=>(window as any).__fail=false);await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(page.locator('.message.user .skill-tag')).toContainText('meeting-summary');await expect(page.locator('.composer [aria-label="已选技能"] [data-slot=attachment]')).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__fail=false);await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(page.locator('[data-message-role=user] .skill-tag')).toContainText('meeting-summary');await expect(page.locator('.composer [aria-label="已选技能"] [data-slot=attachment]')).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds)).toEqual(['skill-1']);
  await page.getByRole('textbox',{name:'继续对话'}).fill('再简短一些');await page.getByRole('button',{name:'发送后续消息'}).click();expect(await page.evaluate(()=>(window as any).__sent.selectedSkillIds||[])).toEqual([]);
 });

@@ -29,7 +29,7 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,sending=f
    </InputGroupAddon>
   </InputGroup>
   {mentions.menu}
-  <div className={footer?"composer-footer":"composer-hint-wrapper"}>{footer}
-  <p id={hintId} className="composer-hint" role="status">{disabled?t(saveDraft?'正在保存…':'正在发送…'):active&&!allowActiveSend?t(draftNotice?'草稿尚未发送，请在本轮结束后发送。':'可先编辑草稿，本轮结束后发送'):t(active?'Enter 发送补充 · Shift+Enter 换行':saveDraft?'Enter 保存草稿 · Shift+Enter 换行':'Enter 发送 · Shift+Enter 换行')}</p></div>
+  {footer&&<div className="composer-footer">{footer}</div>}
+  <p id={hintId} className={active&&!allowActiveSend&&draftNotice?"composer-notice":"sr-only"} role="status">{disabled?t(saveDraft?'正在保存…':'正在发送…'):active&&!allowActiveSend?t(draftNotice?'草稿尚未发送，请在本轮结束后发送。':'可先编辑草稿，本轮结束后发送'):t(active?'Enter 发送补充 · Shift+Enter 换行':saveDraft?'Enter 保存草稿 · Shift+Enter 换行':'Enter 发送 · Shift+Enter 换行')}</p>
  </form>;
 }

@@ -249,3 +249,25 @@ test('restart drops stale native RPCs even from idle histories',async()=>{
   const runtime=new AgentRuntime({directory,publish(){}});await runtime.init();assert.deepEqual(runtime.runs[0].questions,[]);assert.equal(runtime.runs[0].status,'completed');await runtime.shutdown();
  }finally{await fs.rm(directory,{recursive:true,force:true});}
 });
+
+test('ordinary task channels omit creation tools; explicit and resumed creation tasks keep them',async()=>{
+ const {createProviderStore}=require('../electron/provider.cjs');
+ for(const mode of ['ordinary','selected','resumed']){
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'amble-creation-channel-'));let runtime;
+  try{
+   const provider=createProviderStore(directory,{});await provider.save({create:true,name:'Fixture',baseUrl:'https://fixture.invalid/v1',model:'test',executable:process.execPath});
+   runtime=new AgentRuntime({directory,provider,workspace:{read:async()=>({projects:[]})},publish(){},rpcFactory:()=>({close(){}})});await runtime.init();
+   let state=mode==='resumed'?{revision:2}:null,ensures=0;
+   runtime.creation={read:async()=>state,ensure:async()=>{ensures++;state={revision:1};},bind:()=>({tools:[{name:'creation_read',inputSchema:{type:'object'}}],call:async()=>state})};
+   runtime.skills={prepare:async()=>({instructions:'',explicit:'',snapshots:mode==='selected'?[{id:'builtin-skill-master'}]:[]})};
+   runtime.extensionRouter={list:async()=>[],invoke:async()=>{}};
+   let ready;const launched=new Promise(resolve=>ready=resolve);runtime.execute=async()=>{ready();};
+   await runtime.start({prompt:'Read code and research updates'});await launched;
+   const channel=runtime.active.extensionChannel;
+   const response=await fetch(channel.config.url,{method:'POST',headers:{...channel.config.http_headers,'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
+   const names=(await response.json()).result.tools.map(tool=>tool.name);
+   assert.equal(names.includes('creation_read'),mode!=='ordinary');assert.equal(ensures,mode==='selected'?1:0);
+   await runtime.finish(runtime.active,'completed');
+  }finally{await runtime?.shutdown();await fs.rm(directory,{recursive:true,force:true});}
+ }
+});

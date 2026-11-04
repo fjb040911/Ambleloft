@@ -21,3 +21,53 @@ test('input and approval waits are actionable rather than hidden as ordinary dep
  const space={id:'space',createdAt:'2026-01-01'};const data={plans:[{id:'p',spaceId:'space',events:[],updatedAt:'2026-01-01',packages:[{...pkg('input'),status:'waiting'},{...pkg('dependency'),status:'pending'}]}],documents:[],requests:[]};
  const result=spaceSummary(space,data);assert.deepEqual(result.attention.map(i=>i.kind),['input']);
 });
+const snapshot=(packages=[],status='running')=>({spaces:[],plans:[{id:'plan',spaceId:'space',name:'Current plan',status,updatedAt:'2026-01-02',events:[],packages}],documents:[],requests:[]});
+const withRun=(id,status)=>({...pkg(id),status,attempts:[{runId:id,requestId:id+'-request'}]});
+const summary=(data,kinds={})=>spaceSummary({id:'space',createdAt:'2026-01-01'},data,kinds);
+test('parallel execution and categorized attention coexist; a node counts once despite two request types',()=>{
+ const result=summary(snapshot([withRun('working','running'),withRun('blocked','waiting'),pkg('review')]),{working:'',blocked:'approval-input'});
+ assert.equal(result.state,'running');assert.equal(result.running,1);assert.equal(result.actionable.length,2);
+ assert.deepEqual(result.attention[0].kinds,['approval','input']);assert.equal(result.currentPlans[0].packages.length,3);
+});
+test('paused nodes, dependencies and superseded attempt requests are not actionable failures',()=>{
+ const data=snapshot([{...withRun('pause','interrupted'),stopReason:'plan-pause'},{...pkg('next'),status:'pending'}],'paused');
+ data.requests=[{id:'pause-request',spaceId:'space',createdAt:'2026-01-02',participants:[{status:'failed'}]}];
+ const result=summary(data,{pause:'approval'});assert.equal(result.state,'paused');assert.equal(result.attention.length,0);
+});
+test('scheduler running is distinct from execution; completed and draft plans have distinct states',()=>{
+ assert.equal(summary(snapshot([{...pkg('dependency'),status:'pending'}])).state,'scheduling');
+ assert.equal(summary(snapshot([{...pkg('new'),status:'pending'}],'draft')).state,'ready');
+ assert.equal(summary(snapshot([{...pkg('done'),status:'accepted'}],'completed')).state,'completed');
+ const data=snapshot([], 'completed');data.plans.push({...data.plans[0],id:'new',status:'draft',updatedAt:'2026-01-03'});
+ assert.deepEqual(summary(data).currentPlans.map(p=>p.id),['new']);
+});
+test('failed request reads are unknown; loading never masquerades as an empty queue or confirmed input',()=>{
+ const data=snapshot([withRun('wait','waiting')]);
+ assert.equal(summary(data,{wait:'loading'}).state,'unknown');assert.equal(summary(data,{wait:'loading'}).actionable.length,0);
+ assert.equal(summary(data,{wait:'unknown'}).attention[0].kind,'unknown');
+ assert.equal(summary(data,{wait:''}).attention[0].kind,'unknown');
+});
+test('host questions are actionable, survive explanation turns, and clear after answers or closing the topic',()=>{
+ const data={plans:[],documents:[],requests:[{id:'root',spaceId:'space',createdAt:'2026-01-01',prompt:'Goal',participants:[],host:{status:'ready',question:{requestKey:'question'}}}]};
+ assert.equal(summary(data).attention[0].kind,'input');
+ data.requests.push({id:'explain',spaceId:'space',replyTo:'root',intent:'explain-node',createdAt:'2026-01-02',participants:[]});
+ assert.equal(summary(data).attention.length,1);
+ data.requests[0].host.question.answeredBy='answer';assert.equal(summary(data).attention.length,0);
+ delete data.requests[0].host.question.answeredBy;data.discussionStates={root:{status:'closed'}};assert.equal(summary(data).attention.length,0);
+ delete data.discussionStates;data.requests.push({id:'restart',spaceId:'space',replyTo:'root',intent:'restart-guide',createdAt:'2026-01-03',participants:[]});assert.equal(summary(data).attention.length,0);
+});
+test('archived spaces retain history without live actions and streaming does not bump activity timestamps',()=>{
+ const data=snapshot([withRun('run','waiting')]);data.requests=[{id:'discussion',spaceId:'space',prompt:'Goal',createdAt:'2026-01-01',participants:[{status:'running',updatedAt:'2099-01-01'}]}];
+ const result=spaceSummary({id:'space',createdAt:'2026-01-01',archivedAt:'2026-01-03'},data,{run:'approval'});
+ assert.equal(result.state,'archived');assert.equal(result.attention.length,0);assert.equal(result.lastActivity,'2026-01-02');
+});
+test('current host workflow includes pending draft clarification but not an abandoned draft',()=>{
+ const data={plans:[],documents:[],taskDrafts:[{id:'draft',spaceId:'space',status:'needs-input',pendingQuestion:{source:{definition:{title:'Clarify'}}}}],requests:[{id:'root',spaceId:'space',createdAt:'2026-01-01',prompt:'Goal',participants:[],host:{status:'needs-input',task:{draftId:'draft'}}}]};
+ assert.equal(summary(data).attention[0].kind,'input');
+ data.requests.push({id:'restart',spaceId:'space',replyTo:'root',intent:'restart-guide',createdAt:'2026-01-02',participants:[],host:{status:'completed',task:{draftId:'new-draft'}}});
+ assert.equal(summary(data).attention.length,0);
+});
+test('one paused plan never labels other schedulable work as fully paused',()=>{
+ const data=snapshot([{...pkg('pending'),status:'pending'}],'paused');data.plans.push({...data.plans[0],id:'other',status:'running'});
+ assert.equal(summary(data).state,'scheduling');data.plans[1].status='draft';assert.equal(summary(data).state,'partial-paused');
+});

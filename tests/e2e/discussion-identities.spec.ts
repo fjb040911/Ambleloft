@@ -25,7 +25,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,tr
  const composer=page.locator('.wf-discussion-composer'),original=(await composer.boundingBox())!;
  await page.screenshot({path:`/tmp/discussion-identities-top-${width}-${english}.png`});
  await first.evaluate(el=>{const scroller=el.closest('.qa-scroll')!;scroller.scrollTop+=el.getBoundingClientRect().top+320;});
- const tabs=(await page.locator('.wf-space-tabs > [data-slot=tabs-list]').boundingBox())!,header=(await first.locator('.wf-speaker-header').boundingBox())!;
+ const tabs=(await page.locator('.wf-space-navigation').boundingBox())!,header=(await first.locator('.wf-speaker-header').boundingBox())!;
  expect(header.y).toBeGreaterThanOrEqual(tabs.y+tabs.height-2);expect(header.y).toBeLessThan(tabs.y+tabs.height+5);
  expect(Math.abs((await composer.boundingBox())!.y-original.y)).toBeLessThan(2);
  await page.screenshot({path:`/tmp/discussion-identities-sticky-${width}-${english}.png`});

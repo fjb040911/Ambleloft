@@ -4,7 +4,7 @@ Ambleloft's Apache-2.0 license applies to original project code. Dependencies, f
 
 ## Codex runtime
 
-Ambleloft uses the official, pinned Codex 0.153.4 npm distribution without modifying its native runtime. Its license, notice and source reference are retained in [build/licenses/codex](build/licenses/codex/) and copied into packaged runtime resources by the engine preparation script.
+Ambleloft uses the official, pinned Codex 0.166.0 npm distribution without modifying its native runtime. Its license, notice and source reference are retained in [build/licenses/codex](build/licenses/codex/) and copied into packaged runtime resources by the engine preparation script.
 
 ## Frontend and desktop dependencies
 
