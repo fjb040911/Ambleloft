@@ -1,12 +1,12 @@
 import {useEffect} from 'react';
-import {Menu} from 'lucide-react';
+import {Menu,Plus} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {SidebarTrigger} from './components/ui/sidebar';
 import {GlobalSidebarActions} from './GlobalActions';
 import {t} from './i18n';
 
 /** Mounted only when the desktop bridge identifies Windows. */
-export default function WindowsChrome({settings=false,collapsedActions=false}:{settings?:boolean;collapsedActions?:boolean}) {
+export default function WindowsChrome({settings=false,collapsedActions=false,onNewTask}:{settings?:boolean;collapsedActions?:boolean;onNewTask():void}) {
  useEffect(()=>{
   const update=()=>{
    const root=getComputedStyle(document.documentElement);
@@ -21,6 +21,6 @@ export default function WindowsChrome({settings=false,collapsedActions=false}:{s
  return <div className="windows-chrome" aria-label={t('窗口工具栏')}>
   {!settings&&<SidebarTrigger aria-controls="workspace-sidebar" aria-label={t('显示 / 隐藏侧栏')} title={t('显示 / 隐藏侧栏')}/>}
   <Button variant="ghost" size="icon" aria-label={t('应用菜单')} title={t('应用菜单')} onClick={()=>void window.desktop?.openWindowMenu?.()}><Menu/></Button>
-  {collapsedActions&&<GlobalSidebarActions/>}
+  {collapsedActions&&<><Button variant="ghost" size="icon" aria-label={t("新建任务")} title={t("新建任务")} onClick={onNewTask}><Plus/></Button><GlobalSidebarActions/></>}
  </div>;
 }

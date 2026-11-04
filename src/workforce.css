@@ -298,14 +298,7 @@
 .wf-space-scope [data-slot=tabs-trigger] span{font-size:12px;font-variant-numeric:tabular-nums;color:var(--wf-muted)}
 .wf-space-browser>[data-slot=tabs-content]{min-width:0}
 .wf-space-browser .wf-space-directory{border-top:0}
-@layer utilities{
- .wf-directory-empty[data-slot=empty]{flex:none!important;border:0!important;border-radius:0!important;padding:32px 20px!important;gap:20px!important;background:transparent!important}
- .wf-directory-empty [data-slot=empty-header]{max-width:28rem!important;gap:8px!important}
- .wf-directory-empty [data-slot=empty-icon]{width:40px!important;height:40px!important;margin:0 0 8px!important;border-radius:12px!important;background:var(--wf-soft)!important;color:var(--wf-muted)!important}
- .wf-directory-empty [data-slot=empty-icon] svg{width:20px!important;height:20px!important}
- .wf-directory-empty [data-slot=empty-title]{font-size:16px!important;font-weight:600!important;line-height:1.5!important;color:var(--wf-ink)!important}
- .wf-directory-empty [data-slot=empty-description]{font-size:14px!important;line-height:1.7!important;color:var(--wf-muted)!important}
-}
+
 .wf-space-search{position:relative;width:220px;flex-shrink:1;min-width:140px}
 
 .wf-space-directory{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--wf-edge)}

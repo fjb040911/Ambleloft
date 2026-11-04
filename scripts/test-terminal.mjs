@@ -23,24 +23,26 @@ try{
  await expect(page.locator('.terminal-screen:visible .xterm-fg-1').filter({hasText:'ANSI_RED'})).toBeVisible();
  // Theme changes update the live renderer without replacing the session or output.
  const setTheme=theme=>page.evaluate(async theme=>{const state=await window.desktop.readWorkspace();await window.desktop.patchWorkspace({changes:[{kind:'settings',action:'patch',expectedRevision:state.settingsRevision??0,value:{theme}}]});},theme);
- const checkTheme=async(background,foreground)=>{
+ const checkTheme=async(expectedDark)=>{
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.theme==='dark'||(document.documentElement.dataset.theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))).toBe(expectedDark);
+  const {background,foreground,selection}=await page.evaluate(()=>{const probe=document.createElement('div');document.body.append(probe);const resolve=value=>{probe.style.color=value;return getComputedStyle(probe).color;};const values={background:resolve('var(--surface)'),foreground:resolve('var(--text)'),selection:resolve('var(--selection)')};probe.remove();return values;});
   await expect(page.locator('.terminal-panel')).toHaveCSS('background-color',background);
   await expect(page.locator('.terminal-panel')).toHaveCSS('color',foreground);
   await expect(page.locator('.terminal-screen:visible .xterm-screen').locator('..')).toHaveCSS('background-color',background);
   await expect(page.locator('.terminal-screen:visible .xterm-rows')).toHaveCSS('color',foreground);
-  const dark=background==='rgb(28, 30, 35)';
-  await expect(page.locator('.terminal-tabs [aria-selected=true]')).toHaveCSS('background-color',dark?'rgb(46, 60, 87)':'rgb(228, 236, 250)');
+  const dark=expectedDark;
+  await expect(page.locator('.terminal-tabs [aria-selected=true]')).toHaveCSS('background-color',selection);
   await expect(page.locator('.terminal-screen:visible .xterm-fg-1').filter({hasText:'ANSI_RED'})).toHaveCSS('color',dark?'rgb(244, 135, 129)':'rgb(180, 35, 24)');
   assert.equal((await page.evaluate(()=>window.desktop.terminal.list()))[0].id,first.id);
   await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('TERMINAL_READY');
  };
- await setTheme('light');await checkTheme('rgb(250, 251, 252)','rgb(38, 44, 53)');
+ await setTheme('light');await checkTheme(false);
  await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/terminal-light.png'});
- await setTheme('dark');await checkTheme('rgb(28, 30, 35)','rgb(232, 234, 240)');
+ await setTheme('dark');await checkTheme(true);
  await page.screenshot({path:'test-results/terminal-dark.png'});
- await setTheme('system');await page.emulateMedia({colorScheme:'light'});await checkTheme('rgb(250, 251, 252)','rgb(38, 44, 53)');
- await page.emulateMedia({colorScheme:'dark'});await checkTheme('rgb(28, 30, 35)','rgb(232, 234, 240)');
- await setTheme('light');await checkTheme('rgb(250, 251, 252)','rgb(38, 44, 53)');
+ await setTheme('system');await page.emulateMedia({colorScheme:'light'});await checkTheme(false);
+ await page.emulateMedia({colorScheme:'dark'});await checkTheme(true);
+ await setTheme('light');await checkTheme(false);
  await page.evaluate(id=>window.desktop.terminal.write({id,data:`node -e "console.log('LONG'+'RUNNING');setInterval(()=>{},1000)"\r`}),first.id);
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('LONGRUNNING');
  await page.keyboard.press('Control+c');
