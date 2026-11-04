@@ -11,7 +11,7 @@ import {Alert,AlertDescription} from './components/ui/alert';
 import {InputGroup,InputGroupInput,InputGroupAddon} from './components/ui/input-group';
 import {NativeSelect,NativeSelectOption} from './components/ui/native-select';
 import {Field,FieldGroup,FieldLabel,FieldDescription} from './components/ui/field';
-import {Empty,EmptyHeader,EmptyMedia,EmptyTitle,EmptyDescription} from './components/ui/empty';
+import {WorkforceDirectoryEmpty} from './WorkforceDirectoryEmpty';
 import {Skeleton} from './components/ui/skeleton';
 import {Spinner} from './components/ui/spinner';
 import {Separator} from './components/ui/separator';
@@ -96,7 +96,7 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
  const detailUsable=detailInstalled&&(detailInstalled.kind==='skill'?skills.some(skill=>skill.id===detailInstalled.entityId&&skill.enabled):extensions.installed.some(item=>item.manifest.id===detailInstalled.entityId&&item.enabled&&item.trusted!==false));
  const promptFor=(kind:'skill'|'extension',id:string,name:string)=>{const entry=catalog.installed.find(item=>item.kind===kind&&item.entityId===id);const listing=catalog.items.find(item=>item.id===entry?.listingId);const prompt=listing?local(listing.trialPrompt):t('请使用')+' '+name+' '+t('帮助我完成任务。先确认目标，再开始。');return kind==='extension'?t('使用扩展')+'「'+name+'」('+id+')\n'+prompt:prompt;};
  const sourceError=catalog.error?errorText(catalog.error):'';
- const empty=(title:string,description?:string)=><Empty><EmptyHeader><EmptyMedia variant="icon"><Package/></EmptyMedia><EmptyTitle>{title}</EmptyTitle>{description&&<EmptyDescription>{description}</EmptyDescription>}</EmptyHeader></Empty>;
+ const empty=(title:string,description?:string)=><WorkforceDirectoryEmpty Icon={Package} title={title} description={description}/>;
  const statusFor=(item:typeof extensions.installed[number])=>!item.enabled?'已停用':!item.trusted&&item.kind==='package'?'待信任':item.diagnostic||item.runtime?.state==='failed'?'运行异常':'已启用';
  const listCard=(item:StoreListing)=><Card key={item.id} className="store-card"><CardHeader><div className="store-card-meta"><span className="store-kind-icon" aria-hidden="true">{item.kind==='skill'?<BookOpen/>:<Package/>}</span><Badge variant="outline">{t(item.kind==='skill'?'技能':'扩展')}</Badge></div><CardTitle>{local(item.title)}</CardTitle><CardDescription>{local(item.summary)}</CardDescription></CardHeader><CardContent className="mt-auto"><p className="store-publisher">{item.publisher} · {item.release.version}</p><p className="store-requirement">{local(item.runtime)}</p></CardContent><CardFooter className="justify-between gap-3"><span className="store-state">{installed(item)?t('已安装'):item.release.status==='published'?t('精选目录'):t(item.release.status==='yanked'?'已停止分发':'风险公告')}</span><Button variant="outline" size="sm" onClick={()=>{setError('');setLinkError('');setSelectedSource(catalog.source?.id);setSelected(item.id);}}>{t('查看详情')}<ArrowRight data-icon="inline-end"/></Button></CardFooter></Card>;
  return <section className="skill-extension-center" aria-label={t('技能与扩展')}>

@@ -113,7 +113,7 @@ const { probeProvider } = require('../electron/provider.cjs');
     await runtime.stop(pending.id);
     assert.equal((await finished(pending.id)).status, 'interrupted');
     console.log('PASS real Codex: stop');
-    mode = 'tool'; const toolRun = await runtime.start({ prompt: 'Print working directory using a shell tool.' });
+    mode = 'tool'; const toolRun = await runtime.start({ permission:'full', prompt: 'Print working directory using a shell tool.' });
     result = await finished(toolRun.id);
     assert.equal(result.status, 'completed', result.error);
     assert.ok(toolSent, 'fixture issued a supported tool');
@@ -124,6 +124,6 @@ const { probeProvider } = require('../electron/provider.cjs');
     console.log('PASS real Codex: structured plan event received');
   } finally {
     await runtime.shutdown(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
-    await fs.rm(directory, { recursive: true, force: true });
+    await fs.rm(directory,{recursive:true,force:true,maxRetries:20,retryDelay:250}).catch(error=>{if(error.code!=='EBUSY'&&error.code!=='EPERM')throw error;console.warn('Temporary test profile remains locked:',directory);});
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,3 +1,4 @@
+import {WorkforceDirectoryEmpty} from './WorkforceDirectoryEmpty';
 import {useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {ArrowRight,CheckCheck,MessageCircle,FileText,ClipboardCheck,FolderPlus,Archive,Search} from 'lucide-react';
 import {SpaceActions,type SpaceAction} from './WorkforceSpaceActions';
@@ -50,9 +51,9 @@ function SpaceDirectoryEmpty({scope,searching,hasActive,create,clearSearch,showA
  const L=useCopy(),Icon=searching?Search:scope==='active'?FolderPlus:scope==='attention'?CheckCheck:Archive;
  const title=searching?L('没有找到空间','No matching spaces'):scope==='active'?L('为一个共同目标建立空间','Create a space for a shared goal'):scope==='attention'?L('暂时没有需要处理的事项','Nothing needs your attention'):L('暂无归档空间','No archived spaces');
  const description=searching?L('当前分类中没有匹配的空间。试试其他名称或目标关键词。','No spaces match in this tab. Try another name or goal.'):scope==='active'?L('关联已有项目，选择参与专家，从第一次讨论开始。','Link your projects, choose experts, and start your first discussion.'):scope==='attention'?L('需要验收的交付、待补充的信息和执行异常，会集中显示在这里。','Deliveries awaiting review, requests for input, and execution issues appear here.'):L('告一段落的空间可以归档。讨论、文档和任务记录会保留，随时可以恢复。','Archive finished spaces to keep their discussions, documents, and tasks. Restore them whenever needed.');
- return <Empty className="wf-directory-empty"><EmptyHeader><EmptyMedia variant="icon"><Icon aria-hidden="true"/></EmptyMedia><EmptyTitle>{title}</EmptyTitle><EmptyDescription>{description}</EmptyDescription></EmptyHeader>
- {(searching||scope==='active'||hasActive)&&<EmptyContent><Button variant={scope==='active'&&!searching?'default':'outline'} onClick={searching?clearSearch:scope==='active'?create:showActive}>{searching?L('清除搜索','Clear search'):scope==='active'?L('创建项目空间','Create a project space'):L('查看活跃空间','View active spaces')}</Button></EmptyContent>}
- </Empty>;
+ return <WorkforceDirectoryEmpty Icon={Icon} title={title} description={description}>
+ {(searching||scope==='active'||hasActive)&&<Button variant={scope==='active'&&!searching?'default':'outline'} onClick={searching?clearSearch:scope==='active'?create:showActive}>{searching?L('清除搜索','Clear search'):scope==='active'?L('创建项目空间','Create a project space'):L('查看活跃空间','View active spaces')}</Button>}
+ </WorkforceDirectoryEmpty>;
 }
 export function SpaceOverview({requestKinds={},space,data,go}:{requestKinds?:Record<string,string>;space:Space;data:SpaceSnapshot;go(target:SpaceDestination):void}){
  const L=useCopy(),[allAttention,setAllAttention]=useState(false),summary=useMemo(()=>spaceSummary(space,data,requestKinds),[space,data,requestKinds]);

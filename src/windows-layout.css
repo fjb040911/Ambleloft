@@ -19,9 +19,6 @@
 .windows-sidebar-heading .icon-button {width:32px;height:32px;}
 .windows-desktop .windows-sidebar-heading + [data-slot="sidebar-header"] {padding-top:0;}
 .windows-desktop .activity-rail {padding-top:10px;gap:20px;}
-.windows-rail-actions {display:flex;flex-direction:column;align-items:center;gap:4px;}
-.windows-rail-actions .global-sidebar-actions {min-height:0;padding:0;}
-.windows-rail-actions .sidebar-top-actions {flex-direction:column;padding:0;gap:6px;}
 .windows-desktop .brand {display:none;}
 .settings-workspace.windows-desktop {padding-top:38px;grid-template-rows:minmax(0,1fr);}
 .settings-workspace.windows-desktop .settings-sidebar {grid-row:1;padding-top:12px;}

@@ -43,21 +43,21 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
  const runtime=new AgentRuntime({directory,provider:{secret:async()=>config},workspace:{read:async()=>({projects:[]})},publish:r=>updates.push(r),rpcFactory:options=>new CodexRPC({...options,notification:message=>{events.push(message);options.notification(message);}})});
  async function finished(id){const until=Date.now()+40000;while(runtime.active&&Date.now()<until)await new Promise(r=>setTimeout(r,50));const r=runtime.list().find(r=>r.id===id);assert.ok(!runtime.active,'timeout');return r;}
  try{
-  await runtime.init();const first=await runtime.start({prompt:'Check the current directory.'});let result=await finished(first.id);assert.equal(result.status,'completed',result.error);
+  await runtime.init();const first=await runtime.start({permission:'full',prompt:'Check the current directory.'});let result=await finished(first.id);assert.equal(result.status,'completed',result.error);
   assert.ok(result.tools.some(t=>t.type==='commandExecution'&&t.status==='completed'));
   assert.ok(result.messages.some(m=>m.phase==='commentary'));
   assert.equal(result.messages.filter(m=>m.kind==='reasoning')[0].text,'Check environment.');
   assert.ok(updates.some(r=>r.messages.some(m=>m.kind==='reasoning'&&m.text&&m.status==='running')));
   const history=requests.at(-1).messages;assert.ok(history.some(m=>m.role==='tool'));assert.equal(history.find(m=>m.tool_calls)?.reasoning_content,'Check environment.');
   mode='text';await runtime.start({runId:first.id,prompt:'Continue.'});result=await finished(first.id);assert.equal(result.status,'completed',result.error);assert.ok(JSON.stringify(requests.at(-1).messages).includes('Check the current directory.'));
-  mode='plan';const plan=await runtime.start({prompt:'Plan the work.'});result=await finished(plan.id);assert.equal(result.status,'completed',result.error);assert.equal(result.plans[0].steps[0].step,'Verify');
-  mode='question';const questionRun=await runtime.start({prompt:'Ask who this is for.'});
+  mode='plan';const plan=await runtime.start({permission:'full',prompt:'Plan the work.'});result=await finished(plan.id);assert.equal(result.status,'completed',result.error);assert.equal(result.plans[0].steps[0].step,'Verify');
+  mode='question';const questionRun=await runtime.start({permission:'full',prompt:'Ask who this is for.'});
   const untilQuestion=Date.now()+10000;while(runtime.active&&!runtime.list().find(r=>r.id===questionRun.id).questions?.length&&Date.now()<untilQuestion)await new Promise(r=>setTimeout(r,50));
   const question=runtime.list().find(r=>r.id===questionRun.id).questions?.[0];assert.ok(question,'native question event received');
   runtime.answer({runId:questionRun.id,requestId:question.id,answers:{audience:'Designer'}});
   assert.equal((await finished(questionRun.id)).status,'completed');
   assert.ok(JSON.stringify(requests.at(-1).messages).includes('Designer'));
-  mode='image';const imageRun=await runtime.start({prompt:'Inspect the fixture image.'});result=await finished(imageRun.id);
+  mode='image';const imageRun=await runtime.start({permission:'full',prompt:'Inspect the fixture image.'});result=await finished(imageRun.id);
   assert.equal(result.status,'failed');assert.match(result.error,/HTTP 400/);assert.match(result.error,/Fixture rejection/);
   const imageHistory=requests.at(-1).messages;
   assert.ok(imageHistory.some(m=>Array.isArray(m.content)&&m.content.some(c=>c.type==='image_url')),'image is forwarded as multimodal content: '+JSON.stringify(imageHistory.filter(m=>m.role==='tool')));
@@ -75,8 +75,8 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
   const usage=events.filter(e=>e.method==='thread/tokenUsage/updated').at(-1);
   assert.ok(usage,'engine reports token usage');
   assert.equal(usage.params.tokenUsage.modelContextWindow,95000,'configured context window reaches the real engine (95% usable)');
-  mode='error';const error=await runtime.start({prompt:'Broken stream.'});assert.equal((await finished(error.id)).status,'failed');
-  mode='loop';const loopRun=await runtime.start({prompt:'Synthetic no-progress loop test.'});result=await finished(loopRun.id);
+  mode='error';const error=await runtime.start({permission:'full',prompt:'Broken stream.'});assert.equal((await finished(error.id)).status,'failed');
+  mode='loop';const loopRun=await runtime.start({permission:'full',prompt:'Synthetic no-progress loop test.'});result=await finished(loopRun.id);
   assert.equal(result.status,'interrupted',result.error);assert.match(result.error,/重复调用/);
   assert.equal(result.tools.filter(t=>t.type==='commandExecution').length,12,'pause after twelve no-op commands');
   assert.ok(result.modelRequests.some(d=>d.loopGuard?.action==='warn'));
@@ -84,7 +84,7 @@ const {CodexRPC}=require('../electron/codex-rpc.cjs');
   assert.ok(result.modelRequests.some(d=>d.tools?.some(t=>t.name==='write_stdin')));
   mode='text';await runtime.start({runId:loopRun.id,prompt:'Continue with a different strategy.'});result=await finished(loopRun.id);
   assert.equal(result.status,'completed',result.error);
-  mode='hang';const count=requests.length;const pending=await runtime.start({prompt:'Wait.'});const until=Date.now()+10000;while(requests.length===count&&Date.now()<until)await new Promise(r=>setTimeout(r,50));assert.ok(requests.length>count);await runtime.stop(pending.id);assert.equal((await finished(pending.id)).status,'interrupted');
+  mode='hang';const count=requests.length;const pending=await runtime.start({permission:'full',prompt:'Wait.'});const until=Date.now()+10000;while(requests.length===count&&Date.now()<until)await new Promise(r=>setTimeout(r,50));assert.ok(requests.length>count);await runtime.stop(pending.id);assert.equal((await finished(pending.id)).status,'interrupted');
   console.log('PASS real Codex bridge: reasoning stream, deduplication, commentary, command execution, reasoning replay, resume, MCP plan, native user question and answer, image tool result and failure recovery, configured context window, broken stream, loop pause/resume and cancellation');
- }finally{await runtime.shutdown();server.closeAllConnections();server.close();await fs.rm(directory,{recursive:true,force:true});}
+ }finally{await runtime.shutdown();server.closeAllConnections();server.close();await fs.rm(directory,{recursive:true,force:true,maxRetries:20,retryDelay:250}).catch(error=>{if(error.code!=='EBUSY'&&error.code!=='EPERM')throw error;console.warn('Temporary test profile remains locked:',directory);});}
 })().catch(e=>{console.error(e);process.exitCode=1;});
