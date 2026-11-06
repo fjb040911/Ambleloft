@@ -3,6 +3,7 @@
 本目录存放可公开的设计规范、协议契约与开发交付材料，随代码进行版本管理。
 
 - [客户端整包差分更新流程 v1](./client-update-flow-v1.md)（GitHub Releases 分发、排空安装与恢复；待实施）
+- [客户端更新交互设计 v1](./client-update-interaction-v1.md)（检测、提醒、下载、重启与异常状态；待实施）
 
 - [Extension 平台](./extensions/README.md)
 - [SSH / Docker 工作环境](./remote-workspaces/README.md)（实现与模拟验证，真实环境验收待执行）
@@ -28,3 +29,5 @@
 - [任务创建引导与原位验收、调度](workforce/task-creation-and-review-2026-10-30.md)
 - [设备维修工单协作试跑：主持人提示词与操作步骤](workforce/repair-ticket-collaboration-scenario-2026-11-01.md)
 - [讨论页交互与主持人流式反馈：设计及验收](workforce/discussion-feedback-2026-11-01.md)
+
+- [客户端更新实施记录](client-update-implementation-v1.md)（代码与本地验证；生产签名升级待验收）

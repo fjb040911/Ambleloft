@@ -4,6 +4,7 @@ for(const width of [1280,390])test(`node messages scroll while composer stays vi
  await page.goto('/tests/manual/project-space-qa.html');
  await page.evaluate(()=>{const api=window.desktop!,original=api.getRunPage!.bind(api);api.getRunPage=async input=>{const run=await original(input);for(const message of run.messages)if(message.role==='assistant')message.text=Array.from({length:100},(_,i)=>`结果段落 ${i}：这是用于核对滚动和输入区位置的任务输出。`).join('\n\n');return run;};});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'任务',exact:true}).click();await page.locator('.wf-graph-node[data-package-id="copy"]').click();
+ await page.getByRole('tab',{name:'任务对话',exact:true}).click();
  const input=page.getByRole('textbox',{name:'修改要求',exact:true});await expect(input).toBeVisible();
  const scroll=page.locator('.wf-node-conversation .conversation-scroll');
  await expect.poll(()=>scroll.evaluate(el=>el.scrollHeight>el.clientHeight&&el.clientHeight>0)).toBeTruthy();
@@ -33,7 +34,7 @@ for(const width of [1280,390])test(`node messages scroll while composer stays vi
  expect(clipped).toEqual([]);
 
  await page.screenshot({path:`/tmp/node-scroll-fixed-${width}.png`});
- await page.getByRole('button',{name:'交付与验收',exact:true}).click();
+ await page.getByRole('tab',{name:'交付验收',exact:true}).click();
  const detail=page.locator('.wf-task-detail');await expect.poll(()=>detail.evaluate(el=>el.scrollHeight>el.clientHeight)).toBeTruthy();
  await detail.evaluate(el=>{el.scrollTop=200;});await expect.poll(()=>detail.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
  await page.getByRole('tab',{name:'概览',exact:true}).click();await expect(page.locator('.qa-scroll')).toHaveCSS('overflow-y','auto');
@@ -55,6 +56,7 @@ for(const width of [1280,390])test(`old host permission error does not displace 
  await page.setViewportSize({width,height:900});await page.goto('/tests/manual/project-space-qa.html');
  await page.evaluate(()=>{window.desktop!.spaces!.controlPlan=async()=>{throw Error("Error invoking remote method 'spaces:controlPlan': Error: 不支持的控制操作");};});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'任务',exact:true}).click();await page.locator('.wf-graph-node[data-package-id="copy"]').click();
+ await page.getByRole('tab',{name:'任务对话',exact:true}).click();
  const input=page.getByRole('textbox',{name:'修改要求',exact:true});const before=await input.boundingBox();
  await page.getByRole('combobox',{name:'节点授权模式'}).selectOption('full');await page.getByRole('button',{name:'更改授权模式',exact:true}).click();
  await expect(page.getByText(/当前桌面主进程尚不支持更改授权模式/)).toHaveCount(1);

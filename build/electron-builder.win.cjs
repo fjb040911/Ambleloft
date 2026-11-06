@@ -7,7 +7,7 @@ module.exports = {
     ? {from: 'vendor/engine/win32-${arch}', to: 'engine'} : resource),
   win: {
     ...base.win,
-    target: [{target: 'zip', arch: ['x64']}],
+    target: [{target: 'nsis', arch: ['x64']}, {target:'zip',arch:['x64']}],
     artifactName: 'Ambleloft-${version}-windows-${arch}.${ext}',
   },
 };

@@ -34,7 +34,7 @@ class SpaceService {
     return {...state,requests:state.requests.map(request=>({...request,...(request.mode==='discussion'?{discussion:request.discussion||{schemaVersion:1,id:discussionRoot(state.requests,request),mode:'consultation',provenance:'legacy'}}:{}),staleReferences:request.mode==='work'?request.documentRefs.filter(ref=>state.documents.find(d=>d.id===ref.id)?.adoptedRevision!==ref.revision).map(ref=>({id:ref.id,revision:ref.revision,currentRevision:state.documents.find(d=>d.id===ref.id)?.adoptedRevision??null})):[],participants:request.participants.map(p=>{
       const run=this.runtime.runs.find(r=>r.collaboration?.requestId===request.id&&r.employee?.id===p.employeeId);
       const employee=run?.employee;
-      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?.error||p.error,output:run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning').map(m=>m.text).join('\n\n')||'',updatedAt:run?.updatedAt,
+      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?run.error:p.error,output:run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning').map(m=>m.text).join('\n\n')||'',updatedAt:run?.updatedAt,
         // Report the role and skills actually used, even after the employee is edited or removed.
         ...(employee?{role:{name:employee.name,revision:employee.revision,skills:(employee.skills||[]).map(({id,name,version})=>({id,name,version}))}}:{})};
     })}))};

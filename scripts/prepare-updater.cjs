@@ -1,0 +1,1 @@
+require('esbuild').buildSync({stdin:{contents:"module.exports={...require('./electron/updates.cjs'),updater:require('electron-updater').autoUpdater}",resolveDir:require('node:path').resolve(__dirname,'..')},outfile:require('node:path').resolve(__dirname,'../build/updater.cjs'),bundle:true,platform:'node',target:'node22',external:['electron'],logLevel:'warning'});

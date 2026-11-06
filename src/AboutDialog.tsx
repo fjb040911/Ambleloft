@@ -1,3 +1,4 @@
+import {UpdateCard} from './Updates';
 import {useEffect,useState,type MouseEvent,type ReactNode} from 'react';
 import {ArrowUpRight,Check,Copy} from 'lucide-react';
 import ManagementDialog from './ManagementDialog';
@@ -52,6 +53,7 @@ export default function AboutDialog({close}:{close():void}) {
       <div className="flex flex-col gap-1 text-sm" aria-live="polite">
         {info?<><p className="font-medium">v{info.version}<span className="mx-2 text-muted-foreground" aria-hidden="true">·</span>{t(channels[info.channel])}</p>{info.commit&&<p className="text-xs text-muted-foreground">{t('构建提交')} <span className="font-mono">{info.commit}</span>{info.dirty===true&&` · ${t('含未提交更改')}`}</p>}</>:<p className="text-muted-foreground">{t(loadError?'暂时无法读取版本信息，请重启应用后重试。':'正在读取版本信息…')}</p>}
       </div>
+      <UpdateCard/>
       <nav aria-label={t('产品与帮助')} className="flex flex-wrap gap-2">
         {link('官方网站',`https://ambleloft.com/${language==='en'?'en':'zh'}/`)}
         {link('使用文档',`https://ambleloft.com/${language==='en'?'en':'zh'}/docs/overview/`)}

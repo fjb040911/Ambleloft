@@ -271,3 +271,34 @@ test('ordinary task channels omit creation tools; explicit and resumed creation 
   }finally{await runtime?.shutdown();await fs.rm(directory,{recursive:true,force:true});}
  }
 });
+
+test('duplicate pending approval events are shown once and stopping invalidates decisions',()=>{
+ const sent=[],runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};
+ const context={run:{id:'run',approvals:[]},config:{apiKey:''},rpc:{send:value=>sent.push(value)}};
+ runtime.contexts.set('test',context);
+ const request={id:42,method:'item/commandExecution/requestApproval',params:{command:'pwd'}};
+ runtime.request(context,request);runtime.request(context,request);
+ assert.equal(context.run.approvals.length,1);
+ runtime.request(context,{...request,id:43});
+ assert.equal(context.run.approvals.length,2,'identical commands with different RPC identities remain separate');
+ context.cancelled=true;
+ assert.throws(()=>runtime.approve({runId:'run',approvalId:'42',decision:'accept'}),/审批已失效/);
+ assert.equal(sent.length,0);
+});
+
+test('new unassociated tasks use isolated scratch storage even after an SSH Docker task',async()=>{
+ const {createProviderStore}=require('../electron/provider.cjs');
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'amble-target-isolation-'));let runtime;
+ try{
+  const provider=createProviderStore(directory,{});await provider.save({create:true,name:'Fixture',baseUrl:'https://fixture.invalid/v1',model:'test',executable:process.execPath});
+  const project={id:'remote',type:'ssh',connectionId:'ssh',path:'/workspace',environment:{kind:'docker',containerId:'a'.repeat(64)}};
+  runtime=new AgentRuntime({directory,provider,workspace:{read:async()=>({projects:[project],tasks:[]})},ssh:{connect:async()=>{throw Error('Must not connect to the old server');}},publish(){},rpcFactory:()=>({close(){}})});
+  await runtime.init();runtime.execute=async()=>{};
+  runtime.runs.push({id:'old',projectId:project.id,cwd:'/old-coordination',remote:project,status:'completed',messages:[],tools:[],approvals:[]});
+  const run=await runtime.start({prompt:'independent task',projectId:null});
+  assert.equal(run.projectId,null);assert.equal(run.remote,undefined);assert.notEqual(run.id,'old');
+  assert.equal(path.dirname(run.cwd),path.join(directory,'scratch'));
+  assert.equal((await fs.stat(run.cwd)).isDirectory(),true);
+  await runtime.finish(runtime.active,'completed');
+ }finally{await runtime?.shutdown();await fs.rm(directory,{recursive:true,force:true});}
+});

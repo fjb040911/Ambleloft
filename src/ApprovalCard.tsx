@@ -22,6 +22,7 @@ export default function ApprovalCard({approval,disabled,pending,error,decide}:{a
   <ItemContent className="min-w-0">
    <ItemTitle>{t(fileChange?'允许修改文件？':command?'允许执行此命令？':'需要你批准')}</ItemTitle>
    <ItemDescription>{t('仅限本次请求')}</ItemDescription>
+   {typeof params.subagent==='string'&&<ItemDescription>{t('发起专家')} · {params.subagent}</ItemDescription>}
    {reason&&<ItemDescription className="line-clamp-none break-words">{reason}</ItemDescription>}
    {command&&<div className="flex min-w-0 items-start gap-2"><pre tabIndex={0} aria-label={t('待执行命令')} className="m-0 max-h-24 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{command}</pre><Button variant="ghost" size="icon-xs" aria-label={t(status)} title={t(status)} onClick={()=>void copy(command)}>{status==='已复制'?<Check/>:<Copy/>}</Button><span className="sr-only" role="status">{status==='复制命令'?'':t(status)}</span></div>}
    {!command&&<ItemDescription className="line-clamp-none">{t('请查看请求详情，确认操作内容后再决定。')}</ItemDescription>}

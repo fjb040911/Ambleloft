@@ -4,6 +4,7 @@ const xml = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxC
 const rich = '# 渲染验收\n\n**重点内容** 和 `inline`。\n\n| 项目 | 结果 |\n|---|---|\n| 测试 | 成功 |\n\n- [x] 已完成\n\n公式：$E=mc^2$\n\n```typescript\nconst hello = "world";\n```\n\n```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```\n\n```echarts\n{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{},"series":[{"type":"bar","data":[3,7]}]}\n```\n\n```drawio\n'+xml+'\n```\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60"><rect width="200" height="60" fill="#e3ecfa"/><text x="20" y="35">Vector preview</text></svg>\n```';
 async function prepare(page: import('@playwright/test').Page, text = rich, language: 'zh-CN'|'en' = 'zh-CN') {
   await page.addInitScript(({ text, language }) => {
+    sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
     const run: any = { id:'demo', title:'任务体验验收', model:'fixture', baseUrl:'http://127.0.0.1/v1', cwd:'/fixture', createdAt:new Date().toISOString(), status:'waiting', error:'', tools:[], approvals:[{id:'approve',method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo approved',cwd:'/fixture',reason:'确认本次操作'})}], messages:[{id:'u',role:'user',text:'请展示结果'},{id:'r',role:'assistant',kind:'reasoning',status:'completed',text:'先检查输入，再整理结果。'},{id:'a',role:'assistant',phase:'final_answer',text}] };
     (window as any).__formReads=0;(window as any).__formSubscriptions=0;
     let callback: any;
@@ -963,4 +964,39 @@ for(const width of [1240,600])test(`chat composer keeps bottom space for message
  await expect(input).toHaveValue('第一行\na');
  const geometry=await input.evaluate(el=>{const group=el.closest('[data-slot=input-group]')!.getBoundingClientRect(),page=el.closest('.conversation-page')!.getBoundingClientRect(),hint=document.getElementById(el.getAttribute('aria-describedby')!)!;return {gap:page.bottom-group.bottom,hintHeight:hint.getBoundingClientRect().height,description:hint.textContent};});
  expect(geometry.gap).toBeLessThanOrEqual(10);expect(geometry.hintHeight).toBeLessThanOrEqual(1);expect(geometry.description).toContain('Shift+Enter');
+});
+
+test('approval queue collapses bursts and batches only explicitly selected request identities',async({page})=>{
+ await prepare(page,'等待审批');
+ await page.evaluate(()=>{const w=window as any;w.__calls=[];w.__demoRun.approvals=Array.from({length:12},(_,i)=>({id:'a'+i,method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo '+i,cwd:'/fixture',subagent:i%2?'架构师':'产品经理'})}));w.desktop.approveRun=async(input:any)=>{w.__calls.push(input);if(w.__calls.length===1)w.__demoRun.approvals.push({id:'new',method:'commandExecution',detail:'{"command":"echo new"}'});w.__demoRun.approvals=w.__demoRun.approvals.filter((a:any)=>a.id!==input.approvalId);w.__emit();};w.__emit();});
+ const queue=page.getByRole('region',{name:'授权请求队列'});
+ await expect(queue.getByRole('region',{name:'执行授权'})).toHaveCount(1);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('保留正在输入的补充');await expect(input).toBeFocused();
+ await page.getByRole('button',{name:'收起请求',exact:true}).click();await expect(queue).toBeHidden();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.approvals.push({id:'later',method:'commandExecution',detail:'{"command":"echo later"}'});w.__emit();});
+ await expect(queue).toBeHidden();await expect(input).toHaveValue('保留正在输入的补充');
+ await page.getByRole('button',{name:'查看并处理',exact:true}).click();
+ await page.getByRole('checkbox',{name:'选择授权请求 a0',exact:true}).check();await page.getByRole('checkbox',{name:'选择授权请求 a1',exact:true}).check();
+ await page.getByRole('button',{name:'批准所选项',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0','a1']);
+ await expect(page.getByRole('checkbox',{name:'选择授权请求 new',exact:true})).not.toBeChecked();
+ await expect(page.getByRole('button',{name:'批准所选项'})).toBeDisabled();
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/approval-queue-narrow.png'});
+ expect(await queue.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});await expect(queue).toHaveCount(0);
+});
+
+test('approval queue stops a batch on failure and does not approve after stop',async({page})=>{
+ await prepare(page,'等待审批');
+ await page.evaluate(()=>{const w=window as any;w.__calls=[];w.__demoRun.approvals=[0,1].map(i=>({id:'a'+i,method:'commandExecution',detail:JSON.stringify({command:'echo '+i})}));w.desktop.approveRun=async(input:any)=>{w.__calls.push(input);throw Error('服务暂时不可用');};w.__emit();});
+ for(const id of ['a0','a1'])await page.getByRole('checkbox',{name:'选择授权请求 '+id,exact:true}).check();
+ await page.getByRole('button',{name:'拒绝所选项'}).click();await expect(page.getByRole('alert')).toContainText('服务暂时不可用');
+ expect(await page.evaluate(()=>(window as any).__calls.length)).toBe(1);
+ await page.evaluate(()=>{const w=window as any;w.__calls=[];w.desktop.approveRun=(input:any)=>{w.__calls.push(input);return new Promise(resolve=>{w.__resolve=resolve;});};});
+ await page.getByRole('button',{name:'批准所选项'}).click();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});
+ await expect(page.getByRole('region',{name:'授权请求队列'})).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__resolve());
+ expect(await page.evaluate(()=>(window as any).__calls.length)).toBe(1);
 });

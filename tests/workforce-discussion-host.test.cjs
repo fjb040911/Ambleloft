@@ -149,9 +149,39 @@ test('H06 stop rejects late model responses and duplicate submits do not repeat 
 test('H06 cancelling while an expert is starting stops its late run',async t=>{
  const f=await fixture(t);let release,started;const old=f.runtime.start.bind(f.runtime);f.runtime.start=(...args)=>{started=true;return new Promise(r=>release=()=>old(...args).then(r));};f.service.generateDiscussionHost=async()=>delegate('product');await f.start();await until(()=>started);const id=(await f.service.read()).requests[0].id;await f.service.stopDiscussionHost({requestId:id});await release();await until(()=>f.runtime.runs[0]?.status==='interrupted');assert.equal((await f.finish()).host.status,'interrupted');
 });
-test('H06 expert timeout stops unfinished work and keeps prior output; restart does not replay',async t=>{
- const f=await fixture(t);f.service.hostExpertTimeoutMs=20;f.service.generateDiscussionHost=async()=>delegate('product');await f.start();const r=await f.finish();assert.equal(r.host.status,'failed');assert.equal(f.runtime.runs[0].status,'interrupted');
- await f.service.change(s=>{s.requests[0].host.status='running';});await f.service.initialize();clearInterval(f.service.plans.timer);assert.equal((await f.service.read()).requests[0].host.status,'interrupted');assert.equal(f.runtime.runs.length,1);
+test('H06 expert execution and approval waits have no coordination time limit',async t=>{
+ for(const status of ['running','waiting'])await t.test(status,async t=>{
+  const f=await fixture(t),timeout=AbortSignal.timeout.bind(AbortSignal);
+  // Compress the old ten-minute deadline without waiting ten real minutes.
+  t.mock.method(AbortSignal,'timeout',ms=>timeout(ms===600000?20:ms));
+  let calls=0;f.service.generateDiscussionHost=async()=>++calls===1?delegate('product'):response();
+  await f.start();await until(()=>f.runtime.runs.length===1);
+  f.runtime.runs[0].status=status;
+  await new Promise(resolve=>setTimeout(resolve,70));
+  assert.equal(f.runtime.runs[0].status,status);assert.equal(f.service.hostJobs.size,1);assert.equal(calls,1);
+  Object.assign(f.runtime.runs[0],{status:'completed',messages:[{role:'assistant',text:'Expert evidence'}]});
+  const result=await f.finish();assert.equal(result.host.status,'completed');assert.equal(calls,2);
+  assert.equal(result.participants[0].output,'Expert evidence');assert.equal(result.participants[0].error,undefined);
+ });
+});
+test('H06 stopping an expert wait preserves completed results and the explicit stop reason',async t=>{
+ const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'delegate',delegates:[...delegate('product').delegates,...delegate('architect').delegates]});
+ await f.start();await until(()=>f.runtime.runs.length===2);
+ Object.assign(f.runtime.runs[0],{status:'completed',messages:[{role:'assistant',text:'Completed evidence'}]});f.runtime.runs[1].status='waiting';
+ await new Promise(resolve=>setTimeout(resolve,20));
+ const id=(await f.service.read()).requests[0].id;await f.service.stopDiscussionHost({requestId:id});const result=await f.finish();
+ assert.equal(result.host.status,'interrupted');assert.equal(result.host.errorCode,'DISCUSSION_STOPPED');assert.match(result.host.error,/讨论已停止/);
+ assert.equal(f.runtime.runs[0].status,'completed');assert.equal(f.runtime.runs[1].status,'interrupted');
+ assert.equal(result.participants[0].output,'Completed evidence');assert.equal(result.participants[0].error,undefined);
+ assert.equal((await f.service.read()).requests[0].participants[0].status,'completed');
+ await f.service.change(s=>{s.requests[0].host.status='running';});await f.service.initialize();clearInterval(f.service.plans.timer);assert.equal((await f.service.read()).requests[0].host.status,'interrupted');assert.equal(f.runtime.runs.length,2);
+});
+test('H06 host summary failure does not overwrite a completed expert in persistence',async t=>{
+ const f=await fixture(t);let calls=0;f.service.generateDiscussionHost=async()=>{if(++calls===1)return delegate('product');throw Error('Summary provider unavailable');};
+ await f.start();await until(()=>f.runtime.runs.length===1);f.runtime.runs[0].status='completed';
+ const result=await f.finish();assert.equal(result.host.status,'failed');assert.match(result.host.error,/Summary provider unavailable/);
+ const stored=(await f.service.read()).requests[0].participants[0];assert.equal(stored.status,'completed');assert.equal(stored.error,undefined);
+ assert.equal(result.participants[0].status,'completed');assert.equal(result.participants[0].error,undefined);
 });
 test('H06 partial expert failure does not become ready or invoke downstream experts',async t=>{
  const f=await fixture(t);let called=0;f.service.generateDiscussionHost=async()=>{called++;return response({action:'delegate',delegates:[...delegate('product').delegates,...delegate('architect').delegates]});};await f.start();await until(()=>f.runtime.runs.length===2);f.runtime.runs[0].status='completed';f.runtime.runs[1].status='failed';assert.equal((await f.finish()).host.status,'failed');assert.equal(called,1);
