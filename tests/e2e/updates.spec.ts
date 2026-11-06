@@ -1,0 +1,10 @@
+import {test,expect} from '@playwright/test';
+test('update ring downloads once and shares progress with About and Settings',async({page})=>{
+ await page.addInitScript(()=>{
+  localStorage.setItem('atelier-workspace',JSON.stringify({theme:'dark',language:'zh-CN',layoutMode:'classic',projects:[],tasks:[]}));
+  let state={status:'available',currentVersion:'0.9.1',version:'0.9.2',progress:null as number|null,error:'',autoCheck:true,autoDownload:false};let listener=(s:any)=>{};
+  (window as any).updateDownloads=0;
+  (window as any).desktop={readWorkspace:async()=>({theme:'dark',language:'zh-CN',layoutMode:'classic',projects:[],tasks:[]}),listRuns:async()=>[],getProvider:async()=>({configured:false}),onRun:()=>()=>{},onCommand:()=>()=>{},getDevice:async()=>({platform:'darwin'}),getAppInfo:async()=>({version:'0.9.1',channel:'packaged',platform:'darwin'}),updates:{snapshot:async()=>state,onChanged:(fn:any)=>{listener=fn;return()=>{};},download:async()=>{(window as any).updateDownloads++;state={...state,status:'downloading',progress:42};listener(state);return state;},cancel:async()=>{state={...state,status:'available',progress:null};listener(state);return state;}}};
+ });
+ await page.goto('/');const ring=page.locator('.update-ring-button');await expect(ring).toBeVisible();await ring.click();await expect(ring).toHaveAttribute('title',/42%/);await ring.click();await expect(page.getByRole('progressbar')).toHaveAttribute('value','42');expect(await page.evaluate(()=>(window as any).updateDownloads)).toBe(1);await expect(page.getByRole('dialog')).toHaveCSS('opacity','1');await page.screenshot({path:'test-results/update-about-dark.png'});await page.keyboard.press('Escape');await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.getByText('导航布局',{exact:true})).toHaveCount(0);await page.getByRole('button',{name:'版本与更新',exact:true}).click();await expect(page.getByRole('progressbar')).toHaveAttribute('value','42');await page.getByRole('button',{name:'取消下载',exact:true}).click();await expect(page.getByRole('button',{name:'下载更新',exact:true})).toBeVisible();await page.screenshot({path:'test-results/update-settings-dark.png'});
+});

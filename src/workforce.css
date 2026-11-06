@@ -219,14 +219,15 @@
 .wf-document-comparison>section{min-width:0;overflow-wrap:anywhere}.wf-document-comparison h3{font-size:13px;margin:0 0 14px;color:var(--muted)}.wf-document-comparison .markdown{font-size:14px;line-height:1.8}
 .wf-document-dialog [data-slot=alert] ul{max-height:130px;overflow:auto;padding-left:20px;margin:8px 0}
 .wf-discussion-context{border-bottom:1px solid var(--wf-edge);padding:10px 0}.wf-discussion-context>summary{color:var(--wf-muted);overflow-wrap:anywhere}.wf-discussion-context>[data-slot=field-set]{padding-top:16px}
-.wf-discussion-layout{display:flex;flex:1;min-width:0;align-items:stretch}
-.wf-discussion-panels{height:auto;min-height:100%}
+.wf-discussion-layout{display:flex;flex-direction:column;flex:1;min-width:0;align-items:stretch}
+.wf-discussion-panels{flex:1;min-height:0}
 .wf-discussion-chat-pane{display:flex;min-width:0;padding-right:16px}
 .wf-discussion-chat-pane>.wf-discussion-main{flex:1}
-.wf-discussion-context-pane,.wf-discussion-context-content{height:100%}
+.wf-discussion-context-pane,.wf-discussion-context-content{display:flex;flex-direction:column;flex:1;min-height:0}
+.wf-discussion-context-content[hidden]{display:none}
 .wf-discussion-layout[data-context-open=false] .wf-discussion-chat-pane{padding-right:0}
 .wf-discussion-divider>div{position:sticky;top:calc(var(--wf-space-navigation-height,44px) + 64px);margin-top:64px}
-.wf-discussion-main{display:flex;flex-direction:column;min-width:0}.wf-discussion-header,.wf-context-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.wf-discussion-header{flex:none;padding:4px 0 12px;border-bottom:1px solid var(--wf-edge)}.wf-discussion-header h2{font-size:16px;font-weight:600;overflow-wrap:anywhere}.wf-discussion-header .wf-muted{display:block;margin-top:4px;font-size:12px}.wf-discussion-sidebar{min-width:0;height:100%;padding-left:16px}.wf-discussion-sidebar [data-slot=tabs-list]{width:100%;justify-content:flex-start}.wf-discussion-sidebar [data-slot=tabs-trigger]{min-width:0}.wf-context-heading{margin:18px 0 10px}.wf-context-list{display:flex;flex-direction:column;gap:4px}.wf-context-item{display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;padding:10px 12px;text-align:left;border-radius:var(--radius-list);overflow-wrap:anywhere}.wf-context-item:hover,.wf-context-item[aria-current=true]{background:var(--hover)}.wf-context-item strong{font-size:13px;font-weight:500}.wf-context-item small{font-size:12px;color:var(--wf-muted)}.wf-discussion-sidebar p{font-size:13px;line-height:1.6}.wf-discussion-main .wf-request-list{flex:1;margin-top:0;padding:14px 0 20px}
+.wf-discussion-main{display:flex;flex-direction:column;min-width:0}.wf-discussion-header,.wf-context-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.wf-discussion-header{flex:none;padding:4px 0 12px;border-bottom:1px solid var(--wf-edge)}.wf-discussion-header h2{font-size:16px;font-weight:600;overflow-wrap:anywhere}.wf-discussion-header .wf-muted{display:block;margin-top:4px;font-size:12px}.wf-discussion-sidebar{min-width:0;flex:1;padding-left:16px}.wf-discussion-sidebar [data-slot=tabs-list]{width:100%;justify-content:flex-start}.wf-discussion-sidebar [data-slot=tabs-trigger]{min-width:0}.wf-context-heading{margin:18px 0 10px}.wf-context-list{display:flex;flex-direction:column;gap:4px}.wf-context-item{display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;padding:10px 12px;text-align:left;border-radius:var(--radius-list);overflow-wrap:anywhere}.wf-context-item:hover,.wf-context-item[aria-current=true]{background:var(--hover)}.wf-context-item strong{font-size:13px;font-weight:500}.wf-context-item small{font-size:12px;color:var(--wf-muted)}.wf-discussion-sidebar p{font-size:13px;line-height:1.6}.wf-discussion-main .wf-request-list{flex:1;margin-top:0;padding:14px 0 20px}
 /* All space tabs share page scrolling and the same sticky navigation.
    Only the discussion footer stays at the viewport bottom; its normal-flow
    space keeps the final message readable above it. */
@@ -252,7 +253,7 @@
 .discussion-expert-transcript .conversation-turn{min-width:0}
 /* Keep contextual navigation below the shared space navigation. Long lists
    scroll inside their panel without displacing the context tabs. */
-.wf-discussion-sidebar>[data-slot=tabs]{position:sticky;top:calc(var(--wf-space-navigation-height,44px) + 12px);max-height:max(160px,calc(var(--wf-space-available,100dvh) - var(--wf-space-navigation-height,44px) - 32px));background:var(--wf-paper)}
+.wf-discussion-sidebar>[data-slot=tabs]{position:sticky;top:calc(var(--wf-space-navigation-height,44px) + 12px);max-height:max(160px,calc(var(--wf-space-viewport,100dvh) - var(--wf-space-navigation-height,44px) - 32px));background:var(--wf-paper)}
 .wf-discussion-sidebar [data-slot=tabs-list]{flex-shrink:0;overflow-x:auto;overflow-y:hidden;min-height:38px}
 .wf-discussion-sidebar [data-slot=tabs-trigger]{flex:none}
 .wf-discussion-sidebar [data-slot=tabs-content]{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
@@ -466,7 +467,7 @@
 .wf-host-trace summary {cursor:pointer;padding-block:8px;}
 .wf-host-trace[open] > div {margin-block:12px;}
 .wf-host-questions {display:flex;flex-direction:column;gap:20px;padding-block:16px;border-top:1px solid var(--border);}
-.wf-host-question-actions,.wf-host-pinned {display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
+.wf-host-question-actions {display:flex;align-items:center;flex-wrap:wrap;gap:12px;}
 .wf-host-question-actions {justify-content:space-between;}
 .wf-host-question-actions .wf-muted {flex:1;min-width:160px;font-size:12px;}
 .wf-host-brief {padding:16px 0;overflow-wrap:anywhere;}
@@ -557,3 +558,11 @@
 .wf-guide-toolbar-label span{font-size:12px;color:var(--wf-muted)}
 .wf-guide-toolbar>.wf-actions{flex:none;gap:4px}
 @container(max-width:480px){.wf-guide-toolbar{flex-wrap:wrap;gap:6px}.wf-guide-toolbar-label{flex-basis:100%}.wf-guide-toolbar>.wf-actions{margin-inline-start:auto}}
+
+/* Task detail: two views, with context disclosed inside delivery review. */
+.wf-task-review>.wf-task-view-tabs{flex-shrink:0;margin-block:4px 0;border-bottom:1px solid var(--wf-edge);width:100%;justify-content:flex-start}
+.wf-task-view-tabs>[data-slot=tabs-trigger]{flex:0 0 auto;padding-inline:12px}
+.wf-task-review>.wf-actions:empty{display:none}
+.wf-task-context{border-top:1px solid var(--wf-edge);padding-top:16px}
+.wf-task-context>summary{font-weight:500;color:var(--muted-foreground)}
+.wf-task-context-content{display:flex;flex-direction:column;gap:16px;padding-block:16px 0}

@@ -1,6 +1,16 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
 const {Database}=require('../electron/database.cjs');const {SpaceService,spaceInstructions}=require('../core/workforce/spaces.cjs');
 async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-spaces-')),database=new Database(root);await database.call('ready');const runtime={runs:[],async start(input,context){const run={id:'run-'+this.runs.length,employee:{id:input.employeeId},collaboration:context.collaboration,projectId:input.projectId,status:'completed',messages:[{role:'assistant',text:'Evidence from the selected inputs'}]};this.runs.push(run);return run;}};const service=new SpaceService({directory:root,database,workspace:{read:async()=>({projects:[{id:'gateway',path:'/existing/gateway'},{id:'router',path:'/existing/router'}]})},workforce:{read:async()=>({employees:[{id:'product'},{id:'architect'}]})},runtime});await service.initialize();t.after(async()=>{await service.shutdown();await database.close();await fs.rm(root,{recursive:true,force:true});});const space=await service.save({value:{name:'AI Coding',purpose:'Clarify contracts',projectIds:['gateway','router'],members:[{employeeId:'product',assignment:'Requirements',projectIds:['gateway']},{employeeId:'architect',assignment:'Architecture',projectIds:['router']}]}});return {service,runtime,space};}
+test('participant status and error come from the same runtime record, with stored errors only as fallback for missing runs',async t=>{
+ const {service,runtime,space}=await fixture(t);
+ await service.change(s=>s.requests.push({id:'error-snapshot',spaceId:space.id,mode:'discussion',participants:[{employeeId:'product',status:'failed',error:'The operation was aborted'}]}));
+ const run={id:'expert-run',employee:{id:'product'},collaboration:{requestId:'error-snapshot'},status:'completed',messages:[]};runtime.runs.push(run);
+ const participant=async()=>(await service.snapshot()).requests[0].participants[0];
+ for(const error of [undefined,'',null]){run.error=error;assert.equal((await participant()).status,'completed');assert.equal((await participant()).error,error);}
+ run.status='running';assert.equal((await participant()).error,null);
+ Object.assign(run,{status:'failed',error:'Actual provider failure'});assert.equal((await participant()).error,'Actual provider failure');
+ runtime.runs.length=0;assert.equal((await participant()).error,'The operation was aborted');assert.equal((await participant()).status,'failed');
+});
 test('removed experts do not block saving other members and can be unlinked without deleting history',async t=>{
  const {service,space}=await fixture(t);
  await service.change(state=>{state.requests.push({id:'old-request',spaceId:space.id,mode:'discussion',documentRefs:[],participants:[{employeeId:'product',status:'completed'}]});});

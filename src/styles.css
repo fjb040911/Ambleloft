@@ -458,3 +458,18 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; flex-direction:
 .archived-conversations .archive-task-info small { margin-top:4px; }
 .archived-conversations .archive-project-group { margin:24px 0; }
 .archived-conversations .archive-project-group header { padding:0 16px; margin-bottom:10px; }
+
+/* One update process is shared by the activity rail, About and Settings. */
+.update-ring-button{position:relative;width:40px;height:40px;display:grid;place-items:center;border:0;background:transparent;color:#3978f6;border-radius:10px;cursor:pointer;flex-shrink:0}
+.update-ring-button:hover{background:var(--selection)}
+.update-ring-button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.update-ring-button>svg:first-child{position:absolute;width:32px;height:32px;transform:rotate(-90deg);fill:none;stroke-width:3.5}
+.update-ring-track{stroke:currentColor;opacity:.2}.update-ring-value{stroke:currentColor;stroke-linecap:round}
+.update-card{display:flex;flex-direction:column;gap:12px;padding-block:16px;border-block:1px solid var(--border)}
+.update-card h3{font-weight:600}.update-card small{color:var(--muted-foreground)}
+.update-card progress{width:100%;height:8px;accent-color:#3978f6}
+.update-actions{display:flex;gap:8px;flex-wrap:wrap}.update-preferences{display:flex;flex-direction:column;gap:12px;padding-top:12px}.update-preferences label{display:flex;align-items:center;gap:8px}
+.update-card progress{-webkit-appearance:none;appearance:none;border:0;border-radius:4px;overflow:hidden;background:var(--selection)}
+.update-card progress::-webkit-progress-bar{background:var(--selection)}
+.update-card progress::-webkit-progress-value{background:#3978f6;border-radius:4px}
+.update-card progress::-moz-progress-bar{background:#3978f6;border-radius:4px}

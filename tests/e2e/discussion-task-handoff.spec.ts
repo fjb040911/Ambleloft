@@ -24,7 +24,7 @@ test('ready reply prepares once with the selected model, clarifies, then waits f
  expect(await calls(page,'control')).toHaveLength(0);
  await guide.getByRole('button',{name:'确认并启动'}).click();await expect(guide).toBeHidden();
  expect(await calls(page,'createGuidedPlan')).toHaveLength(1);expect(await calls(page,'control')).toHaveLength(1);
- await page.getByRole('button',{name:'任务说明与记录',exact:true}).click();await page.getByRole('button',{name:'返回来源讨论'}).click();await expect(handoff(page).getByRole('button',{name:'查看任务计划'})).toBeVisible();
+ await page.getByRole('tab',{name:'交付验收',exact:true}).click();await page.locator('.wf-task-context > summary').click();await page.getByRole('button',{name:'返回来源讨论'}).click();await expect(handoff(page).getByRole('button',{name:'查看任务计划'})).toBeVisible();
  await handoff(page).getByRole('button',{name:'查看任务计划'}).click();await page.locator('.wf-graph-node[data-package-id="verify"]').click();await expect(page.getByRole('region',{name:'任务详情与验收'})).toBeVisible();expect(await calls(page,'createTaskDraft')).toHaveLength(1);
 });
 

@@ -432,6 +432,8 @@ class AgentRuntime {
       if(params.isBlocking!==false)run.status='waiting';this.changed(run);
     } else if (['item/commandExecution/requestApproval', 'item/fileChange/requestApproval'].includes(message.method)) {
       if(context.remoteProject){context.rpc.send({id:message.id,result:{decision:'decline'}});return;}
+      // Repeated delivery of one pending RPC must not create another authorization.
+      if(run.approvals.some(item=>item.rpcId===message.id))return;
       run.approvals.push({ id: String(message.id), rpcId: message.id, method: message.method,
         detail: redact(JSON.stringify({...message.params,...(child?{subagent:child.analysisAgent.name}:{})}, null, 2), context.config.apiKey) });
       run.status = 'waiting'; this.changed(run);
@@ -441,7 +443,7 @@ class AgentRuntime {
   }
   approve({ runId, approvalId, decision }) {
     const context = [...this.contexts.values()].find(c=>c.run?.id===runId);
-    if (!context?.rpc || context.run?.id !== runId || !['accept', 'decline'].includes(decision)) throw new Error('审批已失效');
+    if (!context?.rpc || context.done || context.cancelled || context.run?.id !== runId || !['accept', 'decline'].includes(decision)) throw new Error('审批已失效');
     const approval = context.run.approvals.find(item => item.id === approvalId);
     if (!approval) throw new Error('审批已失效');
     if(context.remoteApprovals?.has(approvalId)){context.remoteApprovals.get(approvalId)(decision==='accept');return;}

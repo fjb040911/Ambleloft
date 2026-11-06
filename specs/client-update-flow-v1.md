@@ -2,6 +2,8 @@
 
 日期：2026-11-04。状态：方案已选定，本文为待实施设计；不代表更新器、CI 或签名已接通。
 
+配套 [客户端更新交互设计](client-update-interaction-v1.md) 定义提醒入口、文案、按钮行为、重启确认与失败恢复。
+
 ## 1. 决策与边界
 
 使用现有 AmbleLoft GitHub 仓库的 Releases 发布完整客户端，以 electron-updater 差分下载，校验完整安装包后，在安全排空并重启时安装。宿主与固定版本 Codex 引擎是同一个发布单元；不建设更新服务器，不增加独立引擎仓库或 EngineUpdater。
@@ -123,7 +125,7 @@ ready → waiting-for-idle → draining → saving → installing
 
 ## 9. UI、IPC 与诊断
 
-设置页“版本与更新”：当前客户端/引擎版本、检查时间、更新说明、下载进度、状态、阻塞原因；提供检查、下载、取消下载、立即重启更新、空闲时更新、取消计划和稍后处理。
+活动栏左下角独立蓝色圆环为主要更新入口：检测到新版本后显示，悬停提示版本，首次点击直接下载，下载期间以圆环反馈进度并可点击查看关于中的详情；就绪后点击查看重启选项。关于和设置页“版本与更新”复用更新卡片，均提供检查、下载、取消、重试与重启操作；设置页额外管理更新偏好。两处共享主进程状态，关闭页面不取消后台下载，详见交互设计。
 
 建议 IPC：update:getState、update:check、update:download、update:cancelDownload、update:scheduleInstall、update:cancelInstall、update:event。授权绑定可信窗口/profile；安装请求绑定目标版本及状态 revision，过期请求拒绝。所有窗口共享主进程状态，不各自发起更新。
 

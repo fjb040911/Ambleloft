@@ -12,6 +12,7 @@ module.exports = {
   asarUnpack: ['node_modules/node-pty/**/*'],
   files: ['dist/**/*', 'electron/**/*', 'core/**/*', 'package.json', '!node_modules/**/*', '!specs{,/**/*}', '!**/tooling-report{,/**/*}', '!**/outputs{,/**/*}', '!**/output{,/**/*}', '!**/test-results{,/**/*}', '!**/playwright-report{,/**/*}', '!**/coverage{,/**/*}', '!**/.cache{,/**/*}', '!docs{,/**/*}', '!tests{,/**/*}', '!scripts{,/**/*}', '!electron/office-worker.cjs', ...['ajv','fast-uri','fast-deep-equal','json-schema-traverse','require-from-string','ssh2','asn1','bcrypt-pbkdf','safer-buffer','tweetnacl','node-pty','openid-client','oauth4webapi','jose'].map(name=>({from:'node_modules/'+name,to:'node_modules/'+name,filter:['**/*']})), { from: 'node_modules/diff', to: 'node_modules/diff', filter: ['**/*'] }],
   extraResources: [
+    { from: 'build/updater.cjs', to: 'tools/updater.cjs' },
     { from: 'build/workforce-graph.cjs', to: 'tools/workforce-graph.cjs' },
     { from: 'build/workforce-graph-LICENSES.txt', to: 'tools/workforce-graph-LICENSES.txt' },
     ...['ssh2','asn1','bcrypt-pbkdf','safer-buffer','tweetnacl','@xterm/xterm','@xterm/addon-fit','@xterm/addon-search','node-pty'].map(name=>({from:'node_modules/'+name+'/LICENSE',to:'licenses/terminal/'+name.replace('/','-')+'-LICENSE.txt'})),
@@ -40,5 +41,5 @@ module.exports = {
     ...(release ? {} : { identity: '-' }),
   },
   dmg: { sign: release },
-  publish: null,
+  publish: {provider:'github',owner:'fjb040911',repo:'Ambleloft',releaseType:'draft'},
 };

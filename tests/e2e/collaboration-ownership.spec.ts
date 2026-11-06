@@ -1,6 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 async function prepare(page:Page){
  await page.addInitScript(()=>{
+  sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
   const stamp='2026-11-01T09:00:00Z';
   const project={id:'project',name:'示例项目',path:'/tmp/fixture',createdAt:stamp};
   const expert={id:'expert',name:'测试专家',domain:'测试',responsibilities:'检查结果',deliverables:'结果',methods:'验证',skills:[],requirements:[],status:'ready',revision:1,createdAt:stamp,updatedAt:stamp};
@@ -51,7 +52,8 @@ test('full execution records remain accessible inside the workspace and return t
  await prepare(page);
  await page.evaluate(()=>(window as any).__openConversation({kind:'run',recordId:'discussion-run'}));
  await expect(page.getByRole('heading',{name:'讨论验证主题',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'完整任务',exact:true}).click();
+ await page.getByRole('button',{name:'回复操作',exact:true}).click();
+ await page.getByRole('menuitem',{name:'查看执行记录',exact:true}).click();
  await expect(page.getByRole('button',{name:'返回协作工作',exact:true})).toBeVisible();
  await expect(page.getByRole('article',{name:'助手消息'}).getByText('协作讨论记录的交付内容',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'返回协作工作',exact:true}).click();
@@ -61,4 +63,25 @@ test('full execution records remain accessible inside the workspace and return t
  await expect(page.getByText('归档协作记录的交付内容',{exact:true})).toBeVisible();
  await page.getByRole('textbox',{name:'继续对话'}).fill('继续');
  await expect(page.getByRole('button',{name:'发送后续消息'})).toBeDisabled();
+});
+
+test('a standalone new task must not inherit the project from a previously viewed full execution',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>(window as any).__openConversation({kind:'run',recordId:'work'}));
+ await page.getByRole('tab',{name:'交付验收',exact:true}).click();
+ await page.locator('.wf-task-context > summary').click();
+ await page.getByRole('button',{name:'查看完整任务与证据',exact:true}).click();
+ await expect(page.getByRole('article',{name:'助手消息'}).getByText('协作执行记录的交付内容',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{const w=window as any,original=w.desktop.getRunPage;w.desktop.getRunPage=async(input:any)=>{await new Promise(resolve=>setTimeout(resolve,200));return original(input);};w.desktop.startRun=async(input:any)=>{w.__startInput=input;return {id:'new-standalone',title:input.prompt,projectId:input.projectId,cwd:input.projectId?'/tmp/fixture':'/scratch/new',status:'completed',model:'fixture',createdAt:new Date().toISOString(),messages:[{id:'u',role:'user',text:input.prompt}],tools:[],approvals:[]};};});
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
+ await page.locator('.new-task').click();
+ await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
+ await page.getByRole('textbox',{name:'任务内容'}).fill('这是不关联项目的新任务');
+ // Wait for the old full execution's delayed load to settle before sending.
+ await page.waitForTimeout(400);
+ await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
+ await page.getByRole('textbox',{name:'任务内容'}).press('Enter');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__startInput?.projectId)).toBe(null);
+ expect(await page.evaluate(()=>(window as any).__startInput.runId)).toBeUndefined();
+ await expect(page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true})).toHaveAttribute('aria-pressed','true');
 });

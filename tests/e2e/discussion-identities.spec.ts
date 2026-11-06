@@ -32,7 +32,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,tr
  await first.getByRole('button',{name:english?'View context for Product manager':'查看产品经理的发言依据'}).click();
  const context=page.getByRole('dialog',{name:english?'Context for this contribution':'本次发言依据'});await expect(context).toContainText('Requirements');await expect(context).toContainText('abcdef123456');await page.keyboard.press('Escape');
  await page.locator('.wf-discussion-roster button').nth(1).click();await expect(second).toBeFocused();
- await second.getByRole('button',{name:english?'Full task':'完整任务',exact:true}).click();await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();await page.getByRole('button',{name:'返回项目空间'}).click();await expect(page.getByRole('tab',{name:english?'Discussion':'讨论',exact:true})).toHaveAttribute('aria-selected','true');
+ await second.getByRole('button',{name:english?'Response actions':'回复操作',exact:true}).click();await page.getByRole('menuitem',{name:english?'View execution record':'查看执行记录',exact:true}).click();await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();await page.getByRole('button',{name:'返回项目空间'}).click();await expect(page.getByRole('tab',{name:english?'Discussion':'讨论',exact:true})).toHaveAttribute('aria-selected','true');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 test('live per-expert statuses, partial failure and legacy context remain truthful',async({page})=>{

@@ -34,7 +34,7 @@ export function DiscussionLayout({layout,children}:{layout:ReturnType<typeof use
  const L=useCopy(),[main,toggle,context]=children;
  const group=useRef<HTMLDivElement>(null),separator=useRef<HTMLDivElement>(null);
  return <div ref={layout.root} className="wf-discussion-layout" data-narrow={layout.narrow} data-context-open={layout.open}>
-  {layout.narrow?<>{main}{toggle}{context}</>:<ResizablePanelGroup elementRef={group} orientation="horizontal" className="wf-discussion-panels" style={{overflow:'visible'}} onLayoutChanged={(sizes,meta)=>{
+  {layout.narrow?<>{main}{toggle}{context}</>:<ResizablePanelGroup elementRef={group} orientation="horizontal" className="wf-discussion-panels" style={{height:'auto',overflow:'visible'}} onLayoutChanged={(sizes,meta)=>{
    // The callback precedes DOM layout; derive pixels from the new percentages.
    if(meta.isUserInteraction&&group.current)layout.rememberWidth((sizes['discussion-context']??0)/100*(group.current.clientWidth-(separator.current?.offsetWidth??0)));
   }}>

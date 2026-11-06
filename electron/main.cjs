@@ -26,6 +26,8 @@ let extensionServiceForShutdown;
 let messageServiceForShutdown;
 let authenticationForShutdown;
 let quitting = false;
+let updateService;
+let updateGate=false;
 let configBusy = false;
 let catalogService;
 let workforceService;
@@ -49,7 +51,7 @@ const trustedURL = devURL || pathToFileURL(entry).href;
 
 const {WindowRegistry}=require('./window-registry.cjs');
 const windows=new WindowRegistry(trustedURL);
-function authorize(event){return windows.authorize(event);}
+function authorize(event){const owner=windows.authorize(event);if(updateGate)throw Error('正在准备更新，请稍后重试');return owner;}
 async function hostDialog(method,owner,options){const resume=pageHost?.suspend(owner);try{return await dialog[method](owner,options);}finally{resume?.();}}
 
 function createWindow() {
@@ -86,6 +88,12 @@ app.on('second-instance', (_event, argv) => { const link = argv.find(value => va
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
+  let updateTransaction=null;
+  const updateTransactionPath=path.join(app.getPath('userData'),'updates','transaction.json');
+  try{updateTransaction=JSON.parse(await require('node:fs/promises').readFile(updateTransactionPath,'utf8'));}catch{}
+  if(app.isPackaged&&updateTransaction?.status==='installing'&&updateTransaction.target===app.getVersion()){
+    try{await inspectEngine();}catch(error){dialog.showErrorBox('更新后引擎检查失败','请重新安装当前版本；用户数据和更新备份已保留。'+error.message);app.quit();return;}
+  }
   database = new Database(app.getPath('userData'));
   try { await database.call('ready'); } catch (error) {
     dialog.showErrorBox('无法打开数据库', error.message);
@@ -442,6 +450,53 @@ app.whenReady().then(async () => {
     { label: '视图', submenu: [{ label: '打开终端', accelerator: 'Ctrl+`', click: () => command('terminal') }, { type: 'separator' }, { label: '搜索', accelerator: 'CmdOrCtrl+F', click: () => command('search') }, { label: '显示 / 隐藏侧栏', accelerator: 'CmdOrCtrl+\\', click: () => command('sidebar') }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }, { type: 'separator' }, { label: '开发者工具', accelerator: 'Alt+CommandOrControl+I', click: () => { const contents=windows.focused()?.webContents; if(!contents||contents.isDestroyed())return; if(contents.isDevToolsOpened())contents.closeDevTools();else contents.openDevTools({mode:'detach'}); } }] },
     { role: 'windowMenu' },
   ]));
+  const updateModule=app.isPackaged?require(path.join(process.resourcesPath,'tools/updater.cjs')):{...require('./updates.cjs'),updater:require('electron-updater').autoUpdater};
+  updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&['darwin','win32'].includes(process.platform),publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
+    const blockers=()=>{
+      const reasons=[];
+      if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
+      if(spaceService?.pending?.size||spaceService?.hostJobs?.size||spaceService?.suggestionJobs?.size||workforceService?.active?.size||workforceService?.suggestionJobs?.size)reasons.push('协作任务仍在运行');
+      if(spaceService?.plans?.active?.size)reasons.push('Plan scheduling is active');
+      if(services.automation.controllers.size)reasons.push('后台自动化仍在运行');
+      if([...extensionHosts.entries.values()].some(e=>e.rpcCount))reasons.push('扩展请求尚未完成');
+      if(terminals?.sessions?.size)reasons.push('请先关闭终端会话');
+      if([...extensionHosts.entries.values()].some(e=>e.running.size||e.queue.length||e.starting))reasons.push('扩展操作尚未完成');
+      return reasons;
+    };
+    let reasons=blockers();if(reasons.length)throw Error(reasons.join('；'));
+    const result=scheduled?{response:1}:await hostDialog('showMessageBox',windows.focused(),{type:'question',title:'重启并更新',message:'重启并安装 '+updateService.state.version+'？',detail:'请先保存所有编辑。应用将关闭并安装更新。',buttons:['取消','重启并更新'],defaultId:0,cancelId:0});
+    if(result.response!==1)return;
+    let shuttingDown=false;
+    updateGate=true;runtime.closing=true;spaceService.closing=true;workforceService.closing=true;extensionHosts.suspended=true;extensionHosts.updateGate=true;services.automation.closed=true;spaceService.plans.closed=true;
+    try{
+      reasons=blockers();
+      for(const record of windows.records.values()){
+        const dirty=await record.window.webContents.executeJavaScript(`Boolean([...document.querySelectorAll('textarea,input:not([type]),input[type="text"],[contenteditable="true"]')].some(e=>!e.disabled&&e.getClientRects().length&&(e.value||e.textContent||'').trim()))`);
+        if(dirty)reasons.push('窗口中仍有输入内容，请先保存或清空后重试');
+      }
+      if(reasons.length)throw Error(reasons.join('；'));
+      await Promise.all([services.automation.eventWork,services.automation.jobWork]);
+      await runtime.persist();
+      const fs=require('node:fs/promises');const dir=path.join(app.getPath('userData'),'updates');await fs.mkdir(dir,{recursive:true});await fs.writeFile(path.join(dir,'transaction.json.tmp'),JSON.stringify({from:app.getVersion(),target:updateService.state.version,status:'installing',at:new Date().toISOString()}));await fs.rename(path.join(dir,'transaction.json.tmp'),path.join(dir,'transaction.json'));
+      updateService.set({status:'installing',error:''});
+      shuttingDown=true;
+      await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
+      const backup=path.join(dir,'backup-'+Date.now());await fs.mkdir(backup);
+      for(const name of ['atelier.sqlite','atelier.sqlite-wal','atelier.sqlite-shm','codex-home']){const source=path.join(app.getPath('userData'),name);try{await fs.lstat(source);}catch(error){if(error.code==='ENOENT')continue;throw error;}await fs.cp(source,path.join(backup,name),{recursive:true,dereference:false});}
+      messageServiceForShutdown?.close();authenticationForShutdown?.close();terminals?.shutdown();ssh?.shutdown();
+      quitting=true;updateModule.updater.quitAndInstall(false,true);
+    }catch(error){
+      // Never continue installing after a save/shutdown failure.
+      if(shuttingDown){dialog.showErrorBox('更新准备失败','部分服务已关闭，未安装更新。请退出并重新打开应用。'+error.message);updateGate=false;throw Object.assign(Error('更新准备失败，请退出并重新打开应用。'),{recoveryRequired:true});}
+      updateGate=false;runtime.closing=false;spaceService.closing=false;workforceService.closing=false;extensionHosts.suspended=false;extensionHosts.updateGate=false;services.automation.closed=false;spaceService.plans.closed=false;throw error;
+    }
+  }});
+  await updateService.initialize();
+  if(updateTransaction?.status==='installing'&&updateTransaction.target===app.getVersion()&&!runtimeError){
+    await require('node:fs/promises').writeFile(updateTransactionPath,JSON.stringify({...updateTransaction,status:'healthy',completedAt:new Date().toISOString()}));
+    updateService.set({error:''});
+  }
+  for(const action of ['snapshot','check','download','cancel','preferences','restart','schedule','cancelSchedule'])ipcMain.handle('update:'+action,(event,input)=>{authorize(event);return updateService[action](input);});
   createWindow();
   if(!extensionError)for(const item of services.extensions.items)extensionHosts.reconcile(item.id);
   app.on('activate', () => { if (!windows.records.size) createWindow(); });

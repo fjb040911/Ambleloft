@@ -15,7 +15,7 @@ async function prepare(page:Page,english=false,dark=false){
  },{english});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:english?'Discussion':'讨论',exact:true}).click();
 }
-test('default host, precise mention, one-turn routing, pin and unpin',async({page})=>{
+test('default host, precise mention and one-turn recipient selection',async({page})=>{
  await prepare(page);const input=page.getByLabel('这次想推进什么？');
  await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('主持人');
  await input.fill('规划设备维修工单');await input.press('Enter');await expect(page.getByRole('combobox',{name:'谁来使用？'})).toBeVisible();
@@ -23,8 +23,9 @@ test('default host, precise mention, one-turn routing, pin and unpin',async({pag
  await input.fill('@文案员工 请检查文案');await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('文案员工');await input.press('Enter');
  await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('主持人');
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='direct').at(-1).input.employeeIds)).toEqual(['writer']);
- await page.getByRole('button',{name:'继续与此专家讨论'}).click();await expect(page.getByText('已固定专家：文案员工')).toBeVisible();await input.fill('继续检查');await input.press('Enter');await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('文案员工');
- await page.getByRole('button',{name:'回到主持人'}).click();await input.fill('请汇总');await input.press('Enter');await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(3);
+ await expect(page.getByRole('button',{name:'继续与此专家讨论'})).toHaveCount(0);
+ await page.getByRole('button',{name:'本条发送给'}).click();await page.getByRole('checkbox').filter({visible:true}).first().check();await page.keyboard.press('Escape');await input.fill('继续检查');await input.press('Enter');await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('主持人');
+ await input.fill('请汇总');await input.press('Enter');await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(3);
  await page.getByRole('tab',{name:'当前方案',exact:true}).click();await page.getByRole('button',{name:'整理为任务',exact:true}).first().click();await expect(page.getByRole('region',{name:'整理为任务'})).toBeVisible();expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='control').length)).toBe(0);
 });
 for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,true,true],[720,true,false]] as const)test(`host clarification visual ${width} ${english} ${dark}`,async({page})=>{
@@ -60,4 +61,33 @@ test('host composer cancels permission escalation and clears attachments only af
  await expect(page.getByRole('combobox',{name:'谁来使用？'})).toBeVisible();await expect(composer.getByRole('button',{name:'移除附件 brief.md'})).toHaveCount(0);
  const first=await page.evaluate(()=>(window as any).spaceQA.calls.find((c:any)=>c.action==='host').input);expect(first).toMatchObject({permission:'default',attachments:[{name:'brief.md',path:'/tmp/brief.md'}]});
  await page.getByRole('button',{name:'确认并继续'}).click();const second=await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').at(-1).input);expect(second.attachments).toEqual([]);expect(second.selectedSkillIds).toEqual([]);await expect(add).toBeEnabled();await expect(permission).toBeEnabled();
+});
+
+test('old pinned expert is removed without losing the composer draft',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('workforce-discussion:space',JSON.stringify({routeVersion:2,pinnedExpert:'writer',prompt:'保留我的未发送草稿',members:[]})));
+ await prepare(page);
+ await expect(page.getByLabel('这次想推进什么？')).toHaveValue('保留我的未发送草稿');
+ await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('主持人');
+ expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('workforce-discussion:space')!).pinnedExpert)).toBeUndefined();
+ await page.getByLabel('这次想推进什么？').press('Enter');
+ await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='direct').length)).toBe(0);
+});
+
+for(const output of ['专家回复内容',''])test(`execution record lives in the response menu, including before output: ${!!output}`,async({page})=>{
+ await prepare(page);
+ const input=page.getByLabel('这次想推进什么？');await input.fill('@文案员工 检查文案');await input.press('Enter');
+ await expect(page.locator('[data-expert-id="writer"]')).toBeVisible();
+ await page.evaluate(output=>{const q=(window as any).spaceQA,p=q.snapshot.requests.find((r:any)=>r.participants?.length).participants[0];p.runId='expert-record';p.output=output;q.emit();},output);
+ const response=page.locator('[data-expert-id="writer"]');
+ await expect(response.getByRole('button',{name:'完整任务',exact:true})).toHaveCount(0);
+ await expect(response.getByRole('button',{name:'继续与此专家讨论'})).toHaveCount(0);
+ await response.getByRole('button',{name:'回复操作'}).click();
+ await expect(page.getByRole('menuitem',{name:'保存为文档草稿'})).toHaveCount(output?1:0);
+ await expect(page.getByRole('menuitem',{name:'查看执行记录'})).toBeVisible();
+ await page.screenshot({path:`/tmp/discussion-response-menu-${!!output}.png`});
+ await page.getByRole('menuitem',{name:'查看执行记录'}).click();
+ await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();
+ await page.getByRole('button',{name:'返回项目空间'}).click();
+ await expect(page.getByRole('tab',{name:'讨论',exact:true})).toHaveAttribute('aria-selected','true');
 });

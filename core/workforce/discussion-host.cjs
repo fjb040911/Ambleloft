@@ -108,14 +108,22 @@ const methods={
    controller.abort();
    const current=(await this.snapshot()).requests.find(r=>r.id===input.clientRequestId);
    await Promise.allSettled((current?.participants||[]).filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
-   await this.change(s=>{const r=s.requests.find(r=>r.id===input.clientRequestId);if(r?.host){r.host.status=job.stopped?'interrupted':'failed';r.host.error=require('../automation/structured-output.cjs').structuredErrorMessage(error,input.locale);r.host.errorCode=typeof error.code==='string'?error.code:error.message;r.host.finishedAt=new Date().toISOString();if(error.diagnostics)r.host.outputDiagnostics=error.diagnostics;r.host.revision++;for(const p of r.participants)if(live.has(p.status)){p.status=r.host.status;p.error ||= error.message;}}});
+   await this.change(s=>{const r=s.requests.find(r=>r.id===input.clientRequestId);if(r?.host){r.host.status=job.stopped?'interrupted':'failed';r.host.error=require('../automation/structured-output.cjs').structuredErrorMessage(error,input.locale);r.host.errorCode=typeof error.code==='string'?error.code:error.message;r.host.finishedAt=new Date().toISOString();if(error.diagnostics)r.host.outputDiagnostics=error.diagnostics;r.host.revision++;
+    for(const p of r.participants){
+     // A coordination failure is not an expert failure. Keep finished results
+     // and errors from the execution itself, including after a user stop.
+     const run=this.runtime.runs.find(run=>run.id===p.runId);
+     if(run){p.status=run.status;p.error=run.error||undefined;}
+     else if(live.has(p.status)){p.status=r.host.status;p.error ||= r.host.error;}
+    }
+   }});
   }).finally(()=>{this.hostJobs.delete(input.clientRequestId);const n=this.spaceLocks.get(input.spaceId)-1;if(n)this.spaceLocks.set(input.spaceId,n);else this.spaceLocks.delete(input.spaceId);this.publish();});
   return this.snapshot();
  },
  async stopDiscussionHost({requestId}){
   const job=this.hostJobs?.get(requestId);if(job){job.stopped=true;job.controller.abort(Object.assign(Error('DISCUSSION_STOPPED'),{code:'DISCUSSION_STOPPED'}));}
-  const r=(await this.read()).requests.find(r=>r.id===requestId);if(!r?.host)return {stopped:false};
-  await Promise.allSettled(r.participants.filter(p=>p.runId).map(p=>this.runtime.stop(p.runId)));
+  const r=(await this.snapshot()).requests.find(r=>r.id===requestId);if(!r?.host)return {stopped:false};
+  await Promise.allSettled(r.participants.filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
   if(job)await job.promise;
   return {stopped:!!job};
  }
@@ -197,11 +205,13 @@ async function coordinate({request,space},input,hostContext,signal){
    starts.push(abortable(start,signal).then(run=>update(r=>{const p=r.participants.find(p=>p.employeeId===d.employeeId);p.runId=run.id;p.status=run.status||'started';p.execution={model:run.model||null};})).catch(async e=>{if(signal.aborted)throw e;await update(r=>{const p=r.participants.find(p=>p.employeeId===d.employeeId);p.status='failed';p.error=e.message;});}));
   }
   await Promise.all(starts);
-  const waitSignal=AbortSignal.any([signal,AbortSignal.timeout(this.hostExpertTimeoutMs||600000)]);
+  // Experts own their execution lifecycle, including time spent waiting for
+  // approval or input. Only the discussion's cancellation signal stops this wait.
   while(true){
-   waitSignal.throwIfAborted();const s=await this.snapshot(),r=s.requests.find(r=>r.id===request.id);
+   signal.throwIfAborted();const s=await this.snapshot(),r=s.requests.find(r=>r.id===request.id);
    if(!r.participants.some(p=>live.has(p.status)))break;
-   await delay(this.hostPollMs||500,undefined,{signal:waitSignal});
+   try{await delay(this.hostPollMs||500,undefined,{signal});}
+   catch(error){signal.throwIfAborted();throw error;}
   }
   const after=(await this.snapshot()).requests.find(r=>r.id===request.id);
   if(after.participants.some(p=>p.status!=='completed')){await update(r=>{r.host.status='failed';r.host.error='专家分析未完成，请查看结果后继续 / Expert analysis incomplete; review before continuing';});return;}

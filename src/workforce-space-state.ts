@@ -108,16 +108,15 @@ export function useSpaceScroll(key:string,active:boolean,tab:string){
   const navigation=tabs?.querySelector<HTMLElement>(':scope > .wf-space-navigation');
   const storageKey='workforce.scroll:'+key;
   const previous=position.current;
-  let restoredTop=previous?.key===key?previous.top:0;
-  if(previous?.key!==key)try{restoredTop=Number(sessionStorage.getItem(storageKey)||0);}catch{}
   const measure=()=>{
+   // Hidden kept-alive pages have no geometry. Never persist a zero viewport.
+   if(!main.getClientRects().length||scroller.clientHeight<=0)return;
    main.style.setProperty('--wf-space-viewport',`${scroller.clientHeight}px`);
    main.style.setProperty('--wf-space-navigation-height',`${navigation?.getBoundingClientRect().height||44}px`);
    const top=tabs?tabs.getBoundingClientRect().top-scroller.getBoundingClientRect().top-scroller.clientTop+scroller.scrollTop:0;
-   // Empty discussion fills only the space below the visible heading. When
-   // switching from a scrolled tab, retain just enough height to keep tabs pinned.
-   const retained=Math.min(Math.max(0,restoredTop),Math.max(0,top));
-   main.style.setProperty('--wf-space-available',`${Math.max(0,scroller.clientHeight-top+retained)}px`);
+   // Size from the viewport and document-space header offset only. Neither
+   // streaming nor a restored scroll position may manufacture empty space.
+   main.style.setProperty('--wf-space-available',`${Math.max(0,scroller.clientHeight-top)}px`);
   };
   measure();const observer=new ResizeObserver(measure);observer.observe(scroller);if(navigation)observer.observe(navigation);
   if(previous?.key===key&&previous.tab!==tab&&tabs){
@@ -128,7 +127,7 @@ export function useSpaceScroll(key:string,active:boolean,tab:string){
   }else{
    try{scroller.scrollTop=Number(sessionStorage.getItem(storageKey)||0);}catch{}
   }
-  const save=()=>{restoredTop=scroller.scrollTop;measure();position.current={key,tab,top:scroller.scrollTop};try{sessionStorage.setItem(storageKey,String(scroller.scrollTop));}catch{}};
+  const save=()=>{position.current={key,tab,top:scroller.scrollTop};try{sessionStorage.setItem(storageKey,String(scroller.scrollTop));}catch{}};
   save();scroller.addEventListener('scroll',save,{passive:true});
   return()=>{observer.disconnect();scroller.removeEventListener('scroll',save);};
  },[key,tab,active]);

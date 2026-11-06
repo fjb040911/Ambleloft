@@ -84,6 +84,7 @@ class HostManager{
    if(typeof m.id!=='string'||!/^\d{1,15}$/.test(m.id)||Number(m.id)<=e.lastRpcId){this.fail(e,token,'扩展请求 ID 无效或重复');return;}
    e.lastRpcId=Number(m.id);if(e.rpcCount>=32)return this.send(e,{type:'rpcResult',id:m.id,error:'BUSY'});
    e.rpcCount++;try{
+    if(this.updateGate)throw failure('BUSY','Preparing application update');
     if(Buffer.byteLength(JSON.stringify(m))>300*1024)throw failure('INVALID_ARGUMENT','请求过大');
     const context={id:e.id,generation:e.item.generation};let value;
     if(m.method==='storage'){
@@ -113,7 +114,9 @@ class HostManager{
  finish(call,error,value){if(call.done)return;call.done=true;clearTimeout(call.timer);call.signal?.removeEventListener('abort',call.abort);error?call.reject(error):call.resolve(value);}
  async invokeHook(id,hook,event,guard){return this.invoke(id,null,event,{caller:'hook',projectId:event.projectId,guard,hook});}
  async invoke(id,operationId,input,{signal,caller='page',projectId,form,message,timeout=this.limits.operation,guard,onDispatch,resources,hook}={}){
+  if(this.updateGate)throw failure('BUSY','Preparing application update');
   if(signal?.aborted)throw failure('CANCELLED','请求已取消');const e=await this.activate(id),token=e.token;
+  if(this.updateGate)throw failure('BUSY','Preparing application update');
   const operation=hook&&e.item.manifest.hooks?.some(h=>h.event===hook.event&&h.handler===hook.handler)?{handler:hook.handler,inputSchema:{type:'object',additionalProperties:true},outputSchema:{type:'null'}}:e.item.manifest.operations?.find(op=>op.id===operationId);if(!operation)throw failure('NOT_FOUND','未声明此操作');
   // Internal transport only. A6 must authorize/confirm before calling this method.
   if(e.token!==token||e.state!=='active'||e.blocked)throw failure('CANCELLED','扩展状态已改变');

@@ -46,7 +46,7 @@ test('persistent declarative form saves and submits through the shared input con
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.find((c:any)=>c.action==='input'&&c.input.action==='submit').input.values)).toEqual({target:'隔离环境 A'});
 });
 test('missing request offers recovery and a working full-task destination',async({page})=>{
- const detail=await setup(page,'missing');await detail.getByRole('button',{name:'交付与验收',exact:true}).click();await expect(detail).toContainText('尚未读取到具体请求');await detail.getByRole('button',{name:'刷新待处理请求'}).click();await expect(detail.getByRole('button',{name:'打开完整任务'})).toBeVisible();await detail.getByRole('button',{name:'打开完整任务'}).click();await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();
+ const detail=await setup(page,'missing');await detail.getByRole('tab',{name:'交付验收',exact:true}).click();await expect(detail).toContainText('尚未读取到具体请求');await detail.getByRole('button',{name:'刷新待处理请求'}).click();await expect(detail.getByRole('button',{name:'打开完整任务'})).toBeVisible();await detail.getByRole('button',{name:'打开完整任务'}).click();await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();
 });
 for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,true,true],[390,true,false]] as const)test(`waiting task visual ${width} ${english} ${dark}`,async({page})=>{
  await page.setViewportSize({width,height:900});const detail=await setup(page,'approval',`?lang=${english?'en':'zh'}&theme=${dark?'dark':'light'}`);
