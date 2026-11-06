@@ -133,7 +133,8 @@ async function coordinate({request,space},input,hostContext,signal){
  const selectedSkills=composer.skills.map(({id,name,description,body})=>({id,name,description,instructions:body}));
  const update=fn=>this.change(s=>{signal.throwIfAborted();const current=this.writable(s,space.id);if(current.revision!==space.revision)throw Error('空间分工已变化，请继续讨论以重新协调');if(s.discussionStates[request.discussion.id]?.status==='closed')throw Error('讨论已关闭');if(request.documentRefs.some(ref=>s.documents.find(d=>d.id===ref.id)?.deletedAt))throw Error('引用资料已撤回，请重新选择');const r=s.requests.find(r=>r.id===request.id);fn(r);r.host.revision++;return r;});
  const documents=await Promise.all(request.documentRefs.map(async ref=>{const d=await this.document(ref);return {id:d.id,title:d.title,revision:d.revision,hash:d.hash,state:d.state,body:d.body};}));
- const projects=(await this.workspace.read()).projects.filter(p=>space.projectIds.includes(p.id)).map(p=>({id:p.id,name:p.name,type:p.type||'local',environment:p.environment?.kind||null}));
+ const projectFacts=require('./project-relations.cjs').projectFacts((await this.workspace.read()).projects,space.projectIds);
+ const projects=projectFacts.map(({id,name,type,environment})=>({id,name,type,environment}));
  const employees=(await this.workforce.read()).employees;
  const roster=space.members.flatMap(m=>{const e=employees.find(e=>e.id===m.employeeId);return e?[{id:e.id,name:e.name,responsibilities:e.responsibilities,methods:e.methods,deliverables:e.deliverables,skills:(e.skills||[]).map(s=>({name:s.name,purpose:s.purpose})),assignment:m.assignment,projectIds:m.projectIds}]:[];});
  const config=await abortable(this.workforce.providers.secret(input.providerId,input.model),AbortSignal.any([signal,AbortSignal.timeout(this.hostTimeoutMs||90000)]));
@@ -199,7 +200,9 @@ async function coordinate({request,space},input,hostContext,signal){
    const contribution=createContribution({member,employee,request:{...request,prompt:d.instruction},space,docs:documents,historySpaceIds:[],priorDiscussion});
    const participant={employeeId:d.employeeId,status:'preparing',contribution,instruction:d.instruction,reason:d.reason};
    await update(r=>r.participants.push(participant));
-   const collaboration={requestId:request.id,spaceId:space.id,spaceName:space.name,purpose:space.purpose,projectContext:{source:'space-context',...space.projectContext,projects},mode:'discussion',assignment:member.assignment,documents,historySpaceIds:[],priorDiscussion,discussionId:request.discussion.id,contributionId:contribution.id,hostDelegated:true,brief:result.brief,sources};
+   // The host only needs project identities; delegated experts need the same
+   // location facts as direct discussion participants to avoid guessing paths.
+   const collaboration={requestId:request.id,spaceId:space.id,spaceName:space.name,purpose:space.purpose,projectContext:{source:'space-context',...space.projectContext,projects:projectFacts},mode:'discussion',assignment:member.assignment,documents,historySpaceIds:[],priorDiscussion,discussionId:request.discussion.id,contributionId:contribution.id,hostDelegated:true,brief:result.brief,sources};
    const start=this.runtime.start({prompt:d.instruction,employeeId:d.employeeId,projectId:null,providerId:input.providerId,model:input.model,permission:composer.permission,attachments:composer.attachments,selectedSkillIds:composer.selectedSkillIds}, {...hostContext,userAuthored:false,collaboration});
    start.then(run=>{if(signal.aborted&&run?.id)void this.runtime.stop(run.id).catch(()=>{});},()=>{});
    starts.push(abortable(start,signal).then(run=>update(r=>{const p=r.participants.find(p=>p.employeeId===d.employeeId);p.runId=run.id;p.status=run.status||'started';p.execution={model:run.model||null};})).catch(async e=>{if(signal.aborted)throw e;await update(r=>{const p=r.participants.find(p=>p.employeeId===d.employeeId);p.status='failed';p.error=e.message;});}));
