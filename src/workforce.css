@@ -254,8 +254,8 @@
 /* Keep contextual navigation below the shared space navigation. Long lists
    scroll inside their panel without displacing the context tabs. */
 .wf-discussion-sidebar>[data-slot=tabs]{position:sticky;top:calc(var(--wf-space-navigation-height,44px) + 12px);max-height:max(160px,calc(var(--wf-space-viewport,100dvh) - var(--wf-space-navigation-height,44px) - 32px));background:var(--wf-paper)}
-.wf-discussion-sidebar [data-slot=tabs-list]{flex-shrink:0;overflow-x:auto;overflow-y:hidden;min-height:38px}
-.wf-discussion-sidebar [data-slot=tabs-trigger]{flex:none}
+.wf-discussion-sidebar [data-slot=tabs-list]{flex-shrink:0;min-height:38px}
+.wf-discussion-sidebar [data-slot=tabs-trigger]{flex:1 1 auto}
 .wf-discussion-sidebar [data-slot=tabs-content]{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .wf-discussion-sidebar [data-slot=tabs-content][hidden],.wf-discussion-sidebar [data-slot=tabs-content][inert]{display:none}
 .wf-context-toggle{display:none}

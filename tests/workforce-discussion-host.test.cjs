@@ -15,6 +15,28 @@ async function fixture(t){
 }
 const response=(extra={})=>({action:'reply',message:'Let us clarify the goal.',brief:{goal:'Repair tickets',items:[]},questions:[],delegates:[],...extra});
 const delegate=(employeeId)=>response({action:'delegate',message:'Invite '+employeeId,delegates:[{employeeId,instruction:'Analyze only your assigned scope.',reason:'The next stage needs this conclusion.'}]});
+
+test('delegated experts receive linked project locations without exposing paths to host inference',async t=>{
+ const f=await fixture(t);
+ const projects=[{id:'local',name:'Local sample',path:'C:\\qa\\sample'},{id:'remote',name:'Remote sample',type:'ssh',path:'/srv/sample',connectionId:'connection',environment:{kind:'docker'}},{id:'unrelated',name:'Unrelated',path:'C:\\private'}];
+ f.service.workspace.read=async()=>({projects});
+ await f.service.change(s=>{s.spaces[0].projectIds=['local','remote'];s.spaces[0].members.forEach(m=>{m.projectIds=['local'];});});
+ let calls=0;f.service.generateDiscussionHost=async(_config,job)=>{
+  assert.deepEqual(job.input.projects.map(p=>p.id),['local','remote']);
+  assert.ok(job.input.projects.every(p=>!Object.hasOwn(p,'path')));
+  return ++calls===1?delegate('architect'):response();
+ };
+ await f.start();await until(()=>f.runtime.starts.length===1);
+ const {input,context}=f.runtime.starts[0];
+ assert.equal(input.projectId,null,'Discussion must not become an implementation run');
+ assert.equal(context.collaboration.mode,'discussion');
+ assert.deepEqual(context.collaboration.projectContext.projects,[
+  {id:'local',name:'Local sample',type:'local',path:'C:\\qa\\sample',environment:null,connectionConfigured:null},
+  {id:'remote',name:'Remote sample',type:'ssh',path:'/srv/sample',environment:'docker',connectionConfigured:true}
+ ]);
+ assert.match(spaceInstructions(context.collaboration),/C:\\\\qa\\\\sample/);
+ f.runtime.runs[0].status='completed';assert.equal((await f.finish()).host.status,'completed');
+});
 test('source contract permits only current evidence and preserves intent constraints',()=>{
  const Ajv=require('ajv'),sources=[{id:'current-user',kind:'user'},{id:'current-expert',kind:'expert'}];
  const validate=new Ajv({strict:false}).compile(schemaForSources(sources));
