@@ -9,7 +9,7 @@ const config=(extra={})=>({baseUrl:'https://fixture.example/v1',model:'unknown-m
 const ok=(value={status:'ok',count:2},protocol='chat')=>new Response(JSON.stringify(protocol==='chat'?{choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]}:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]}));
 const reject=(message,status=400)=>new Response(JSON.stringify({error:{message}}),{status});
 function mock(t,fetch){const old=global.fetch;global.fetch=fetch;t.after(()=>{global.fetch=old;});}
-function storage(){let state=null;const database={call:async(method,args)=>method==='readSetting'?structuredClone(state):(state=structuredClone(args.value))};return {database,read:()=>state};}
+function storage(){let state=null;const database={call:async(method,args)=>method==='readSetting'?structuredClone(state):method==='writeSetting'?(state=structuredClone(args.value)):undefined};return {database,read:()=>state};}
 const encryption={isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from('encrypted:'+s),decryptString:b=>b.toString().slice(10)};
 
 for(const model of ['glm-example','kimi-example','gpt-example'])for(const protocol of ['chat','responses'])test(`${model} ${protocol} uses portable schema output with full local validation`,async t=>{

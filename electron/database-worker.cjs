@@ -7,6 +7,7 @@ const {schema:messageSchema,createMessageStore}=require('../core/extensions/mess
 const {schema:chatInputSchema,handlers:chatInputHandlers}=require('../core/forms/chat-inputs.cjs');
 const {schema:inputRequestSchema,handlers:inputRequestHandlers}=require('../core/inputs/store.cjs');
 const {schema:automationSchema,automationPersistence}=require('../core/automation/persistence.cjs');
+const insightsModule=require('../core/project-insights/persistence.cjs');
 const {schema:actionSchema,createActionJournal}=require('../core/extensions/action-journal.cjs');
 const {schema:localizationSchema,createLocalizationStore}=require('../core/localization/store.cjs');
 let db;let resources;
@@ -35,6 +36,7 @@ try{
  ${localizationSchema}
  ${actionSchema}
  ${automationSchema}
+ ${insightsModule.schema}
  ${chatInputSchema}
  ${inputRequestSchema}
  PRAGMA user_version=10;
@@ -83,6 +85,7 @@ const automation=automationPersistence(db,transaction,extensionHandlers.extensio
 const handlers={
  localizationSnapshot:createLocalizationStore(db),
  ...automation.handlers,
+ ...insightsModule.persistence(db,transaction,extensionHandlers.extensionCheck,automation.handlers),
  ...chatInputs,
  ...inputRequestHandlers(db,transaction,chatInputs.chatInput),
  commitTurn({runs,runId,turnId}){return transaction(()=>{saveRunRows(runs);const run=runs.find(r=>r.id===runId);if(run)automation.capture({...run,conversationId:resources.identify('run',run.id,run.projectId)},turnId);});},

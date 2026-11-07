@@ -33,8 +33,8 @@ function automationPersistence(db,transaction,check){
   for(const row of db.prepare("SELECT * FROM automation_events WHERE status IN ('pending','delivering','dead')").all())if(!installed.has(row.extension_id)||!allowed(installed.get(row.extension_id),'agent.hooks',row.project_id))db.prepare('DELETE FROM automation_events WHERE id=?').run(row.id);
   for(const row of db.prepare("SELECT * FROM automation_jobs WHERE status IN ('queued','running')").all()){
    const item=installed.get(row.extension_id),job=parse(row);
-   const sourceValid=job.input.every(ref=>{const current=db.prepare("SELECT project_id FROM conversation_identities WHERE id=? AND kind='run'").get(ref.conversationId);return current?.project_id===job.projectId;});
-   if(!sourceValid||!item||!allowed(item,'background.jobs',row.project_id)||!allowed(item,'conversations.read',row.project_id)){job.status=job.status==='running'?'unknown':'cancelled';job.error='FORBIDDEN';job.finishedAt=Date.now();saveJob(job);}
+   const sourceValid=job.input.every(ref=>{const current=db.prepare("SELECT project_id FROM conversation_identities WHERE id=? AND kind='run'").get(ref.conversationId);return current?.project_id===job.projectId&&db.prepare('SELECT 1 FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND created>=?').get(ref.conversationId,ref.turnId,ref.version,Date.now()-RETENTION);});
+   if(!sourceValid||!item||!allowed(item,'background.jobs',row.project_id)||!allowed(item,'conversations.read',row.project_id)||(job.summaryJobId&&!allowed(item,'project.summaries.generate',row.project_id))){job.status=job.status==='running'?'unknown':'cancelled';job.error='FORBIDDEN';job.finishedAt=Date.now();saveJob(job);}
   }
  };
  return {
@@ -47,6 +47,7 @@ function automationPersistence(db,transaction,check){
    const messages=run.messages.slice(start,next<0?undefined:next).map(({id,role,text})=>({id,role,text:text||''}));
    const snapshot={conversationId,turnId,version:1,projectId:run.projectId,status:run.status,messages};
    db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,JSON.stringify(snapshot));
+   require('../project-insights/persistence.cjs').captureActivity(db,snapshot,now);
    if(run.status==='completed')for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
   },
   handlers:{
@@ -56,6 +57,7 @@ function automationPersistence(db,transaction,check){
     if(!identity)fail('NOT_FOUND');check({...context,capability:'conversations.read',projectId:identity.project_id});
     const row=db.prepare('SELECT * FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=?').get(input.conversationId,input.turnId,input.version);
     if(!row||row.project_id!==identity.project_id)fail('NOT_FOUND');
+    if(row.created<Date.now()-RETENTION)fail('SOURCE_EXPIRED');
     check({...context,capability:'conversations.read',projectId:row.project_id});
     if(Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');return parse(row);
    },
@@ -65,6 +67,8 @@ function automationPersistence(db,transaction,check){
     reconcile();db.prepare("UPDATE automation_events SET status='dead' WHERE status IN ('pending','delivering') AND created<?").run(now-RETENTION);
     db.prepare("DELETE FROM automation_events WHERE status='acked' AND created<?").run(now-RETENTION);
     db.prepare('DELETE FROM automation_turns WHERE created<?').run(now-RETENTION);
+    // Frozen job text must not outlive the source retention policy.
+    for(const row of db.prepare("SELECT * FROM automation_jobs WHERE created<?").all(now-RETENTION)){const job=parse(row);if(job.input?.length){job.input=[];delete job.prompt;delete job.outputSchema;saveJob(job);}}
     const row=db.prepare("SELECT e.* FROM automation_events e WHERE e.status='pending' AND e.due<=? AND NOT EXISTS (SELECT 1 FROM automation_events p WHERE p.extension_id=e.extension_id AND p.conversation_id=e.conversation_id AND p.rowid<e.rowid AND p.status IN ('pending','delivering')) ORDER BY e.rowid LIMIT 1").get(now);
     if(!row)return null;db.prepare("UPDATE automation_events SET status='delivering',attempts=attempts+1 WHERE id=?").run(row.id);return {...row,event:parse(row)};
    });},
@@ -80,6 +84,7 @@ function automationPersistence(db,transaction,check){
     db.prepare('INSERT INTO automation_jobs VALUES (?,?,?,?,?,?,?)').run(job.id,context.id,key,input.projectId,job.createdAt,job.status,JSON.stringify(job));return publicJob(job);
    });},
    automationGetJob({context,id}){const row=jobRow(id);if(!row||row.extension_id!==context.id)fail('NOT_FOUND');check({...context,capability:'background.jobs',projectId:row.project_id});check({...context,capability:'conversations.read',projectId:row.project_id});return publicJob(parse(row));},
+   automationCancelJob({context,id}){return transaction(()=>{const row=jobRow(id);if(!row||row.extension_id!==context.id)fail('NOT_FOUND');check({...context,capability:'background.jobs',projectId:row.project_id});const job=parse(row);if(['queued','running'].includes(job.status)){job.status=job.status==='running'?'unknown':'cancelled';job.error=job.status==='unknown'?'OUTCOME_UNKNOWN':'CANCELLED';job.finishedAt=Date.now();saveJob(job);}return publicJob(job);});},
    automationNextJob(){return transaction(()=>{
     reconcile();const budgets=new Map();for(const row of db.prepare("SELECT id,extension_id FROM automation_jobs WHERE status='queued' ORDER BY created").iterate()){
      if(!budgets.has(row.extension_id)){const p=policy(row.extension_id);budgets.set(row.extension_id,{...p,used:usedCalls(row.extension_id)});}
@@ -103,7 +108,7 @@ function automationPersistence(db,transaction,check){
      const row=db.prepare("SELECT * FROM automation_events WHERE id=? AND extension_id=? AND status='dead'").get(eventId,id);if(!row)fail('NOT_FOUND');
      if(action==='retry'){if(parse(row).type==='queue.overflow'||row.created<Date.now()-RETENTION)fail('NOT_FOUND');db.prepare("UPDATE automation_events SET status='pending',attempts=0,due=? WHERE id=?").run(Date.now(),eventId);}else db.prepare('DELETE FROM automation_events WHERE id=?').run(eventId);
     }else if(action==='retryJob'){
-     const original=parse(jobRow(jobId));if(!original||original.extensionId!==id||!['unknown','failed'].includes(original.status))fail('NOT_FOUND');
+     const original=parse(jobRow(jobId));if(original&&!original.input?.length)fail('SOURCE_EXPIRED');if(!original||original.extensionId!==id||!['unknown','failed'].includes(original.status))fail('NOT_FOUND');
      if(db.prepare('SELECT data FROM automation_jobs WHERE extension_id=?').all(id).some(r=>parse(r).retryOf===jobId))fail('CONFLICT');
      const item=items().find(i=>i.id===id);check({id,generation:item.generation,capability:'background.jobs',projectId:original.projectId});check({id,generation:item.generation,capability:'conversations.read',projectId:original.projectId});
      if(policy(id).paused)fail('INTERACTION_REQUIRED');

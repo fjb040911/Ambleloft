@@ -31,11 +31,12 @@ class AutomationService{
  async runJob(){
   const job=await this.database.call('automationNextJob');if(!job||this.closed)return;
   let config;try{config=await this.providers.secret(job.providerId,job.model);}catch{await this.database.call('automationFinishJob',{id:job.id,status:'failed',error:'PROVIDER_UNAVAILABLE'});return;}
+  if(job.summaryJobId&&(config.revision||0)!==job.providerRevision){await this.database.call('automationFinishJob',{id:job.id,status:'failed',error:'MODEL_UNAVAILABLE'});return;}
   if(this.closed||!await this.database.call('automationStartJob',{id:job.id}))return;
   if(this.closed){await this.database.call('automationReleaseJob',{id:job.id});return;}
   const abort=new AbortController();this.controllers.set(job.id,{extensionId:job.extensionId,projectId:job.projectId,abort});const timeout=setTimeout(()=>abort.abort(),120000);
   let outcome;
-  try{const result=await this.request(config,job,abort.signal);if(!await this.extensions.packages.validateValue(job.outputSchema,result))outcome={status:'failed',error:'INVALID_OUTPUT'};else outcome={status:'succeeded',result};}
+  try{const result=await this.request(config,{...job,usageScope:{projectId:job.projectId,jobId:job.id,purpose:job.summaryJobId?'summary':'other',origin:'background'}},abort.signal);if(!await this.extensions.packages.validateValue(job.outputSchema,result))outcome={status:'failed',error:'INVALID_OUTPUT'};else outcome={status:'succeeded',result};}
   catch(error){outcome={status:error.definitive?'failed':'unknown',error:error.definitive?(error.message==='INVALID_OUTPUT'?'INVALID_OUTPUT':'PROVIDER_REJECTED'):'OUTCOME_UNKNOWN'};}
   finally{clearTimeout(timeout);this.controllers.delete(job.id);}
   await this.database.call('automationFinishJob',{id:job.id,...outcome});

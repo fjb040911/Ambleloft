@@ -9,7 +9,7 @@ const MAX_STREAM_BYTES=32*1024*1024,MAX_TEXT_CHARACTERS=256*1024;
 
 // Stream only model-supplied reasoning and transport phases. Partial JSON is
 // never applied as a decision, question or delegation.
-async function readStructuredStream(response,{chat,signal,onProgress,reasoning=true}){
+async function readStructuredStream(response,{chat,signal,onProgress,onUsage,reasoning=true}){
  let content='',thought='',format='summary',finished=false,bytes=0,phase='waiting',receivedCharacters=0;
  const report=()=>onProgress({phase,reasoning:thought,reasoningFormat:format,receivedCharacters});
  async function* bounded(){
@@ -23,6 +23,7 @@ async function readStructuredStream(response,{chat,signal,onProgress,reasoning=t
   if(raw==='[DONE]')break;
   let event;try{event=JSON.parse(raw);}catch{throw outputError('invalid-event',raw.length,'transport');}
   if(!event||typeof event!=='object')throw outputError('invalid-event',raw.length,'transport');
+  if(event.usage||event.response?.usage)onUsage?.(event.usage||event.response.usage,event.id||event.response?.id);
   if(event.error||['error','response.failed'].includes(event.type))throw invalid('PROVIDER_REJECTED');
   if(chat){
    const choice=event.choices?.[0],delta=choice?.delta||{};

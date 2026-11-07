@@ -10,9 +10,10 @@ async function initialize(m){
  const storage=(key,options={})=>rpc('storage',{kind:'kv',key,...options});
  const secret=(key,options={})=>rpc('storage',{kind:'secret',key,...options});
  dictionaries=m.dictionaries||{};locale=L.canonical(m.locale||'en');
- context={capabilities:Object.freeze({notificationLocalization:1,liveLocalization:1,skillLocalization:1,templateLocalization:1}),extensionId:m.id,packageRevision:m.revision,subscriptions:[],
+ context={capabilities:Object.freeze({projectInsights:1,notificationLocalization:1,liveLocalization:1,skillLocalization:1,templateLocalization:1}),extensionId:m.id,packageRevision:m.revision,subscriptions:[],
   operations:{register(name,callback){if(!registering||!expected.has(name)||handlers.has(name)||typeof callback!=='function')throw Error('Invalid handler registration');handlers.set(name,callback);return {dispose(){if(active)throw Error('Handlers are bound for this generation');handlers.delete(name);}};}},
   hooks:{register(name,callback){if(!(m.manifest.hooks||[]).some(h=>h.handler===name))throw Error('Undeclared hook');return context.operations.register(name,async(event,invocation)=>{await callback(event,invocation);return null;});}},
+  projectInsights:{projects:{list:()=>rpc('projectInsights',{method:'projects.list',input:{}})},activity:{list:input=>rpc('projectInsights',{method:'activity.list',input})},usage:{list:input=>rpc('projectInsights',{method:'usage.list',input})},summaries:{policy:projectId=>rpc('projectInsights',{method:'summaries.policy',input:{projectId}}),prepare:input=>rpc('projectInsights',{method:'summaries.prepare',input}),get:id=>rpc('projectInsights',{method:'summaries.get',input:{id}}),cancel:id=>rpc('projectInsights',{method:'summaries.cancel',input:{id}})}},
   conversations:{getTurn:input=>rpc('automation',{method:'getTurn',input})},
   jobs:{submit:input=>rpc('automation',{method:'submit',input}),get:id=>rpc('automation',{method:'getJob',input:{id}})},
   storage:{async get(key){const item=await storage(key);return item.exists?{value:item.value,revision:item.revision}:null;},async set(key,value,expectedRevision){return (await storage(key,{write:true,value,expectedRevision})).revision;},async delete(key,expectedRevision){await storage(key,{write:true,value:null,remove:true,expectedRevision});}},

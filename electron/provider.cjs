@@ -75,7 +75,7 @@ function createProviderStore(directory, encryption, database) {
       let encryptedKey='';
       if(input.apiKey){if(!encryption.isEncryptionAvailable())throw new Error('系统加密存储不可用，未保存 API Key');encryptedKey=encryption.encryptString(input.apiKey).toString('base64');}
       else if(!input.clearKey&&old?.encryptedKey){if(old.baseUrl!==config.baseUrl)throw new Error('端点已更换，请重新填写 API Key 或明确移除密钥，避免将旧密钥发送到新服务');encryptedKey=old.encryptedKey;}
-      const saved={...config,id,name:input.name?.trim()||old?.name||config.model,models:unique,encryptedKey};
+      const saved={...config,id,revision:(old?.revision||0)+1,name:input.name?.trim()||old?.name||config.model,models:unique,encryptedKey};
       saved.outputProfiles=(old?.outputProfiles||[]).filter(p=>unique.includes(p.model)&&outputCapabilities.valid(p,outputCapabilities.key({...saved,model:p.model})));
       state.providers=old?state.providers.map(p=>p.id===id?saved:p):[...state.providers,saved];state.defaultId ||= id;
       return publicConfig(saved);
@@ -92,7 +92,8 @@ function createProviderStore(directory, encryption, database) {
       const capabilityKey=outputCapabilities.key({...stored,...config});
       const outputProfiles=(stored.outputProfiles||[]).filter(p=>outputCapabilities.valid(p,capabilityKey));
       const detected=outputProfiles.toSorted((a,b)=>b.verifiedAt-a.verifiedAt)[0]?.protocol;
-      const result={...config,effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,apiKey,outputProfiles,...(config.protocol==='auto'&&detected?{detectedProtocol:detected}:{})};
+      const result={...config,effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,revision:stored.revision||0,apiKey,outputProfiles,...(config.protocol==='auto'&&detected?{detectedProtocol:detected}:{})};
+      require('../core/project-insights/usage.cjs').bind(result,database);
       return outputCapabilities.bind(result,profile=>mutate(state=>{
         const current=state.providers.find(p=>p.id===stored.id);
         if(!current||!(current.models||[current.model]).includes(config.model)||outputCapabilities.key({...current,model:config.model})!==capabilityKey)return;

@@ -1,0 +1,392 @@
+{
+  "date": "2026-11-06",
+  "result": "passed after fixing long clarification reason",
+  "scope": "Archived real existing project spaces via desktop UI. Lifecycle model verification uses production service APIs and real DeepSeek in a new isolated database, not desktop clicks. Failure and concurrency matrices use deterministic inference/runtime doubles with real SQLite/services/scheduler.",
+  "archive": {
+    "spaces": 2,
+    "active": 0,
+    "unchangedRecords": {
+      "requests": true,
+      "documents": true,
+      "plans": true,
+      "taskDrafts": true
+    },
+    "counts": {
+      "requests": 44,
+      "documents": 14,
+      "plans": 3,
+      "taskDrafts": 5
+    },
+    "backup": "/Users/gavin.fang/Library/Application Support/Atelier/backups/topic-lifecycle-20261106/spaces-before-archive.json"
+  },
+  "automatedTests": {
+    "serviceTests": 132,
+    "uiTests": 65,
+    "serviceCommand": "node --test tests/workforce-topic-lifecycle.test.cjs tests/workforce-task-guide.test.cjs tests/workforce-plans.test.cjs tests/workforce-discussion-host.test.cjs tests/workforce-spaces.test.cjs",
+    "uiFiles": [
+      "discussion-topics.spec.ts",
+      "discussion-plan-workflow.spec.ts",
+      "workforce-task-review.spec.ts",
+      "workforce-review-outcome.spec.ts",
+      "discussion-host.spec.ts",
+      "discussion-feedback.spec.ts"
+    ]
+  },
+  "coverage": [
+    "12 concurrent fresh creations yield one draft",
+    "8 concurrent confirmations yield one plan",
+    "draft/ready/pending/starting/preparing/running/pausing/paused/review/rejected/failed/waiting/blocked/stale/stopping block new task",
+    "Chinese and English host cannot bypass unfinished task even with new-plan model output",
+    "revision preserves plan identity",
+    "rejection and retry retain history and gate downstream execution",
+    "restart never replays execution",
+    "stop acknowledgment required before next task",
+    "discarded draft cannot resurrect",
+    "completed history cannot resume over next task",
+    "paused acceptance does not dispatch",
+    "running acceptance dispatches dependent node",
+    "same-topic next task requires explicit user request"
+  ],
+  "foundAndFixed": {
+    "error": "补充表单定义不符合规范",
+    "reproductionSeq": 12,
+    "validationPath": "/reason",
+    "actualMessageLength": 1789,
+    "reasonLimit": 500,
+    "fix": "Keep full host explanation in chat; use a short localized form reason",
+    "realModelRetestSeq": 14,
+    "retestMessageLength": 1267,
+    "retestReasonLength": 10,
+    "retestPassed": true
+  },
+  "model": "deepseek-flash",
+  "provider": "DeepSeek",
+  "spaceId": "4a0667ae-4cff-4e5a-9403-3288314856e5",
+  "finalFrontend": {
+    "status": "ended",
+    "conflict": false,
+    "unfinished": 0,
+    "drafts": 0,
+    "history": 2,
+    "historyUnchanged": true
+  },
+  "plans": [
+    {
+      "id": "cb91469b-edfe-4c56-bba8-72bb2a70b0da",
+      "name": "20+30 纯文本合计核对",
+      "discussionId": "ab776feb-1631-4e19-915c-6a406f51ceb3",
+      "status": "completed",
+      "nodes": [
+        {
+          "id": "pkg-20-30-calc",
+          "status": "accepted",
+          "dependencies": [],
+          "attempts": 1
+        },
+        {
+          "id": "pkg-20-30-verify",
+          "status": "accepted",
+          "dependencies": [
+            "pkg-20-30-calc"
+          ],
+          "attempts": 1
+        }
+      ]
+    },
+    {
+      "id": "096c64bb-3df4-4bc2-aea8-37083f3fb7d1",
+      "name": "纯文本合计核对任务（7+8）",
+      "discussionId": "ab776feb-1631-4e19-915c-6a406f51ceb3",
+      "status": "completed",
+      "nodes": [
+        {
+          "id": "pkg-total-calc",
+          "status": "accepted",
+          "dependencies": [],
+          "attempts": 1
+        },
+        {
+          "id": "pkg-total-verify",
+          "status": "accepted",
+          "dependencies": [
+            "pkg-total-calc"
+          ],
+          "attempts": 1
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "id": "47ec4b7a-092c-43d4-88ef-ed26d67a0a52",
+      "expert": "验算专家",
+      "model": "deepseek-flash",
+      "status": "completed",
+      "tools": 0,
+      "output": [
+        "核对通过：20+30=50"
+      ]
+    },
+    {
+      "id": "9ca25b33-8147-4b99-a3eb-84e30a779b61",
+      "expert": "资料整理员",
+      "model": "deepseek-flash",
+      "status": "completed",
+      "tools": 0,
+      "output": [
+        "20+30=50"
+      ]
+    },
+    {
+      "id": "f68dc066-cf81-4a40-81ae-40a372b5ca9f",
+      "expert": "验算专家",
+      "model": "deepseek-flash",
+      "status": "completed",
+      "tools": 0,
+      "output": [
+        "核对通过：7+8=15"
+      ]
+    },
+    {
+      "id": "2b42fe31-3ade-4733-9ac1-cee14ed80835",
+      "expert": "资料整理员",
+      "model": "deepseek-flash",
+      "status": "completed",
+      "tools": 0,
+      "output": [
+        "7+8=15"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "at": "2026-11-06T13:49:26.534Z",
+      "action": "turn",
+      "seq": 1,
+      "ok": true,
+      "hostStatus": "needs-input",
+      "messages": [
+        "已收到：本轮只做讨论与澄清，不执行、不调用工具、不读写文件、不访问网络，全部基于你提供的虚构文本。资料整理员与验算专家均为纯分析型成员，不需要项目即可承接分析工作。\n\n现在只需要你定一个业务决策：核对结论以什么为判定基准？这直接决定任务的交付物和验收标准，是唯一必须由你决定的业务选择，其余技术细节我会在方案里给默认建议。\n\n建议默认：以你后续贴入的“原始数据集”为基准 A，以待核对清单为基准 B，逐项比对，把结果分为一致、数值不一致、缺失、多余四类，并列出差异明细；不做推断、不补齐缺失值、不引入外部数据。如果你认可，回复“用默认口径”即可。"
+      ],
+      "hasTaskProposal": false
+    },
+    {
+      "at": "2026-11-06T13:50:41.724Z",
+      "action": "turn",
+      "seq": 2,
+      "ok": true,
+      "hostStatus": "ready",
+      "messages": [
+        "信息已足够，草稿已就绪，无需再向你确认业务口径。已按你的要求整理为两个严格串行、均为纯文本分析的节点：①资料整理员只输出单行“7+8=15”；②验算专家依赖①，并且必须在你对节点①的人工验收通过后才开始，读取①的真实输出独立核对，只输出“核对通过：7+8=15”。两节点负责人分别为资料整理员与验算专家，projectId 留空（纯分析不需要项目），不新增文档。人工验收属于你的审阅动作，不会虚拟成专家工作包。下一步：请审阅下方负责人、依赖关系、项目范围（均为空）与验收标准，然后保存草稿，或确认并启动；在你确认前不会执行任何工作。"
+      ],
+      "hasTaskProposal": true
+    },
+    {
+      "at": "2026-11-06T13:51:18.733Z",
+      "action": "turn",
+      "seq": 3,
+      "ok": true,
+      "hostStatus": "needs-input",
+      "messages": [
+        "收到，但这一步需要你先做一个处置决定：一个话题只能有一项未结束的顶层任务。当前话题已存在 7+8 核对草稿（状态 ready、未结束、未执行），因此我不能在同一话题再生成第二份独立草稿，也不会绕过这条限制去建。你要求的 20+30 任务本身信息完整（两位成员都在花名册中、纯文本分析、不关联项目），只差“放在哪里”这个业务选择。\n\n我的建议（默认）：保留 7+8 草稿原样不动，20+30 先只作为本话题的聊天记录留存，等 7+8 任务验收完成或被明确终止后，再由你明确要求“下一个任务”，我立即整理 20+30 的草稿。这样不会出现隐含的任务队列，也不会丢掉任何一项。\n\n请在下面选择处置方式；在你选择前，7+8 草稿保持未结束、未执行，我不会创建、启动或执行任何任务。"
+      ],
+      "hasTaskProposal": false
+    },
+    {
+      "at": "2026-11-06T13:51:34.814Z",
+      "action": "confirm",
+      "seq": 4,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:51:52.154Z",
+      "action": "control",
+      "seq": 5,
+      "ok": true,
+      "control": "pause"
+    },
+    {
+      "at": "2026-11-06T13:52:23.621Z",
+      "action": "turn",
+      "seq": 6,
+      "ok": true,
+      "hostStatus": "needs-input",
+      "messages": [
+        "已核对已保存的真实状态：计划“纯文本合计核对任务（7+8）”（ID 096c64bb-3df4-4bc2-aea8-37083f3fb7d1，revision 1）当前状态为 paused，两个节点均为 pending，accepted 均为 false，观测时间 2026-11-06T13:52:07.989Z。因此回答你的问题：暂停不算结束，该任务仍是未结束的顶层任务，本话题的 topicTaskUnfinished 仍为 true。基于一话题只允许一项未结束顶层任务的约束，我不能在保留它的同时，又在同一话题创建第二项独立的 20+30 任务；我也不会改写或终止现有 7+8 暂停任务。20+30 本身信息完整，只差“放在哪里”这一项处置选择。建议默认：把 20+30 放到一个新话题中创建，保留本话题的 7+8 暂停任务原样不动。请选择下一步处置方式；在你选择前不会创建或执行任何任务。"
+      ],
+      "hasTaskProposal": false
+    },
+    {
+      "at": "2026-11-06T13:52:38.969Z",
+      "action": "control",
+      "seq": 7,
+      "ok": true,
+      "control": "resume"
+    },
+    {
+      "at": "2026-11-06T13:53:00.076Z",
+      "action": "snapshot",
+      "seq": 8,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:53:26.411Z",
+      "action": "turn",
+      "seq": 9,
+      "ok": false,
+      "error": "补充表单定义不符合规范"
+    },
+    {
+      "at": "2026-11-06T13:53:32.200Z",
+      "action": "guard",
+      "seq": 10,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:54:41.738Z",
+      "action": "finish",
+      "seq": 11,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:55:23.166Z",
+      "action": "restart-probe",
+      "seq": null,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:56:11.368Z",
+      "action": "turn",
+      "seq": 12,
+      "ok": false,
+      "error": "补充表单定义不符合规范"
+    },
+    {
+      "at": "2026-11-06T13:56:18.934Z",
+      "action": "finish",
+      "seq": 13,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:56:32.401Z",
+      "action": "restart-probe",
+      "seq": null,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:57:03.201Z",
+      "action": "turn",
+      "seq": 14,
+      "ok": true,
+      "hostStatus": "needs-input",
+      "messages": [
+        "先按已保存的真实状态核对（观测时间 2026-11-06T13:56:45.546Z，未做任何改动）：计划「纯文本合计核对任务（7+8）」ID 096c64bb-3df4-4bc2-aea8-37083f3fb7d1，revision 1，计划状态 paused；节点 pkg-total-calc 为 status=review、executionStatus=completed、实际输出「7+8=15」、accepted=false、approvalCount=0；节点 pkg-total-verify 为 status=pending、reason「等待上游工作包验收」、runId 为空、accepted=false。可见执行确实结束并留下了真实输出，但至今没有任何验收动作。\n\n四个概念的区别：\n1）执行结束（executionStatus=completed）：只说明该节点的执行者把这一轮跑完并交出了产物，即「7+8=15」这行字已存在于记录中。它回答的是“跑没跑完”，不代表内容正确，也不代表任务完成。\n2）待验收（status=review）：表示该节点已交付、正等你审阅。系统不会替你判断这行文本是否合格；approvalCount=0 和 accepted=false 表明还没有发生任何认可动作。此状态下该节点自身不会再推进，但也没有被承认。\n3）暂停（计划层面 status=paused）：是整项计划的整体状态。暂停期间不调度任何后续节点；pkg-total-verify 本就因「等待上游工作包验收」而 pending，再加上计划暂停，它没有 runId，也不会自行开始。暂停既不是结束也不是失败，计划仍算未结束的顶层任务，继续占用本话题唯一的未结束任务位；恢复必须由你显式操作，不会因为上游被验收而自动发生。\n4）验收通过（accepted=true）：这是你作为用户对真实交付的认可动作，只有你能做。它与“执行完成”不同：执行完成是“有人交了东西”，验收通过是“你确认这东西达标”。需要说明的是，即使你验收了 pkg-total-calc，计划仍处于暂停状态，pkg-total-verify 也不会自己启动，仍要恢复计划后才可能被调度。\n\n为什么现在不能新建 20+30 任务：当前 taskContext.topicTaskUnfinished=true，而一个话题只允许一项未结束的顶层任务。7+8 计划状态为 paused、两个节点 accepted 均为 false，明确属于未结束；availablePlans 中也只有这一项。因此在保留它的前提下，我不能在同一话题再生成第二份独立草稿；同时你明确要求不改写、不终止原任务，我也不会绕过该约束，更不会用自动验收来腾出位置。20+30 任务本身信息是完整的（资料整理员与验算专家均为纯分析成员，不需要项目），唯一缺的只是“放在哪里”这一项处置选择。\n\n本轮只做解释，不修改、不创建、不验收、不执行任何东西。下一步只需你做下面这一项选择。"
+      ],
+      "hasTaskProposal": false
+    },
+    {
+      "at": "2026-11-06T13:57:15.304Z",
+      "action": "review",
+      "seq": 15,
+      "ok": true,
+      "planId": "096c64bb-3df4-4bc2-aea8-37083f3fb7d1",
+      "packageId": "pkg-total-calc",
+      "accepted": true
+    },
+    {
+      "at": "2026-11-06T13:57:36.506Z",
+      "action": "control",
+      "seq": 16,
+      "ok": true,
+      "control": "resume"
+    },
+    {
+      "at": "2026-11-06T13:57:53.145Z",
+      "action": "snapshot",
+      "seq": 17,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:58:02.219Z",
+      "action": "review",
+      "seq": 18,
+      "ok": true,
+      "planId": "096c64bb-3df4-4bc2-aea8-37083f3fb7d1",
+      "packageId": "pkg-total-verify",
+      "accepted": true
+    },
+    {
+      "at": "2026-11-06T13:58:11.803Z",
+      "action": "snapshot",
+      "seq": 19,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:58:46.175Z",
+      "action": "turn",
+      "seq": 20,
+      "ok": true,
+      "hostStatus": "ready",
+      "messages": [
+        "信息已足够，可生成待确认草稿。已按你的要求将 20+30 整理为两个严格串行的纯文本分析节点：资料整理员只输出“20+30=50”；验算专家须在你对该真实输出人工验收通过后，读取真实输出并独立复核，仅输出“核对通过：20+30=50”。两节点均不关联项目，7+8 历史任务不改动。下一步请审阅负责人、依赖关系与验收标准，然后保存草稿或确认并启动；本轮不会执行任何工作。"
+      ],
+      "hasTaskProposal": true
+    },
+    {
+      "at": "2026-11-06T13:59:02.823Z",
+      "action": "confirm",
+      "seq": 21,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:59:13.186Z",
+      "action": "control",
+      "seq": 22,
+      "ok": true,
+      "control": "start"
+    },
+    {
+      "at": "2026-11-06T13:59:25.284Z",
+      "action": "snapshot",
+      "seq": 23,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T13:59:37.388Z",
+      "action": "review",
+      "seq": 24,
+      "ok": true,
+      "planId": "cb91469b-edfe-4c56-bba8-72bb2a70b0da",
+      "packageId": "pkg-20-30-calc",
+      "accepted": true
+    },
+    {
+      "at": "2026-11-06T14:00:03.089Z",
+      "action": "snapshot",
+      "seq": 25,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T14:00:18.226Z",
+      "action": "review",
+      "seq": 26,
+      "ok": true,
+      "planId": "cb91469b-edfe-4c56-bba8-72bb2a70b0da",
+      "packageId": "pkg-20-30-verify",
+      "accepted": true
+    },
+    {
+      "at": "2026-11-06T14:00:28.327Z",
+      "action": "snapshot",
+      "seq": 27,
+      "ok": true
+    },
+    {
+      "at": "2026-11-06T14:01:10.916Z",
+      "action": "finish",
+      "seq": 28,
+      "ok": true
+    }
+  ],
+  "localEvidenceDirectory": "/tmp/topic-serial-clean-20261106"
+}

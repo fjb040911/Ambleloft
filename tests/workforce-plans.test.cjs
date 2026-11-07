@@ -179,3 +179,11 @@ test('revising upstream invalidates accepted dependents but preserves every hist
  const before=(await f.service.read()).plans[0];const revised=await f.service.savePlan({id:plan.id,expectedRevision:1,spaceId:f.space.id,value:{name:plan.name,goal:plan.goal,packages:before.packages.map(p=>p.id==='build'?{...p.definition,instruction:'Build a new public client'}:p.definition)}});
  assert.deepEqual(revised.packages.map(p=>p.status),['pending','pending']);assert.ok(revised.packages.every(p=>!p.acceptance));assert.deepEqual(revised.packages.map(p=>p.attempts),before.packages.map(p=>p.attempts));
 });
+
+
+test('confirmed analysis dispatch explains execution phase and preserves exact-output constraints',async t=>{
+ const f=await fixture(t);const starts=[];const original=f.runtime.start.bind(f.runtime);f.runtime.start=async(input,context)=>{starts.push(input);return original(input,context);};
+ const plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Sum',goal:'先准备任务，暂不启动。求2+3',packages:[{...unit('sum','a'),mode:'discussion',projectId:null,instruction:'求2+3，只输出5',deliverables:'单独一行5',acceptance:'仅为5',constraints:'不调用工具、不访问网络、不写文件',verification:'人工核对2+3=5'}]}});
+ assert.equal(starts.length,0);await control(f.service,plan,'start');assert.equal(starts.length,1);
+ assert.match(starts[0].prompt,/用户已确认并启动本计划/);assert.match(starts[0].prompt,/当前工作包：sum/);assert.match(starts[0].prompt,/若要求仅输出指定文本/);assert.match(starts[0].prompt,/不调用工具、不访问网络、不写文件/);assert.doesNotMatch(starts[0].prompt,/报告实际变更、验证命令及结果/);assert.equal(starts[0].permission,'default');
+});

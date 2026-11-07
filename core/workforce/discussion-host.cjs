@@ -10,7 +10,7 @@ const {normalizeDynamic}=require('../inputs/runtime-definition.cjs');
 const {id,text}=require('./contract.cjs');
 const {createContribution}=require('./discussion-contract.cjs');
 const rules=readFileSync(join(__dirname,'skills/discussion-host/SKILL.md'),'utf8');
-const ruleVersion='discussion-host-v7';
+const ruleVersion='discussion-host-v9';
 const discussionPlans=require('./discussion-plans.cjs');
 const live=new Set(['preparing','started','running','waiting','stopping']);
 const str={type:'string',maxLength:8000};
@@ -174,10 +174,17 @@ async function coordinate({request,space},input,hostContext,signal){
   if(request.intent==='explain-node'&&!validateExplanation(output))throw Error('节点解释未完成，计划未修改。请重试。 / Explanation incomplete; the plan was not changed. Please retry.');
   if(request.intent==='restart-guide'&&!validateRestart(output))throw Error('重新引导未完成，请重试 / Could not restart the guide; please retry');
   const result=checked(output,sources,roster,used,pass===4?0:4-used.size);
+  // Reject an extra top-level task before creating a draft or calling task inference.
+  if(['new-plan','restart-guide'].includes(result.action)&&taskContext.topicTaskUnfinished){
+   result.action='reply';result.questions=[];result.delegates=[];
+   result.message=input.locale==='zh-CN'?'本话题已有未结束任务。可以继续补充或修改当前任务；独立的新目标请另开话题，或在当前任务结束后再创建。':'This topic already has an unfinished task. Refine the current task, or start a separate topic for an independent goal. A next task can be created after this one ends.';
+  }
   let question=null;
   if(result.questions.length){
    const fields=result.questions.map((q,i)=>({name:'answer'+i,type:q.type,label:q.label,help:q.help,required:true,...(q.type==='select'?{options:q.options}:{})}));
-   question={requestKey:randomUUID(),reason:result.message,source:{kind:'dynamic',definition:{title:input.locale==='zh-CN'?'需要你确认':'Your input is needed',fields}},prefill:Object.fromEntries(result.questions.map((q,i)=>['answer'+i,q.defaultValue]).filter(([,v])=>v))};normalizeDynamic(question);
+   // The full explanation belongs in the chat step. The form reason is a short
+   // purpose label (max 500 chars), not the host message (up to 8000 chars).
+   question={requestKey:randomUUID(),reason:input.locale==='zh-CN'?'确认影响下一步的选择':'Confirm the choice that affects the next step',source:{kind:'dynamic',definition:{title:input.locale==='zh-CN'?'需要你确认':'Your input is needed',fields}},prefill:Object.fromEntries(result.questions.map((q,i)=>['answer'+i,q.defaultValue]).filter(([,v])=>v))};normalizeDynamic(question);
   }
   await update(r=>{r.host.activity={...latestProgress,phase:result.action==='delegate'?'experts':'complete'};r.host.brief=result.brief;r.host.steps.push({id:randomUUID(),text:result.message,action:result.action,brief:result.brief,at:new Date().toISOString()});r.host.question=question;r.host.status=['delegate','plan','new-plan'].includes(result.action)?'running':result.action==='ask'?'needs-input':result.action==='ready'?'ready':'completed';});
   if(result.action==='restart-guide'){

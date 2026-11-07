@@ -13,16 +13,16 @@ import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent} from './components
 import {Empty,EmptyHeader,EmptyTitle,EmptyDescription} from './components/ui/empty';
 import {Skeleton} from './components/ui/skeleton';
 import {Alert,AlertDescription} from './components/ui/alert';
-import {t} from './i18n';
+import {t,useLanguage} from './i18n';
 import './extension-detail.css';
 
 function DetailEmpty({title,description}:{title:string;description:string}) {
  return <Empty><EmptyHeader><EmptyTitle>{t(title)}</EmptyTitle><EmptyDescription>{t(description)}</EmptyDescription></EmptyHeader></Empty>;
 }
-const permissionName=(key:string)=>t(({'agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'读取项目信息','projects.path.read':'读取项目路径','conversations.create':'创建聊天','conversations.open':'打开聊天','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
+const permissionName=(key:string)=>t(({'project.activity.read':'读取项目活动记录','project.usage.read':'读取项目 AI 用量','project.summaries.generate':'按需生成项目摘要','agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'读取项目信息','projects.path.read':'读取项目路径','conversations.create':'创建聊天','conversations.open':'打开聊天','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
 
-export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle,initialTab='details',backLabel='返回扩展列表',closeGuard}:{closeGuard?:React.MutableRefObject<(()=>void)|null>;backLabel?:string;initialTab?:string;item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
- const confirm=useConfirm();
+export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle,initialTab='details',backLabel='返回扩展列表',closeGuard,hideBack=false}:{hideBack?:boolean;closeGuard?:React.MutableRefObject<(()=>void)|null>;backLabel?:string;initialTab?:string;item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
+ const confirm=useConfirm();const locale=useLanguage();
  const [settingsBusy,setSettingsBusy]=useState(false),[automationBusy,setAutomationBusy]=useState(false);
  const [dirty,setDirty]=useState(false),[automationDirty,setAutomationDirty]=useState(false);
  const [tab,setTab]=useState(initialTab),[error,setError]=useState(''),[projectError,setProjectError]=useState('');
@@ -32,7 +32,7 @@ export default function ExtensionDetail({item,back,permissions,grantConfiguratio
   (window.desktop?.extensions?.details?.(item.manifest.id)||Promise.resolve({readme:'',publisher:'',size:null})).then(data=>{if(live)setDetails(data);}).catch(e=>{if(live)setError(e.message);});
   window.desktop?.readWorkspace().then(state=>{if(live)setProjects(state.projects);}).catch(e=>{if(live)setProjectError(e.message);});
   return()=>{live=false;};
- },[item.manifest.id,item.active]);
+ },[item.manifest.id,item.active,locale]);
  useEffect(()=>{setDirty(false);},[item.active,item.enabled,item.trusted]);
  const canConfigure=!!item.grants?.some(g=>g.capability==='configuration'&&g.resource==='self');
  const projectIds=[...new Set(item.grants?.filter(g=>g.resource.startsWith('project:')).map(g=>g.resource.slice(8))||[])];
@@ -40,7 +40,7 @@ export default function ExtensionDetail({item,back,permissions,grantConfiguratio
  const leave=async(action:()=>void)=>{if(busy||settingsBusy||automationBusy)return;if(!(dirty||automationDirty)||await confirm({title:t('放弃未保存的修改？'),description:t('离开后，本次未保存的修改将丢失。'),action:t('放弃修改'),destructive:true}))action();};
  useEffect(()=>{if(closeGuard)closeGuard.current=()=>{void leave(back);};return()=>{if(closeGuard)closeGuard.current=null;};},[closeGuard,back,dirty,automationDirty,busy,settingsBusy,automationBusy]);
  return <div className="extension-detail">
-  <Button variant="ghost" size="sm" onClick={()=>leave(back)}><ArrowLeft data-icon="inline-start"/>{t(backLabel)}</Button>
+  {!hideBack&&<Button variant="ghost" size="sm" onClick={()=>leave(back)}><ArrowLeft data-icon="inline-start"/>{t(backLabel)}</Button>}
   <header className="extension-detail-header">
    <span className="extension-detail-logo" aria-hidden="true"><ExtensionIcon icon={item.manifest.icon} size={26}/></span>
    <div className="extension-detail-heading">

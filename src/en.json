@@ -1790,5 +1790,10 @@
   "拒绝所选项": "Reject selected",
   "已批准所选请求": "Selected requests approved",
   "已拒绝所选请求": "Selected requests rejected",
-  "发起专家": "Requesting expert"
+  "发起专家": "Requesting expert",
+  "读取项目活动记录": "Read project activity",
+  "读取项目 AI 用量": "Read project AI usage",
+  "按需生成项目摘要": "Generate project summaries on demand",
+  "仅扩展私有权限（暂不授权项目）": "Extension private permissions only (no project access)",
+  "只允许保存此扩展自己的设置、数据与凭据，不读取任何项目。": "Only stores this extension’s own settings, data and credentials. No project data is read."
 }

@@ -136,7 +136,7 @@ async function readUpstreamError(response,key){
   const label=category==='context_length_exceeded'?'上下文超限':category==='image_request_error'?'图片请求不受支持或格式无效':'请求被模型服务拒绝';
   return {upstreamCode:code||category,errorCategory:category,upstreamMessage:message?`${label}；${message}`:label};
 }
-async function startChatBridge(config, sessionId = randomUUID(), passthrough = false, onDiagnostic = () => {}) {
+async function startChatBridge(config, sessionId = randomUUID(), passthrough = false, onDiagnostic = () => {}, onUsage = () => {}) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) throw new Error("模型会话 ID 无效");
   const token=randomUUID();const active=new Set();
   const loopGuard=new ToolLoopGuard();
@@ -145,6 +145,9 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
     if(req.method!=='POST'||req.url!=='/v1/responses'){res.writeHead(404);res.end();return;}
     const controller=new AbortController();active.add(controller);res.on('close',()=>controller.abort());
     const diagnostic={threadId:req.headers['thread-id'],parentThreadId:req.headers['x-codex-parent-thread-id'],requestId:randomUUID(),sessionId,startedAt:new Date().toISOString(),protocol:passthrough?'responses':'chat',stage:'request',events:0,done:false,finishReason:null};
+    let usageAttempt=null;
+    const usageNotify=async(status)=>{if(!usageAttempt)return;try{await onUsage({...usageAttempt,status,finishedAt:status==='running'?null:new Date().toISOString(),parentThreadId:diagnostic.parentThreadId,...(diagnostic.parentThreadId?{origin:'subagent'}:{})});}catch{}};
+    const usageBegin=async(attempt)=>{usageAttempt={id:diagnostic.requestId+':'+attempt,hostRequestId:diagnostic.requestId,attempt,startedAt:new Date().toISOString(),usage:null};await usageNotify('running');};
     const started=performance.now();
     const report=()=>{diagnostic.durationMs=Math.round(performance.now()-started);try{onDiagnostic({...diagnostic});}catch{}};
     let seq=0;const emit=(type,fields)=>{if(!res.destroyed)res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:seq++,...fields})}\n\n`);};
@@ -172,6 +175,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         diagnostic.imageCount=body.messages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(c=>c.type==='image_url').length:0),0);
       }
       if(config.effectiveLimits)diagnostic.limits={...config.effectiveLimits};
+      await usageBegin(0);
       let upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:controller.signal});
       diagnostic.httpStatus=upstream.status;diagnostic.stage='upstream_stream';
       if(!upstream.ok){
@@ -182,8 +186,9 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       if(passthrough){
         res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'application/json','Cache-Control':'no-cache'});
-        const observe=responseObserver(diagnostic,fingerprint);
+        const observe=responseObserver(diagnostic,fingerprint,(usage,id)=>{usageAttempt.usage=usage;usageAttempt.providerRequestId=id;});
         for await(const chunk of upstream.body){if(res.destroyed)break;observe(chunk);res.write(chunk);}
+        await usageNotify(diagnostic.done&&diagnostic.finishReason==='completed'?'succeeded':'unknown');usageAttempt=null;
         diagnostic.stage='forwarded';res.end();return;
       }
       res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
@@ -196,7 +201,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         for await(const rawEvent of readSSE(upstream.body)){
           if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
           diagnostic.events++;diagnostic.lastEventAt=new Date().toISOString();
-          const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage)attemptUsage=chunk.usage;
+          const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage){attemptUsage=chunk.usage;usageAttempt.usage=chunk.usage;}if(chunk.id)usageAttempt.providerRequestId=chunk.id;
           const choice=chunk.choices?.[0];if(!choice)continue;
           if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
           const delta=choice.delta||{};
@@ -217,6 +222,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             acc.args+=call.function?.arguments||'';if(call.id&&call.id!==acc.id)acc.id+=call.id;calls.set(call.index,acc);
           }
         }
+        await usageNotify(done&&finish?'succeeded':'unknown');usageAttempt=null;
         if(attemptUsage){usage||={prompt_tokens:0,completion_tokens:0,total_tokens:0};for(const key of Object.keys(usage))usage[key]+=attemptUsage[key]||0;}
         diagnostic.stage='validate_completion';
         if(!done||!finish)throw new Error('模型流未完整结束，请重试');
@@ -233,6 +239,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           // Separate any streamed narration from the corrected response.
           if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
+          await usageBegin(1);
           upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:controller.signal});
           diagnostic.httpStatus=upstream.status;
           if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
@@ -276,7 +283,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       diagnostic.reason=error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
       report();
       if(!res.destroyed){if(res.headersSent){emit('error',{message:error.message,code:'bridge_error'});res.end();}else{res.writeHead(error.httpStatus||502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:diagnostic.reason,code:error.code||'bridge_error'}}));}}}
-    finally{if(!diagnostic.failed)report();controller.abort();active.delete(controller);}
+    finally{await usageNotify(controller.signal.aborted?'unknown':diagnostic.failed?'failed':'unknown');if(!diagnostic.failed)report();controller.abort();active.delete(controller);}
   });
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
   return {config:{...config,baseUrl:`http://127.0.0.1:${server.address().port}/v1`,apiKey:token},close(){for(const controller of active)controller.abort();server.close();server.closeAllConnections();}};

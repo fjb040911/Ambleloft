@@ -7,7 +7,7 @@ async function enter(page:Page,theme='light'){
 for(const theme of ['light','dark'])test(`discussion sidebar resizes, collapses and remembers width in ${theme}`,async({page})=>{
  await page.setViewportSize({width:1280,height:900});await enter(page,theme);
  const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),main=page.getByRole('region',{name:'讨论对话'}),input=page.getByLabel('这次想推进什么？');
- await sidebar.getByRole('tab',{name:'当前方案'}).click();await input.fill('保留未发送内容');await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});
+ await input.fill('保留未发送内容');await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});
  const separator=page.getByRole('separator',{name:'调整讨论侧栏宽度'});
  const initial=(await sidebar.boundingBox())!.width,handle=(await separator.boundingBox())!;
  await page.mouse.move(handle.x+handle.width/2,Math.min(handle.y+100,500));await page.mouse.down();await page.mouse.move(handle.x-100,Math.min(handle.y+100,500),{steps:8});await page.mouse.up();
@@ -16,7 +16,7 @@ for(const theme of ['light','dark'])test(`discussion sidebar resizes, collapses 
  await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await expect(sidebar).toBeHidden();await expect(separator).toBeHidden();
  expect((await main.boundingBox())!.width).toBeGreaterThan(before+resized-5);await expect(input).toHaveValue('保留未发送内容');
  await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect(sidebar).toBeVisible();
- await expect(sidebar.getByRole('tab',{name:'当前方案'})).toHaveAttribute('aria-selected','true');
+ await expect(sidebar.getByRole('list',{name:'话题列表',exact:true})).toBeVisible();
  await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-resized)).toBeLessThan(1);
  await separator.focus();await page.keyboard.press('ArrowLeft');
  await expect.poll(async()=>(await sidebar.boundingBox())!.width).toBeGreaterThan(resized+5);
@@ -49,7 +49,7 @@ for(const theme of ['light','dark'])test(`drag-collapse can reopen from the stic
  const close=page.getByRole('button',{name:'收起讨论侧栏',exact:true}),open=page.getByRole('button',{name:'展开讨论侧栏',exact:true});
  await expect(navigation.getByRole('button',{name:'收起讨论侧栏',exact:true})).toHaveCount(1);
  await expect(page.locator('.wf-discussion-header .wf-context-desktop-toggle')).toHaveCount(0);
- await sidebar.getByRole('tab',{name:'当前方案'}).click();await page.getByLabel('这次想推进什么？').fill('未发送的讨论内容');
+ await page.getByLabel('这次想推进什么？').fill('未发送的讨论内容');
  const initialWidth=(await sidebar.boundingBox())!.width;
  await page.getByLabel('这次想推进什么？').evaluate(el=>el.blur());
  await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight)).toBeGreaterThan(2000);
@@ -63,7 +63,7 @@ for(const theme of ['light','dark'])test(`drag-collapse can reopen from the stic
  await page.screenshot({path:`/tmp/discussion-sticky-expand-${theme}.png`});
  // Click its visible position so the driver does not auto-scroll the sticky button.
  const openBounds=(await open.boundingBox())!;await page.mouse.click(openBounds.x+openBounds.width/2,openBounds.y+openBounds.height/2);await expect(sidebar).toBeVisible();await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-initialWidth)).toBeLessThan(1);
- await expect(sidebar.getByRole('tab',{name:'当前方案'})).toHaveAttribute('aria-selected','true');await expect(page.getByLabel('这次想推进什么？')).toHaveValue('未发送的讨论内容');
+ await expect(sidebar.getByRole('list',{name:'话题列表',exact:true})).toBeVisible();await expect(page.getByLabel('这次想推进什么？')).toHaveValue('未发送的讨论内容');
  expect(Math.abs(await scroller.evaluate(el=>el.scrollTop)-top)).toBeLessThan(2);
  await page.getByRole('tab',{name:'文档与产物',exact:true}).click();await expect(page.locator('.wf-context-desktop-toggle')).toHaveCount(0);
  await page.getByRole('tab',{name:'讨论',exact:true}).click();await expect(close).toBeInViewport();

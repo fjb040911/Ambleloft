@@ -16,6 +16,28 @@ async function fixture(t){
 const response=(extra={})=>({action:'reply',message:'Let us clarify the goal.',brief:{goal:'Repair tickets',items:[]},questions:[],delegates:[],...extra});
 const delegate=(employeeId)=>response({action:'delegate',message:'Invite '+employeeId,delegates:[{employeeId,instruction:'Analyze only your assigned scope.',reason:'The next stage needs this conclusion.'}]});
 
+for(const locale of ['zh-CN','en'])test(`host prose guidance preserves structured task context and references (${locale})`,async t=>{
+ const f=await fixture(t);
+ f.service.generateDiscussionHost=async(_config,job)=>{
+  assert.match(job.prompt,/## User-facing language/);
+  assert.match(job.prompt,/Do not expose internal field names/);
+  assert.match(job.prompt,/结果已生成，等待你验收/);
+  assert.match(job.prompt,/The result is ready for your review/);
+  assert.match(job.prompt,/Technical terms in the user's actual work/);
+  assert.equal(job.input.locale,locale);assert.equal(typeof job.input.taskContext.topicTaskUnfinished,'boolean');
+  const source=job.input.sources.find(s=>s.kind==='user');
+  return response({message:locale==='zh-CN'?'正在梳理这次的目标，请补充你希望得到的结果。':'We are clarifying the goal. What result do you want?',brief:{goal:'API review',items:[{id:'fact',kind:'proposal',text:'Review the accepted field in the user API.',sourceIds:[source.id]}]}});
+ };
+ await f.start({locale});const r=await f.finish();assert.equal(r.host.status,'completed');assert.deepEqual(r.host.brief.items[0].sourceIds,[r.id]);assert.match(r.host.brief.items[0].text,/accepted/,'Do not censor actual technical task content');
+ assert.equal((await f.service.read()).taskDrafts.length,0);assert.equal(f.runtime.starts.length,0);
+});
+
+test('long lifecycle explanations remain in chat without overflowing the clarification form reason',async t=>{
+ const f=await fixture(t),message='Paused and pending acceptance still mean unfinished. '.repeat(20);
+ f.service.generateDiscussionHost=async()=>response({action:'ask',message,questions:[{label:'What should happen next?',help:'Continue the existing task or use another topic.',type:'select',options:[{label:'Continue current task',value:'continue'},{label:'Use another topic',value:'separate'}],defaultValue:'continue'}]});
+ await f.start();const result=await f.finish();assert.equal(result.host.status,'needs-input');assert.equal(result.host.steps.at(-1).text,message);assert.ok(result.host.question.reason.length<=500);assert.equal(result.host.question.source.definition.fields[0].help,'Continue the existing task or use another topic.');
+});
+
 test('delegated experts receive linked project locations without exposing paths to host inference',async t=>{
  const f=await fixture(t);
  const projects=[{id:'local',name:'Local sample',path:'C:\\qa\\sample'},{id:'remote',name:'Remote sample',type:'ssh',path:'/srv/sample',connectionId:'connection',environment:{kind:'docker'}},{id:'unrelated',name:'Unrelated',path:'C:\\private'}];
@@ -322,14 +344,14 @@ test('H09 stopped planning cannot commit a late model reply and manual edits win
  const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});let release;f.service.generateTaskGuide=()=>new Promise(r=>release=r);await f.start({prompt:'生成任务'});await until(()=>!!release);const r=(await f.service.read()).requests[0];await f.service.stopDiscussionHost({requestId:r.id});release(taskResult());await tick();assert.equal((await f.finish()).host.status,'interrupted');assert.equal((await f.service.read()).taskDrafts[0].value.packages.length,0);
  release=null;await f.start({replyTo:r.id,prompt:'继续规划'});await until(()=>!!release);const d=(await f.service.read()).taskDrafts[0];await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:{...d.value,name:'Manual wins'}});release(taskResult());assert.equal((await f.finish()).host.status,'failed');assert.equal((await f.service.read()).taskDrafts[0].value.name,'Manual wins');assert.equal(f.runtime.runs.length,0);
 });
-test('H10 new goal creates a separate draft, invalid topic targets are rejected and stale base rebases on current plan',async t=>{
+test('H10 new goal cannot bypass an unfinished task, invalid topic targets are rejected and stale base rebases on current plan',async t=>{
  const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});f.service.generateTaskGuide=async()=>taskResult();await f.start({prompt:'生成任务'});const first=await f.finish();let d=(await f.service.read()).taskDrafts[0],plan=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
  await f.start({replyTo:first.id,prompt:'修订计划'});const r=await f.finish(),revision=(await f.service.read()).taskDrafts.find(d=>d.id===r.host.task.draftId);
  plan=await f.service.savePlan({id:plan.id,expectedRevision:plan.revision,spaceId:f.space.id,value:{name:plan.name,goal:'Manual latest goal',packages:plan.packages.map(p=>p.definition)}});
  await assert.rejects(f.service.createGuidedPlan({id:revision.id,expectedRevision:revision.revision}),/新版本/);
  f.service.generateTaskGuide=async(_c,r)=>{assert.equal(r.input.value.goal,'Manual latest goal');return taskResult({value:{...r.input.value,packages:r.input.value.packages.map(p=>({...p,documentIds:[]}))}});};
  await f.start({replyTo:r.id,prompt:'基于最新版本重新修订',taskContext:{draftId:revision.id,draftRevision:revision.revision}});const rebased=await f.finish();assert.notEqual(rebased.host.task.draftId,revision.id);assert.equal((await f.service.read()).taskDrafts[0].basePlanRevision,plan.revision);
- f.service.generateDiscussionHost=async()=>response({action:'new-plan'});f.service.generateTaskGuide=async()=>taskResult();await f.start({replyTo:rebased.id,prompt:'另建一个新目标的计划'});const fresh=await f.finish();assert.notEqual(fresh.host.task.draftId,rebased.host.task.draftId);assert.equal((await f.service.read()).taskDrafts[0].basePlanId,undefined);
+ f.service.generateDiscussionHost=async()=>response({action:'new-plan'});f.service.generateTaskGuide=async()=>taskResult();await f.start({replyTo:rebased.id,prompt:'另建一个新目标的计划'});const fresh=await f.finish();assert.equal(fresh.host.task,undefined);assert.match(fresh.host.steps.at(-1).text,/未结束任务|unfinished task/);assert.equal((await f.service.read()).taskDrafts[0].id,rebased.host.task.draftId);
  await assert.rejects(f.start({prompt:'新话题',taskContext:{planId:plan.id}}),/不属于/);assert.equal((await f.service.read()).plans.length,1);
 });
 test('H11 progress includes persistent pending input without leaking unsubmitted answers',async t=>{
@@ -339,20 +361,27 @@ test('H11 progress includes persistent pending input without leaking unsubmitted
  await f.start({replyTo:first.id,prompt:'检查状态',taskContext:{planId:plan.id,planRevision:1}});assert.equal((await f.finish()).host.progress.nodes[0].inputCount,1);assert.equal(f.runtime.starts.length,0);
 });
 
-test('restart guide preserves old work and isolates later planning from unconfirmed history',async t=>{
+test('restart cannot abandon an unfinished task or create a second draft',async t=>{
  const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});f.service.generateTaskGuide=async()=>taskResult();
- await f.start({prompt:'旧要求：生成工单任务'});const first=await f.finish(),old=(await f.service.read()).taskDrafts[0];
- f.service.generateDiscussionHost=async()=>response({action:'restart-guide',message:'旧稿保留。现在最希望解决什么问题？'});
- f.service.generateTaskGuide=async()=>{throw Error('Restart must not auto-plan');};
+ await f.start({prompt:'生成工单任务'});const first=await f.finish(),old=(await f.service.read()).taskDrafts[0];
+ f.service.generateDiscussionHost=async()=>response({action:'restart-guide'});
+ f.service.generateTaskGuide=async()=>{throw Error('Must not auto-plan');};
  await f.start({replyTo:first.id,prompt:'开始新的引导',taskContext:{draftId:old.id,draftRevision:old.revision}});const reset=await f.finish();
- assert.equal(reset.host.task.restarted,true);assert.equal(reset.host.question,null);
- let state=await f.service.read(),fresh=state.taskDrafts.find(d=>d.id===reset.host.task.draftId);
- assert.deepEqual(state.taskDrafts.find(d=>d.id===old.id),old);assert.equal(fresh.value.packages.length,0);assert.deepEqual(fresh.source.map(r=>r.id),[reset.id]);
- f.service.generateDiscussionHost=async(_c,job)=>{assert.ok(job.input.sources.every(s=>!s.text.includes('旧要求')));assert.equal(job.input.taskContext.draft.value.packages.length,0);return response({action:'plan'});};
- f.service.generateTaskGuide=async(_c,job)=>{assert.ok(job.input.source.every(s=>s.id!==first.id));return taskResult();};
- await f.start({replyTo:reset.id,prompt:'新要求：规划离线阅读器',taskContext:{draftId:fresh.id,draftRevision:fresh.revision}});const planned=await f.finish();
- assert.notEqual(planned.host.status,'failed',planned.host.error);assert.equal(planned.host.task.draftId,fresh.id);
- state=await f.service.read();assert.ok(state.taskDrafts.find(d=>d.id===fresh.id).source.every(r=>r.id!==first.id));assert.deepEqual(state.taskDrafts.find(d=>d.id===old.id),old);assert.equal(f.runtime.starts.length,0);
+ assert.equal(reset.host.task,undefined);assert.match(reset.host.steps.at(-1).text,/未结束任务|unfinished task/);
+ assert.deepEqual((await f.service.read()).taskDrafts,[old]);assert.equal(f.runtime.starts.length,0);
+});
+
+test('host receives unfinished state in both locales and rejects a model-requested second task across lifecycle states',async t=>{
+ const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});f.service.generateTaskGuide=async()=>taskResult();
+ await f.start({prompt:'Prepare one task'});const first=await f.finish(),d=(await f.service.read()).taskDrafts[0];await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
+ f.service.generateTaskGuide=async()=>{throw Error('Must not create another task');};
+ for(const locale of ['zh-CN','en'])for(const [status,node] of [['draft','pending'],['running','running'],['paused','interrupted'],['pausing','stopping'],['running','review'],['running','failed'],['running','waiting'],['running','rejected'],['running','blocked'],['running','stale'],['stopped','stopping']]){
+  await f.service.change(s=>{s.plans[0].status=status;s.plans[0].packages[0].status=node;});const before=await f.service.read();
+  f.service.generateDiscussionHost=async(_c,job)=>{assert.equal(job.input.taskContext.topicTaskUnfinished,true);assert.equal(job.input.taskContext.progress.status,status);return response({action:'new-plan'});};
+  await f.start({replyTo:first.id,locale,prompt:'Keep the old task unfinished and create another independent task now'});const result=await f.finish();
+  assert.equal(result.host.status,'completed');assert.equal(result.host.task,undefined);assert.match(result.host.steps.at(-1).text,/未结束任务|unfinished task/);
+  const after=await f.service.read();assert.deepEqual(after.plans,before.plans);assert.deepEqual(after.taskDrafts,before.taskDrafts);assert.equal(f.runtime.starts.length,0);
+ }
 });
 
 test('explicit restart rejects incompatible model output and cannot reset another topic source',async t=>{
@@ -397,4 +426,21 @@ test('host active reasoning can still be stopped without replaying a decision',a
  const active=(await f.service.snapshot()).requests[0];assert.equal(active.host.status,'running');
  await f.service.stopDiscussionHost({requestId:active.id});release(delegate('product'));const stopped=await f.finish();
  assert.equal(stopped.host.errorCode,'DISCUSSION_STOPPED');assert.equal(stopped.host.status,'interrupted');assert.equal(calls,1);assert.ok(stopped.host.activity.lastProgressAt);assert.equal(f.runtime.starts.length,0);assert.equal(f.service.spaceLocks.size,0);
+});
+
+test('explicit planning after a terminated task creates the next draft instead of revising history',async t=>{
+ const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});f.service.generateTaskGuide=async()=>taskResult();
+ await f.start({prompt:'生成任务'});const first=await f.finish(),d=(await f.service.read()).taskDrafts[0],p=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
+ await f.service.controlPlan({id:p.id,expectedRevision:p.revision,commandId:randomUUID(),action:'stop'});
+ await f.start({replyTo:first.id,prompt:'创建下一项任务'});const next=await f.finish();assert.notEqual(next.host.status,'failed',next.host.error);
+ const fresh=(await f.service.read()).taskDrafts.find(d=>d.id===next.host.task.draftId);assert.equal(fresh.basePlanId,undefined);assert.notEqual(fresh.id,d.id);assert.equal((await f.service.read()).plans.length,1);assert.equal(f.runtime.starts.length,0);
+});
+
+test('multiple refinement rounds reuse the current revision draft of a running task',async t=>{
+ const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'plan'});f.service.generateTaskGuide=async()=>taskResult();
+ await f.start({prompt:'生成任务'});const first=await f.finish(),d=(await f.service.read()).taskDrafts[0],p=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
+ await f.service.change(s=>s.plans[0].status='running');
+ await f.start({replyTo:first.id,prompt:'修改当前任务'});const revised=await f.finish();assert.notEqual(revised.host.status,'failed',revised.host.error);
+ await f.start({replyTo:revised.id,prompt:'继续补充当前修订'});const refined=await f.finish();assert.notEqual(refined.host.status,'failed',refined.host.error);assert.equal(refined.host.task.draftId,revised.host.task.draftId);
+ const state=await f.service.read();assert.equal(state.plans[0].id,p.id);assert.equal(state.plans[0].status,'running');assert.equal(state.taskDrafts.filter(d=>!d.planId).length,1);
 });
