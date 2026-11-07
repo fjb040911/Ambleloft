@@ -9,7 +9,7 @@ async function setup(page:Page,{classic=false,language='zh-CN',delay=0}={}){
    {manifest:{id:'untrusted',name:'未信任',version:'1',contributes:{}},home:{title:'未信任'},trusted:false,enabled:true}
   ];
   const state={theme:'light',language,layoutMode:classic?'classic':'activity',projects:[{id:'p',name:'调试项目',path:'/tmp/test',createdAt:'today'}],tasks:[]};
-  const calls:any[]=[];const listeners=new Set<()=>void>();let context:any={};let config={revision:1,generation:1,value:{endpoint:'https://example.test'},schema:{type:'object',properties:{endpoint:{type:'string'}},required:['endpoint']}};
+  const calls:any[]=[];const listeners=new Set<()=>void>();let context:any={};let config={revision:1,generation:1,value:{endpoint:'https://example.test'},schema:{type:'object',properties:{endpoint:{type:'string',description:'服务 API 地址。'},username:{type:'string',description:'管理员分配的用户名。'},email:{type:'string',description:'可选，用于统计与检索。'}},required:['endpoint']}};
   const emit=()=>listeners.forEach(cb=>cb());
   (window as any).__fixture={entries,calls,emit};
   (window as any).desktop={readWorkspace:async()=>state,getDevice:async()=>({mode:'desktop',platform:'darwin'}),getProvider:async()=>({configured:false}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{},
@@ -22,7 +22,7 @@ async function setup(page:Page,{classic=false,language='zh-CN',delay=0}={}){
 const rail=(page:Page)=>page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true});
 const entries=(page:Page)=>page.getByRole('region',{name:'扩展业务入口',exact:true});
 async function opens(page:Page){return page.evaluate(()=>(window as any).__fixture.calls.filter((c:any)=>c.type==='open'));}
-async function settings(page:Page){await page.getByRole('button',{name:'扩展页面操作'}).click();await page.getByRole('menuitem',{name:'设置与权限'}).click();return page.getByRole('dialog',{name:'服务台扩展 · 设置与权限',exact:true});}
+async function settings(page:Page){await page.getByRole('button',{name:'设置与权限',exact:true}).click();return page.getByRole('dialog',{name:'服务台扩展 · 设置与权限',exact:true});}
 
 test('rail changes sidebar; direct pages, repeated clicks and manager return preserve location',async({page})=>{
  await setup(page);await rail(page).click();await expect(entries(page).locator('.extension-nav-row')).toHaveCount(2);await expect(page.getByRole('region',{name:'我的项目'})).toBeHidden();
@@ -34,14 +34,15 @@ test('rail changes sidebar; direct pages, repeated clicks and manager return pre
  await entries(page).getByRole('searchbox').fill('设备');await expect(entries(page).locator('.extension-nav-row')).toHaveCount(1);await entries(page).getByRole('searchbox').fill('');
  expect(await entries(page).getByRole('searchbox').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBeGreaterThanOrEqual(32);
  await page.screenshot({path:'test-results/extension-workbench.png'});
- await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect.poll(()=>page.getByRole('button',{name:'扩展页面操作'}).evaluate(el=>{const rgb=getComputedStyle(el).color.match(/\d+/g)!.slice(0,3).map(Number);return Math.min(...rgb);})).toBeGreaterThan(180);await page.screenshot({path:'test-results/extension-workbench-dark.png'});
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect.poll(()=>page.getByRole('button',{name:'设置与权限',exact:true}).evaluate(el=>{const rgb=getComputedStyle(el).color.match(/\d+/g)!.slice(0,3).map(Number);return Math.min(...rgb);})).toBeGreaterThan(180);await page.screenshot({path:'test-results/extension-workbench-dark.png'});
 });
 
 test('business settings retain native slot; every close path guards dirty configuration',async({page})=>{
  await setup(page);await rail(page).click();await expect.poll(async()=>(await opens(page)).length).toBe(1);const closes=await page.evaluate(()=>(window as any).__fixture.calls.filter((c:any)=>c.type==='close').length);const dialog=await settings(page);
+ await expect(dialog.getByRole('button',{name:'返回业务页面'})).toHaveCount(0);await page.screenshot({path:'test-results/extension-settings-dialog.png',animations:'disabled'});
  await dialog.getByLabel('endpoint').fill('https://changed.test');await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(page.getByRole('alertdialog')).toBeVisible();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(dialog.getByLabel('endpoint')).toHaveValue('https://changed.test');
  await page.keyboard.press('Escape');await page.getByRole('alertdialog').getByRole('button',{name:'放弃修改',exact:true}).click();await expect(dialog).toBeHidden();expect((await opens(page)).length).toBe(1);expect(await page.evaluate(()=>(window as any).__fixture.calls.filter((c:any)=>c.type==='close').length)).toBe(closes);
- const reopened=await settings(page);await reopened.getByLabel('endpoint').fill('https://saved.test');await reopened.getByRole('button',{name:'保存配置',exact:true}).click();await expect(reopened.getByText('已保存',{exact:true})).toBeVisible();await reopened.getByRole('button',{name:'返回业务页面'}).click();await expect(reopened).toBeHidden();expect((await opens(page)).length).toBe(1);
+ const reopened=await settings(page);await reopened.getByLabel('endpoint').fill('https://saved.test');await reopened.getByRole('button',{name:'保存配置',exact:true}).click();await expect(reopened.getByText('已保存',{exact:true})).toBeVisible();await expect(reopened.getByRole('button',{name:'返回业务页面'})).toHaveCount(0);await reopened.getByRole('button',{name:'关闭',exact:true}).click();await expect(reopened).toBeHidden();expect((await opens(page)).length).toBe(1);
 });
 
 test('conditions use host context; disable, remove and update never open another business',async({page})=>{
@@ -53,7 +54,7 @@ test('conditions use host context; disable, remove and update never open another
 });
 
 test('classic layout and late inventory show home entries only; new installs synchronize',async({page})=>{
- await setup(page,{classic:true,delay:250});await expect(entries(page).locator('.extension-nav-row')).toHaveCount(2);await entries(page).getByRole('button',{name:'售后服务',exact:true}).click();await expect.poll(async()=>(await opens(page)).length).toBe(1);
+ await setup(page,{classic:true,delay:250});await rail(page).click();await expect(entries(page).locator('.extension-nav-row')).toHaveCount(2);await entries(page).getByRole('button',{name:'售后服务',exact:true}).click();await expect.poll(async()=>(await opens(page)).length).toBe(1);
  await page.evaluate(()=>{const f=(window as any).__fixture;f.entries.push({manifest:{id:'orders',name:'订单扩展',contributes:{}},home:{title:'售后服务',available:true},trusted:true,enabled:true});f.emit();});await expect(entries(page).getByText('订单扩展',{exact:true})).toBeVisible();await expect(entries(page).getByText('服务台扩展',{exact:true})).toBeVisible();await entries(page).getByRole('button',{name:'售后服务 订单扩展',exact:true}).click();await expect.poll(async()=>(await opens(page)).at(-1)?.extensionId).toBe('orders');
 });
 
@@ -63,4 +64,20 @@ test('English empty workspace and keyboard navigation remain clear at narrow wid
 
 test('global search opens a business page directly',async({page})=>{
  await setup(page);await page.getByRole('button',{name:'搜索工作台',exact:true}).click();await page.getByRole('tab',{name:'扩展',exact:true}).click();await page.getByRole('combobox').fill('服务台');await page.getByRole('option').filter({hasText:'服务台扩展'}).click();await expect(page.locator('.extension-workbench h1')).toHaveText('售后服务');await expect(entries(page)).toBeVisible();await expect.poll(async()=>(await opens(page)).length).toBe(1);
+});
+
+test('info opens settings directly and closes without reopening the business page',async({page})=>{
+ await setup(page);await rail(page).click();await expect.poll(async()=>(await opens(page)).length).toBe(1);
+ const trigger=page.getByRole('button',{name:'设置与权限',exact:true});
+ await expect(trigger.locator('svg.lucide-info')).toBeVisible();await trigger.focus();await page.keyboard.press('Enter');
+ const dialog=page.getByRole('dialog',{name:'服务台扩展 · 设置与权限',exact:true});await expect(dialog).toBeVisible();
+ await expect(page.getByRole('menu')).toHaveCount(0);await expect(dialog.getByRole('tab',{name:'设置',exact:true})).toHaveAttribute('aria-selected','true');
+ const form=dialog.locator('.extension-config-form');
+ await expect(dialog.getByLabel('endpoint')).toBeVisible();
+ const alignment=await form.evaluate(el=>{const f=el.getBoundingClientRect(),t=el.closest('[data-slot=tabs-content]')!.getBoundingClientRect();return {left:Math.abs(f.x-t.x),width:Math.abs(f.width-t.width)};});
+ expect(alignment.left).toBeLessThan(1);expect(alignment.width).toBeLessThan(1);
+ await page.setViewportSize({width:640,height:720});await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ expect(await form.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await page.screenshot({path:'test-results/extension-settings-dialog-narrow-dark.png',animations:'disabled'});
+ await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(trigger).toBeFocused();expect((await opens(page)).length).toBe(1);
 });

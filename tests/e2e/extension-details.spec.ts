@@ -10,6 +10,7 @@ test('extension details render README, configuration and named project permissio
  await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await expect(page.getByRole('heading',{name:'使用指南'})).toBeVisible();await page.getByRole('tab',{name:'权限',exact:true}).click();await expect(page.locator('.extension-permissions')).toContainText('品牌设计');await expect(page.locator('.extension-detail')).not.toContainText('private-id');
  await page.getByRole('tab',{name:'设置',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('中文');
  await page.getByLabel('language').fill('English');
+ expect(await page.getByLabel('language').evaluate(el=>getComputedStyle(el).borderTopWidth)).toBe('1px');
  await page.getByLabel('format',{exact:true}).selectOption(JSON.stringify('text'));
  await page.getByRole('switch',{name:'compact',exact:true}).click();
  await page.getByLabel('limit',{exact:true}).fill('30');

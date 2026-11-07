@@ -77,7 +77,10 @@
               "secrets",
               "agent.hooks",
               "conversations.read",
-              "background.jobs"
+              "background.jobs",
+              "project.activity.read",
+              "project.usage.read",
+              "project.summaries.generate"
             ]
           },
           "scope": {
@@ -600,7 +603,10 @@
               "secrets",
               "agent.hooks",
               "conversations.read",
-              "background.jobs"
+              "background.jobs",
+              "project.activity.read",
+              "project.usage.read",
+              "project.summaries.generate"
             ]
           },
           "maxItems": 10,

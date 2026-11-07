@@ -36,7 +36,6 @@
 .extension-self-grants { padding-top:20px; }
 .extension-config-field { min-width:0; }
 .extension-config-field [data-slot="field-label"], .extension-config-field [data-slot="field-description"] { overflow-wrap:anywhere; }
-.extension-config-actions { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
 .extension-config-save { display:flex; gap:12px; align-items:center; margin-left:auto; flex-wrap:wrap; }
 .extension-config-save > span { font-size:calc(12px * var(--font-scale,1)); color:var(--secondary); }
 .extension-detail [hidden] { display:none !important; }
@@ -47,3 +46,7 @@
  .extension-detail-header { grid-template-columns:52px minmax(0,1fr); }
  .extension-detail-actions { grid-column:2; }
 }
+
+/* Supply only the scoped Preflight resets missing from this legacy host. */
+.extension-config-form, .extension-config-form * { box-sizing:border-box; }
+.extension-config-form :is(p,label) { margin:0; }

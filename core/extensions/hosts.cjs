@@ -94,6 +94,9 @@ class HostManager{
     }else if(m.method==='authentication'){
      if(!this.service.authentication)throw failure('UNSUPPORTED','Authentication unavailable');
      value=await this.service.authentication.forExtension(context,m.params?.method,m.params?.input);
+    }else if(m.method==='projectInsights'){
+     if(!this.service.projectInsights)throw failure('UNSUPPORTED','Project insights unavailable');
+     value=await this.service.projectInsights.forExtension(context,m.params?.method,m.params?.input);
     }else if(m.method==='automation'){
      if(!this.service.automation)throw failure('UNSUPPORTED','Automation unavailable');
      value=await this.service.automation.forExtension(context,m.params?.method,m.params?.input);

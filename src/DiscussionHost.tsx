@@ -1,4 +1,4 @@
-import {useState,useEffect,useRef} from 'react';
+import {useState,useEffect} from 'react';
 import {MessageCircle} from 'lucide-react';
 import {Avatar,AvatarFallback} from './components/ui/avatar';
 import {Badge} from './components/ui/badge';
@@ -9,7 +9,6 @@ import Markdown from './Markdown';
 import {ThinkingWindow,ProcessIndicator} from './ProcessPanel';
 import {useCopy} from './WorkforceInputs';
 import {contributionAnchor} from './DiscussionIdentity';
-import {spaceScroller} from './workforce-space-state';
 import type {DiscussionHost,SpaceRequest} from './workforce-types';
 
 export function ExpertContributions({request,children}:{request:SpaceRequest;children:React.ReactNode}){
@@ -49,27 +48,13 @@ export function DiscussionQuestions({request,disabled,submit}:{request:SpaceRequ
   <div className="wf-host-question-actions"><span className="wf-muted">{L('也可以直接在聊天中补充或调整目标。','You can also reply in chat or revise the goal.')}</span><Button type="submit" disabled={disabled||sending}>{sending?L('正在发送…','Sending…'):L('确认并继续','Confirm and continue')}</Button></div>
  </form>;
 }
-export function DiscussionTaskHandoff({state,model,disabled,proceed}:{state:'new'|'draft'|'plan'|'team';model?:string;disabled:boolean;proceed():void}){
- const L=useCopy(),pointerFocus=useRef(false);
- const title=state==='plan'?L('任务计划已保存','Task plan saved'):state==='draft'?L('已有任务草稿，继续核对','Continue reviewing the existing draft'):state==='team'?L('先安排参与工作的专家','Choose the experts who will do the work'):L('下一步：检查任务与分工','Next: review tasks and assignments');
- const description=state==='plan'?L('打开计划查看分工、执行状态与交付。','Open the plan to review assignments, progress and deliveries.'):state==='draft'?L('保留原讨论来源和已填写内容；新要求可以在草稿中补充。','Your original sources and edits are preserved. Add new requirements in the draft.'):state==='team'?L('当前空间还没有可分工的专家。添加成员后，可以继续整理任务。','This space has no experts to assign work to. Add members, then prepare the tasks.'):L(`使用 ${model||'当前模型'}，根据本轮讨论、引用资料和专家职责整理建议。关键缺项会继续询问，核对后由你确认是否启动。`,`Use ${model||'the selected model'} to prepare proposals from this discussion, references and expert responsibilities. Clarify any key gaps, then review before deciding to start.`);
- const label=state==='plan'?L('查看任务计划','View task plan'):state==='draft'?L('继续整理任务','Continue task draft'):state==='team'?L('选择参与专家','Choose experts'):L('整理并检查任务','Prepare and check tasks');
- return <section className="wf-host-handoff" aria-label={L('任务下一步','Next task step')}><h3>{title}</h3><p className="wf-muted">{description}</p><Button disabled={disabled} onClick={proceed} onPointerDown={()=>{pointerFocus.current=true;}} onPointerUp={()=>{pointerFocus.current=false;}} onPointerCancel={()=>{pointerFocus.current=false;}} onFocus={event=>{
-  const button=event.currentTarget;
-  // Pointer focus must not move the button between mouse-down and click.
-  if(pointerFocus.current){pointerFocus.current=false;return;}
-  const footer=button.closest('.wf-discussion-main')?.querySelector('.wf-discussion-footer');
-  // Native focus scrolling does not account for the sticky composer.
-  if(footer){const overlap=button.getBoundingClientRect().bottom-footer.getBoundingClientRect().top+16;if(overlap>0)spaceScroller(button).scrollBy({top:overlap,behavior:'instant'});}
- }}>{label}</Button></section>;
-}
-export function DiscussionBrief({request,requests,createTasks,disabled,actionLabel}:{request:SpaceRequest;requests:SpaceRequest[];createTasks():void;disabled:boolean;actionLabel?:string}){
+export function DiscussionBrief({request,requests,createTasks,disabled,actionLabel,onSource}:{request:SpaceRequest;requests:SpaceRequest[];createTasks?():void;disabled?:boolean;actionLabel?:string;onSource?(id:string):void}){
  const L=useCopy(),brief=request.host?.brief;if(!brief)return null;
- const labels={decision:L('用户决定','User decision'),proposal:L('待采纳建议','Proposal'),question:L('待确认','Open question'),verification:L('待验证','To verify')};
+ const labels={decision:L('用户决定','User decision'),proposal:L('建议（未确认）','Suggestion (unconfirmed)'),question:L('待确认','Open question'),verification:L('待验证','To verify')};
  const sources=[...new Set(brief.items.flatMap(i=>i.sourceIds))],latest=requests.at(-1);
- const jump=(id:string)=>{const r=requests.find(r=>r.id===id||r.host?.steps.some(step=>step.id===id)||r.participants.some(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id));if(!r)return;const p=r.participants.find(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id);const el=document.getElementById(p?contributionAnchor(r,p):'wf-request-'+r.id);const details=el?.closest('details');if(details)details.open=true;el?.scrollIntoView({block:'start'});el?.focus({preventScroll:true});};
- return <section className="wf-host-brief"><h3>{L('当前方案','Current brief')}</h3><p>{brief.goal}</p>{latest?.id!==request.id&&<p className="wf-muted">{L('后续有新讨论，等待主持人更新。','Newer discussion is awaiting consolidation.')}</p>}
+ const jump=(id:string)=>{if(onSource){onSource(id);return;}const r=requests.find(r=>r.id===id||r.host?.steps.some(step=>step.id===id)||r.participants.some(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id));if(!r)return;const p=r.participants.find(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id);const el=document.getElementById(p?contributionAnchor(r,p):'wf-request-'+r.id);const details=el?.closest('details');if(details)details.open=true;el?.scrollIntoView({block:'start'});el?.focus({preventScroll:true});};
+ return <section className="wf-host-brief"><h3>{L('当前目标','Current goal')}</h3><p>{brief.goal}</p>{latest?.id!==request.id&&<p className="wf-muted">{L('后续有新讨论，等待主持人更新。','Newer discussion is awaiting consolidation.')}</p>}
   <ul>{brief.items.map(i=><li key={i.id}><Badge variant="outline">{labels[i.kind]}</Badge><p>{i.text}</p><div className="wf-host-sources">{i.sourceIds.map(id=><Button key={id} variant="link" size="sm" onClick={()=>jump(id)}>{L('来源','Source')} {sources.indexOf(id)+1}</Button>)}</div></li>)}</ul>
-  <Button variant="outline" disabled={disabled} onClick={createTasks}>{actionLabel||L('整理为任务','Shape into tasks')}</Button><p className="wf-muted">{L('确认任务草稿后再启动。','Review the task draft before starting.')}</p>
+  {createTasks&&<Button variant="outline" disabled={disabled} onClick={createTasks}>{actionLabel||L('整理为任务','Shape into tasks')}</Button>}
  </section>;
 }

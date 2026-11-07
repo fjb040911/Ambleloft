@@ -1,0 +1,147 @@
+{
+  "date": "2026-11-07",
+  "timezone": "Asia/Shanghai",
+  "result": "passed",
+  "method": "All creation, conversation, confirmation, execution, review and history navigation were performed through the native desktop UI with cua_repl. SQLite was inspected read-only after UI completion to corroborate persistence; no service calls or database writes drove the workflow.",
+  "space": {
+    "id": "997b928a-ced1-4232-a510-b2c6b8bd3fa0",
+    "name": "桌面串行生命周期验证 · 1107",
+    "retainedForReview": true
+  },
+  "topicId": "886e718a-2b85-4ded-a1f4-7e057ac0e712",
+  "uiChecks": [
+    {
+      "case": "Create space",
+      "result": "通用占位符为输入空间名称；成功保存独立空间，不关联项目。"
+    },
+    {
+      "case": "Draft blocks next task",
+      "result": "DeepSeek拒绝创建第二项，保留第一项草稿与待确认状态。"
+    },
+    {
+      "case": "Review blocks next task",
+      "result": "明确要求不等待验收直接创建第二项，DeepSeek仍拒绝；第一项维持待验收。"
+    },
+    {
+      "case": "Acceptance completes lifecycle",
+      "result": "第一项验收后显示已结束、创建下一项任务、任务记录1。"
+    },
+    {
+      "case": "Next task entry",
+      "result": "点击入口重新询问新目标，没有自动沿用旧请求或执行。"
+    },
+    {
+      "case": "Second task dependency",
+      "result": "第二项包含两个节点；首节点待验收时下游显示等待前置验收。"
+    },
+    {
+      "case": "Automatic dispatch visible in review",
+      "result": "首节点验收后当前验收页显示下游等待调度，自动更新为待验收；查看任务按钮直达下游交付。"
+    },
+    {
+      "case": "History",
+      "result": "第二项完成后显示已结束、创建下一项任务、任务记录2；两条均已完成，可分别打开。第一项交付7+8=15和原验收说明保留；第二项已验收2/2。"
+    }
+  ],
+  "plans": [
+    {
+      "id": "5fe61acd-56f4-44b6-bab9-f469d5b22847",
+      "name": "桌面验证一：7+8",
+      "status": "completed",
+      "topicId": "886e718a-2b85-4ded-a1f4-7e057ac0e712",
+      "nodes": [
+        {
+          "title": "桌面验证一：7+8",
+          "status": "accepted",
+          "model": "deepseek-flash",
+          "runId": "8dfbccb5-87cb-4aca-a356-af10ebcfd127",
+          "startedAt": "2026-11-07T12:18:15.303Z",
+          "finishedAt": "2026-11-07T12:18:17.447Z",
+          "acceptance": {
+            "attemptId": "b4c4ec14-c808-4190-907a-1e493ae794dc",
+            "resultHash": "5853ad705d1ded7586ad18bb4eaedaaac05e651616b5b121b8ce1f0dcd256290",
+            "note": "桌面人工核对：最终回复恰好为单行7+8=15，无额外内容，验收通过。",
+            "accepted": true,
+            "at": "2026-11-07T12:19:39.871Z",
+            "source": "user-review"
+          },
+          "dependencies": []
+        }
+      ]
+    },
+    {
+      "id": "a41c0311-f36d-466a-85f9-a800992ad21e",
+      "name": "桌面验证二：20+30与复核",
+      "status": "completed",
+      "topicId": "886e718a-2b85-4ded-a1f4-7e057ac0e712",
+      "nodes": [
+        {
+          "title": "节点一：输出 20+30 的结果",
+          "status": "accepted",
+          "model": "deepseek-flash",
+          "runId": "6420ab14-a356-43a8-ad1c-eb132de0ca0d",
+          "startedAt": "2026-11-07T12:21:19.859Z",
+          "finishedAt": "2026-11-07T12:21:21.781Z",
+          "acceptance": {
+            "attemptId": "3b9f52ff-987d-4684-bb1c-aa9f31c03b74",
+            "resultHash": "e03e0f49656199ae09d3a591da1afd39122965cca6ca459520794dfe1a7bfc34",
+            "note": "逐字核对通过：20+30=50，允许满足依赖条件的复核节点自动调度。",
+            "accepted": true,
+            "at": "2026-11-07T12:21:50.912Z",
+            "source": "user-review"
+          },
+          "dependencies": []
+        },
+        {
+          "title": "节点二：读取节点一交付并输出核对结果",
+          "status": "accepted",
+          "model": "deepseek-flash",
+          "runId": "5060fb2f-eb66-4509-b1ac-b589f49d9f67",
+          "startedAt": "2026-11-07T12:21:51.655Z",
+          "finishedAt": "2026-11-07T12:21:53.311Z",
+          "acceptance": {
+            "attemptId": "4915428e-a4f4-4a35-a3e0-56b8b97eed9c",
+            "resultHash": "75e3e657bfe4cda827f673d1e46ac4a8beb48a0531dd9643178037dfcfcd1b50",
+            "note": "逐字核对通过：核对通过：20+30=50。已实际观察到节点一验收前等待、验收后自动调度，结果符合要求。",
+            "accepted": true,
+            "at": "2026-11-07T12:22:21.120Z",
+            "source": "user-review"
+          },
+          "dependencies": [
+            {
+              "id": "pkg-2030-sum",
+              "acceptance": {
+                "attemptId": "3b9f52ff-987d-4684-bb1c-aa9f31c03b74",
+                "resultHash": "e03e0f49656199ae09d3a591da1afd39122965cca6ca459520794dfe1a7bfc34",
+                "note": "逐字核对通过：20+30=50，允许满足依赖条件的复核节点自动调度。",
+                "accepted": true,
+                "at": "2026-11-07T12:21:50.912Z",
+                "source": "user-review"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "observedOutputs": [
+    "7+8=15",
+    "20+30=50",
+    "核对通过：20+30=50"
+  ],
+  "final": {
+    "completedPlans": 2,
+    "unfinishedPlans": 0,
+    "acceptedNodes": 3,
+    "duplicateRuns": 0,
+    "conflicts": 0
+  },
+  "limitations": [
+    "本轮真实执行为无工具的空间讨论任务，未覆盖文件写入、SSH或授权弹窗。",
+    "未将刷新键无可见变化视作重启验证；本轮没有执行应用重启。"
+  ],
+  "uxObservations": [
+    "点击创建下一项任务后尚在询问目标时，状态栏已显示待确认，标题为明确目标后生成任务；可继续梳理状态文案。",
+    "主持人的拦截解释包含topicTaskUnfinished、review、accepted等实现字段，规则正确但用户文案可更简洁。"
+  ]
+}

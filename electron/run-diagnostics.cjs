@@ -35,7 +35,7 @@ function diagnosticReport(run, appVersion) {
 }
 // A read-only tap: transport bytes are forwarded unchanged. Malformed or huge
 // frames cannot break an otherwise working Responses connection.
-function responseObserver(diagnostic, fingerprint) {
+function responseObserver(diagnostic, fingerprint, onUsage) {
   const decoder = new TextDecoder(); let buffer = '', dropping = false;
   const seen = new Set();
   function item(value) {
@@ -58,6 +58,7 @@ function responseObserver(diagnostic, fingerprint) {
         if (['response.completed', 'response.incomplete', 'response.failed'].includes(event.type)) {
           diagnostic.done = true; diagnostic.finishReason = event.response?.status;
           const usage=event.response?.usage;
+          onUsage?.(usage||null,event.response?.id);
           if(usage)diagnostic.usage=Object.fromEntries(['input_tokens','output_tokens','total_tokens'].filter(k=>Number.isFinite(usage[k])).map(k=>[k,usage[k]]));
           for (const value of event.response?.output || []) item(value);
         }

@@ -24,23 +24,18 @@ for(const width of [390,1280])test(`empty discussion also fits a short window at
  await expect.poll(()=>page.locator('.qa-scroll').evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
 });
 
-for(const [width,english,dark] of [[1280,false,false],[390,true,true]] as const)test(`brief has a stable tab, its own scroll and source navigation ${width}`,async({page})=>{
+for(const [width,english,dark] of [[1280,false,false],[390,true,true]] as const)test(`brief opens in main workspace with stable topic list and source navigation ${width}`,async({page})=>{
  await page.setViewportSize({width,height:950});await enter(page,{english,dark});
  const sidebar=page.getByRole('complementary',{name:english?'Discussion context':'讨论上下文'});
  if(width<800)await page.getByRole('button',{name:english?'Show discussion context':'查看讨论与相关内容'}).click();
- const tabs=sidebar.getByRole('tablist'),before=await tabs.boundingBox();
- const labels=await tabs.getByRole('tab').evaluateAll(items=>items.map(el=>{const range=document.createRange();range.selectNodeContents(el);const rect=range.getBoundingClientRect();return {left:rect.left,right:rect.right};}));
- for(let i=1;i<labels.length;i++)expect(labels[i].left-labels[i-1].right).toBeGreaterThanOrEqual(8);
- expect(await tabs.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
+ const toolbar=sidebar.locator('.wf-topic-toolbar'),before=await toolbar.boundingBox();
  await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'completed',revision:1,ruleVersion:'fixture',steps:[{id:'result',text:'方案已整理',action:'reply',at:''}],brief:{goal:'工单登记与查询',items:Array.from({length:24},(_,i)=>({id:'item'+i,kind:'proposal',text:'基于已确认的范围，建议优先完善表单校验与服务错误反馈。'.repeat(3),sourceIds:['discussion']}))}};q.emit();});
- await expect(sidebar.getByRole('tab',{name:english?'Topics':'话题'})).toHaveAttribute('aria-selected','true');expect((await tabs.boundingBox())!.y).toBeCloseTo(before!.y,0);
- await sidebar.getByRole('tab',{name:english?'Current brief':'当前方案',exact:true}).click();
- const panel=sidebar.getByRole('tabpanel');await expect(page.locator('.wf-host-brief')).toBeVisible();
- const outer=await page.locator('.qa-scroll').evaluate(el=>el.scrollTop);await panel.evaluate(el=>el.scrollTop=el.scrollHeight);await expect.poll(()=>panel.evaluate(el=>el.scrollTop)).toBeGreaterThan(100);
- expect((await tabs.boundingBox())!.y).toBeCloseTo(before!.y,0);expect(await page.locator('.qa-scroll').evaluate(el=>el.scrollTop)).toBe(outer);
- await page.screenshot({path:`/tmp/discussion-brief-tabs-${width}.png`,animations:'disabled'});
+ await expect(sidebar.getByRole('list',{name:english?'Topic list':'话题列表'})).toBeVisible();expect((await toolbar.boundingBox())!.y).toBeCloseTo(before!.y,0);
+ await page.getByText(english?'Goal and decision sources':'目标与决定的来源',{exact:true}).click();
+ const panel=page.locator('.wf-host-brief');await expect(page.locator('.wf-host-brief')).toBeVisible();
+ await expect(sidebar.getByRole('list',{name:english?'Topic list':'话题列表'})).toBeVisible();await expect(sidebar.getByRole('button',{name:english?'All topics':'全部话题'})).toHaveCount(0);
  await panel.getByRole('button',{name:english?'Source 1':'来源 1'}).last().click();await expect(page.locator('#wf-request-discussion')).toBeFocused();
- await sidebar.getByRole('tab',{name:english?'Current brief':'当前方案',exact:true}).focus();await page.keyboard.press('ArrowRight');await expect(sidebar.getByRole('tab',{name:english?'Topics':'话题'})).toBeFocused();
+ await expect(page.locator('.wf-topic-chat')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 for(const [english,dark,reduced] of [[false,false,false],[true,true,true]] as const)test(`host uses shared thinking feedback, preserves manual reading and stops motion ${english}`,async({page})=>{

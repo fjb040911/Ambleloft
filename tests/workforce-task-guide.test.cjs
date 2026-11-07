@@ -46,7 +46,7 @@ test('task allocation receives real expertise and environment kind without conne
   assert.doesNotMatch(JSON.stringify(req.input),/not-for-model|private-container|\/private\//);
   return response();
  };
- const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v5');assert.equal(f.runtime.runs.length,0);
+ const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v8');assert.equal(f.runtime.runs.length,0);
 });
 test('semantic gaps produce valid declarative forms, even with all fields populated',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which specification should be used?',help:'The two revisions conflict.'}]});
@@ -291,6 +291,8 @@ test('another round in the same discussion creates a new plan draft and reuses t
  let d=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'conversation',commandId:randomUUID()});f.service.generateTaskGuide=async()=>response({value:workValue()});
  d=await relationAnswer(f,await guide(f,d));const plan=await f.service.createGuidedPlan({id:d.id,expectedRevision:d.revision});
  await f.service.change(s=>s.requests.push({id:'next-round',replyTo:'conversation',spaceId:f.space.id,mode:'discussion',prompt:'Add the next delivery',documentRefs:[],participants:[],createdAt:'2026-11-02'}));
+ await assert.rejects(f.service.createTaskDraft({spaceId:f.space.id,discussionId:'next-round',commandId:randomUUID()}),/未结束任务/);
+ await f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'stop'});
  const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'next-round',commandId:randomUUID()});assert.notEqual(next.id,d.id);assert.equal(next.discussionId,'conversation');assert.equal(next.source.length,2);
  const result=await guide(f,next);assert.equal(result.status,'ready');assert.equal(result.value.packages[0].projectBinding.reusedFrom,'space');assert.equal((await f.service.read()).plans[0].id,plan.id);assert.equal(f.runtime.runs.length,0);
 });
@@ -318,4 +320,56 @@ test('silent discussion planning preserves input and cannot apply a late draft',
  release(response());await new Promise(r=>setTimeout(r,10));
  const saved=(await f.service.read()).taskDrafts.find(d=>d.id===f.draft.id);
  assert.equal(saved.messages.at(-1).text,'Keep my answer');assert.equal(saved.status,'needs-input');assert.equal(saved.value.packages.length,0);assert.equal(f.service.taskGuideControllers.size,0);
+});
+
+test('topic task creation is serialized under concurrent requests and preserves explicit termination history',async t=>{
+ const f=await setup(t);
+ await f.service.change(s=>s.requests.push({id:'topic',spaceId:f.space.id,mode:'discussion',prompt:'Goal',documentRefs:[],participants:[],createdAt:'2026-11-01'}));
+ const create=extra=>f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID(),...extra});
+ const drafts=await Promise.all([create(),create(),create()]);assert.equal(new Set(drafts.map(d=>d.id)).size,1);
+ await assert.rejects(create({newPlan:true}),/未结束任务/);
+ const d=drafts[0];await f.service.discardTaskDraft({id:d.id,expectedRevision:d.revision});
+ await assert.rejects(f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision+1,value:value()}),/已结束/);
+ const next=await create({newPlan:true});assert.notEqual(next.id,d.id);assert.ok((await f.service.read()).taskDrafts.find(x=>x.id===d.id).discardedAt);
+});
+test('paused, failed, review and waiting plans block new tasks; ended tasks cannot resume across the next draft',async t=>{
+ const f=await setup(t);
+ await f.service.change(s=>s.requests.push({id:'topic',spaceId:f.space.id,mode:'discussion',prompt:'Goal',documentRefs:[],participants:[],createdAt:'2026-11-01'}));
+ const d=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID()});f.service.generateTaskGuide=async()=>response();
+ const ready=await guide(f,d),plan=await f.service.createGuidedPlan({id:ready.id,expectedRevision:ready.revision});
+ for(const [status,node] of [['draft','pending'],['paused','interrupted'],['pausing','stopping'],['running','starting'],['running','preparing'],['running','running'],['running','failed'],['running','review'],['running','rejected'],['running','waiting'],['running','blocked'],['running','stale'],['stopped','stopping']]){
+  await f.service.change(s=>{s.plans[0].status=status;s.plans[0].packages[0].status=node;});
+  await assert.rejects(f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID(),newPlan:true}),/未结束任务/);
+ }
+ await f.service.change(s=>{s.plans[0].status='completed';s.plans[0].packages[0].status='accepted';});
+ const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID(),newPlan:true});assert.notEqual(next.id,d.id);
+ await assert.rejects(f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'resume'}),/未结束任务/);
+});
+test('same-topic legacy drafts cannot both confirm and shared documents do not imply ownership',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response();
+ await f.service.change(s=>s.requests.push({id:'topic',spaceId:f.space.id,mode:'discussion',prompt:'Goal',documentRefs:[],participants:[],createdAt:'2026-11-01'}));
+ const d=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID()}),ready=await guide(f,d);
+ await f.service.change(s=>s.taskDrafts.push({...structuredClone(ready),id:'legacy'}));
+ await assert.rejects(f.service.createGuidedPlan({id:ready.id,expectedRevision:ready.revision}),/未结束任务/);
+ await f.service.discardTaskDraft({id:'legacy',expectedRevision:ready.revision});
+ const p=await f.service.createGuidedPlan({id:ready.id,expectedRevision:ready.revision});assert.equal(p.source.discussionId,'topic');
+ await f.service.change(s=>s.requests.push({id:'independent',spaceId:f.space.id,mode:'discussion',prompt:'Separate goal',documentRefs:[],participants:[],createdAt:'2026-11-02'}));
+ const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'independent',commandId:randomUUID()});assert.equal(next.discussionId,'independent');
+});
+
+test('terminal plan revision drafts stay historical and are not reused for the next task',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async()=>response();
+ await f.service.change(s=>s.requests.push({id:'topic',spaceId:f.space.id,mode:'discussion',prompt:'Goal',documentRefs:[],participants:[],createdAt:'2026-11-01'}));
+ const d=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID()}),ready=await guide(f,d),p=await f.service.createGuidedPlan({id:ready.id,expectedRevision:ready.revision});
+ const revision=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID(),basePlanId:p.id,basePlanRevision:p.revision});
+ await f.service.controlPlan({id:p.id,expectedRevision:p.revision,commandId:randomUUID(),action:'stop'});
+ const next=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID()});assert.notEqual(next.id,revision.id);assert.equal(next.basePlanId,undefined);
+ await assert.rejects(f.service.createTaskDraft({spaceId:f.space.id,discussionId:'topic',commandId:randomUUID(),basePlanId:p.id,basePlanRevision:p.revision}),/未结束任务/);
+});
+
+test('ending a draft blocks a late model result and survives reopening the service state',async t=>{
+ const f=await setup(t);let release,entered;const began=new Promise(r=>entered=r);f.service.generateTaskGuide=()=>{entered();return new Promise(r=>release=r);};
+ const job=guide(f,f.draft);await began;const current=(await f.service.read()).taskDrafts.find(d=>d.id===f.draft.id);
+ await f.service.discardTaskDraft({id:current.id,expectedRevision:current.revision});release(response());await assert.rejects(job,/更新|已结束/);
+ const saved=(await f.service.read()).taskDrafts.find(d=>d.id===f.draft.id);assert.ok(saved.discardedAt);assert.equal(saved.value.packages.length,0);assert.equal(f.runtime.runs.length,0);
 });

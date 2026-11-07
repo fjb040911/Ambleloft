@@ -1,0 +1,125 @@
+{
+  "verifiedAt": "2026-11-06T06:13:16.728Z",
+  "provider": "DeepSeek",
+  "model": "deepseek-flash",
+  "transport": "Production service APIs and real AgentRuntime; no mocked model responses",
+  "topicId": "873fe69f-7bfb-4178-96c7-5236897c1301",
+  "spaceId": "183712d7-66cd-4715-9deb-1cc2dcd4be30",
+  "plans": [
+    {
+      "id": "ded286b5-9b93-4905-a43f-dfa178361654",
+      "status": "completed",
+      "revision": 1,
+      "sourceDiscussionId": "873fe69f-7bfb-4178-96c7-5236897c1301",
+      "packages": [
+        {
+          "id": "sum-2-3",
+          "status": "accepted",
+          "attempts": [
+            {
+              "id": "49e1992e-ca59-47d2-a1df-01ffbc222e7b",
+              "runId": "6efbd1a4-1bd8-4521-a25e-8048af4cf7d7",
+              "resultHash": "9699674932c4ea9ac3ec6a0d57a86c64d9f929ce289864af90a7911131989ded"
+            }
+          ],
+          "acceptedAt": "2026-11-06T06:11:55.717Z"
+        }
+      ]
+    },
+    {
+      "id": "20b704aa-b94c-48e6-ba67-0467fcd9df6b",
+      "status": "completed",
+      "revision": 1,
+      "sourceDiscussionId": "873fe69f-7bfb-4178-96c7-5236897c1301",
+      "packages": [
+        {
+          "id": "pkg-1-comparison-table",
+          "status": "accepted",
+          "attempts": [
+            {
+              "id": "db7fbd83-a1ae-4d49-a7c6-431746d70336",
+              "runId": "b29f3df6-24ce-42fe-a7c1-ec29d63c08dc",
+              "resultHash": "2d5a325538600a9d919f86036361c18421a72ed6e8e2cf73e24991f277eeeebd"
+            }
+          ],
+          "acceptedAt": "2026-11-06T06:08:33.782Z"
+        },
+        {
+          "id": "pkg-2-recheck-verdict",
+          "status": "accepted",
+          "attempts": [
+            {
+              "id": "21c2496e-9e99-4a98-a24c-fa4e9f298e6d",
+              "runId": "47cf5df7-e5e8-421f-8c8c-9451acaf3917",
+              "resultHash": "1b02885a05450977b0439f2615a0597d043a15936ceb3c408f13306e0d00d3b6"
+            }
+          ],
+          "acceptedAt": "2026-11-06T06:10:20.567Z"
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "id": "6efbd1a4-1bd8-4521-a25e-8048af4cf7d7",
+      "status": "completed",
+      "model": "deepseek-flash",
+      "expert": "资料整理员",
+      "toolCalls": 0,
+      "requests": [
+        {
+          "requestId": "621659b7-87c7-47ac-b451-6ddd334a5494",
+          "httpStatus": 200
+        }
+      ],
+      "output": "5"
+    },
+    {
+      "id": "47cf5df7-e5e8-421f-8c8c-9451acaf3917",
+      "status": "completed",
+      "model": "deepseek-flash",
+      "expert": "验算专家",
+      "toolCalls": 0,
+      "requests": [
+        {
+          "requestId": "52d92869-7290-4a44-8c96-cfe2406f2bd7",
+          "httpStatus": 200
+        }
+      ],
+      "output": "**复核依据（上游三行原文）**\n\n| 路径 | 期望状态 | 实际状态 | 是否符合 |\n|---|---|---|---|\n| /intro | 200 | 200 | 符合 |\n| /api | 200 | 404 | 不符合 |\n| /faq | 200 | 200 | 符合 |\n\n上游交付核验：该交付确实存在，表格恰好为三行，四列齐全；三行内容逐项与用户给定数据一致，无需退回，也无需补全。上游验收记录采用所提供的数据（attemptId `db7fbd83-a1ae-4d49-a7c6-431746d70336`，resultHash 前缀 `2d5a3255…`）；因禁止调用工具，该哈希未被独立重算。\n\n**统计结果**\n\n- 通过项数：2（`/intro`、`/faq`）\n- 不通过项数：1（`/api`）\n\n**唯一异常**\n\n`/api` 是三项中唯一不符合的路径：期望状态为 `200`，实际状态为 `404`。其余两项的期望状态与实际状态均为 `200`，与给定数据一致。\n\n**最终结论**\n\n**不予发布**\n\n**执行与验证说明**\n\n- 实际变更：无。\n- 验证命令：无（按约束仅做聊天文本分析）。\n- 验证方式：将上游三行原文与本任务给定数据逐行比对，核对行数、路径、期望和实际状态、符合性、统计数字与异常定位；结果一致。\n- 本次为独立复核交付，尚待用户依据给定数据逐项确认；复核完成不等于验收通过，也不代表批准网页发布。"
+    },
+    {
+      "id": "b29f3df6-24ce-42fe-a7c1-ec29d63c08dc",
+      "status": "completed",
+      "model": "deepseek-flash",
+      "expert": "资料整理员",
+      "toolCalls": 0,
+      "requests": [
+        {
+          "requestId": "d7afef0c-69fa-4451-ac51-a3e11fde6a29",
+          "httpStatus": 200
+        }
+      ],
+      "output": "| 路径 | 期望状态 | 实际状态 | 是否符合 |\n|---|---|---|---|\n| /intro | 200 | 200 | 符合 |\n| /api | 200 | 404 | 不符合 |\n| /faq | 200 | 200 | 符合 |"
+    }
+  ],
+  "downstreamDispatchDelayMs": 1077,
+  "checks": {
+    "insufficientInformationAsked": true,
+    "noExecutionBeforeExplicitStart": true,
+    "unfinishedDraftCreationBlocked": true,
+    "unfinishedReviewCreationBlocked": true,
+    "realHostRefusedConcurrentTask": true,
+    "dependencyWaitedForAcceptance": true,
+    "actualUpstreamDeliveryForwarded": true,
+    "automaticDownstreamDispatch": true,
+    "sameTopicNextTaskCreatedExecutedAccepted": true,
+    "oldCompletedPlanUnchanged": true,
+    "frontendStateEndedWithTwoHistoricalTasks": true,
+    "noProjectOrToolsAccessed": true
+  },
+  "limits": [
+    "Text-only discussion-mode execution; project modification and deployment not covered",
+    "API-driven real workflow, not a desktop click-through UI test"
+  ]
+}

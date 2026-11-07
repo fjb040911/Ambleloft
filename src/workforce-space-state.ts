@@ -58,7 +58,7 @@ export function spaceSummary(space:Space,data:SpaceSnapshot,requestKinds:Record<
    if(r.staleReferences?.length)kinds.push('stale');
    if(!hasLater){
     const question=r.host?.question&&!r.host.question.answeredBy;
-    const draft=(data.taskDrafts||[]).find(d=>d.id===r.host?.task?.draftId&&d.spaceId===space.id&&!d.planId);
+    const draft=(data.taskDrafts||[]).find(d=>d.id===r.host?.task?.draftId&&d.spaceId===space.id&&!d.planId&&!d.discardedAt);
     const draftInput=draft?.status==='needs-input'&&(draft.pendingQuestion||draft.assessment?.question||draft.relationGuide?.nodes.length);
     if(question||draftInput)kinds.push('input');
     else if(executing(r.host?.status||''))running++;
@@ -77,7 +77,7 @@ export function spaceSummary(space:Space,data:SpaceSnapshot,requestKinds:Record<
  const sortedPlans=[...plans].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
  const unfinished=sortedPlans.filter(p=>!['completed','stopped'].includes(p.status));
  const currentPlans=unfinished.length?unfinished:sortedPlans.slice(0,1);
- const drafts=(data.taskDrafts||[]).filter(d=>d.spaceId===space.id&&!d.planId);
+ const drafts=(data.taskDrafts||[]).filter(d=>d.spaceId===space.id&&!d.planId&&!d.discardedAt);
  const state=space.archivedAt?'archived':stopping||plans.some(p=>p.status==='pausing')?'stopping':running?'running':actionable.length?'attention':attention.length||checking?'unknown':unfinished.some(p=>p.status==='running')?'scheduling':unfinished.some(p=>p.status==='paused')?unfinished.every(p=>p.status==='paused')?'paused':'partial-paused':unfinished.length?'ready':drafts.length||!plans.length&&requests.length?'planning':sortedPlans[0]?.status==='completed'?'completed':sortedPlans[0]?.status==='stopped'?'stopped':'empty';
  return {plans,currentPlans,planRunning,requests,documents:documents.filter(d=>!d.deletedAt),attention,actionable,activity,lastActivity:activity[0]?.at||space.createdAt,running,state:state as SpaceRuntimeState,checking};
 }

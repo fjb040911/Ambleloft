@@ -1,9 +1,8 @@
 import {useRef,useState} from 'react';
-import {MoreHorizontal,ArrowRight,Search,Puzzle} from 'lucide-react';
+import {Info,ArrowRight,Search,Puzzle} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {SidebarMenu,SidebarMenuItem,SidebarMenuButton} from './components/ui/sidebar';
-import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuGroup,DropdownMenuItem} from './components/ui/dropdown-menu';
 import {WorkforceDirectoryEmpty} from './WorkforceDirectoryEmpty';
 import ExtensionIcon from './ExtensionIcon';
 import ExtensionSurface from './ExtensionSurface';
@@ -33,8 +32,8 @@ export default function ExtensionWorkbench({item,selected,loading,error,visible,
  const usable=item?.enabled&&item.trusted&&item.home;
  const setContext=async(id:string)=>{if(id===projectId)return;if(usable&&item.home?.available!==false&&!await confirm({title:t('切换入口项目？'),description:t('页面将重新打开。请先保存业务页面中的修改；切换不会新增项目授权。'),action:t('切换项目')}))return;setProject(id);};
  return <section className="extension-workbench" aria-label={t('扩展工作区')}>
-  {item?.home&&<header className="extension-workbench-header"><div className="extension-workbench-identity"><ExtensionIcon icon={item.manifest.icon} size={22}/><div><h1>{businessTitle(item)}</h1><p>{item.manifest.name}</p></div></div><div className="extension-workbench-actions">{item.home.when&&<div className="extension-entry-context" title={t('入口项目仅用于页面可用条件；业务操作由扩展选择项目并请求授权。')}><span>{t('入口项目')}</span><ProjectPicker projects={projects} value={projectId} onChange={id=>void setContext(id)} disabled={false}/></div>}<DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="text-foreground" aria-label={t('扩展页面操作')}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup><DropdownMenuItem onClick={()=>setPanel('settings')}>{t('设置与权限')}</DropdownMenuItem><DropdownMenuItem onClick={()=>setPanel('details')}>{t('扩展详情')}</DropdownMenuItem></DropdownMenuGroup></DropdownMenuContent></DropdownMenu></div></header>}
+  {item?.home&&<header className="extension-workbench-header"><div className="extension-workbench-identity"><ExtensionIcon icon={item.manifest.icon} size={22}/><div><h1>{businessTitle(item)}</h1><p>{item.manifest.name}</p></div></div><div className="extension-workbench-actions">{item.home.when&&<div className="extension-entry-context" title={t('入口项目仅用于页面可用条件；业务操作由扩展选择项目并请求授权。')}><span>{t('入口项目')}</span><ProjectPicker projects={projects} value={projectId} onChange={id=>void setContext(id)} disabled={false}/></div>}<Button variant="ghost" size="icon" aria-label={t('设置与权限')} title={t('设置与权限')} aria-haspopup="dialog" onClick={()=>setPanel('settings')}><Info/></Button></div></header>}
   {usable&&item.home?.available!==false?<ExtensionSurface extensionId={item.manifest.id} revision={item.active} projectId={projectId} locale={locale} visible={visible&&!panel} onSettings={()=>setPanel('settings')}/>:<WorkforceDirectoryEmpty Icon={Puzzle} title={t(loading?'正在加载…':error?'暂时无法读取扩展。':usable?'此入口暂不可用':selected?'此扩展入口已不可用':'在这里使用你的业务工具')} description={error||t(usable?'当前项目或扩展状态尚未满足使用条件。可选择入口项目，或查看设置与权限。':selected?'扩展可能已停用、卸载或移除页面。可在技能与扩展中查看；不会自动打开其他业务。':'安装带有独立页面的扩展，在这里处理工单、查看设备或使用其他业务工具。技能仍在聊天中使用。')}><Button variant={selected?'outline':'default'} onClick={usable?()=>setPanel('settings'):selected?manage:discover}>{t(usable?'设置与权限':selected?'技能与扩展':'发现工具')}<ArrowRight data-icon="inline-end"/></Button></WorkforceDirectoryEmpty>}
-  {panel&&item&&<ManagementDialog title={item.manifest.name+' · '+t(panel==='settings'?'设置与权限':'扩展详情')} wide busy={false} close={close} className="extension-workbench-settings"><ExtensionsPage mode="detail" initialId={item.manifest.id} initialTab={panel} backLabel="返回业务页面" closeGuard={guard} onClose={()=>setPanel(null)}/></ManagementDialog>}
+  {panel&&item&&<ManagementDialog title={item.manifest.name+' · '+t(panel==='settings'?'设置与权限':'扩展详情')} wide busy={false} close={close} className="extension-workbench-settings"><ExtensionsPage mode="detail" initialId={item.manifest.id} initialTab={panel} hideBack closeGuard={guard} onClose={()=>setPanel(null)}/></ManagementDialog>}
  </section>;
 }

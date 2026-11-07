@@ -10,7 +10,7 @@ function knownBindings(state,space,excludeDraftId){
   const b={responsibility:role.responsibility,relations:(space.projectContext.relations||[]).filter(r=>r.sourceProjectId===role.projectId).map(({sourceProjectId,...r})=>r),confirmed:true};
   explicit.set(role.projectId,{projectId:role.projectId,binding:b,source:'space'});
  }
- const definitions=[...(state.plans||[]).filter(p=>p.spaceId===space.id).flatMap(p=>p.packages.map(p=>p.definition)),...(state.taskDrafts||[]).filter(d=>d.spaceId===space.id&&d.id!==excludeDraftId).flatMap(d=>d.value.packages)];
+ const definitions=[...(state.plans||[]).filter(p=>p.spaceId===space.id).flatMap(p=>p.packages.map(p=>p.definition)),...(state.taskDrafts||[]).filter(d=>d.spaceId===space.id&&!d.discardedAt&&d.id!==excludeDraftId).flatMap(d=>d.value.packages)];
  for(const p of definitions){
   if(p.mode!=='work'||!p.projectBinding?.confirmed||!space.projectIds.includes(p.projectId))continue;
   const b=R.binding(p.projectBinding);if(!b.responsibility||b.relations.some(r=>!space.projectIds.includes(r.targetProjectId)||r.targetProjectId===p.projectId||!r.description))continue;

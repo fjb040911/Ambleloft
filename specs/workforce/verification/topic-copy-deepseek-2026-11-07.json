@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-07",
+  "scope": "Real DeepSeek structured inference with production host and task-guide prompts and synthetic lifecycle facts, not desktop workflow execution. No state mutation or task scheduling.",
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "locale": "zh-CN",
+      "phase": "collecting",
+      "action": "status",
+      "message": "根据最新状态，目前没有正在执行或等待验收的任务；已保存的只有一个任务草稿，但其中还没有写下目标，所以暂时无法准备或启动。\n\n下一步需要你来决定：请用一两句话说明这个新目标想达成什么结果，比如要产出一份分析、改好某个项目，还是先做一次调研。有了这个方向后，我会先把它整理成可核对的任务方案，交给你确认。",
+      "questions": []
+    },
+    {
+      "locale": "zh-CN",
+      "phase": "review",
+      "action": "reply",
+      "message": "当前任务的结果已经生成，但还没有完成验收，所以这项任务仍未结束。我不能跳过验收直接创建第二项任务。请先查看并验收当前结果；如果你不打算验收，需要明确结束当前任务，之后才能在同一话题创建下一项任务。",
+      "questions": []
+    },
+    {
+      "locale": "en",
+      "phase": "collecting",
+      "action": "status",
+      "message": "Based on the latest status, no task plan is running or waiting for review right now. There is a task draft in progress, but its goal is still empty, so it isn't ready to check yet.\n\nNext step: tell me in one or two sentences what result this new goal should produce, for example the change you want to see or the material you need at the end. Once that is clear, we can refine the scope and prepare a task you can review.",
+      "questions": []
+    },
+    {
+      "locale": "en",
+      "phase": "review",
+      "action": "reply",
+      "message": "The output for “Arithmetic check” is ready (7+8=15), but the task is not finished yet: it still needs your review and acceptance. While it remains open, a topic can only carry one task, so I can't start a second one now — and I can't skip your acceptance on your behalf, since accepting delivery is a decision only you can make.\n\nYour next step is to open the current result and either accept it or send back specific corrections. Once it's accepted (or you explicitly end the task without accepting), tell me you want the next task, and I'll help shape it in this same conversation — the accepted result stays in the history.",
+      "questions": []
+    }
+  ],
+  "passed": true
+}

@@ -7,7 +7,7 @@ const CONTRACT_REVISION = 'm1-a1-r1';
 const MAX_JSON_BYTES = 256 * 1024;
 const ajv = new Ajv({ strict: false, allErrors: true, ownProperties: true, coerceTypes: false, useDefaults: false, removeAdditional: false });
 const structural = ajv.compile(schema);
-const projectCapabilities = new Set(['projects.read', 'projects.path.read', 'conversations.create', 'conversations.open','agent.hooks','conversations.read','background.jobs']);
+const projectCapabilities = new Set(['projects.read', 'projects.path.read', 'conversations.create', 'conversations.open','agent.hooks','conversations.read','background.jobs','project.activity.read','project.usage.read','project.summaries.generate']);
 const own = (object, key) => Object.hasOwn(object, key);
 function jsonGuard(value, maxDepth = 32) {
   const active = new Set(); let nodes = 0;

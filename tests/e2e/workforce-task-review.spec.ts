@@ -17,6 +17,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  const accept=detail.getByRole('button',{name:english?'Accept delivery':'验收通过',exact:true});
  await expect(accept).toBeEnabled();
  const before=await accept.boundingBox();expect(before!.y+before!.height).toBeLessThanOrEqual(900);
+ expect((await detail.locator('.wf-review-actions').boundingBox())!.height).toBeLessThanOrEqual(49);
  const context=detail.locator('.wf-task-context');await expect(context).not.toHaveAttribute('open','');
  await context.locator(':scope > summary').click();await expect(context).toHaveAttribute('open','');
  await expect(context.getByRole('region',{name:english?'Scheduling basis':'调度依据'})).toBeVisible();
@@ -34,7 +35,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  await tabs.getByRole('tab',{name:english?'Conversation':'任务对话',exact:true}).focus();await page.keyboard.press('ArrowRight');await expect(review).toBeFocused();await page.keyboard.press('Enter');await expect(review).toHaveAttribute('aria-selected','true');await expect(accept).toBeEnabled();await accept.click();
  const calls=await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='review'));
  expect(calls).toHaveLength(1);expect(calls[0].input).toMatchObject({packageId:'copy',attemptId:'attempt1',resultHash:'result-hash',accepted:true});
- await expect(detail).toContainText(english?'Review recorded.':'已记录验收');
+ await expect(detail).toContainText(english?'Delivery accepted':'验收已通过');
 });
 test('rejection preserves note and old info links open the disclosure',async({page})=>{
  await page.addInitScript(()=>sessionStorage.setItem('workforce.package:space',JSON.stringify({planId:'launch',packageId:'copy',detailTab:'info'})));

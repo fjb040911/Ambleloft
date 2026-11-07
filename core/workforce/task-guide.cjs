@@ -7,7 +7,8 @@ const {generate}=require('../automation/provider.cjs');
 const {inferenceDeadline}=require('../automation/inference-deadline.cjs');
 const {normalizeDynamic}=require('../inputs/runtime-definition.cjs');
 const rules=readFileSync(join(__dirname,'skills/task-creation-guide/SKILL.md'),'utf8');
-const ruleVersion='task-creation-guide-v5';
+const topicTask=require('./topic-task.cjs');
+const ruleVersion='task-creation-guide-v8';
 const projectRelations=require('./project-relations.cjs');
 const relationGuide=require('./relation-guide.cjs');
 function abortable(promise,signal){
@@ -42,6 +43,7 @@ function issues(value,space,employees,locale='zh-CN'){
 function getDraft(service,state,input){
  const draft=state.taskDrafts.find(d=>d.id===input.id);if(!draft)throw Error('任务草稿不存在');service.writable(state,draft.spaceId);
  if(draft.revision!==input.expectedRevision)throw Error('任务草稿已更新，请重新打开');
+ if(draft.discardedAt)throw Error('此草稿已结束，请创建下一项任务 / This draft has ended');
  if(draft.planId)throw Error('此草稿已创建任务，请在任务页修订');return draft;
 }
 const methods={
@@ -52,9 +54,10 @@ const methods={
   if(input.discussionId&&!request)throw Error('讨论不属于此空间');
   const rootOf=r=>{const seen=new Set();while(r.replyTo&&!seen.has(r.id)){seen.add(r.id);const parent=snapshot.requests.find(p=>p.id===r.replyTo&&p.spaceId===input.spaceId);if(!parent)break;r=parent;}return r.id;};
   const discussionId=request?rootOf(request):null;
-  const basePlan=input.basePlanId?snapshot.plans.find(p=>p.id===input.basePlanId&&p.spaceId===input.spaceId&&p.source?.discussionId===discussionId):null;
+  const basePlan=input.basePlanId?topicTask.owned(snapshot,input.spaceId,discussionId).plans.find(p=>p.id===input.basePlanId):null;
   if(input.basePlanId&&(!basePlan||basePlan.revision!==input.basePlanRevision))throw Error('计划已有新版本，请重新读取后修订');
-  const existingDraft=!input.newPlan?snapshot.taskDrafts.find(d=>d.spaceId===input.spaceId&&d.discussionId===discussionId&&!d.planId&&(input.draftId?d.id===input.draftId:input.basePlanId?d.basePlanId===input.basePlanId&&d.basePlanRevision===input.basePlanRevision:true)):null;
+  const eligible=(d,s)=>d.spaceId===input.spaceId&&topicTask.root(s,input.spaceId,d.discussionId)===discussionId&&!d.planId&&!d.discardedAt&&(!d.basePlanId||input.basePlanId===d.basePlanId||s.plans.some(p=>p.id===d.basePlanId&&!topicTask.ended(p)));
+  const existingDraft=!input.newPlan?snapshot.taskDrafts.find(d=>eligible(d,snapshot)&&(input.draftId?d.id===input.draftId:input.basePlanId?d.basePlanId===input.basePlanId&&d.basePlanRevision===input.basePlanRevision:true)):null;
   const sourceFromRequestId=existingDraft?.sourceFromRequestId||input.sourceFromRequestId;
   const discussionRequests=snapshot.requests.filter(r=>discussionId&&r.spaceId===input.spaceId&&r.mode==='discussion'&&rootOf(r)===discussionId).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   const boundary=sourceFromRequestId?discussionRequests.findIndex(r=>r.id===sourceFromRequestId):0;
@@ -71,12 +74,16 @@ const methods={
   if(JSON.stringify(sourceDocuments).length>60000)throw Error('讨论引用资料过长，请先精简');
   return this.change(s=>{
    this.writable(s,input.spaceId);const prior=s.taskDrafts.find(d=>d.commandId===input.commandId);if(prior){if(prior.spaceId!==input.spaceId||prior.discussionId!==discussionId)throw Error('请求标识已用于其他草稿');return prior;}
-   const existing=input.newPlan?null:s.taskDrafts.find(d=>d.spaceId===input.spaceId&&d.discussionId===discussionId&&!d.planId&&(input.draftId?d.id===input.draftId:input.basePlanId?d.basePlanId===input.basePlanId&&d.basePlanRevision===input.basePlanRevision:true));
+   const existing=input.newPlan?null:s.taskDrafts.find(d=>eligible(d,s)&&(input.draftId?d.id===input.draftId:input.basePlanId?d.basePlanId===input.basePlanId&&d.basePlanRevision===input.basePlanRevision:true));
    if(input.draftId&&(!existing||existing.revision!==input.expectedRevision))throw Error('任务草稿已更新，请重新读取');
    if(basePlan&&s.plans.find(p=>p.id===basePlan.id)?.revision!==basePlan.revision)throw Error('计划已有新版本，请重新读取后修订');
+   topicTask.assertAvailable(s,input.spaceId,discussionId,{planId:basePlan?.id||existing?.basePlanId,draftId:existing?.id});
    if(existing){if(input.refreshSource){existing.source=source;existing.sourceDocuments=[...new Map([...(existing.sourceDocuments||[]),...sourceDocuments].map(d=>[d.id+':'+d.revision,d])).values()];existing.revision++;existing.status='needs-input';delete existing.assessment;}return existing;}
    const draft={id:randomUUID(),commandId:input.commandId,spaceId:input.spaceId,discussionId,revision:1,...(sourceFromRequestId?{sourceFromRequestId}:{}),...(basePlan?{basePlanId:basePlan.id,basePlanRevision:basePlan.revision}:{}),value:basePlan?{name:basePlan.name,goal:basePlan.goal,packages:basePlan.packages.map(p=>p.definition)}:blank(),source,sourceDocuments,messages:[],status:'needs-input',requirementsPending:true,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};s.taskDrafts.unshift(draft);return draft;
   });
+ },
+ async discardTaskDraft(input){
+  return this.change(s=>{const d=getDraft(this,s,input);d.discardedAt=new Date().toISOString();d.revision++;d.updatedAt=d.discardedAt;return d;});
  },
  async saveTaskDraft(input){
   const value=candidate(input.value);
