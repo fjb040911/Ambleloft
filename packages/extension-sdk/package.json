@@ -32,6 +32,7 @@
     "contracts.d.ts",
     "extension.schema.json",
     "README.md",
+    "PAGE_CAPABILITIES.md",
     "LICENSE",
     "form.schema.json",
     "project-insights-preview.cjs",
