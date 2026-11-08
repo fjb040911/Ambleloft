@@ -67,7 +67,7 @@ export interface ProjectInsights {
  summaries:{
   /** Host-managed opt-in model policy. This API cannot change it. */
   policy(projectId:string):Promise<{paused:boolean;providerId:string;providerName:string;model:string;dailyLimit:number}>;
-  prepare(input:{projectId:string;turns:TurnReference[];requestKey:string;ruleVersion:string;language:'zh-CN'|'en';modelRef:{providerId:string;model:string}}):Promise<ProjectSummary>;
+  prepare(input:{projectId:string;turns:TurnReference[];requestKey:string;ruleVersion:string;format?:'general'|'work'|'learning';language:'zh-CN'|'en';modelRef:{providerId:string;model:string}}):Promise<ProjectSummary>;
   get(id:string):Promise<ProjectSummary>;
   /** An in-flight request may become unknown, never automatically retried. */
   cancel(id:string):Promise<ProjectSummary>;
@@ -124,10 +124,20 @@ export interface WebviewClient {
   /** Host applies confirmation policy; page clicks are not approval evidence.
    * No approval token is returned; host confirms and dispatches the exact request. */
   invoke(operationId: string, input: JsonObject, options?: InvokeOptions): Promise<Result<JsonObject>>;
+  /** Own extension KV only, with an existing storage:self grant. No Node operation is invoked. */
+  getStorage(input: { key: string }): Promise<Result<KvEntry | null>>;
+  /** Autosave without per-write confirmation. Host enforces identity, grant, quotas and CAS.
+   * null expectedRevision means create-only; value:null is stored JSON null, not deletion.
+   * No access to secrets, host settings, files or another extension's data. */
+  setStorage(input: { key: string; value: Json; expectedRevision: number | null }): Promise<Result<{ revision: number }>>;
   /** Host-owned picker plus explicit grant UI; null if user cancels. */
   selectProject(input: { capabilities: Capability[] }): Promise<Result<Project | null>>;
   requestGrant(input: { projectId: string; capabilities: Capability[] }): Promise<Result<boolean>>;
   /** A host-rendered secure field; value is never returned to this page. */
+  /** Host confirmation; writes only, never reads clipboard. Text is limited to 1 MiB UTF-8. */
+  writeClipboard(input: { text: string }): Promise<Result<{ copied: boolean }>>;
+  /** Native save dialog; .md/.txt suggested basename only. No filesystem path is returned. */
+  saveTextFile(input: { suggestedName: string; text: string }): Promise<Result<{ saved: boolean }>>;
   requestSecretInput(input: { key: string; title: string }): Promise<Result<{ saved: boolean }>>;
   onHostContextChanged(listener: (context: HostContext) => void): Disposable;
 }

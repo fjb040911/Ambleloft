@@ -60,3 +60,24 @@ test('business entry availability follows host conditions without conflating per
  assert.deepEqual(service.items[0].grants,[],'entry availability never creates a grant');
  service.items[0].manifest.contributes.home.when='unknown.key';assert.equal(service.snapshot('p').installed[0].home.available,false);
 });
+
+test('native text export requires host interaction, rejects traversal, and ignores stale confirmation',async t=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'amble-text-export-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+ const registry=new WindowRegistry('file:///app/index.html'),owner=registry.add(windowFixture(),'one');
+ const item={id:'test.log',kind:'package',enabled:true,trusted:true,active:'digest',generation:1,manifest:{contributes:{home:{}}}};
+ let answer=1,clipboard='',saveCanceled=false,afterDialog=()=>{},restoreCount=0;
+ const filePath=path.join(directory,'log.md');
+ const manager=new PageHost({registry,service:{items:[item],displayName:()=> 'AI Work Log'},locale:'en',electron:{nativeTheme:{shouldUseDarkColors:false},clipboard:{writeText:text=>{clipboard=text;}},dialog:{showMessageBox:async()=>{afterDialog();return {response:answer};},showSaveDialog:async()=>{afterDialog();return {canceled:saveCanceled,filePath};}}}});
+ manager.suspend=()=>()=>{restoreCount++;};
+ const wc={id:19,mainFrame:{url:'amble-extension://page/index.html'}},p={id:'page',owner,extensionId:item.id,revision:'digest',generation:1,origin:'amble-extension://page',view:{webContents:wc},pending:new Map(),lastRequest:0};
+ manager.pages.set(wc.id,p);manager.owners.set(owner.id,p);let id=0;
+ const call=(method,params)=>manager.rpc({sender:wc,senderFrame:wc.mainFrame},{id:String(++id),protocolVersion:'1',method,params});
+ answer=0;assert.deepEqual((await call('writeClipboard',{text:'private'})).value,{copied:false});assert.equal(clipboard,'');
+ answer=1;assert.deepEqual((await call('writeClipboard',{text:'approved'})).value,{copied:true});assert.equal(clipboard,'approved');
+ assert.equal((await call('saveTextFile',{suggestedName:'../escape.md',text:'no'})).error.code,'INVALID_ARGUMENT');
+ assert.equal((await call('saveTextFile',{suggestedName:'run.sh',text:'no'})).error.code,'INVALID_ARGUMENT');
+ saveCanceled=true;assert.deepEqual((await call('saveTextFile',{suggestedName:'log.md',text:'no'})).value,{saved:false});await assert.rejects(fs.stat(filePath));
+ saveCanceled=false;assert.deepEqual((await call('saveTextFile',{suggestedName:'log.md',text:'# saved'})).value,{saved:true});assert.equal(await fs.readFile(filePath,'utf8'),'# saved');
+ afterDialog=()=>{p.generation++;item.generation++;};assert.equal((await call('writeClipboard',{text:'late'})).error.code,'CANCELLED');assert.equal(clipboard,'approved');
+ assert.equal((await call('writeClipboard',{text:'x'.repeat(1024*1024+1)})).error.code,'INVALID_ARGUMENT');assert.equal(restoreCount,5);assert.equal(p.exporting,false);
+});

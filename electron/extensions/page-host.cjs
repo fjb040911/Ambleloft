@@ -9,7 +9,7 @@ class PageHost{
  item(id){const item=this.service.items.find(i=>i.id===id);if(!item||item.kind!=='package'||!item.enabled||!item.trusted||item.pending||!item.manifest.contributes?.home)throw Error('FORBIDDEN');return item;}
  allowed(item,projectId,expression){if(!expression)return true;const types={'project.exists':'boolean'},values={'project.exists':!!projectId};for(const key of item.manifest.contextKeys||[]){types[key.key]=key.type;values[key.key]=this.service.hosts?.entries.get(item.id)?.context[key.key]??key.default;}try{return compileCondition(expression,types)(values);}catch{return false;}}
  valid(p){if(p.closed||p.owner.window.isDestroyed()||this.owners.get(p.owner.id)!==p)throw Error('CANCELLED');const item=this.item(p.extensionId);if(item.active!==p.revision||item.generation!==p.generation)throw Error('FORBIDDEN');return item;}
- context(p){return {protocolVersion:'1',extensionId:p.extensionId,pageInstanceId:p.id,locale:p.locale||this.locale,theme:this.electron.nativeTheme.shouldUseDarkColors?'dark':'light',supportedMethods:['initialize','selectProject','requestGrant','requestSecretInput','invoke']};}
+ context(p){return {protocolVersion:'1',extensionId:p.extensionId,pageInstanceId:p.id,locale:p.locale||this.locale,theme:this.electron.nativeTheme.shouldUseDarkColors?'dark':'light',supportedMethods:['initialize','selectProject','requestGrant','requestSecretInput','getStorage','setStorage','writeClipboard','saveTextFile','invoke']};}
  async open(event,input){
   const owner=this.registry.authorize(event);if(typeof input?.slotId!=='string'||input.slotId.length>100)throw Error('INVALID_ARGUMENT');this.closeOwner(owner.id);
   const item=this.item(input.extensionId);const projectId=this.contexts.get(owner.id)?.projectId;if(!this.allowed(item,projectId,item.manifest.contributes.home.when))throw Error('FORBIDDEN');
@@ -68,15 +68,51 @@ class PageHost{
   const fail=code=>({ok:false,error:{code,message:code,requestId:id,effectStatus:request?.dispatched?'unknown':'notStarted'}});
   try{
    p=this.authorize(event);if(message?.protocolVersion!=='1'||!/^\d{1,15}$/.test(id)||Number(id)<=p.lastRequest)throw Error('INVALID_ARGUMENT');p.lastRequest=Number(id);
-   if(p.pending.size>=16)throw Error('BUSY');if(Buffer.byteLength(JSON.stringify(message))>256*1024)throw Error('INVALID_ARGUMENT');
+   if(p.pending.size>=16)throw Error('BUSY');if(Buffer.byteLength(JSON.stringify(message))>(['writeClipboard','saveTextFile'].includes(message.method)?2*1024*1024:256*1024))throw Error('INVALID_ARGUMENT');
    request={abort:new AbortController(),generation:p.generation};p.pending.set(id,request);const params=message.params;if(!params||typeof params!=='object'||Array.isArray(params))throw Error('INVALID_ARGUMENT');
    let value;if(message.method==='initialize')value=this.context(p);
    else if(message.method==='invoke'){if(!this.router)throw Error('UNSUPPORTED');return await this.router.invoke(params.operationId,params.input,{caller:'page',extensionId:p.extensionId,owner:p.owner,signal:request.abort.signal,canUseProject:id=>p.selected.has(id)||(this.valid(p).grants||[]).some(g=>g.resource==='project:'+id),validate:()=>this.valid(p)});}
-   else if(['selectProject','requestGrant','requestSecretInput','invoke'].includes(message.method))value=await this.interact(p,request,message.method,params);
+   else if(['getStorage','setStorage'].includes(message.method))value=await this.privateStorage(p,request,message.method,params);
+   else if(['writeClipboard','saveTextFile'].includes(message.method))value=await this.exportText(p,request,message.method,params);
+   else if(['selectProject','requestGrant','requestSecretInput','writeClipboard','saveTextFile','invoke'].includes(message.method))value=await this.interact(p,request,message.method,params);
    else throw Error('UNSUPPORTED');
    this.valid(p);if(request.abort.signal.aborted||request.generation!==p.generation)throw Error('CANCELLED');return {ok:true,value};
-  }catch(error){const code=String(error.message).split(':')[0];return fail(['FORBIDDEN','CANCELLED','TIMEOUT','BUSY','INVALID_ARGUMENT','UNSUPPORTED','CONFLICT','STORAGE_UNAVAILABLE'].includes(code)?code:'INTERNAL');}
+  }catch(error){const code=String(error.message).split(':')[0];return fail(['FORBIDDEN','CANCELLED','TIMEOUT','BUSY','INVALID_ARGUMENT','UNSUPPORTED','CONFLICT','STORAGE_UNAVAILABLE','QUOTA_EXCEEDED'].includes(code)?code:'INTERNAL');}
   finally{if(p&&request&&p.pending.get(id)===request)p.pending.delete(id);}
+ }
+ async privateStorage(p,request,method,params){
+  // Host-owned KV only. Never dispatch extension code or accept a caller-supplied
+  // extension ID, resource, storage kind, path, or permission override.
+  const write=method==='setStorage',fields=write?['key','value','expectedRevision']:['key'];
+  if(Object.keys(params).some(k=>!fields.includes(k))||fields.some(k=>!Object.hasOwn(params,k))||typeof params.key!=='string'||!params.key.length||params.key.length>200)throw Error('INVALID_ARGUMENT');
+  if(write&&params.expectedRevision!==null&&(!Number.isSafeInteger(params.expectedRevision)||params.expectedRevision<1))throw Error('INVALID_ARGUMENT');
+  if(write){
+   const json=v=>v===null||typeof v==='string'||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v)||Array.isArray(v)&&v.every(json)||v&&Object.getPrototypeOf(v)===Object.prototype&&Object.values(v).every(json);
+   if(!json(params.value))throw Error('INVALID_ARGUMENT');
+  }
+  const check=()=>{this.valid(p);if(request.abort.signal.aborted||request.generation!==p.generation)throw Error('CANCELLED');};
+  check();const context={id:p.extensionId,generation:request.generation};
+  await this.service.check(context,'storage');check();
+  if(write)request.dispatched=true;
+  const result=await this.service.storage(context,params.key,write?{kind:'kv',write:true,value:params.value,expectedRevision:params.expectedRevision,deleteValue:false}:{kind:'kv'});
+  check();return write?{revision:result.revision}:result.exists?{value:result.value,revision:result.revision}:null;
+ }
+ async exportText(p,request,method,params){
+  // Native mediation; the renderer never receives filesystem or clipboard read access.
+  if(typeof params.text!=='string'||Buffer.byteLength(params.text)>1024*1024)throw Error('INVALID_ARGUMENT');
+  if(method==='saveTextFile'&&(typeof params.suggestedName!=='string'||params.suggestedName.length>180||!(/^[^\\/\x00-\x1f]+\.(md|txt)$/i).test(params.suggestedName)))throw Error('INVALID_ARGUMENT');
+  if(p.exporting)throw Error('BUSY');p.exporting=true;const restore=this.suspend(p.owner.window);
+  const check=()=>{this.valid(p);if(request.abort.signal.aborted||request.generation!==p.generation)throw Error('CANCELLED');};
+  try{
+   const en=!(p.locale||this.locale||'').startsWith('zh');const name=this.service.displayName(this.valid(p));
+   if(method==='writeClipboard'){
+    const answer=await this.electron.dialog.showMessageBox(p.owner.window,{type:'question',title:en?'Copy extension content':'复制扩展内容',message:en?`${name} wants to copy text to your clipboard.`:`${name} 请求将文字复制到剪贴板。`,buttons:en?['Cancel','Copy']:['取消','复制'],defaultId:1,cancelId:0,noLink:true});
+    check();if(answer.response!==1)return {copied:false};request.dispatched=true;this.electron.clipboard.writeText(params.text);return {copied:true};
+   }
+   const answer=await this.electron.dialog.showSaveDialog(p.owner.window,{title:en?'Export text':'导出文本',defaultPath:params.suggestedName,filters:[{name:en?'Text documents':'文本文档',extensions:['md','txt']}],properties:['showOverwriteConfirmation','createDirectory']});
+   check();if(answer.canceled||!answer.filePath)return {saved:false};request.dispatched=true;
+   try{await fs.writeFile(answer.filePath,params.text,{encoding:'utf8',mode:0o600});}catch{throw Error('STORAGE_UNAVAILABLE');}return {saved:true};
+  }finally{p.exporting=false;restore();}
  }
  async interact(p,request,method,params){
   const item=this.valid(p),permissions=item.manifest.permissions||[];let capabilities=method==='requestSecretInput'?['secrets']:params.capabilities;
