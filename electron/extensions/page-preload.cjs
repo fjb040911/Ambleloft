@@ -6,6 +6,8 @@ if(process.isMainFrame){
  contextBridge.exposeInMainWorld('__ambleExtensionBridge',{
   initialize:async()=>{const result=await request('initialize');if(!result.ok)throw Error(result.error.code);return result.value;},
   invoke,cancel:key=>{const id=invocations.get(key);if(id)ipcRenderer.send('extension-page:cancel',{id});},
+  getStorage:input=>request('getStorage',input),setStorage:input=>request('setStorage',input),
+  writeClipboard:input=>request('writeClipboard',input),saveTextFile:input=>request('saveTextFile',input),
   selectProject:input=>request('selectProject',input),requestGrant:input=>request('requestGrant',input),requestSecretInput:input=>request('requestSecretInput',input),
   onHostContextChanged:listener=>{const handler=(_event,context)=>listener(context);ipcRenderer.on('extension-page:context',handler);return {dispose:()=>ipcRenderer.removeListener('extension-page:context',handler)};}
  });
@@ -13,7 +15,7 @@ if(process.isMainFrame){
  // Only the random cancellation key crosses the isolated-world boundary.
  contextBridge.executeInMainWorld({func:()=>{
   const bridge=window.__ambleExtensionBridge;
-  const api={initialize:bridge.initialize,selectProject:bridge.selectProject,requestGrant:bridge.requestGrant,requestSecretInput:bridge.requestSecretInput,onHostContextChanged:bridge.onHostContextChanged,
+  const api={initialize:bridge.initialize,getStorage:bridge.getStorage,setStorage:bridge.setStorage,writeClipboard:bridge.writeClipboard,saveTextFile:bridge.saveTextFile,selectProject:bridge.selectProject,requestGrant:bridge.requestGrant,requestSecretInput:bridge.requestSecretInput,onHostContextChanged:bridge.onHostContextChanged,
    invoke(operationId,input,options={}){const key=crypto.randomUUID(),signal=options.signal;
     if(signal?.aborted)return Promise.resolve({ok:false,error:{code:'CANCELLED',message:'CANCELLED',requestId:key,effectStatus:'notStarted'}});
     const cancel=()=>bridge.cancel(key);const promise=bridge.invoke(operationId,input,key);signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();return promise.finally(()=>signal?.removeEventListener('abort',cancel));

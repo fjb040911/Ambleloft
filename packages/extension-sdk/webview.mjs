@@ -13,11 +13,15 @@ export function createClient(){
   if(signal?.aborted)return {ok:false,error:failure('CANCELLED')};
   try{const result=await bridge[method](...args);if(!result||typeof result.ok!=='boolean')throw Error('Malformed host reply');
    if(!result.ok&&result.error.code==='CANCELLED'&&cancelValue!==undefined)return {ok:true,value:cancelValue};return result;
-  }catch{return {ok:false,error:failure('HOST_UNAVAILABLE',method==='invoke'||method==='requestSecretInput'?'unknown':'notStarted')};}
+  }catch{return {ok:false,error:failure('HOST_UNAVAILABLE',['invoke','setStorage','requestSecretInput','writeClipboard','saveTextFile'].includes(method)?'unknown':'notStarted')};}
  };
  return Object.freeze({
   initialize(){if(!initializing)initializing=Promise.resolve().then(()=>bridge.initialize()).then(context=>{if(context?.protocolVersion!=='1'||!Array.isArray(context.supportedMethods))throw new ExtensionError(failure('UNSUPPORTED'));methods=new Set(context.supportedMethods);ready=true;return context;}).catch(error=>{initializing=undefined;throw error instanceof ExtensionError?error:new ExtensionError(failure('HOST_UNAVAILABLE'));});return initializing;},
   invoke:(id,input,options={})=>call('invoke',[id,input,options],options),
+  getStorage:input=>call('getStorage',[input]),
+  setStorage:input=>call('setStorage',[input]),
+  writeClipboard:input=>call('writeClipboard',[input]),
+  saveTextFile:input=>call('saveTextFile',[input]),
   selectProject:input=>call('selectProject',[input],{cancelValue:null}),
   requestGrant:input=>call('requestGrant',[input],{cancelValue:false}),
   requestSecretInput:input=>call('requestSecretInput',[input]),
