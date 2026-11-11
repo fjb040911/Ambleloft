@@ -1,3 +1,4 @@
+import {isConversationMessage} from './conversation-message';
 import RunDiagnosticsButton from './RunDiagnosticsButton';
 import UserMessage from './UserMessage';
 import TaskRequestSurface from './TaskRequestSurface';
@@ -17,6 +18,8 @@ import { t, useLanguage } from './i18n';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { ChevronUp, Clock3 } from 'lucide-react';
 import SkillTags from './SkillTags';
+import ModelStatus from './ModelStatus';
+import PermissionStatus from './PermissionStatus';
 import ComposerControls, {type ComposerOptions} from './ComposerControls';
 import type { ProviderCatalog, AgentRun, TurnTiming } from './types';
 import Markdown from './Markdown';
@@ -69,6 +72,12 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const [prompt, setPrompt] = useState(''); const [pending,setPending]=useState<{id:string;decision:'accept'|'decline'}|null>(null);
   const approvalLock=useRef(false);const [approvalError,setApprovalError]=useState<{id:string;message:string}|null>(null);
   const [recentOpen,setRecentOpen]=useState(false),[pendingOpen,setPendingOpen]=useState(false);
+  const [modelBusy,setModelBusy]=useState(false);
+  useEffect(()=>{setOptions(current=>({...current,model:run.model,providerId:run.providerId||current.providerId}));},[run.id,run.model,run.providerId]);
+  const changeModel=async(next:ComposerOptions)=>{if(modelBusy)return;setModelBusy(true);try{const result=await window.desktop!.switchRunModel!({runId:run.id,providerId:next.providerId!,model:next.model!,confirmProviderChange:next.confirmProviderChange});if(!['applied','configured'].includes(result.state))throw Error(result.error||'模型未确认生效');setOptions(current=>({...current,model:next.model,providerId:next.providerId}));}finally{setModelBusy(false);}};
+  const [permissionBusy,setPermissionBusy]=useState(false);
+  useEffect(()=>{setOptions(current=>({...current,permission:run.permission||'default'}));},[run.id,run.permission]);
+  const changePermission=async(permission:'default'|'full')=>{if(permissionBusy)return;setPermissionBusy(true);try{const result=await window.desktop!.switchRunPermission!({runId:run.id,permission,confirmed:permission==='full'});if(result.state!=='applied')throw Error(result.error||'权限未确认生效');setOptions(current=>({...current,permission}));}finally{setPermissionBusy(false);}};
   const [sendError,setSendError]=useState('');
   const [referenceError,setReferenceError]=useState('');
   const openReferenceFile=useCallback((href:string)=>{
@@ -84,7 +93,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const savedTop=useRef(0);
   const active = isRunning(run);
   const currentProviderId=run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id;
-  const modelPending=active&&(options.model!==run.model||options.providerId!==currentProviderId);
+  const modelPending=active&&!window.desktop?.switchRunModel&&(options.model!==run.model||options.providerId!==currentProviderId);
   const [older,setOlder]=useState<AgentRun|null>(null);
   const [loadingHistory,setLoadingHistory]=useState(false);
   const [historyError,setHistoryError]=useState('');
@@ -178,6 +187,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
   const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>
+            {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} text={message.text}/>:<Message key={message.id} role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={message.text}/></MessageContent></Message>)}
             <TurnProgress allRequests={deliveries.snapshot?.requests||[]} requests={(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1))} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<Message role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></MessageContent></Message>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
@@ -241,6 +251,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     </section>;
   }
   if(embedded)return <div className="discussion-expert-transcript" data-run-id={run.id}>
+    <PermissionStatus value={run.permissionChange}/><ModelStatus value={run.modelChange}/>
     {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<p role="alert">{historyError}</p>}
     {turns.map((turn,index)=><div className="conversation-turn" key={turn.user.id} data-embedded-first={index===0&&!before&&turn.user.text===embeddedPrompt||undefined}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
@@ -267,17 +278,18 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
     </div>
     <div className="conversation-dock">
+      <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {inlineInputs}{outboxPanel}{pendingSurface}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
-      <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
+      <PermissionStatus value={run.permissionChange}/><ModelStatus value={run.modelChange}/>
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
       <ChatComposer attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending} sending={submitting||inputSending}
         label={reworkMode?t('修改要求'):t('继续对话')} placeholder={reworkMode?t('说明需要修改的内容，提交后重新执行并验收'):run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
         canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
         skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
-        controls={<ComposerControls catalog={catalog} value={options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} modelDisabled={submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
+        controls={<ComposerControls catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 
     </div>
   </div>;

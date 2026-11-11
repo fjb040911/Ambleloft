@@ -234,6 +234,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('spaces:exportDocument',async(event,input)=>{const owner=authorize(event),doc=await spaceService.document(input);const result=await hostDialog('showSaveDialog',owner.window,{title:'导出文档',defaultPath:doc.title.replace(/[\\/:*?"<>|]/g,'-')+'.md',filters:[{name:'Markdown',extensions:['md']}]});if(result.canceled||!result.filePath)return null;await require('node:fs/promises').writeFile(result.filePath,doc.body+'\n\n<!-- Space document '+doc.id+' v'+doc.revision+' sha256:'+doc.hash+'; exported copy, not synchronized. -->\n');return {path:result.filePath};});
   for(const action of ['stopDiscussionHost','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','discardTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','knowledge'])ipcMain.handle('spaces:'+action,(event,input)=>{authorize(event);return spaceService[action](input);});
   ipcMain.handle('spaces:controlPlan',(event,input)=>{const owner=authorize(event);checkRuntime();return spaceService.controlPlan(input,{owner});});
+  ipcMain.handle('spaces:changeDiscussionModel',(event,input)=>{authorize(event);checkRuntime();if(configBusy)throw Error('正在更新模型配置');return spaceService.changeDiscussionModel(input);});
+  ipcMain.handle('spaces:changeDiscussionPermission',(event,input)=>{authorize(event);checkRuntime();return spaceService.changeDiscussionPermission(input);});
+  ipcMain.handle('spaces:followupDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.followupDiscussion(input,{owner});});
   ipcMain.handle('spaces:coordinateDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.coordinateDiscussion(input,{owner});});
   ipcMain.handle('spaces:start',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.start(input,{owner});});
   for(const action of ['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion'])ipcMain.handle('workforce:'+action,(event,input)=>{authorize(event);return workforceService[action](input);});
@@ -411,6 +414,8 @@ app.whenReady().then(async () => {
     if(input.preview)return file;
     shell.showItemInFolder(file.path);return null;
   });
+  ipcMain.handle('agent:model',(event,input)=>{authorize(event);checkRuntime();if(configBusy)throw Error('正在更新模型配置');return runtime.switchModel(input);});
+  ipcMain.handle('agent:permission', (event,input)=>{authorize(event);checkRuntime();return runtime.switchPermission(input);});
   ipcMain.handle('agent:stop', (event, id) => { authorize(event); checkRuntime(); return runtime.stop(id); });
   ipcMain.handle('agent:answer', (event,input)=>{authorize(event);checkRuntime();return runtime.answer(input);});
   ipcMain.handle('agent:approve', (event, input) => { authorize(event); checkRuntime(); return runtime.approve(input); });
@@ -455,7 +460,7 @@ app.whenReady().then(async () => {
     const blockers=()=>{
       const reasons=[];
       if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
-      if(spaceService?.pending?.size||spaceService?.hostJobs?.size||spaceService?.suggestionJobs?.size||workforceService?.active?.size||workforceService?.suggestionJobs?.size)reasons.push('协作任务仍在运行');
+      if(spaceService?.pending?.size||spaceService?.hostJobs?.size||spaceService?.discussionFollowupJobs?.size||spaceService?.suggestionJobs?.size||workforceService?.active?.size||workforceService?.suggestionJobs?.size)reasons.push('协作任务仍在运行');
       if(spaceService?.plans?.active?.size)reasons.push('Plan scheduling is active');
       if(services.automation.controllers.size)reasons.push('后台自动化仍在运行');
       if([...extensionHosts.entries.values()].some(e=>e.rpcCount))reasons.push('扩展请求尚未完成');

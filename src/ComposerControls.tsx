@@ -12,12 +12,12 @@ import {Popover,PopoverTrigger,PopoverContent,PopoverTitle,PopoverDescription} f
 import {Command,CommandInput,CommandList,CommandEmpty,CommandGroup,CommandItem} from './components/ui/command';
 export interface ComposerOptions {employeeId?:string;selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean}
 const popupLayout='w-80 max-w-[calc(100vw-24px)] max-h-[min(380px,var(--available-height))] overflow-y-auto motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none';
-export default function ComposerControls({catalog,value,onChange,disabled,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
+export default function ComposerControls({catalog,value,onChange,disabled,permissionDisabled=disabled,onPermissionChange,permissionScope,onModelChange,previousProviderIds,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;permissionDisabled?:boolean;onPermissionChange?(permission:'default'|'full'):Promise<void>;permissionScope?:string;onModelChange?(value:ComposerOptions):Promise<void>;previousProviderIds?:string[];modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
  const confirm=useConfirm();
  const permissionTrigger=useRef<HTMLButtonElement>(null);
  const {skills,error:skillsError}=useSkills();
  const [menu,setMenu]=useState(''),[query,setQuery]=useState(''),[error,setError]=useState('');
- useEffect(()=>{setMenu(current=>(current==='models'?modelDisabled:disabled)?'':current);},[disabled,modelDisabled]);
+ useEffect(()=>{setMenu(current=>(current==='models'?modelDisabled:current==='permission'?permissionDisabled:disabled)?'':current);},[disabled,modelDisabled,permissionDisabled]);
  const select=async()=>{try{if(!window.desktop?.selectAttachments)throw new Error(t('请在桌面应用中添加文件和文件夹'));const files=await window.desktop.selectAttachments();onChange({...value,attachments:[...(value.attachments||[]),...files].filter((f,i,a)=>a.findIndex(x=>x.path===f.path)===i)});setError('');setMenu('');}catch(e){setError((e as Error).message);}};
  return <div className="composer-options">
 
@@ -31,16 +31,16 @@ export default function ComposerControls({catalog,value,onChange,disabled,modelD
     </PopoverContent>
    </Popover>
    <Popover open={menu==='permission'} onOpenChange={open=>setMenu(open?'permission':'')}>
-    <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="composer-permission @max-[480px]/composer:size-7 @max-[480px]/composer:px-0" disabled={disabled} ref={permissionTrigger} aria-label={t(value.permission==='full'?'完全访问':'默认权限')} title={t(value.permission==='full'?'完全访问':'默认权限')}/> }><ShieldCheck/><span className="@max-[480px]/composer:hidden">{t(value.permission==='full'?'完全访问':'默认权限')}</span><ChevronDown className="@max-[480px]/composer:hidden"/></PopoverTrigger>
+    <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="composer-permission @max-[480px]/composer:size-7 @max-[480px]/composer:px-0" disabled={permissionDisabled} ref={permissionTrigger} aria-label={t(value.permission==='full'?'完全访问':'默认权限')} title={t(value.permission==='full'?'完全访问':'默认权限')}/> }><ShieldCheck/><span className="@max-[480px]/composer:hidden">{t(value.permission==='full'?'完全访问':'默认权限')}</span><ChevronDown className="@max-[480px]/composer:hidden"/></PopoverTrigger>
     <PopoverContent className={popupLayout} side="top" align="start" sideOffset={8} aria-label={t('权限模式')}>
      <div className="flex flex-col gap-1 px-1"><PopoverTitle className="m-0 text-sm leading-snug">{t('权限模式')}</PopoverTitle><PopoverDescription className="m-0 text-xs leading-relaxed">{t('选择此任务的执行权限。')}</PopoverDescription></div>
-     <ToggleGroup orientation="vertical" className="w-full" value={[value.permission==='full'?'full':'default']} disabled={disabled} onValueChange={async values=>{const permission=values[0];if(!permission||permission===value.permission||permission==='default'&&value.permission!=='full')return;if(permission==='full'){setMenu('');if(!await confirm({title:t('允许完全访问'),description:t('允许当前任务完全访问？AI 可以修改文件和执行命令，无需逐次批准。'),action:t('允许完全访问'),returnFocus:permissionTrigger.current}))return;}onChange({...value,permission:permission==='full'?'full':'default'});setMenu('');}} aria-label={t('权限模式')}>
+     <ToggleGroup orientation="vertical" className="w-full" value={[value.permission==='full'?'full':'default']} disabled={permissionDisabled} onValueChange={async values=>{const permission=values[0];if(!permission||permission===value.permission||permission==='default'&&value.permission!=='full')return;if(permission==='full'){setMenu('');if(!await confirm({title:t('允许完全访问'),description:(permissionScope?permissionScope+'\n':'')+t('允许当前任务完全访问？AI 可以修改文件和执行命令，无需逐次批准。'),action:t('允许完全访问'),returnFocus:permissionTrigger.current}))return;}setMenu('');try{if(onPermissionChange)await onPermissionChange(permission==='full'?'full':'default');else onChange({...value,permission:permission==='full'?'full':'default'});setError('');}catch(e){setError((e as Error).message);}}} aria-label={t('权限模式')}>
       {(['default','full'] as const).map(permission=><ToggleGroupItem key={permission} value={permission} aria-label={t(permission==='full'?'完全访问':'默认权限')} className="h-auto min-h-16 w-full items-start justify-start gap-3 whitespace-normal px-3 py-2.5"><span className="flex min-w-0 flex-1 flex-col gap-1 text-left"><span>{t(permission==='full'?'完全访问':'默认权限')}</span><span className="text-xs font-normal leading-relaxed text-muted-foreground">{t(permission==='full'?'可修改文件和执行命令，无需逐次批准。':'读取文件；修改文件或提升权限时请求批准。')}</span></span><Check className={cn('mt-0.5 size-4 shrink-0',{'invisible':(value.permission==='full')!==(permission==='full')})}/></ToggleGroupItem>)}
      </ToggleGroup>
     </PopoverContent>
    </Popover>
    <div className="composer-model-anchor">
-    <ModelPicker catalog={catalog} value={value} onChange={onChange} disabled={modelDisabled} pending={modelPending} openSettings={openSettings} previousProviderId={previousProviderId} previousBaseUrl={previousBaseUrl}/>
+    <ModelPicker catalog={catalog} previousProviderIds={previousProviderIds} value={value} onChange={onModelChange||onChange} disabled={modelDisabled} pending={modelPending} openSettings={openSettings} previousProviderId={previousProviderId} previousBaseUrl={previousBaseUrl}/>
 
    </div>
   </div>
@@ -48,16 +48,16 @@ export default function ComposerControls({catalog,value,onChange,disabled,modelD
 }
 
 // Shared by ordinary task and space discussion composers.
-export function ModelPicker({catalog,value,onChange,disabled,pending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;pending?:boolean;openSettings?:(section:string)=>void;previousProviderId?:string;previousBaseUrl?:string}){
+export function ModelPicker({catalog,value,onChange,disabled,pending=false,openSettings,previousProviderId,previousProviderIds,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void|Promise<void>;previousProviderIds?:string[];disabled?:boolean;pending?:boolean;openSettings?:(section:string)=>void;previousProviderId?:string;previousBaseUrl?:string}){
  const confirm=useConfirm(),modelTrigger=useRef<HTMLButtonElement>(null);
- const [open,setOpen]=useState(false);
+ const [open,setOpen]=useState(false),[modelError,setModelError]=useState('');
  useEffect(()=>{if(disabled)setOpen(false);},[disabled]);
- return (    <Popover open={open} onOpenChange={setOpen}>
+ return (    <>{modelError&&<small role="alert">{modelError}</small>}<Popover open={open} onOpenChange={setOpen}>
      <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="max-w-full" disabled={disabled} aria-label={t('选择模型')} ref={modelTrigger}/> }><span className="composer-model-name min-w-0 truncate">{value.model||t('选择模型')}</span>{pending&&<span className="text-xs text-muted-foreground">{t('下一轮')}</span>}<ChevronDown/></PopoverTrigger>
      <PopoverContent className={popupLayout} side="top" align="end" sideOffset={8} aria-label={t('模型列表')}>
       <PopoverTitle className="sr-only">{t('模型列表')}</PopoverTitle>
-      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{const crossing=(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setOpen(false);if(!await confirm({title:t('切换模型服务'),description:t('切换服务后，当前任务历史将发送到新的模型服务。是否继续？'),action:t('切换模型服务'),returnFocus:modelTrigger.current}))return;}onChange({...value,providerId:p.id,model,confirmProviderChange:crossing});setOpen(false);}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
+      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{const crossing=previousProviderIds?.some(id=>id!==p.id)||(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setOpen(false);if(!await confirm({title:t('切换模型服务'),description:t('切换服务后，当前任务历史将发送到新的模型服务。是否继续？'),action:t('切换模型服务'),returnFocus:modelTrigger.current}))return;}setOpen(false);try{await onChange({...value,providerId:p.id,model,confirmProviderChange:!!crossing});setModelError('');}catch(e){setModelError((e as Error).message);}}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
       {!catalog.providers.length&&<PopoverDescription>{t('尚未配置模型服务')}</PopoverDescription>}{openSettings&&<Button variant="ghost" size="sm" onClick={()=>{setOpen(false);openSettings('providers');}}>{t('配置模型服务')}</Button>}
      </PopoverContent>
-    </Popover>);
+    </Popover></>);
 }

@@ -29,3 +29,14 @@ test('tool failures remain MCP tool errors with actionable details rather than H
  const invalid=await fetch(channel.config.url,{method:'POST',headers:channel.config.http_headers,body:'not-json'});assert.equal(invalid.status,400);
  }finally{channel.close();}
 });
+
+test('permission pause drains aborted host work, rejects new calls and resumes the same channel',async()=>{
+ let started,release,aborted=false,calls=0;const ready=new Promise(r=>started=r),gate=new Promise(r=>release=r);
+ const channel=await createAgentChannel({list:async()=>[],invoke:async(_id,_input,signal)=>{calls++;if(calls===1){signal.addEventListener('abort',()=>{aborted=true;},{once:true});started();await gate;}return {ok:true};}});
+ const call=signal=>fetch(channel.config.url,{method:'POST',headers:channel.config.http_headers,signal,body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'extension_invoke_operation',arguments:{operationId:'test.op',input:{}}}})});
+ const abort=new AbortController();const first=call(abort.signal);first.catch(()=>{});
+ try{await ready;let drained=false;const pausing=channel.pause().then(()=>{drained=true;});await new Promise(r=>setTimeout(r,10));assert.equal(aborted,true);assert.equal(drained,false);
+  const blocked=await (await call()).json();assert.equal(blocked.result.isError,true);assert.equal(calls,1);
+  release();await pausing;abort.abort();await assert.rejects(first);channel.resume();assert.equal((await (await call()).json()).result.isError,false);assert.equal(calls,2);
+ }finally{release();abort.abort();channel.close();}
+});

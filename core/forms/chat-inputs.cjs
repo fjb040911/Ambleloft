@@ -65,7 +65,7 @@ class ChatInputs{
  constructor({database,runtime,validate,publish}){Object.assign(this,{database,runtime,validate,publish});this.owners=new Map();this.inflight=new Map();this.locks=new Map();}
  serial(runId,fn){const old=this.locks.get(runId)||Promise.resolve(),work=old.catch(()=>{}).then(fn),tail=work.catch(()=>{});this.locks.set(runId,tail);void tail.then(()=>{if(this.locks.get(runId)===tail)this.locks.delete(runId);});return work;}
  checkRun(runId,{readOnly=false}={}){if(typeof runId!=='string'||!runId||runId.length>128)throw failure('INVALID_ARGUMENT');const run=this.runtime.runs?.find(r=>r.id===runId);if(!run)throw failure('NOT_FOUND','聊天不存在');if(run.archivedAt&&!readOnly)throw failure('FORBIDDEN','请先还原聊天');return run;}
- async validateItem(item){if(item.source==='user'){this.checkRun(item.runId);if(typeof item.text!=='string'||!item.text.trim()||item.text.length>20000||Buffer.byteLength(item.text)>65536)throw failure('INVALID_ARGUMENT');}else await this.validate(item);}
+ async validateItem(item){if(item.source==='discussion'){if(!this.runtime.spaces?.validateDiscussionInput)throw failure('FORBIDDEN');await this.runtime.spaces.validateDiscussionInput(item);}else if(item.source==='user'){this.checkRun(item.runId);if(typeof item.text!=='string'||!item.text.trim()||item.text.length>20000||Buffer.byteLength(item.text)>65536)throw failure('INVALID_ARGUMENT');}else await this.validate(item);}
  async append(input,owner){
   if(!input||Object.keys(input).some(k=>!['runId','clientMutationId','text'].includes(k))||typeof input.clientMutationId!=='string'||!input.clientMutationId||input.clientMutationId.length>128||typeof input.text!=='string'||!input.text.trim()||input.text.length>20000||Buffer.byteLength(input.text)>65536)throw failure('INVALID_ARGUMENT');
   this.checkRun(input.runId);const id='user:'+createHash('sha256').update(JSON.stringify([input.runId,input.clientMutationId])).digest('hex');
@@ -78,7 +78,7 @@ class ChatInputs{
   this.checkRun(input.runId);return this.serial(input.runId,async()=>{const value=await this.database.call('chatInput',{action:'resume',runId:input.runId,clientMutationId:input.clientMutationId,expectedGeneration:input.expectedPolicyGeneration,deliveryIds:input.deliveryIds});this.publish(input.runId);this.tick();return {paused:value.paused,generation:value.generation};});
  }
  async initialize(){await this.database.call('chatInput',{action:'recover'});this.timer=setInterval(()=>this.tick(),500);this.timer.unref?.();this.tick();}
- async enqueue(item,owner){const saved=await this.database.call('chatInput',{action:'enqueue',item});if(saved.state==='queued')this.owners.set(item.id,owner);this.publish(item.runId);this.tick();return saved;}
+ async enqueue(item,owner){const saved=await this.database.call('chatInput',{action:'enqueue',item});if(saved.state==='queued')this.owners.set(item.id,owner);await this.runtime.recordQueuedUserInput?.(saved);this.publish(item.runId);this.tick();return saved;}
  get(id){return this.database.call('chatInput',{action:'get',id});}
  async update(id,state,error,target){const item=await this.database.call('chatInput',{action:'update',id,state,error,target});this.publish(item.runId);return item;}
  tick(){if(this.closed||this.poll)return;this.poll=this.drain().catch(()=>{}).finally(()=>{this.poll=null;});}
@@ -105,15 +105,35 @@ class ChatInputs{
    await this.database.call('chatInput',{action:'repairRelease',id:lease.item.id,outcome:finished?'finished':'reviewRequired'});this.publish(lease.item.runId);
   }
  }}
- async drain(){await this.reapRepairs();for(const item of await this.database.call('chatInput',{action:'list'})){
-  if(this.closed)return;if(this.inflight.has(item.runId))continue;if(!await this.database.call('chatInput',{action:'canDispatch',id:item.id}))continue;
-  const work=this.deliver(item).catch(()=>{}).finally(()=>this.inflight.delete(item.runId));this.inflight.set(item.runId,work);
- }}
- async deliver(item){let dispatched=false,repairAcquired=false;
+ async drain(){
+  await this.reapRepairs();const groups=new Map();
+  for(const item of await this.database.call('chatInput',{action:'list'})){
+   if(!groups.has(item.runId))groups.set(item.runId,[]);groups.get(item.runId).push(item);
+  }
+  for(const [runId,items] of groups){
+   if(this.closed)return;if(this.inflight.has(runId))continue;
+   // Visit every queued message, even when an earlier execution update is waiting
+   // for a tool/turn boundary. Progress questions must remain answerable.
+   const work=(async()=>{let executionBlocked=false;for(const item of items){
+    if(this.closed)return;
+    if(executionBlocked&&item.source!=='user')continue;
+    if(await this.database.call('chatInput',{action:'canDispatch',id:item.id})){
+     await this.deliver(item,{conversationOnly:executionBlocked});
+     if(['queued','unknown'].includes((await this.get(item.id))?.state)){
+      const context=[...this.runtime.contexts?.values()||[]].find(c=>c.run?.id===runId);
+      if(!this.runtime.conversation?.enabled(context))break;
+      executionBlocked=true;
+     }
+    }
+   }})().catch(()=>{}).finally(()=>this.inflight.delete(runId));
+   this.inflight.set(runId,work);
+  }
+ }
+ async deliver(item,{conversationOnly=false}={}){let dispatched=false,repairAcquired=false;
   try{if(item.managedRepair){await this.acquireRepair(item);repairAcquired=true;}await this.validateItem(item);if(this.closed){if(repairAcquired)await this.database.call('chatInput',{action:'repairRelease',id:item.id,outcome:'unsent'});return;}
    const onDispatch=async target=>{if(this.closed)throw failure('BUSY');await this.validateItem(item);if(item.managedRepair&&!await this.database.call('chatInput',{action:'repairAssert',id:item.id}))throw failure('MANAGED_REPAIR_REVIEW_REQUIRED','修复执行占用已变化，请重新审查。');await this.update(item.id,'dispatching',undefined,target);dispatched=true;};
    const dispatch=(target,send)=>this.serial(item.runId,async()=>{await onDispatch(target);return {receipt:send()};});
-   await this.runtime.deliverFormInput(item,{owner:this.owners.get(item.id),onDispatch,dispatch});
+   await this.runtime.deliverFormInput(item,{owner:this.owners.get(item.id),onDispatch,dispatch,conversationOnly});
    await this.update(item.id,'delivered');this.owners.delete(item.id);
   }catch(error){
    if(item.managedRepair&&!repairAcquired&&!['BUSY','CANCELLED'].includes(error.code))await this.database.call('chatInput',{action:'repairReject',id:item.id,outcome:error.code==='MANAGED_REPAIR_REVIEW_REQUIRED'?'reviewRequired':error.code==='MANAGED_REPAIR_CONFLICT'?'conflict':'failed'});

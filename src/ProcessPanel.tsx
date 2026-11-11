@@ -1,3 +1,4 @@
+import {isConversationMessage} from './conversation-message';
 import UserMessage from './UserMessage';
 import ProcessTool from './ProcessTool';
 import AnalysisTask from './AnalysisTask';
@@ -67,7 +68,7 @@ export default function ProcessPanel({ turn, showAnalysis=true, paused=false,req
  const hasPendingInput=!!nativePending.length||allRequests.some(request=>request.state==='pending');
  const entries=[
   ...requests.map(r=>({id:'request-'+r.id,order:r.order??Number.MAX_SAFE_INTEGER,command:'',iconKind:'',type:'supplemental',title:'',text:'',status:'',summary:'',live:false})),
-  ...turn.messages.filter(message=>message.id!==turn.final?.id&&!deliveries.some(d=>d.id===message.formSubmissionId&&(d.source==='inputRequest'||requests.some(r=>r.id===d.requestId)))&&(turn.active||message.kind!=='reasoning')).map((message,index)=>({id:'message-'+message.id,order:message.order??index,command:'',iconKind:'',type:message.role==='user'?'input':message.kind==='reasoning'?'reasoning':'progress',title:message.kind==='reasoning'?(message.reasoningFormat==='text'?'思考过程':'思考摘要'):'继续处理',text:message.text,status:'',summary:'',live:message.role==='assistant'&&turn.active&&!paused&&message.id===turn.messages.at(-1)?.id})),
+  ...turn.messages.filter(message=>!isConversationMessage(message)&&message.id!==turn.final?.id&&!deliveries.some(d=>d.id===message.formSubmissionId&&(d.source==='inputRequest'||requests.some(r=>r.id===d.requestId)))&&(turn.active||message.kind!=='reasoning')).map((message,index)=>({id:'message-'+message.id,order:message.order??index,command:'',iconKind:'',type:message.role==='user'?'input':message.kind==='reasoning'?'reasoning':'progress',title:message.kind==='reasoning'?(message.reasoningFormat==='text'?'思考过程':'思考摘要'):'继续处理',text:message.text,status:'',summary:'',live:message.role==='assistant'&&turn.active&&!paused&&message.id===turn.messages.at(-1)?.id})),
   ...turn.tools.map((tool,index)=>({id:'tool-'+tool.id,order:tool.order??turn.messages.length+index,command:tool.type==='commandExecution'?tool.label:'',type:tool.type,iconKind:tool.type==='commandExecution'?commandPresentation(tool).kind:tool.type,title:tool.type==='commandExecution'?commandPresentation(tool).title:tool.type==='contextCompaction'?(tool.status==='completed'?'上下文已压缩':turn.active&&toolBusy(tool.status)?'正在压缩上下文':'上下文压缩'):tool.type==='fileChange'?'修改文件':tool.type==='webSearch'?'搜索资料':tool.type==='plan'?'任务规划':tool.label,text:tool.detail,status:!turn.active&&toolBusy(tool.status)?(turn.outcome==='completed'?'未确认完成':'已停止'):tool.status,summary:toolSummary(tool),live:turn.active&&!paused&&toolBusy(tool.status)}))
  ].sort((a,b)=>a.order-b.order);
  if(!turn.active&&!entries.length&&!turn.plan?.steps.length)return null;
