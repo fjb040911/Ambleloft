@@ -399,11 +399,11 @@ test('markdown file dialog follows dark, light and system themes in both sizes',
   await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});
   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
   const dark=theme!=='light';
-  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 39, 46)':'rgb(255, 255, 255)');
-  await expect.poll(()=>dialog.locator('.markdown').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(232, 234, 240)':'rgb(38, 44, 53)');
+  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 36, 36)':'rgb(255, 255, 255)');
+  await expect.poll(()=>dialog.locator('.markdown').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(237, 237, 237)':'rgb(38, 44, 53)');
   await expect.poll(()=>dialog.locator('.hljs-keyword').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(213, 165, 245)':'rgb(128, 64, 160)');
   await dialog.getByRole('button',{name:'最大化',exact:true}).click();
-  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 39, 46)':'rgb(255, 255, 255)');
+  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 36, 36)':'rgb(255, 255, 255)');
   if(theme==='dark')await page.screenshot({path:'test-results/markdown-preview-dark.png'});
   await dialog.getByRole('button',{name:'退出最大化',exact:true}).click();
  }
@@ -575,7 +575,8 @@ test('parallel streaming keeps sidebar order and selection stable after pointer 
   const runs=[make('A','2026-09-24T00:00:00Z'),make('B','2026-09-24T00:01:00Z')];
   let emit:any;const w=window as any;
   w.__stream=(id:string,index:number)=>{const run=runs.find(r=>r.id===id)!;run.updatedAt=new Date(Date.UTC(2026,8,24,0,2,index)).toISOString();run.messages[1].text+='更新';emit(structuredClone(run));};
-  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({language,layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
+  sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
+  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({language:'zh-CN',layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
  });
  await page.goto('/');
  const rows=page.locator('.tree-task > button:first-child');
@@ -603,18 +604,18 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
  await page.getByRole('button',{name:'显示侧栏',exact:true}).click();
  await expect(page.locator('#workspace-sidebar')).toBeVisible();
- await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(224);
- const headings=page.locator('.workspace-navigation .nav-group-toggle');
- await expect(headings).toHaveText(['项目','任务','扩展']);
- await expect(page.getByRole('button',{name:'技能与扩展',exact:true})).toBeVisible();
+ await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(256);
+ const navigation=page.getByRole('navigation',{name:'分组导航'});
+ for(const name of ['项目','任务','协作工作平台','扩展'])await expect(navigation.getByRole('button',{name,exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/task-sidebar.png'});
- for(const heading of await headings.all()){await expect(heading).toHaveCSS('font-size','14px');await expect(heading).toHaveCSS('min-height','32px');}
- for(const name of ['项目','任务']){
-  const heading=page.getByRole('button',{name,exact:true});
-  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');
+ for(const name of ['项目','任务','项目','任务']){
+  const group=navigation.getByRole('button',{name,exact:true});
+  await group.click();await expect(group).toHaveAttribute('aria-pressed','true');
+  await expect(navigation.locator('[aria-pressed=true]')).toHaveCount(1);
   await expect(page.locator('[data-slot=message][data-align=start]')).toContainText('保持当前任务');
-  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','true');
+  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
  }
+ await expect(page.locator('.tree-task.selected')).toContainText('任务体验验收');
 });
 
 test('activity and thinking indicators animate only while running and respect reduced motion',async({page})=>{
@@ -869,7 +870,7 @@ test('queued execution follows application language',async({page})=>{
 test('project execution status and empty description are translated',async({page})=>{
  await prepare(page);
  await page.addInitScript(()=>{const api=(window as any).desktop;api.readWorkspace=async()=>({layoutMode:'classic',theme:'light',language:'en',tasks:[],projects:[{id:'p',name:'Demo',path:'/fixture',createdAt:new Date().toISOString()}]});const run=(window as any).__demoRun;run.projectId='p';run.status='completed';run.approvals=[];});
- await page.reload();await page.locator('.project-tree-name').click();
+ await page.reload();await page.getByRole('navigation',{name:'Navigation groups'}).getByRole('button',{name:'Project',exact:true}).click();await page.locator('.project-tree-name').click();
  await expect(page.locator('.project-task-list small')).toHaveText('Turn ended');
  await expect(page.locator('.page-description')).toHaveText('Add a description to share context across project tasks.');
 });
