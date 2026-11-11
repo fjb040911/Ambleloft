@@ -400,8 +400,10 @@ class AgentRuntime {
     if(this.native.notification(context,{method,params}))return;
     if (context.done || !context.run || (params.threadId && context.run.threadId && params.threadId !== context.run.threadId)) return;
     const run = context.run;
-    if(params.turnId&&run.turnId&&params.turnId!==run.turnId)return;
-    if(method==='turn/completed'&&params.turn?.id&&run.turnId&&params.turn.id!==run.turnId)return;
+    // Lifecycle notifications carry turn.id, unlike item notifications. A late
+    // completion from another turn must never close this turn's MCP endpoint.
+    const eventTurnId=params.turnId||params.turn?.id;
+    if(eventTurnId&&run.turnId&&eventTurnId!==run.turnId)return;
     if(run.retrying&&['item/started','item/agentMessage/delta','item/reasoning/textDelta','item/reasoning/summaryTextDelta'].includes(method)){run.retrying=false;run.error='';}
     const clean = value => redact(value || '', context.config.apiKey);
     run.lastEventAt=new Date().toISOString();

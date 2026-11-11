@@ -1,4 +1,8 @@
 {
+  "显示异常": "Display error",
+  "内容暂时无法显示": "Content could not be displayed",
+  "显示异常不代表任务已停止。请先查看任务状态，避免重复执行命令。": "A display error does not mean the task has stopped. Check its status before running commands again.",
+  "重新显示": "Show again",
   "有待补充信息": "Input needed",
   "任务尚未结束，可先处理上方请求": "The task has not ended. You can respond to the request above.",
   "本轮历时": "Turn elapsed",

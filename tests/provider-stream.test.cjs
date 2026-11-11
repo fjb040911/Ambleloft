@@ -125,3 +125,25 @@ test('interactive idle timer can renew beyond five minutes but stops after five 
  t.mock.timers.tick(1);assert.equal(deadline.signal.reason.code,'MODEL_RESPONSE_TIMEOUT');
  assert.equal(deadline.signal.reason.diagnostics.timeoutMs,null);
 });
+
+for(const protocol of ['chat','responses'])for(const streaming of [false,true])test(protocol+' output-limit recovery '+streaming,async t=>{
+ const bodies=[];
+ mock(t,async(_url,options)=>{
+  const body=JSON.parse(options.body);bodies.push(body);const limited=bodies.length===1;
+  if(streaming)return stream(protocol==='chat'?[chat({content:limited?'PRIVATE truncated':'{"ok":true}'},limited?'length':'stop')]:limited?[{type:'response.incomplete',response:{incomplete_details:{reason:'max_output_tokens'}}}]:[{type:'response.output_text.delta',delta:'{"ok":true}'},{type:'response.completed',response:{status:'completed'}}]);
+  return new Response(JSON.stringify(protocol==='chat'?{choices:[{finish_reason:limited?'length':'stop',message:{content:limited?'PRIVATE truncated':'{"ok":true}'}}]}:limited?{status:'incomplete',incomplete_details:{reason:'max_output_tokens'}}:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'{"ok":true}'}]}]}));
+ });
+ assert.deepEqual(await generate({...config,protocol,effectiveLimits:{maxOutputTokens:24000}},{...job,maxOutputTokens:16384,retryOutputLimit:true},undefined,streaming?()=>{}:undefined),{ok:true});
+ assert.deepEqual(bodies.map(b=>b.max_tokens||b.max_output_tokens),[16384,24000]);
+ assert.ok(!JSON.stringify(bodies[1]).includes('PRIVATE'));
+});
+test('output-limit recovery retries only once and respects a fixed configured ceiling',async t=>{
+ const budgets=[];mock(t,async(_url,options)=>{budgets.push(JSON.parse(options.body).max_tokens);return stream([chat({content:'{}'},'length')]);});
+ await assert.rejects(generate({...config,effectiveLimits:{maxOutputTokens:8000}},{...job,maxOutputTokens:16384,retryOutputLimit:true},undefined,()=>{}),/OUTPUT_LIMIT/);
+ assert.deepEqual(budgets,[8000,8000]);
+});
+test('output-limit recovery can be cancelled before redispatch',async t=>{
+ let calls=0;const controller=new AbortController();mock(t,async()=>{calls++;return stream([chat({content:'{}'},'length')]);});
+ await assert.rejects(generate(config,{...job,retryOutputLimit:true},controller.signal,p=>{if(p.phase==='waiting')controller.abort();}),/abort/i);
+ assert.equal(calls,1);
+});

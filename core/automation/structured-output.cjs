@@ -12,6 +12,11 @@ function parseStructuredOutput(text){
  try{return JSON.parse(fence?fence[1]:value);}
  catch{throw outputError('invalid-json',text.length);}
 }
+function outputLimitDetails(error,locale='zh-CN'){
+ const {maxOutputTokens,attempts}=error.diagnostics||{};
+ if(!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<=0)return '';
+ return locale==='en'?' Requested output limit: '+maxOutputTokens+' tokens.'+(Number.isSafeInteger(attempts)?' Model requests: '+attempts+'.':''):' 本次请求输出上限：'+maxOutputTokens+' tokens。'+(Number.isSafeInteger(attempts)?'已请求模型 '+attempts+' 次。':'');
+}
 function structuredErrorMessage(error,locale='zh-CN'){
  const en=locale==='en';
  if(error.message==='DISCUSSION_STOPPED')return en?'Discussion stopped. Your submitted answers and saved content are preserved.':'讨论已停止。已提交的回答和已保存内容均保留。';
@@ -29,7 +34,7 @@ function structuredErrorMessage(error,locale='zh-CN'){
   }
   return en?'The model returned an unreadable response. Your submitted choices and saved tasks are preserved. Please retry.':'模型返回内容无法解析。已提交的选择和已保存任务均保留，请重试本轮。';
  }
- if(error.message==='OUTPUT_LIMIT')return en?'The model response reached its output limit. Saved content is preserved. Reduce the scope or raise the output limit, then retry.':'模型输出达到上限，已保存内容保留。请缩小本轮范围或提高输出限制后重试。';
+ if(error.message==='OUTPUT_LIMIT')return (en?'The model response reached its output limit. Saved content is preserved. Reduce the scope or raise the output limit, then retry.':'模型输出达到上限，已保存内容保留。请缩小本轮范围或提高输出限制后重试。')+outputLimitDetails(error,locale);
  if(error.message==='INCOMPLETE_STREAM')return en?'The model response was interrupted before completion. Saved content is preserved. Please retry.':'模型响应在完成前中断，已保存内容保留，请重试本轮。';
  return error.message;
 }
@@ -38,4 +43,4 @@ function localizeStructuredError(error,locale){
  if(message!==error.message){error.code ||= error.message;error.message=message;}
  return error;
 }
-module.exports={outputError,parseStructuredOutput,structuredErrorMessage,localizeStructuredError};
+module.exports={outputLimitDetails,outputError,parseStructuredOutput,structuredErrorMessage,localizeStructuredError};

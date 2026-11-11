@@ -620,3 +620,13 @@ test('discussion reports queued model changes as pending until the selected expe
  await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new',confirmProviderChange:true});let r=(await f.service.read()).requests[0];assert.equal(r.modelChange.state,'configured');assert.equal(r.modelChange.effective,null);
  run.modelChange.state='applied';run.modelChange.effective=run.modelChange.requested;await f.service.pumpDiscussionUpdates();r=(await f.service.read()).requests[0];assert.equal(r.modelChange.state,'applied');assert.equal(r.modelChange.effective.model,'new');await f.service.stopDiscussionHost({requestId});
 });
+
+for(const recover of [true,false])test('host output limit retries once and preserves diagnostics: '+recover,async t=>{
+ const f=await fixture(t),old=global.fetch;let calls=0;
+ t.after(()=>{global.fetch=old;});
+ f.service.workforce.providers.secret=async()=>({model:'test',protocol:'chat',baseUrl:'https://model.example/v1',effectiveLimits:{maxOutputTokens:12000}});
+ global.fetch=async(_url,options)=>{const body=JSON.parse(options.body);calls++;assert.equal(body.max_tokens,calls===1?8192:12000);return new Response(JSON.stringify({choices:[{finish_reason:recover&&calls===2?'stop':'length',message:{content:recover&&calls===2?JSON.stringify(response()):'PRIVATE truncated'}}]}));};
+ await f.start();const result=await f.finish();assert.equal(calls,2);assert.equal(f.runtime.starts.length,0);
+ if(recover){assert.equal(result.host.status,'completed');assert.equal(result.host.steps.length,1);}
+ else{assert.equal(result.host.status,'failed');assert.equal(result.host.errorCode,'OUTPUT_LIMIT');assert.equal(result.host.outputDiagnostics.maxOutputTokens,12000);assert.equal(result.host.outputDiagnostics.attempts,2);assert.match(result.host.error,/12000 tokens/);assert.ok(!JSON.stringify(result).includes('PRIVATE'));}
+});

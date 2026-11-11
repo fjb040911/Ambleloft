@@ -31,8 +31,8 @@ class UpdateService {
   }
   async download(){
     if(!this.supported||this.busy||!['available','download-failed'].includes(this.state.status))return this.snapshot();
-    this.busy=true;this.cancelled=false;this.set({status:'downloading',progress:0,error:''});
-    try{if(this.downloadSize){await fs.mkdir(this.directory,{recursive:true});const disk=await fs.statfs(this.directory);if(Number(disk.bavail)*Number(disk.bsize)<this.downloadSize*4)throw Error('Insufficient disk space');}this.token=new (require('builder-util-runtime').CancellationToken)();await this.updater.downloadUpdate(this.token);if(!this.cancelled)this.set({status:'ready',progress:100});}
+    this.busy=true;this.cancelled=false;this.token=new (require('builder-util-runtime').CancellationToken)();this.set({status:'downloading',progress:0,error:''});
+    try{if(this.downloadSize){await fs.mkdir(this.directory,{recursive:true});const disk=await fs.statfs(this.directory);if(Number(disk.bavail)*Number(disk.bsize)<this.downloadSize*4)throw Error('Insufficient disk space');}if(this.cancelled)throw Error('Download cancelled');await this.updater.downloadUpdate(this.token);if(!this.cancelled)this.set({status:'ready',progress:100});}
     catch{this.set({status:this.cancelled?'available':'download-failed',progress:null,error:this.cancelled?'':'下载或校验失败，当前版本未改变，请重试。'});}
     finally{this.busy=false;this.token=null;}return this.snapshot();
   }
