@@ -5,6 +5,7 @@
   "description": "Open-source, extensible desktop Agent workspace",
   "main": "electron/main.cjs",
   "scripts": {
+    "dist:win:update-test": "node scripts/build-update-test.cjs",
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",

@@ -12,10 +12,11 @@ const { configureSecureStorage, createSecureStorage } = require('./secure-storag
 
 protocol.registerSchemesAsPrivileged([{scheme:'amble-app',privileges:{standard:true,secure:true}}, {scheme:'amble-extension',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}, {scheme:'atelier-preview',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}]);
 configureSecureStorage(app);
-app.setName('Ambleloft');
+const updateTest = require('../package.json').ambleloftUpdateTest === true;
+app.setName(updateTest ? 'Ambleloft Update Test' : 'Ambleloft');
 // Keep the legacy profile path so renaming the product preserves sessions and encrypted credentials.
 // Keep Electron's explicit test/profile switch usable.
-if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', path.join(app.getPath('appData'), 'Atelier'));
+if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', path.join(app.getPath('appData'), updateTest ? 'Ambleloft Update Test' : 'Atelier'));
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
 let pageHost;let taskApps;let profileId;let terminals;let ssh;
@@ -36,6 +37,7 @@ let pendingStoreURL = process.argv.find(value => value.startsWith('ambleloft://'
 let pendingStoreOpen = null;
 let pendingStoreOpenError = null;
 function receiveStoreURL(value) {
+  if (updateTest) return;
   if (!catalogService) { pendingStoreURL = value; return; }
   const target = require('../core/catalog-store/catalog.cjs').inspectStoreLink(value, catalogService.sources);
   if (!target) return;
@@ -57,7 +59,7 @@ async function hostDialog(method,owner,options){const resume=pageHost?.suspend(o
 function createWindow() {
   const window = new BrowserWindow({
     width: 1240, height: 840, minWidth: 800, minHeight: 560,
-    title: 'Ambleloft', backgroundColor: '#f8f9fb',
+    title: updateTest ? `Ambleloft Update Test ${app.getVersion()}` : 'Ambleloft', backgroundColor: '#f8f9fb',
     icon: path.join(__dirname, '../dist/brand/icon-512.png'),
     ...(process.platform === 'win32' ? {titleBarStyle: 'hidden', titleBarOverlay: {color: '#e9ecf0', symbolColor: '#262c35', height: 38}, autoHideMenuBar: true} : process.platform === 'darwin' ? {titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 23 }} : {}),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
@@ -116,8 +118,10 @@ app.whenReady().then(async () => {
   for(const [action,method] of [['dockerList','list'],['dockerEnter','enter'],['dockerStart','start']])ipcMain.handle('ssh:'+action,(event,input)=>{authorize(event);return ssh.docker[method](input.id,method==='list'?input.endpoint:input.environment);});
   ipcMain.handle('ssh:key',async event=>{const owner=authorize(event);const result=await hostDialog('showOpenDialog',owner.window,{title:'选择 SSH 私钥',properties:['openFile']});return result.canceled?null:result.filePaths[0];});
   const skills=services.skills;
-  if (app.isPackaged) app.setAsDefaultProtocolClient('ambleloft');
-  else if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('ambleloft', process.execPath, [path.resolve(process.argv[1])]);
+  if (!updateTest) {
+    if (app.isPackaged) app.setAsDefaultProtocolClient('ambleloft');
+    else if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient('ambleloft', process.execPath, [path.resolve(process.argv[1])]);
+  }
   try{await skills.initializeBuiltins();}catch{console.warn('Built-in skill guidance is unavailable; ordinary chat remains available.');}
   let extensionError='';
   try{await services.extensions.initialize();}catch(error){extensionError=error.message;}
@@ -451,6 +455,7 @@ app.whenReady().then(async () => {
     { role: 'windowMenu' },
   ]));
   const updateModule=app.isPackaged?require(path.join(process.resourcesPath,'tools/updater.cjs')):{...require('./updates.cjs'),updater:require('electron-updater').autoUpdater};
+  if (updateTest) require('./update-diagnostics.cjs').attachUpdateDiagnostics(updateModule.updater,path.join(app.getPath('userData'),'updates'),app.getVersion());
   updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&['darwin','win32'].includes(process.platform),publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
     const blockers=()=>{
       const reasons=[];

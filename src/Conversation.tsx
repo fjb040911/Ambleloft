@@ -1,4 +1,5 @@
 import RunDiagnosticsButton from './RunDiagnosticsButton';
+import RenderErrorBoundary from './RenderErrorBoundary';
 import UserMessage from './UserMessage';
 import TaskRequestSurface from './TaskRequestSurface';
 import ComposerAttachments from './ComposerAttachments';
@@ -290,5 +291,5 @@ function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnN
 }
 export default function Conversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(true);
- return <MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} onFollowingChange={setFollowing}/></MessageScrollerProvider>;
+ return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
 }

@@ -16,7 +16,7 @@ async function generateWithinDeadline(config,job,signal,onProgress){
  let protocol=usesChat(config)?'chat':'responses',available=capabilities.formats(job.outputSchema);
  let unsupported=[];
  const choose=()=>{unsupported=capabilities.profile(config,protocol,!!onProgress)?.unsupported||[];const found=available.findIndex(mode=>!unsupported.includes(mode));return found<0?available.length-1:found;};
- let index=choose(),repair='',repaired=false,switched=false;
+ let index=choose(),repair='',repaired=false,switched=false,outputRetried=false;
  for(let attempt=0;attempt<4;attempt++){
   signal.throwIfAborted();const mode=available[index];
   job={...job,usageAttempt:attempt};
@@ -35,6 +35,13 @@ async function generateWithinDeadline(config,job,signal,onProgress){
    const probeRoute=job.probeProtocol&&error.message==='PROVIDER_REJECTED'&&error.diagnostics?.httpStatus===404;
    if((error.message==='PROTOCOL_UNSUPPORTED'||probeRoute)&&(!config.protocol||config.protocol==='auto')&&!switched){protocol=protocol==='chat'?'responses':'chat';switched=true;index=choose();}
    else if(['FORMAT_UNSUPPORTED','SCHEMA_UNSUPPORTED'].includes(error.message)&&index<available.length-1){if(error.message==='FORMAT_UNSUPPORTED')unsupported=[...new Set([...unsupported,mode])];index++;}
+   else if(job.retryOutputLimit&&!outputRetried&&error.message==='OUTPUT_LIMIT'){
+    outputRetried=true;
+    const current=outputBudget(config,job);
+    const ceiling=config.effectiveLimits?.maxOutputTokens||current;
+    job={...job,maxOutputTokens:Math.min(current*2,ceiling)};
+    repair='The previous response reached its output limit. Return one complete JSON value matching the schema. Keep prose concise and avoid repetition across fields. Preserve all requested scope, tasks, dependencies and user-confirmed constraints; do not omit requirements to shorten the response.';
+   }
    else if(job.repairInvalidOutput&&!repaired&&error.message==='INVALID_OUTPUT'&&['content','schema'].includes(error.diagnostics.stage)){
     repaired=true;repair='The previous response did not satisfy the output contract. Return one complete JSON value matching the schema, without commentary or Markdown fences.';
     if(error.diagnostics.issues)repair+=' Validation errors (schema locations only): '+JSON.stringify(error.diagnostics.issues);
@@ -43,6 +50,10 @@ async function generateWithinDeadline(config,job,signal,onProgress){
   }
  }
 }
+function outputBudget(config,job){
+ const requested=Number.isInteger(job.maxOutputTokens)?Math.max(256,job.maxOutputTokens):2048;
+ return Math.min(requested,config.effectiveLimits?.maxOutputTokens||requested);
+}
 async function request(config,job,signal,onProgress,mode){
  const id=require('node:crypto').randomUUID(),startedAt=new Date().toISOString();let usage=null,providerRequestId=null,status='unknown',dispatched=false;
  const observed=()=>({id,hostRequestId:job.usageRequestId,attempt:job.usageAttempt||0,startedAt,finishedAt:status==='running'?null:new Date().toISOString(),status,usage,providerRequestId});
@@ -50,8 +61,7 @@ async function request(config,job,signal,onProgress,mode){
  const onUsage=(value,requestId)=>{usage=value;providerRequestId=requestId||providerRequestId;};
  try{
  const chat=usesChat(config),instruction='Return only JSON matching this schema: '+JSON.stringify(job.outputSchema)+'\n'+job.prompt;
- const requested=Number.isInteger(job.maxOutputTokens)?Math.max(256,Math.min(16384,job.maxOutputTokens)):2048;
- const maximum=Math.min(requested,config.effectiveLimits?.maxOutputTokens||requested);
+ const maximum=outputBudget(config,job);
  const input=JSON.stringify(job.input),body=chat?{model:config.model,messages:[{role:'system',content:instruction},{role:'user',content:input}],max_tokens:maximum,stream:false}:{model:config.model,instructions:instruction,input,max_output_tokens:maximum,stream:false,store:false};
  capabilities.applyFormat(body,mode,job.outputSchema,chat);
  if(onProgress){
