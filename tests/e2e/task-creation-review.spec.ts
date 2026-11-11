@@ -16,9 +16,9 @@ test('discussion to task: missing information, form answers, confirmation, then 
 test('task drafts can resume; edited candidates require rechecking; save never starts',async({page})=>{
  await enter(page);await page.getByRole('tab',{name:'任务',exact:true}).click();await page.getByRole('button',{name:'AI 帮我整理任务'}).click();
  let guide=page.getByRole('region',{name:'整理为任务'});await page.getByLabel('补充任务需求').fill('请检查发布页的三个链接');await page.getByRole('button',{name:'发送补充'}).click();
- await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();await guide.getByLabel('共同目标').fill('检查发布页与帮助页');
+ await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();await guide.getByRole('button',{name:'编辑计划',exact:true}).click();await guide.getByLabel('共同目标').fill('检查发布页与帮助页');
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeHidden();await guide.getByRole('button',{name:'返回任务，保留草稿'}).click();
- await page.getByRole('button',{name:'AI 帮我整理任务'}).click();guide=page.getByRole('region',{name:'整理为任务'});await expect(guide.getByLabel('共同目标')).toHaveValue('检查发布页与帮助页');
+ await page.getByRole('button',{name:'AI 帮我整理任务'}).click();guide=page.getByRole('region',{name:'整理为任务'});await guide.getByRole('button',{name:'编辑计划',exact:true}).click();await expect(guide.getByLabel('共同目标')).toHaveValue('检查发布页与帮助页');
  await page.getByLabel('补充任务需求').fill('两个页面所有链接均返回 200 即可');await page.getByRole('button',{name:'发送补充'}).click();await expect(guide.getByRole('button',{name:'确认并保存计划'})).toBeEnabled();await guide.getByRole('button',{name:'确认并保存计划'}).click();
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='control'))).toHaveLength(0);
 });

@@ -1,6 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 async function setup(page:Page,paused=false,missingHandler=false){
  await page.addInitScript(({paused,missingHandler})=>{
+ sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
  const run:any={id:'input-test',title:'补充信息测试',model:'fixture',baseUrl:'http://localhost/v1',cwd:'/tmp',createdAt:new Date().toISOString(),status:paused?'interrupted':'running',messages:[{id:'u',role:'user',text:'规划旅行'}],tools:[],approvals:[]};
  let callback:any,inputCallback:any;
  const snapshot:any={policy:{paused,generation:paused?1:0},deliveries:paused?[{id:'one',runId:run.id,text:'之前填写的日期',state:'queued'},{id:'two',runId:run.id,text:'之前填写的预算',state:'queued'}]:[]};

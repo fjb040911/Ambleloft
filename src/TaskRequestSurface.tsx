@@ -12,7 +12,7 @@ export default function TaskRequestSurface({title,open,onOpenChange,count,floati
  useLayoutEffect(()=>{
   if(!floating||!visible)return;
   const el=anchor.current;if(!el)return;
-  const chat=el.closest('.wf-node-conversation');
+  const chat=el.closest('.wf-node-conversation, .conversation-page');
   const dock=el.closest('.conversation-dock');
   const measure=()=>{
    const r=el.getBoundingClientRect(),top=chat?.getBoundingClientRect().top||0;
