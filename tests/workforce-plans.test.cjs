@@ -7,6 +7,17 @@ async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amb
  t.after(async()=>{await service.shutdown();await db.close();await fs.rm(root,{recursive:true,force:true});});return {service,db,runtime,space};}
 const unit=(id,projectId,dependencies=[])=>({projectBinding:{responsibility:'Implement assigned module',confirmed:true,relations:['a','b','alias'].filter(target=>target!==projectId).map(targetProjectId=>({targetProjectId,kind:'artifact',description:'Read accepted predecessor deliverables and verify the handoff'}))},id,title:id,ownerId:'one',mode:'work',projectId,instruction:'Implement this unit',dependencies,documentRefs:[],deliverables:'Code and checks',acceptance:'Correct tests with evidence'});
 const control=(service,plan,action,packageId)=>service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action,packageId},{});
+for(const status of ['paused','stopped','running'])test(`terminal runs clear stale waiting nodes in ${status} plans without a scheduling context`,async t=>{
+ const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Recovery',goal:'Keep status synchronized',packages:[unit('first','a'),unit('next','b',['first'])]}});
+ await control(f.service,plan,'start');
+ const run=f.runtime.runs[0];run.status='waiting';await f.service.plans.reconcile(plan.id);
+ await f.service.change(s=>{s.plans[0].status=status;});f.service.plans.contexts.clear();
+ run.status='interrupted';run.error='Stopped';
+ await f.service.plans.tick();
+ const current=(await f.service.read()).plans[0];
+ assert.equal(current.packages[0].status,'interrupted');assert.equal(current.packages[0].attempts[0].status,'interrupted');
+ assert.equal(current.status,status);assert.equal(current.packages[1].status,'pending');assert.equal(f.runtime.runs.length,1);
+});
 async function accept(f,plan,packageId){const r=f.runtime.runs.find(r=>r.collaboration.requestId===plan.packages.find(p=>p.id===packageId).attempts.at(-1).requestId);r.status='completed';r.messages=[{role:'assistant',text:'Produced implementation'}];r.tools=[{name:'exec',output:'tests passed',exitCode:0}];await f.service.plans.reconcile(plan.id);const current=(await f.service.read()).plans[0],p=current.packages.find(p=>p.id===packageId),a=p.attempts.at(-1);await f.service.reviewPlan({planId:plan.id,packageId,attemptId:a.id,resultHash:a.resultHash,note:'Reviewed the recorded test and diff',accepted:true});return current;}
 test('LangGraph waits for accepted dependencies, then runs independent projects; a retry preserves other work',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Delivery',goal:'Contract then parallel modules',packages:[unit('contract','a'),unit('go','a',['contract']),unit('python','b',['contract'])]}});

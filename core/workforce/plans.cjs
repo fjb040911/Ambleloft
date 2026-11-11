@@ -131,7 +131,14 @@ class PlanService {
    attempt.review=structuredClone(p.acceptance);event(plan,p.status,note,p.id);this.dirty=true;return plan;
   });
  }
- tick(){if(this.closed)return;const signature=JSON.stringify(this.runtime.runs.map(r=>[r.id,r.status]));if(signature!==this.signature){this.signature=signature;this.dirty=true;}if(!this.dirty)return;this.dirty=false;void this.spaces.read().then(s=>Promise.all(s.plans.filter(p=>p.status==='running'&&this.contexts.has(p.id)).map(p=>this.pulse(p.id)))).catch(()=>{this.dirty=true;});}
+ tick(){if(this.closed)return;const signature=JSON.stringify(this.runtime.runs.map(r=>[r.id,r.status]));if(signature!==this.signature){this.signature=signature;this.dirty=true;}if(!this.dirty)return;this.dirty=false;return this.spaces.read().then(async s=>{
+  // Reconcile execution even while scheduling is paused or its in-memory context
+  // was lost on restart. Otherwise a finished run leaves its node waiting forever
+  // and the task conversation cannot offer retry/rework. Reconciliation never starts work.
+  for(const plan of s.plans)if(plan.packages.some(p=>['starting','running','waiting','stopping'].includes(p.status)))await this.reconcile(plan.id);
+  const current=await this.spaces.read();
+  await Promise.all(current.plans.filter(p=>p.status==='running'&&this.contexts.has(p.id)).map(p=>this.pulse(p.id)));
+ }).catch(()=>{this.dirty=true;});}
  pulse(planId){if(this.active.has(planId))return this.active.get(planId);const promise=this.graph.invoke({planId},{configurable:{thread_id:planId},durability:'sync'}).catch(async e=>{await this.spaces.change(s=>{const plan=s.plans.find(p=>p.id===planId);plan.status='paused';event(plan,'scheduler_error','编排已暂停：'+e.message);});throw e;}).finally(()=>this.active.delete(planId));this.active.set(planId,promise);return promise;}
  async reconcile(planId){
   const state=await this.spaces.read(),original=state.plans.find(p=>p.id===planId);if(!original)return;

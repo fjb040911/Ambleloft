@@ -14,7 +14,7 @@ test('tool streaming accepts fragments and repeated complete names but rejects u
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const bridge=await startChatBridge({baseUrl:`http://127.0.0.1:${server.address().port}`},randomUUID(),false,d=>records.push(d));
- const tools=[{type:'function',name:'exec_command'},...['a','b'].map(name=>({type:'namespace',name,tools:[{type:'function',name:'search'}]}))];
+ const tools=[{type:'function',name:'exec_command',parameters:{type:'object',properties:{cmd:{type:'string'}},required:['cmd']}},...['a','b'].map(name=>({type:'namespace',name,tools:[{type:'function',name:'search'}]}))];
  const call=(name,args='{}',index=0)=>({index,id:'call-'+index,type:'function',function:{name,arguments:args}});
  const request=async()=>{
   const response=await fetch(bridge.config.baseUrl+'/responses',{method:'POST',headers:{Authorization:'Bearer '+bridge.config.apiKey},body:JSON.stringify({model:'fixture',input:'test',tools})});
@@ -30,11 +30,17 @@ test('tool streaming accepts fragments and repeated complete names but rejects u
   }
   chunks=[[call('mcp__amble_extensions__progress_list')]];correctedChunks=[[call('exec_command')]];
   const before=requests.length,recovered=await request();assert.equal(requests.length-before,2);assert.ok(recovered.some(e=>e.type==='response.completed'));assert.equal(recovered.filter(e=>e.type==='response.output_item.added'&&e.item.type==='function_call').length,1);assert.equal(records.at(-1).toolCorrectionAttempts,1);correctedChunks=null;
-  for(const name of ['unknown_tool','search','exec_command_wrong','bad name with spaces']){
+  const correction=requests.at(-1).messages.at(-1).content;
+  assert.match(correction,/FUNCTION NAME error, not an argument error/);
+  assert.ok(correction.includes(JSON.stringify({name:'exec_command',requiredArguments:['cmd']})));
+  assert.ok(correction.includes(JSON.stringify({name:'a__search',requiredArguments:[]})));
+  assert.ok(correction.includes(JSON.stringify({name:'b__search',requiredArguments:[]})));
+  for(const name of ['mcp__amble_extensions__cmd','unknown_tool','search','exec_command_wrong','bad name with spaces']){
    chunks=[[call('exec_command'),call(name,'{}',1)]];
    const count=requests.length,events=await request();assert.equal(requests.length-count,2);assert.ok(events.some(e=>e.type==='error'));
    assert.ok(!events.some(e=>e.item?.type==='function_call'||e.type==='response.completed'));
    const diagnostic=records.at(-1);assert.equal(diagnostic.stage,'translate_tools');assert.equal(diagnostic.toolNameDetails.length,name.length);assert.equal(diagnostic.toolNameDetails.chunks,1);
+   assert.ok(events.find(e=>e.type==='error').message.includes(diagnostic.returnedTool));
   }
   chunks=[[call('exec_command'),call('a.search','invalid-json',1)]];
   const invalid=await request();assert.ok(invalid.some(e=>e.type==='error'));assert.ok(!invalid.some(e=>e.item?.type==='function_call'));

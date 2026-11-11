@@ -235,7 +235,8 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           diagnostic.toolCorrectionAttempts=1;
           const names=unknown.map(call=>/^[a-zA-Z0-9_.-]{1,160}$/.test(call.name)?call.name:'[invalid tool name]');
           diagnostic.rejectedTools=names.slice(0,20);
-          const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
+          const catalog=(body.tools||[]).map(tool=>({name:tool.function.name,requiredArguments:tool.function.parameters?.required||[]}));
+          const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. This is a FUNCTION NAME error, not an argument error. The complete list of callable function names and their required argument keys for THIS request is: '+JSON.stringify(catalog)+'. Copy the exact name from this list, including its namespace prefix. Argument keys (such as cmd or command) are not function names. Do not combine a namespace from one tool with the name of another, or reuse tools from earlier sessions. Use the matching schema in tools for the arguments. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
           // Separate any streamed narration from the corrected response.
           if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
@@ -261,7 +262,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             repeatedChunks:call.nameParts.length>1&&call.nameParts.every(part=>part===call.nameParts[0]),
             validCharacters:/^[a-zA-Z0-9_.-]+$/.test(call.name)};
           diagnostic.availableTools=[...definitions.keys()].slice(0,100).map(safeName);
-          throw new Error('模型调用了未提供或名称不唯一的工具');
+          throw new Error('模型调用了未提供或名称不唯一的工具：'+sanitizeError(diagnostic.returnedTool,config.apiKey)+'；已尝试一次自动纠正，未执行本次响应中的工具调用');
         }
         const args=JSON.parse(call.args);const item={id:'fc_'+randomUUID(),call_id:call.id||randomUUID(),type:def.type==='custom'?'custom_tool_call':'function_call',name:def.name,...(def.namespace?{namespace:def.namespace}:{}),status:'completed'};
         if(def.type==='custom'){if(typeof args.input!=='string')throw new Error('工具输入无效');item.input=args.input;}else item.arguments=call.args;

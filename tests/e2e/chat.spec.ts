@@ -669,7 +669,7 @@ test('activity and thinking indicators animate only while running and respect re
  await expect(page.locator('[data-slot="marker"] [data-slot="spinner"]')).toHaveCount(0);
 });
 
-test('message scroller follows output, pauses for reading, and resumes at the latest message',async({page})=>{
+for(const resume of ['button','wheel'] as const)test(`message scroller follows output, pauses for reading, and resumes at the latest message via ${resume}`,async({page})=>{
  await prepare(page,('初始回答\n\n').repeat(80));
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];(window as any).__emit();});
  const viewport=page.locator('.conversation-scroll:visible');
@@ -681,10 +681,21 @@ test('message scroller follows output, pauses for reading, and resumes at the la
  await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('新输出\n\n').repeat(40);(window as any).__emit();});
  await page.waitForTimeout(150);
  expect(Math.abs(await viewport.evaluate(el=>el.scrollTop)-top)).toBeLessThan(3);
- await page.getByRole('button',{name:'回到最新消息'}).click();
+ if(resume==='button')await page.getByRole('button',{name:'回到最新消息'}).click();
+ else await page.mouse.wheel(0,100000);
  await expect.poll(distance).toBeLessThan(3);
- await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('继续输出\n\n').repeat(20);(window as any).__emit();});
- await expect.poll(distance).toBeLessThan(3);
+ for(let i=0;i<3;i++){
+  await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('继续输出\n\n').repeat(20);(window as any).__emit();});
+  await expect.poll(distance).toBeLessThan(3);
+ }
+ // Resuming must not prevent the reader from pausing the next stream again.
+ await viewport.hover();await page.mouse.wheel(0,-500);
+ await expect.poll(distance).toBeGreaterThan(200);
+ const paused=await viewport.evaluate(el=>el.scrollTop);
+ await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('后续输出\n\n').repeat(20);(window as any).__emit();});
+ await expect(viewport).toContainText('后续输出');
+ await page.waitForTimeout(200);
+ expect(Math.abs(await viewport.evaluate(el=>el.scrollTop)-paused)).toBeLessThan(3);
 });
 
 test('tool summaries describe actions while commands and output remain expandable',async({page})=>{
@@ -924,9 +935,16 @@ test('user Bubble keeps message theme and typography across themes and narrow la
   const message=page.locator('[data-message-role=user]').first(),bubble=message.locator('[data-slot=bubble-content]');
   await expect(message).toHaveAttribute('data-align','end');await expect(bubble).toHaveCSS('background-color',theme==='light'?'rgb(0, 0, 0)':'rgb(48, 48, 48)');await expect(bubble).toHaveCSS('color','rgb(255, 255, 255)');
   await expect(bubble).toHaveCSS('font-size','15px');await expect(bubble).toHaveCSS('font-weight','500');await expect(bubble).toHaveCSS('line-height','22.5px');await expect(bubble).toHaveCSS('border-width','0px');
-  await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[0].text='第一行\n'+('很长的用户消息'.repeat(40));(window as any).__emit();});
+  const text='第一行\n'+('很长的用户消息'.repeat(40));
+  await page.evaluate(text=>{const run=(window as any).__demoRun;run.messages[0].text=text;(window as any).__emit();},text);
+  await expect(bubble).toHaveText(text);
   expect(await message.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
-  const outer=await message.boundingBox(),inner=await bubble.boundingBox();expect(Math.abs(outer!.x+outer!.width-inner!.x-inner!.width)).toBeLessThan(2);
+  // Read both edges in one browser task. Separate boundingBox calls can span
+  // frames while the responsive sidebar changes the conversation's position.
+  await expect.poll(()=>message.evaluate(el=>{
+   const outer=el.getBoundingClientRect(),inner=el.querySelector('[data-slot=bubble-content]')!.getBoundingClientRect();
+   return Math.abs(outer.right-inner.right);
+  })).toBeLessThan(2);
   await page.screenshot({path:`test-results/user-bubble-${theme}-${width}.png`});
  }
 });

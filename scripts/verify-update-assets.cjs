@@ -1,5 +1,5 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');const YAML=require('yaml');
-const root=path.resolve(process.argv[2]||'release');const version=require('../package.json').version;
+const root=path.resolve(process.argv[2]||'release');const version=process.argv[3]||require('../package.json').version;
 const manifests=fs.readdirSync(root).filter(n=>/^latest.*\.yml$/.test(n));if(!manifests.length)throw Error('No update metadata generated');
 for(const name of manifests){const m=YAML.parse(fs.readFileSync(path.join(root,name),'utf8'));if(m.version!==version||!m.files?.length)throw Error('Invalid update metadata: '+name);for(const f of m.files){if(path.basename(f.url)!==f.url)throw Error('Update asset must be a sibling file');const file=path.join(root,f.url);const digest=crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64');if(digest!==f.sha512)throw Error('Digest mismatch: '+f.url);if(/\.(zip|exe)$/.test(f.url)&&!fs.existsSync(file+'.blockmap'))throw Error('Missing blockmap: '+f.url);}}
 console.log('Validated '+manifests.length+' update manifests');

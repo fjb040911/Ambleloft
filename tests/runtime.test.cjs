@@ -5,6 +5,24 @@ const os = require('node:os');
 const path = require('node:path');
 const { AgentRuntime } = require('../electron/agent-runtime.cjs');
 
+test('late lifecycle events cannot stop the active turn or close its MCP connection', async()=>{
+ const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
+ const channel=await createAgentChannel({});
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});
+ runtime.changed=()=>{};runtime.persist=async()=>{};
+ const context={key:'test',config:{},extensionChannel:channel,run:{id:'run',threadId:'thread',turnId:'current',status:'running',messages:[],tools:[],approvals:[]}};
+ runtime.contexts.set(context.key,context);
+ try{
+  for(const method of ['turn/started','turn/completed'])runtime.notification(context,{method,params:{threadId:'thread',turn:{id:'previous',status:'interrupted'}}});
+  assert.equal(context.done,undefined);assert.equal(context.run.turnId,'current');assert.equal(context.run.status,'running');
+  const response=await fetch(channel.config.url,{method:'POST',headers:channel.config.http_headers,body:JSON.stringify({jsonrpc:'2.0',id:1,method:'ping'})});
+  assert.deepEqual((await response.json()).result,{});
+  runtime.notification(context,{method:'turn/completed',params:{threadId:'thread',turn:{id:'current',status:'completed'}}});
+  assert.equal(context.done,true);
+  assert.equal(context.run.status,'completed');
+ }finally{channel.close();}
+});
+
 test('approvals require the live request and are consumed exactly once', () => {
   const sent = [];
   const runtime = new AgentRuntime({ directory: '/unused', publish() {} });
