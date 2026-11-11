@@ -444,3 +444,13 @@ test('multiple refinement rounds reuse the current revision draft of a running t
  await f.start({replyTo:revised.id,prompt:'继续补充当前修订'});const refined=await f.finish();assert.notEqual(refined.host.status,'failed',refined.host.error);assert.equal(refined.host.task.draftId,revised.host.task.draftId);
  const state=await f.service.read();assert.equal(state.plans[0].id,p.id);assert.equal(state.plans[0].status,'running');assert.equal(state.taskDrafts.filter(d=>!d.planId).length,1);
 });
+
+for(const recover of [true,false])test('host output limit retries once and preserves diagnostics: '+recover,async t=>{
+ const f=await fixture(t),old=global.fetch;let calls=0;
+ t.after(()=>{global.fetch=old;});
+ f.service.workforce.providers.secret=async()=>({model:'test',protocol:'chat',baseUrl:'https://model.example/v1',effectiveLimits:{maxOutputTokens:12000}});
+ global.fetch=async(_url,options)=>{const body=JSON.parse(options.body);calls++;assert.equal(body.max_tokens,calls===1?8192:12000);return new Response(JSON.stringify({choices:[{finish_reason:recover&&calls===2?'stop':'length',message:{content:recover&&calls===2?JSON.stringify(response()):'PRIVATE truncated'}}]}));};
+ await f.start();const result=await f.finish();assert.equal(calls,2);assert.equal(f.runtime.starts.length,0);
+ if(recover){assert.equal(result.host.status,'completed');assert.equal(result.host.steps.length,1);}
+ else{assert.equal(result.host.status,'failed');assert.equal(result.host.errorCode,'OUTPUT_LIMIT');assert.equal(result.host.outputDiagnostics.maxOutputTokens,12000);assert.equal(result.host.outputDiagnostics.attempts,2);assert.match(result.host.error,/12000 tokens/);assert.ok(!JSON.stringify(result).includes('PRIVATE'));}
+});

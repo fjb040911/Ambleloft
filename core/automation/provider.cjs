@@ -30,7 +30,7 @@ async function generateWithinDeadline(config,job,signal,onProgress){
    await capabilities.remember(config,{protocol,streaming:!!onProgress,mode,unsupported});
    signal.throwIfAborted();return result;
   }catch(error){
-   error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode};
+   error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode,...(error.message==='OUTPUT_LIMIT'?{maxOutputTokens:outputBudget(config,job),outputLimitRetried:outputRetried}: {})};
    signal.throwIfAborted();if(attempt===3)throw error;
    const probeRoute=job.probeProtocol&&error.message==='PROVIDER_REJECTED'&&error.diagnostics?.httpStatus===404;
    if((error.message==='PROTOCOL_UNSUPPORTED'||probeRoute)&&(!config.protocol||config.protocol==='auto')&&!switched){protocol=protocol==='chat'?'responses':'chat';switched=true;index=choose();}
