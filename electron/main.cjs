@@ -456,7 +456,7 @@ app.whenReady().then(async () => {
   ]));
   const updateModule=app.isPackaged?require(path.join(process.resourcesPath,'tools/updater.cjs')):{...require('./updates.cjs'),updater:require('electron-updater').autoUpdater};
   if (updateTest) require('./update-diagnostics.cjs').attachUpdateDiagnostics(updateModule.updater,path.join(app.getPath('userData'),'updates'),app.getVersion());
-  updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&['darwin','win32'].includes(process.platform),publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
+  updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&process.platform==='win32',publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
     const blockers=()=>{
       const reasons=[];
       if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
