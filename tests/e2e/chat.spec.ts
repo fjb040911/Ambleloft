@@ -936,8 +936,10 @@ test('user Bubble keeps message theme and typography across themes and narrow la
   await expect(message).toHaveAttribute('data-align','end');await expect(bubble).toHaveCSS('background-color',theme==='light'?'rgb(0, 0, 0)':'rgb(48, 48, 48)');await expect(bubble).toHaveCSS('color','rgb(255, 255, 255)');
   await expect(bubble).toHaveCSS('font-size','15px');await expect(bubble).toHaveCSS('font-weight','500');await expect(bubble).toHaveCSS('line-height','22.5px');await expect(bubble).toHaveCSS('border-width','0px');
   await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[0].text='第一行\n'+('很长的用户消息'.repeat(40));(window as any).__emit();});
+  await expect(bubble).toContainText('很长的用户消息'.repeat(40));
   expect(await message.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
-  const outer=await message.boundingBox(),inner=await bubble.boundingBox();expect(Math.abs(outer!.x+outer!.width-inner!.x-inner!.width)).toBeLessThan(2);
+  // Read both rectangles in one frame after the streamed text reaches the DOM.
+  await expect.poll(()=>message.evaluate(el=>{const outer=el.getBoundingClientRect(),inner=el.querySelector('[data-slot=bubble-content]')!.getBoundingClientRect();return Math.abs(outer.right-inner.right);})).toBeLessThan(2);
   await page.screenshot({path:`test-results/user-bubble-${theme}-${width}.png`});
  }
 });
