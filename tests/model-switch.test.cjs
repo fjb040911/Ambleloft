@@ -7,7 +7,7 @@ async function fixture(t,{hook}={}){
  const config=(id='a',model='old')=>({id,model,baseUrl:`https://${id}.invalid/v1`,apiKey:`secret-${id}`,executable:process.execPath});
  const runtime=new AgentRuntime({directory,publish(){},provider:{secret:async(id,model)=>config(id,model)},conversationOptions:{infer:async()=>({action:'reply',reply:'Working'})}});runtime.persist=async()=>{};runtime.changed=()=>{};
  const run={id:'run',providerId:'a',model:'old',baseUrl:config().baseUrl,permission:'default',status:'running',threadId:'parent',turnId:'old-parent',messages:[{id:'root',role:'user',text:'Keep the original goal'},{id:'answer',role:'user',formSubmissionId:'answer-id',text:'Confirmed form answer',turnKey:'root'}],tools:[],approvals:[],questions:[],conversation:{version:2,updates:[{inputId:'requirement',version:2,state:'delivered',turnKey:'root',action:'execute'}]}};
- const child={id:'child',nativeThreadId:'child',nativeTurnId:'old-child',status:'running',analysisAgent:{name:'Reviewer'},turnKey:'root'};run.tools=[child];
+ const child={id:'child',nativeThreadId:'child',nativeTurnId:'old-child',status:'running',analysisAgent:{name:'Reviewer'},analysisTask:'Review the original goal',turnKey:'root'};run.tools=[child];
  const context={key:'context',run,turnKey:'root',config:config(),dualAgent:true,nativeThreads:new Map([['child',child]]),rpcLocation:{home:directory,cwd:directory},engineParameters:{model:'old',modelProvider:'atelier',developerInstructions:'Keep role and workflow instructions'}};
  const factory=options=>{const rpc={options,closed:false,send(){},close(){this.closed=true;},async call(method,args){calls.push({method,args,rpc});const result=await hook?.(method,args,{runtime,run,context});if(result)return result;
   if(method==='turn/interrupt'){runtime.notification(context,{method:'turn/completed',params:{threadId:args.threadId,turn:{id:args.turnId,status:'interrupted'}}});return {};}
@@ -24,7 +24,9 @@ test('live model switch rebuilds transport and retains thread IDs, roles, forms,
  const f=await fixture(t),messages=f.run.messages,updates=f.run.conversation.updates;const result=await f.runtime.switchModel(next);
  assert.equal(result.state,'applied',result.error);assert.equal(f.run.model,'new');assert.equal(f.context.config.model,'new');assert.equal(f.context.turnKey,'root');assert.equal(f.run.messages,messages);assert.equal(f.run.conversation.updates,updates);assert.equal(f.context.nativeThreads.get('child'),f.child);assert.equal(f.run.permission,'default');assert.equal(f.transports.length,2);assert.equal(f.transports[0].closed,true);
  const resumes=f.calls.filter(c=>c.method==='thread/resume');assert.deepEqual(resumes.map(c=>c.args.threadId),['parent','child']);assert.ok(resumes.every(c=>c.args.model==='new'&&c.args.approvalPolicy==='on-request'));assert.match(resumes[0].args.developerInstructions,/Keep role/);
- assert.ok(f.calls.filter(c=>c.method==='turn/start').every(c=>c.args.model==='new'));
+ const starts=f.calls.filter(c=>c.method==='turn/start');assert.ok(starts.every(c=>c.args.model==='new'));
+ assert.match(starts.find(c=>c.args.threadId==='parent').args.input[0].text,/Keep the original goal/);
+ assert.match(starts.find(c=>c.args.threadId==='child').args.input[0].text,/Review the original goal/);
 });
 test('cross-service changes require confirmation before stopping or transmitting history',async t=>{
  const f=await fixture(t);await assert.rejects(f.runtime.switchModel({...next,providerId:'b'}),/确认/);assert.equal(f.calls.length,0);assert.equal(f.run.model,'old');

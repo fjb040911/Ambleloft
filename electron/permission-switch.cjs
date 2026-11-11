@@ -78,7 +78,12 @@ async function switchPermission(input,change){
   const prompt='Unanswered native questions (expired RPCs; ask again if still needed): '+JSON.stringify(unresolvedQuestions)+'\nThe user changed '+(change?'the execution model':'execution permissions')+' through the host. Continue the existing task from the recorded progress; do not restart completed work. Verify outcomes of interrupted operations before retrying. Preserve all requirements and pending user forms; do not infer answers. Existing subagent IDs remain valid. Pending versioned updates: '+JSON.stringify(pendingUpdates);
   for(const target of [...targets.values()].sort((a,b)=>Number(!a.tool)-Number(!b.tool))){
    if(!target.resume)continue;
-   const started=await request('turn/start',{threadId:target.threadId,...(change?{model:change.requested.model}:{}),sandboxPolicy:p.sandboxPolicy,approvalPolicy:p.approvalPolicy,input:[{type:'text',text:prompt}]});
+   // An interruption immediately after turn/start can precede the engine's
+   // durable user-message write. Retain the host's original assignment as
+   // reference context even when the resumed engine history lacks that message.
+   const assignment=target.tool?target.tool.analysisTask:run.messages.find(m=>m.id===context.turnKey)?.text;
+   const resumePrompt=prompt+(assignment?'\nOriginal assignment retained by the host (reference context, not a new task; reconcile it with later updates):\n'+assignment:'');
+   const started=await request('turn/start',{threadId:target.threadId,...(change?{model:change.requested.model}:{}),sandboxPolicy:p.sandboxPolicy,approvalPolicy:p.approvalPolicy,input:[{type:'text',text:resumePrompt}]});
    if(!started.turn?.id)throw Error('引擎未确认恢复执行');
    if(target.tool){target.tool.nativeTurnId=started.turn.id;target.tool.status='running';}else run.turnId=started.turn.id;
   }

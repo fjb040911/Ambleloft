@@ -15,7 +15,7 @@ test('bundled engine switches models and endpoints with parent/child history and
  const parent=await original.call('thread/start',{model:run.model,modelProvider:'atelier',sandbox:'read-only',approvalPolicy:'on-request',developerInstructions:'Retain original workflow.'});run.threadId=parent.thread.id;
  const parentTurn=await original.call('turn/start',{threadId:run.threadId,input:[{type:'text',text:run.messages[0].text}]});run.turnId=parentTurn.turn.id;
  const child=await original.call('thread/start',{model:run.model,modelProvider:'atelier',sandbox:'read-only',approvalPolicy:'on-request',developerInstructions:'Review the original task.'});
- const tool={id:'child',nativeThreadId:child.thread.id,status:'running',analysisAgent:{name:'Reviewer'},turnKey:'root'};run.tools.push(tool);context.nativeThreads.set(child.thread.id,tool);
+ const tool={id:'child',nativeThreadId:child.thread.id,status:'running',analysisAgent:{name:'Reviewer'},analysisTask:'Review requirement 475',turnKey:'root'};run.tools.push(tool);context.nativeThreads.set(child.thread.id,tool);
  tool.nativeTurnId=(await original.call('turn/start',{threadId:child.thread.id,input:[{type:'text',text:'Review requirement 475'}]})).turn.id;
  for(const [providerId,model] of [['a','fixture-new'],['b','fixture-other']]){
   const result=await runtime.switchModel({runId:run.id,providerId,model,confirmProviderChange:providerId==='b'});assert.equal(result.state,'applied',result.error);assert.equal(run.threadId,parent.thread.id);assert.equal(context.nativeThreads.get(child.thread.id),tool);
