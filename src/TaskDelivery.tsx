@@ -21,7 +21,7 @@ export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,o
  const delivery=(finals?.length?finals:output?.slice(-1))||[];
  const conversationProps:ComponentProps<typeof Conversation>|null=run?{
   onOptionsChange:mode==='chat'&&!switching?onOptionsChange:undefined,
-  run:readOnly||switching?{...run,archivedAt:run.archivedAt||'read-only'}:run,catalog,submitting:switching,pendingInPanel:true,autoOpenPending:mode==='chat',visible:active&&!hidden,
+  run:readOnly||switching?{...run,archivedAt:run.archivedAt||'read-only'}:run,catalog,submitting:switching,inputsInPanel:true,autoOpenPending:mode==='chat',visible:active&&!hidden,
   send:async(text,options)=>{if(!onRework)throw Error(L('当前状态不能修改交付，请先处理任务状态。','This delivery cannot be changed in its current state.'));await onRework(text,options);},
   stop:()=>{if(!readOnly)void window.desktop!.stopRun(run.id).catch(e=>setError(e.message));},
   approve:async(id,decision)=>{if(readOnly)throw Error(L('空间已归档，只能查看执行记录','Archived space: execution records are read-only'));await window.desktop!.approveRun({runId:run.id,approvalId:id,decision});},

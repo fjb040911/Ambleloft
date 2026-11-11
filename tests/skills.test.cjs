@@ -152,3 +152,25 @@ test('system guidance is discoverable, localized and read-only without entering 
  skills.locale='zh-CN';assert.equal((await skills.listSystem())[0].displayName,'任务创建引导');
  skills.locale='fr';assert.equal((await skills.listSystem())[0].displayName,'Task creation guide');
 });
+
+test('skill bundles import with resources and remote reads bind to request revision',async t=>{
+ const {skills,dir}=await fixture(t);
+ const {createRemoteTools}=require('../core/ssh/agent-tools.cjs');
+ const project={id:'eda',type:'ssh',connectionId:'eda-host',path:'/work/chip'};
+ for(const name of ['remote-one','remote-two']){
+  const source=path.join(dir,name);await fs.mkdir(path.join(source,'scripts'),{recursive:true});await fs.mkdir(path.join(source,'references'));
+  await fs.writeFile(path.join(source,'SKILL.md'),`---\nname: ${name}\ndescription: Remote test workflow\n---\nRead the bundled resources.\n`);
+  await fs.writeFile(path.join(source,'scripts/job.py'),'def submit():\n    return None\n');await fs.writeFile(path.join(source,'references/remote-jobs.md'),'Remote workflow fixture.');
+  const {skill}=await skills.importFolder(source);
+  const context={skills:await skills.prepare([skill.id]),run:{id:'r',permission:'full'}};
+  const runtime={skills,workspace:{read:async()=>({projects:[project]})}};
+  const remote=createRemoteTools(runtime,context,project),signal=new AbortController().signal;
+  const resource=await remote.call('remote_skill_read',{id:skill.id,file:'scripts/job.py'},signal);
+  assert.match(resource.text,/def submit/);assert.match(resource.sha256,/^[a-f0-9]{64}$/);
+  assert.ok(resource.files.includes('references/remote-jobs.md'));
+  await assert.rejects(remote.call('remote_skill_read',{id:skill.id,file:'../escape'},signal),/当前请求/);
+  await assert.rejects(remote.call('remote_skill_read',{id:'not-in-catalog'},signal),/当前请求/);
+  await skills.importFolder(source,{replaceId:skill.id});
+  await assert.rejects(remote.call('remote_skill_read',{id:skill.id},signal),/已更新/);
+ }
+});

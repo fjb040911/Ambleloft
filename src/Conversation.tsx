@@ -9,7 +9,6 @@ import PendingMessage from './PendingMessage';
 import {unwrapInputResult} from './input-action-result';
 import {Button} from './components/ui/button';
 import ApprovalCard from './ApprovalCard';
-import ApprovalQueue from './ApprovalQueue';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
@@ -43,10 +42,11 @@ function Duration({ timing }: { timing: TurnTiming }) {
   const seconds = typeof timing.durationMs === 'number' && Number.isFinite(timing.durationMs) ? Math.max(0, Math.floor(timing.durationMs / 1000)) : null;
   return <TraceDescription className="trace-duration inline-flex items-center gap-2"><Clock3 size={13} /><span>{seconds === null ? t("用时未完整记录") : <>{t("用时")} <strong>{Math.floor(seconds / 60)}</strong> {t("分")} <strong>{seconds % 60}</strong> {t("秒")}</>}{timing.outcome === 'failed' ? t(" · 执行失败") : timing.outcome === 'interrupted' ? t(" · 已中断") : ''}</span></TraceDescription>;
 }
-function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel=false,reworkMode=false,onFollowingChange, visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openReference, openChanges, embedded = false, embeddedPrompt, actionsOnly = false, hidePendingActions = false, refreshRun, selectedInput, onOpenInput }: {
+function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=false,reworkMode=false,onFollowingChange, visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openReference, openChanges, embedded = false, embeddedPrompt, actionsOnly = false, hidePendingActions = false, refreshRun, selectedInput, onOpenInput }: {
   onOptionsChange?(options:ComposerOptions):void;
-  pendingInPanel?:boolean;
   autoOpenPending?:boolean;
+  // Form placement varies by host; approval review always uses the shared surface.
+  inputsInPanel?:boolean;
   reworkMode?:boolean;
   onFollowingChange(following:boolean):void;
   embedded?:boolean;
@@ -167,7 +167,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
     }catch(error){setPrompt(current=>draftVersion.current===version?text:[text,current].filter(Boolean).join('\n\n'));setSendError((error as Error).message);}finally{setPendingMessage(null);sending.current=false;setInputSending(false);void deliveries.refresh();}
   };
   const [requestOutcome,setRequestOutcome]=useState<{key:string;label:string}|null>(null);
-  const decide = async (id:string,decision:'accept'|'decline')=>{if(approvalLock.current)return;approvalLock.current=true;setPending({id,decision});setApprovalError(null);try{await approve(id,decision);const fileChange=run.approvals.find(a=>a.id===id)?.method.includes('fileChange');setRequestOutcome({key:'approval:'+id,label:decision==='decline'?'已拒绝本次请求':fileChange?'已批准本次文件修改':'已批准本次命令'});}catch(e){setApprovalError({id,message:(e as Error).message});}finally{approvalLock.current=false;setPending(null);}};
+  const decide = async (id:string,decision:'accept'|'decline')=>{if(approvalLock.current||!visibleRef.current||run.archivedAt||!isRunning(run)||run.status==='stopping'||!run.approvals.some(a=>a.id===id))return;approvalLock.current=true;setPending({id,decision});setApprovalError(null);try{await approve(id,decision);const fileChange=run.approvals.find(a=>a.id===id)?.method.includes('fileChange');setRequestOutcome({key:'approval:'+id,label:decision==='decline'?'已拒绝本次请求':fileChange?'已批准本次文件修改':'已批准本次命令'});}catch(e){setApprovalError({id,message:(e as Error).message});}finally{approvalLock.current=false;setPending(null);}};
   // Temporary status belongs inside a turn, not in the scroller's direct-child
   // anchor list. Replacing a pending item with a real turn at the same count
   // makes the scroller rediscover a historical anchor and jump backwards.
@@ -185,15 +185,16 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
             <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language]);
   const renderTurn=(turn:typeof turns[number])=>renderedTurns.get(turn.user.id);
-  const requestKeys=[...run.approvals.map(r=>'approval:'+r.id),...(run.questions||[]).map(r=>'question:'+r.id),...(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id)];
+  const actionableApprovals=active&&run.status!=='stopping'&&!run.archivedAt?[...new Map(run.approvals.map(a=>[a.id,a])).values()]:[];
+  const requestKeys=[...actionableApprovals.map(r=>'approval:'+r.id),...(inputsInPanel?(run.questions||[]).map(r=>'question:'+r.id):[]),...(inputsInPanel?(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id):[])];
   const pendingCount=requestKeys.length;
   const [selectedRequest,setSelectedRequest]=useState<string|null>(null);
   const dismissedRequests=useRef(false);
   const currentRequest=selectedRequest||requestKeys[0];
   const requestActive=requestKeys.includes(currentRequest);
-  const selectedApprovals=pendingInPanel?run.approvals.filter(r=>'approval:'+r.id===currentRequest):run.approvals;
-  const requestRun=pendingInPanel?{...run,questions:(run.questions||[]).filter(r=>'question:'+r.id===currentRequest)}:run;
-  const selectedRequests=pendingInPanel?(deliveries.snapshot?.requests||[]).filter(r=>'input:'+r.id===currentRequest):deliveries.snapshot?.requests||[];
+  const selectedApproval=actionableApprovals.find(r=>'approval:'+r.id===currentRequest);
+  const requestRun={...run,questions:(run.questions||[]).filter(r=>'question:'+r.id===currentRequest)};
+  const selectedRequests=(deliveries.snapshot?.requests||[]).filter(r=>'input:'+r.id===currentRequest);
   const previousRequests=useRef(new Set<string>());
   const requestSignature=JSON.stringify(requestKeys);
   useEffect(()=>{
@@ -208,19 +209,19 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
   },[autoOpenPending,visible,hidePendingActions,run.archivedAt,requestSignature]);
   const toggleRequests=(open:boolean)=>{setPendingOpen(open);if(!open)dismissedRequests.current=true;};
   const outboxPanel=<InputDeliveryPanel snapshot={deliveries.snapshot} hasUnansweredQuestion={!!run.questions?.length||!!interruptedQuestion(run.messages)} error={deliveries.error} selected={selectedInputs} onSelected={setSelectedInputs} onContinue={()=>void continueSelected()} busy={inputSending||submitting||run.status==='stopping'} onRefresh={()=>void deliveries.refresh()}/>;
-  const pendingActions=<>      <SupplementalInputDock compact={pendingInPanel} run={requestRun} requests={selectedRequests} policy={deliveries.snapshot?.policy} refresh={deliveries.refresh} selection={selectedInput||inputSelection}/>
-      {pendingInPanel && selectedApprovals.length > 0 && <div className={`flex min-w-0 flex-col gap-2 ${!pendingInPanel&&selectedApprovals.length>1?'max-h-[40vh] overflow-auto':''}`} aria-label={t("待处理授权")}><div className="sr-only" role="status">{t("待处理授权 ·")}{selectedApprovals.length}</div>{selectedApprovals.map(approval => <ApprovalCard key={approval.id} approval={approval} disabled={!!pending||run.status==='stopping'||!!run.archivedAt} pending={pending?.id===approval.id?pending.decision:undefined} error={approvalError?.id===approval.id?approvalError.message:undefined} decide={decision => void decide(approval.id,decision)} />)}{run.tools.filter(tool=>tool.type==='fileChange').length > 0 && <details className="p-2 [&_pre]:whitespace-pre-wrap [&_pre]:break-words"><summary>{t("文件变更记录")}</summary>{run.tools.filter(tool=>tool.type==='fileChange').map(tool=><pre key={tool.id}>{tool.detail}</pre>)}</details>}</div>}
-      {!pendingInPanel&&run.approvals.length>0&&!['stopping','completed','failed','interrupted'].includes(run.status)&&!run.archivedAt&&<ApprovalQueue key={run.id} approvals={run.approvals} source={[run.employee?.name,run.title].filter(Boolean).join(' · ')} disabled={!!pending||!visible} decide={approve}/>}
-      {!pendingInPanel&&outboxPanel}</>;
+  const inlineInputs=!inputsInPanel&&<SupplementalInputDock run={run} requests={deliveries.snapshot?.requests||[]} policy={deliveries.snapshot?.policy} refresh={deliveries.refresh} selection={selectedInput||inputSelection}/>;
+  const pendingActions=<>
+    {inputsInPanel&&<SupplementalInputDock compact run={requestRun} requests={selectedRequests} policy={deliveries.snapshot?.policy} refresh={deliveries.refresh} selection={selectedInput||inputSelection}/>}
+    {selectedApproval&&<ApprovalCard key={selectedApproval.id} approval={selectedApproval} disabled={!!pending||!visible||run.status==='stopping'||!!run.archivedAt} pending={pending?.id===selectedApproval.id?pending.decision:undefined} error={approvalError?.id===selectedApproval.id?approvalError.message:undefined} decide={decision=>void decide(selectedApproval.id,decision)}/>}
+  </>;
   const nextRequestKey=requestKeys[0];
-  const nextApproval=run.approvals.find(r=>'approval:'+r.id===nextRequestKey);
+  const nextApproval=actionableApprovals.find(r=>'approval:'+r.id===nextRequestKey);
   const nextQuestion=run.questions?.find(r=>'question:'+r.id===nextRequestKey);
   const nextInput=deliveries.snapshot?.requests?.find(r=>'input:'+r.id===nextRequestKey);
   let nextSummary=nextQuestion?.questions[0]?.question||nextInput?.template.title||'';
   if(nextApproval){try{const detail=JSON.parse(nextApproval.detail);nextSummary=[detail.command,detail.path,detail.filePath,detail.reason].find(value=>typeof value==='string'&&value.trim())||t('查看请求详情');}catch{nextSummary=t('查看请求详情');}}
   const nextType=nextApproval?t(nextApproval.method.includes('fileChange')?'文件修改':'终端操作'):t('待补充信息');
-  const pendingSurface=pendingInPanel?<TaskRequestSurface title={requestActive?(currentRequest?.startsWith('approval:')?t('待处理授权'):t('待补充信息')):undefined} open={pendingOpen} onOpenChange={toggleRequests} count={pendingCount} floating={!actionsOnly&&!embedded} visible={visible&&!hidePendingActions}>
-    {outboxPanel}
+  const pendingSurface=<TaskRequestSurface title={requestActive?(currentRequest?.startsWith('approval:')?t('待处理授权'):t('待补充信息')):undefined} open={pendingOpen} onOpenChange={toggleRequests} count={pendingCount} floating={!actionsOnly&&!embedded} visible={visible&&!hidePendingActions&&(!floatingHost||recentOpen)}>
     {requestActive?pendingActions:<div className="flex min-w-0 flex-col gap-3 px-2 pb-2">
       <p className="m-0 text-sm text-muted-foreground" role="status">{t(requestOutcome&&requestOutcome.key===currentRequest?requestOutcome.label:'当前请求已处理')}</p>
       {pendingCount>0&&<section aria-label={t('下一项请求')} className="flex min-w-0 flex-col items-start gap-2">
@@ -230,12 +231,12 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
       </section>}
     </div>}
     {requestActive&&pendingCount>1&&<div className="flex justify-end p-2"><Button variant="outline" onClick={()=>{const next=requestKeys[(requestKeys.indexOf(currentRequest)+1)%requestKeys.length];setSelectedRequest(next);}}>{t('查看下一项')} ({pendingCount})</Button></div>}
-  </TaskRequestSurface>:pendingActions;
+  </TaskRequestSurface>;
   if(actionsOnly){
     const hasRequest=!!run.approvals.length||!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending');
     return <section className="wf-run-actions" aria-label={t('需要你处理')}>
       {hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
-      {pendingSurface}
+      {inlineInputs}{outboxPanel}{pendingSurface}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {run.status==='waiting'&&!hasRequest&&!deliveries.error&&<div role="status"><p>{t('正在等待操作，但尚未读取到具体请求。可以刷新或打开完整任务查看。')}</p><div className="settings-actions"><Button variant="outline" onClick={()=>{void deliveries.refresh();refreshRun?.();}}>{t('刷新待处理请求')}</Button><Button variant="ghost" onClick={()=>openSettings('task')}>{t('打开完整任务')}</Button></div></div>}
     </section>;
@@ -245,7 +246,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
     {turns.map((turn,index)=><div className="conversation-turn" key={turn.user.id} data-embedded-first={index===0&&!before&&turn.user.text===embeddedPrompt||undefined}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
     {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact/>}
-    {!hidePendingActions&&pendingSurface}
+    {!hidePendingActions&&<>{inlineInputs}{outboxPanel}{pendingSurface}</>}
   </div>;
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<button className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp size={16} aria-hidden="true"/></button>}
@@ -267,11 +268,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=false,pendingInPanel
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
     </div>
     <div className="conversation-dock">
-      {pendingInPanel&&pendingSurface}
+      {inlineInputs}{outboxPanel}{pendingSurface}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
-      {!pendingInPanel&&pendingSurface}
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
       <ChatComposer attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending} sending={submitting||inputSending}
         label={reworkMode?t('修改要求'):t('继续对话')} placeholder={reworkMode?t('说明需要修改的内容，提交后重新执行并验收'):run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}

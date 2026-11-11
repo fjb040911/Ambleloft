@@ -1,7 +1,8 @@
 const {sameTarget,targetLabel}=require('./environment.cjs');
-const {randomUUID}=require('node:crypto');
+const {randomUUID,createHash}=require('node:crypto');
 const schema=properties=>({type:'object',properties,additionalProperties:false});
 const tools=[
+ {name:'remote_skill_read',description:'Read a text resource from an installed skill in this request catalog. This is the only local skill-resource bridge for SSH tasks; it never executes or uploads files. Use remote_write to deploy returned text to the project, then verify its SHA-256. Defaults to SKILL.md and returns the bundle file list.',inputSchema:{...schema({id:{type:'string'},file:{type:'string'}}),required:['id']}},
  {name:'remote_list',description:'List files in the SSH project directory. Paths are project-relative.',inputSchema:schema({path:{type:'string'},hidden:{type:'boolean'}})},
  {name:'remote_search',description:'Search file names in the SSH project. Use remote_exec for content searches.',inputSchema:{...schema({query:{type:'string'}}),required:['query']}},
  {name:'remote_read',description:'Read a UTF-8 remote project file. Returns text and SHA-256 for safe subsequent writes.',inputSchema:{...schema({path:{type:'string'}}),required:['path']}},
@@ -26,6 +27,13 @@ function createRemoteTools(runtime,context,project){
  return {tools:tools.map(tool=>({...tool,description:tool.description.replaceAll('SSH project','selected remote environment project').replace('on the SSH server in a login bash shell',project.environment?.kind==='docker'?'inside the selected Docker container using its configured bash/sh shell':'on the SSH server in a login bash shell')})),async call(name,args,signal){await validate();if(signal.aborted)throw Error('操作已取消');const tool=tools.find(t=>t.name===name);if(!tool||!args||typeof args!=='object'||Object.keys(args).some(k=>!Object.keys(tool.inputSchema.properties).includes(k)))throw Error('远端工具参数无效');
   if(name==='remote_write'||name==='remote_exec')await approve(name,args,signal);
   await validate();if(signal.aborted)throw Error('操作已取消');
+  if(name==='remote_skill_read'){
+   const resource=context.skills?.resources?.find(s=>s.id===args.id),file=args.file??'SKILL.md';
+   if(!resource||!runtime.skills||!resource.files.includes(file))throw Error('技能资源不在当前请求目录中');
+   const result=await runtime.skills.readFile({id:args.id,file,expectedRevision:resource.revision});
+   if(typeof result.text!=='string')throw Error('仅支持文本技能资源');
+   return {id:args.id,revision:resource.revision,files:resource.files,file,text:result.text,sha256:createHash('sha256').update(result.text).digest('hex')};
+  }
   if(name==='remote_exec')return runtime.ssh.execute(project.connectionId,project.path,args.command,{signal,timeoutMs:args.timeoutMs,environment:project.environment});
   return runtime.remoteFiles[{remote_list:'list',remote_read:'read',remote_write:'write',remote_search:'search'}[name]]({...args,projectId:project.id,runId:context.run.id,signal});
  }};

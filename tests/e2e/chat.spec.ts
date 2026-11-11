@@ -399,11 +399,11 @@ test('markdown file dialog follows dark, light and system themes in both sizes',
   await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});
   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
   const dark=theme!=='light';
-  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 39, 46)':'rgb(255, 255, 255)');
-  await expect.poll(()=>dialog.locator('.markdown').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(232, 234, 240)':'rgb(38, 44, 53)');
+  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 36, 36)':'rgb(255, 255, 255)');
+  await expect.poll(()=>dialog.locator('.markdown').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(237, 237, 237)':'rgb(38, 44, 53)');
   await expect.poll(()=>dialog.locator('.hljs-keyword').evaluate(el=>getComputedStyle(el).color)).toBe(dark?'rgb(213, 165, 245)':'rgb(128, 64, 160)');
   await dialog.getByRole('button',{name:'最大化',exact:true}).click();
-  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 39, 46)':'rgb(255, 255, 255)');
+  await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(dark?'rgb(36, 36, 36)':'rgb(255, 255, 255)');
   if(theme==='dark')await page.screenshot({path:'test-results/markdown-preview-dark.png'});
   await dialog.getByRole('button',{name:'退出最大化',exact:true}).click();
  }
@@ -575,7 +575,8 @@ test('parallel streaming keeps sidebar order and selection stable after pointer 
   const runs=[make('A','2026-09-24T00:00:00Z'),make('B','2026-09-24T00:01:00Z')];
   let emit:any;const w=window as any;
   w.__stream=(id:string,index:number)=>{const run=runs.find(r=>r.id===id)!;run.updatedAt=new Date(Date.UTC(2026,8,24,0,2,index)).toISOString();run.messages[1].text+='更新';emit(structuredClone(run));};
-  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({language,layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
+  sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
+  w.desktop={getProvider:async()=>({configured:true,model:'fixture',baseUrl:runs[0].baseUrl}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>({language:'zh-CN',layoutMode:'classic',tasks:[],projects:[],theme:'light'}),listRuns:async()=>structuredClone(runs),onRun:(fn:any)=>{emit=fn;return()=>{};},onCommand:()=>()=>{},saveWorkspace:async()=>{}};
  });
  await page.goto('/');
  const rows=page.locator('.tree-task > button:first-child');
@@ -603,18 +604,18 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
  await page.getByRole('button',{name:'显示侧栏',exact:true}).click();
  await expect(page.locator('#workspace-sidebar')).toBeVisible();
- await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(224);
- const headings=page.locator('.workspace-navigation .nav-group-toggle');
- await expect(headings).toHaveText(['项目','任务','扩展']);
- await expect(page.getByRole('button',{name:'技能与扩展',exact:true})).toBeVisible();
+ await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(256);
+ const navigation=page.getByRole('navigation',{name:'分组导航'});
+ for(const name of ['项目','任务','协作工作平台','扩展'])await expect(navigation.getByRole('button',{name,exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/task-sidebar.png'});
- for(const heading of await headings.all()){await expect(heading).toHaveCSS('font-size','14px');await expect(heading).toHaveCSS('min-height','32px');}
- for(const name of ['项目','任务']){
-  const heading=page.getByRole('button',{name,exact:true});
-  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');
+ for(const name of ['项目','任务','项目','任务']){
+  const group=navigation.getByRole('button',{name,exact:true});
+  await group.click();await expect(group).toHaveAttribute('aria-pressed','true');
+  await expect(navigation.locator('[aria-pressed=true]')).toHaveCount(1);
   await expect(page.locator('[data-slot=message][data-align=start]')).toContainText('保持当前任务');
-  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','true');
+  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
  }
+ await expect(page.locator('.tree-task.selected')).toContainText('任务体验验收');
 });
 
 test('activity and thinking indicators animate only while running and respect reduced motion',async({page})=>{
@@ -837,6 +838,8 @@ test('reconciled forms replace stale local errors with the confirmed submission 
  });
  const card=page.getByLabel('报销申请',{exact:true});
  await expect(card.getByRole('alert')).toContainText('INTERNAL');
+ // The shared authorization surface can be dismissed to work with transcript forms.
+ await page.getByRole('region',{name:'处理任务请求',exact:true}).getByRole('button',{name:'收起请求',exact:true}).click();
  await card.getByRole('button',{name:'核实提交结果'}).click();
  await expect(card.getByRole('alert')).toContainText('暂时无法连接');
  await page.evaluate(()=>{const f=(window as any).__recovery;f.revision++;f.status='completed';delete f.error;f.results={main:{claimId:'CL-001',amount:'1280.00'}};(window as any).__formsChanged();});
@@ -867,7 +870,7 @@ test('queued execution follows application language',async({page})=>{
 test('project execution status and empty description are translated',async({page})=>{
  await prepare(page);
  await page.addInitScript(()=>{const api=(window as any).desktop;api.readWorkspace=async()=>({layoutMode:'classic',theme:'light',language:'en',tasks:[],projects:[{id:'p',name:'Demo',path:'/fixture',createdAt:new Date().toISOString()}]});const run=(window as any).__demoRun;run.projectId='p';run.status='completed';run.approvals=[];});
- await page.reload();await page.locator('.project-tree-name').click();
+ await page.reload();await page.getByRole('navigation',{name:'Navigation groups'}).getByRole('button',{name:'Project',exact:true}).click();await page.locator('.project-tree-name').click();
  await expect(page.locator('.project-task-list small')).toHaveText('Turn ended');
  await expect(page.locator('.page-description')).toHaveText('Add a description to share context across project tasks.');
 });
@@ -966,37 +969,39 @@ for(const width of [1240,600])test(`chat composer keeps bottom space for message
  expect(geometry.gap).toBeLessThanOrEqual(10);expect(geometry.hintHeight).toBeLessThanOrEqual(1);expect(geometry.description).toContain('Shift+Enter');
 });
 
-test('approval queue collapses bursts and batches only explicitly selected request identities',async({page})=>{
- await prepare(page,'等待审批');
- await page.evaluate(()=>{const w=window as any;w.__calls=[];w.__demoRun.approvals=Array.from({length:12},(_,i)=>({id:'a'+i,method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo '+i,cwd:'/fixture',subagent:i%2?'架构师':'产品经理'})}));w.desktop.approveRun=async(input:any)=>{w.__calls.push(input);if(w.__calls.length===1)w.__demoRun.approvals.push({id:'new',method:'commandExecution',detail:'{"command":"echo new"}'});w.__demoRun.approvals=w.__demoRun.approvals.filter((a:any)=>a.id!==input.approvalId);w.__emit();};w.__emit();});
- const queue=page.getByRole('region',{name:'授权请求队列'});
- await expect(queue.getByRole('region',{name:'执行授权'})).toHaveCount(1);
- await expect(page.getByRole('dialog')).toHaveCount(0);
- const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('保留正在输入的补充');await expect(input).toBeFocused();
- await page.getByRole('button',{name:'收起请求',exact:true}).click();await expect(queue).toBeHidden();
+for(const width of [1240,390])test(`concurrent approvals share one review surface and preserve the composer ${width}`,async({page})=>{
+ await prepare(page,'等待审批');await page.setViewportSize({width,height:844});
+ const input=page.getByRole('textbox',{name:'继续对话'}),surface=page.getByRole('region',{name:'处理任务请求',exact:true});
+ await input.fill('保留正在输入的补充');const initial=await input.boundingBox();
+ await page.evaluate(()=>{const w=window as any;w.__calls=[];w.__demoRun.approvals=Array.from({length:12},(_,i)=>({id:'a'+i,method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo '+i,cwd:'/fixture',subagent:i%2?'架构师':'产品经理'})}));w.desktop.approveRun=async(input:any)=>{w.__calls.push(input);w.__demoRun.approvals=w.__demoRun.approvals.filter((a:any)=>a.id!==input.approvalId);w.__demoRun.approvals.push({id:'new',method:'commandExecution',detail:'{"command":"echo new"}'});w.__emit();};w.__emit();});
+ await expect(surface).toContainText('待处理授权 · 12');await expect(surface.getByRole('region',{name:'执行授权',exact:true})).toHaveCount(1);
+ await expect(surface.getByLabel('待执行命令')).toHaveText('echo 0');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(input).toBeFocused();
+ await surface.getByRole('button',{name:'收起请求',exact:true}).click();
  await page.evaluate(()=>{const w=window as any;w.__demoRun.approvals.push({id:'later',method:'commandExecution',detail:'{"command":"echo later"}'});w.__emit();});
- await expect(queue).toBeHidden();await expect(input).toHaveValue('保留正在输入的补充');
- await page.getByRole('button',{name:'查看并处理',exact:true}).click();
- await page.getByRole('checkbox',{name:'选择授权请求 a0',exact:true}).check();await page.getByRole('checkbox',{name:'选择授权请求 a1',exact:true}).check();
- await page.getByRole('button',{name:'批准所选项',exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0','a1']);
- await expect(page.getByRole('checkbox',{name:'选择授权请求 new',exact:true})).not.toBeChecked();
- await expect(page.getByRole('button',{name:'批准所选项'})).toBeDisabled();
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/approval-queue-narrow.png'});
- expect(await queue.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
- await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});await expect(queue).toHaveCount(0);
+ await expect(surface.getByRole('region',{name:'执行授权',exact:true})).toBeHidden();await expect(surface).toContainText('待处理授权 · 13');await expect(input).toHaveValue('保留正在输入的补充');
+ await surface.getByRole('button',{name:'查看并处理',exact:true}).click();
+ await surface.getByRole('button',{name:'批准本次',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0']);
+ await expect(surface).toContainText('已批准本次命令');await expect(surface.getByRole('button',{name:'批准本次',exact:true})).toHaveCount(0);
+ await expect(surface.getByRole('region',{name:'下一项请求'})).toContainText('echo 1');
+ await surface.getByRole('button',{name:'审核此项',exact:true}).click();await expect(surface.getByLabel('待执行命令')).toHaveText('echo 1');
+ await surface.getByRole('button',{name:/查看下一项/}).click();await expect(surface.getByLabel('待执行命令')).toHaveText('echo 2');
+ expect(await page.evaluate(()=>(window as any).__calls.length)).toBe(1);
+ expect(await input.boundingBox()).toEqual(initial);
+ await page.screenshot({path:`test-results/approval-single-${width}.png`});
+ expect(await surface.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await surface.getByRole('button',{name:'收起请求',exact:true}).focus();await page.keyboard.press('Escape');await expect(surface.getByRole('button',{name:'查看并处理',exact:true})).toBeFocused();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});await expect(surface).toHaveCount(0);
 });
 
-test('approval queue stops a batch on failure and does not approve after stop',async({page})=>{
+test('single review retries failures without acting on other concurrent approvals',async({page})=>{
  await prepare(page,'等待审批');
  await page.evaluate(()=>{const w=window as any;w.__calls=[];w.__demoRun.approvals=[0,1].map(i=>({id:'a'+i,method:'commandExecution',detail:JSON.stringify({command:'echo '+i})}));w.desktop.approveRun=async(input:any)=>{w.__calls.push(input);throw Error('服务暂时不可用');};w.__emit();});
- for(const id of ['a0','a1'])await page.getByRole('checkbox',{name:'选择授权请求 '+id,exact:true}).check();
- await page.getByRole('button',{name:'拒绝所选项'}).click();await expect(page.getByRole('alert')).toContainText('服务暂时不可用');
- expect(await page.evaluate(()=>(window as any).__calls.length)).toBe(1);
+ const surface=page.getByRole('region',{name:'处理任务请求',exact:true});
+ await surface.getByRole('button',{name:'拒绝',exact:true}).click();await expect(surface.getByRole('alert')).toContainText('服务暂时不可用');
+ await expect(surface.getByLabel('待执行命令')).toHaveText('echo 0');expect(await page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0']);
  await page.evaluate(()=>{const w=window as any;w.__calls=[];w.desktop.approveRun=(input:any)=>{w.__calls.push(input);return new Promise(resolve=>{w.__resolve=resolve;});};});
- await page.getByRole('button',{name:'批准所选项'}).click();
- await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});
- await expect(page.getByRole('region',{name:'授权请求队列'})).toHaveCount(0);
- await page.evaluate(()=>(window as any).__resolve());
- expect(await page.evaluate(()=>(window as any).__calls.length)).toBe(1);
+ await surface.getByRole('button',{name:'批准本次'}).click();await expect(surface.getByRole('button',{name:'正在批准…'})).toBeDisabled();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});await expect(surface).toHaveCount(0);
+ await page.evaluate(()=>(window as any).__resolve());expect(await page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0']);
 });

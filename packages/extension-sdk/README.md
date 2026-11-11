@@ -42,6 +42,8 @@ Use `onHostContextChanged` to update language and theme and dispose subscription
 
 ## Storage
 
+For page-side storage, native copy/export, permissions and complete examples, see [Host page capabilities / 宿主页面能力](./PAGE_CAPABILITIES.md).
+
 Declare and obtain self-scoped storage permission. `get` returns null when absent; stored JSON null remains an entry with its revision. `set(key,value,null)` creates only when currently absent, including after a delete. Numeric revisions are compare-and-set; conflicts must be resolved by the extension. Delete leaves a tombstone so revisions never reset. Keys are opaque strings of 1–200 characters. Node resource/storage rejections have an error `code`; they do not reveal remote stack traces.
 
 The included `extension.schema.json` is for editor assistance. Host package validation also checks semantic constraints, actual files, links and permissions. The host remains authoritative even when this SDK reports success locally.

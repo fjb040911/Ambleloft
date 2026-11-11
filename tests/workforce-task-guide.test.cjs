@@ -14,6 +14,30 @@ const value=()=>({name:'Review contract',goal:'Verify the API contract before im
 const response=(extra={})=>({summary:'The task is ready for your review.',ready:true,questions:[],value:value(),...extra});
 async function confirmProject(f,d){const v=structuredClone(d.value);for(const p of v.packages)if(p.mode==='work')p.projectBinding={responsibility:'Implement the agreed project scope',relations:[],confirmed:true};const saved=await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:v});return f.service.checkTaskDraft({id:saved.id,expectedRevision:saved.revision});}
 const guide=(f,draft,extra={})=>f.service.guideTask({id:draft.id,expectedRevision:draft.revision,requestId:randomUUID(),...extra});
+test('generated plan metadata is repaired from discussion without asking the user to fill a form',async t=>{
+ const f=await setup(t);let calls=0;
+ f.service.workforce.providers.secret=async()=>({model:'test',protocol:'chat',baseUrl:'https://model.example/v1'});
+ const source='Review the API contract before implementation';
+ await f.service.change(s=>s.requests.push({id:'metadata-source',spaceId:f.space.id,mode:'discussion',prompt:source,documentRefs:[],createdAt:'2026-11-10',participants:[]}));
+ const draft=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'metadata-source',commandId:randomUUID()});
+ t.mock.method(global,'fetch',async(_url,options)=>{
+  calls++;const body=JSON.parse(options.body),input=JSON.parse(body.messages[1].content);
+  assert.equal(input.source[0].prompt,source);assert.match(body.messages[0].content,/never ask the user to name the plan/i);
+  const v=value();v.packages=v.packages.map(({documentRefs,...p})=>({...p,projectId:'',documentIds:[],projectBinding:{responsibility:'',relations:[],reason:''}}));
+  if(calls===1){v.name='';v.goal='   ';}else assert.match(body.messages[0].content,/previous response did not satisfy/);
+  return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(response({value:v}))}}]}));
+ });
+ const result=await guide(f,draft);assert.equal(calls,2);assert.equal(result.status,'ready');assert.equal(result.value.name,value().name);assert.equal(result.value.goal,value().goal);assert.equal(result.assessment.question,null);assert.deepEqual(result.assessment.missing,[]);
+ assert.equal((await f.service.read()).plans.length,0);assert.equal(f.runtime.runs.length,0);
+});
+test('an unknown business outcome can be clarified without fabricating plan metadata',async t=>{
+ const f=await setup(t);f.service.generateTaskGuide=async(_c,req)=>{
+  const proposed=response({ready:false,value:{name:'',goal:'',packages:[]},questions:[{label:'What outcome should this work deliver?',help:'This determines the scope.'}]});
+  const validate=new (require('ajv'))({strict:false}).compile(req.outputSchema);assert.equal(validate(proposed),true);
+  return proposed;
+ };
+ const result=await guide(f,f.draft,{message:'Help me work out what to do'});assert.equal(result.status,'needs-input');assert.equal(result.value.packages.length,0);assert.ok(result.assessment.question);assert.equal(f.runtime.runs.length,0);
+});
 test('progressive clarification keeps the question and submitted answer after inference failure',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async(_c,req)=>{assert.equal(req.outputSchema.properties.questions.maxItems,1);return response({ready:false,questions:[{label:'Which delivery scope?',help:'Choose the first release.'}]});};
  const first=await guide(f,f.draft);const question=first.assessment.question;
@@ -46,7 +70,7 @@ test('task allocation receives real expertise and environment kind without conne
   assert.doesNotMatch(JSON.stringify(req.input),/not-for-model|private-container|\/private\//);
   return response();
  };
- const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v8');assert.equal(f.runtime.runs.length,0);
+ const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v9');assert.equal(f.runtime.runs.length,0);
 });
 test('semantic gaps produce valid declarative forms, even with all fields populated',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which specification should be used?',help:'The two revisions conflict.'}]});

@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('graph assignments reuse relationships, batch unassigned nodes and check without regeneration',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/tests/manual/project-relations-qa.html');
+ await page.goto('/tests/manual/project-relations-qa.html');await page.getByRole('button',{name:'编辑计划',exact:true}).click();
  const planner=page.getByRole('region',{name:'确认项目与关系',exact:true});
  await expect(planner.locator('.wf-graph-node')).toHaveCount(2);
  await expect(planner.locator('.wf-graph-node').first()).toContainText('待关联项目');
@@ -21,7 +21,7 @@ test('graph assignments reuse relationships, batch unassigned nodes and check wi
 });
 
 test('editing confirmed configuration invalidates confirmation; validation remains inline',async({page})=>{
- await page.goto('/tests/manual/project-relations-qa.html');const planner=page.getByRole('region',{name:'确认项目与关系',exact:true});
+ await page.goto('/tests/manual/project-relations-qa.html');await page.getByRole('button',{name:'编辑计划',exact:true}).click();const planner=page.getByRole('region',{name:'确认项目与关系',exact:true});
  await planner.getByRole('combobox',{name:'主执行项目',exact:true}).selectOption('web');
  await planner.getByRole('button',{name:'确认此项目配置',exact:true}).click();
  await planner.getByRole('textbox',{name:'主项目职责',exact:true}).fill('Revised client scope');
@@ -43,7 +43,7 @@ test('space project responsibilities are editable and persist after reopening',a
 });
 
 test('English dark narrow layout supports keyboard editing without horizontal overflow',async({page})=>{
- await page.setViewportSize({width:560,height:850});await page.goto('/tests/manual/project-relations-qa.html?en&dark');
+ await page.setViewportSize({width:560,height:850});await page.goto('/tests/manual/project-relations-qa.html?en&dark');await page.getByRole('button',{name:'Edit plan',exact:true}).click();
  await page.getByRole('combobox',{name:'Edit node',exact:true}).selectOption('checks');
  await page.getByRole('combobox',{name:'Main execution project',exact:true}).selectOption('web');
  await page.getByRole('textbox',{name:'Execution project responsibility',exact:true}).focus();await page.keyboard.press('Tab');
@@ -54,7 +54,7 @@ test('English dark narrow layout supports keyboard editing without horizontal ov
 });
 
 test('changing an upstream execution project invalidates the dependent node confirmation',async({page})=>{
- await page.goto('/tests/manual/project-relations-qa.html?en&dependent');const planner=page.getByRole('region',{name:'Confirm projects and relationships',exact:true});
+ await page.goto('/tests/manual/project-relations-qa.html?en&dependent');await page.getByRole('button',{name:'Edit plan',exact:true}).click();const planner=page.getByRole('region',{name:'Confirm projects and relationships',exact:true});
  await expect(planner.locator('[data-package-id="checks"]')).toContainText('Project confirmed');
  await planner.getByRole('combobox',{name:'Main execution project',exact:true}).selectOption('api');
  await expect(planner.locator('[data-package-id="checks"]')).toContainText('Confirm project relationships');

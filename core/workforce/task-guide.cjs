@@ -8,7 +8,7 @@ const {inferenceDeadline}=require('../automation/inference-deadline.cjs');
 const {normalizeDynamic}=require('../inputs/runtime-definition.cjs');
 const rules=readFileSync(join(__dirname,'skills/task-creation-guide/SKILL.md'),'utf8');
 const topicTask=require('./topic-task.cjs');
-const ruleVersion='task-creation-guide-v8';
+const ruleVersion='task-creation-guide-v9';
 const projectRelations=require('./project-relations.cjs');
 const relationGuide=require('./relation-guide.cjs');
 function abortable(promise,signal){
@@ -179,7 +179,7 @@ async function guide(input,options={}){
   let result;
   const relationsOnly=input.phase==='relations',known=relationGuide.knownBindings(state,space,draft.id);
   const gaps=base.value.packages.filter(p=>p.mode==='work'&&projectRelations.issues(base.value.packages,space,{onlyIds:[p.id]}).length).map(p=>p.id);
-  try{result=await Promise.race([(this.generateTaskGuide||generate)(config,{prompt:relationsOnly?relationGuide.prompt:rules+'\nInvocation: host-structured task preparation. The user is ALREADY INSIDE the task guide. Return the editable proposal now; do not direct them back to the discussion, ask them to open the task guide, or repeat a previous host handoff. If ready, the next action is to review the proposal below, then save or confirm and start. Return only the schema. All generated values are proposals. Questions use labels/help, not fabricated answers. Preserve user-edited candidate values unless the user asks to revise them. When editing, keep existing package IDs and all unchanged fields exactly. Change only requested scope and logically affected dependencies/constraints. Never regenerate unrelated tasks or invent a user confirmation. The latest user request overrides earlier conflicting requirements; explain changes in summary. This prepares a draft only, never executes work.',input:{locale,source:base.source,documents:base.sourceDocuments||[],value:base.value,messages,members,projects,projectContext:space.projectContext||{roles:[],relations:[]},knownBindings:known,gaps},outputSchema:relationsOnly?relationGuide.outputSchema:schema,maxOutputTokens:16384,retryOutputLimit:true,repairInvalidOutput:true,timeoutMs:deadline.timeoutMs},signal,onProgress),aborted]);}
+  try{result=await Promise.race([(this.generateTaskGuide||generate)(config,{prompt:relationsOnly?relationGuide.prompt:rules+'\nInvocation: host-structured task preparation. The user is ALREADY INSIDE the task guide. Synthesize the plan name and shared goal from the discussion; never ask the user to fill those fields. Return the editable proposal now; do not direct them back to the discussion, ask them to open the task guide, or repeat a previous host handoff. If ready, the next action is to review the proposal below, then save or confirm and start. Return only the schema. All generated values are proposals. Questions use labels/help, not fabricated answers. Preserve user-edited candidate values unless the user asks to revise them. When editing, keep existing package IDs and all unchanged fields exactly. Change only requested scope and logically affected dependencies/constraints. Never regenerate unrelated tasks or invent a user confirmation. The latest user request overrides earlier conflicting requirements; explain changes in summary. This prepares a draft only, never executes work.',input:{locale,source:base.source,documents:base.sourceDocuments||[],value:base.value,messages,members,projects,projectContext:space.projectContext||{roles:[],relations:[]},knownBindings:known,gaps},outputSchema:relationsOnly?relationGuide.outputSchema:schema,maxOutputTokens:16384,retryOutputLimit:true,repairInvalidOutput:true,timeoutMs:deadline.timeoutMs},signal,onProgress),aborted]);}
   catch(e){if(e.message==='OUTPUT_LIMIT')throw Error(locale==='en'?'The model reached its output limit. Your draft is preserved. Narrow the first delivery or raise the model output limit, then retry.':'模型输出达到上限，草稿已保留。可以缩小首轮交付范围，或提高模型输出限制后重试。');throw require('../automation/structured-output.cjs').localizeStructuredError(e,locale);}
   finally{signal.removeEventListener('abort',stop);}
   signal.throwIfAborted();
@@ -214,4 +214,11 @@ async function guide(input,options={}){
 const str={type:'string'};
 const bindingSchema={type:'object',additionalProperties:false,required:['responsibility','relations','reason'],properties:{reason:str,responsibility:str,relations:{type:'array',maxItems:20,items:{type:'object',additionalProperties:false,required:['targetProjectId','kind','description'],properties:{targetProjectId:str,kind:{type:'string',enum:['api','artifact','contract']},description:str}}}}};
 const schema={type:'object',additionalProperties:false,required:['summary','ready','questions','value'],properties:{summary:str,ready:{type:'boolean'},questions:{type:'array',maxItems:1,items:{type:'object',additionalProperties:false,required:['label','help'],properties:{label:str,help:str}}},value:{type:'object',additionalProperties:false,required:['name','goal','packages'],properties:{name:str,goal:str,packages:{type:'array',maxItems:12,items:{type:'object',additionalProperties:false,required:['id','mode','dependencies','documentIds','projectBinding',...packageFields],properties:{projectBinding:bindingSchema,documentIds:{type:'array',maxItems:8,items:str},id:str,mode:{type:'string',enum:['discussion','work']},dependencies:{type:'array',items:str},...Object.fromEntries(packageFields.map(k=>[k,str]))}}}}}}};
+// A generated workflow must carry its own summary. The shared provider repairs
+// missing metadata once before any draft mutation; genuine goal clarification
+// can still return no packages without fabricating a goal.
+schema.properties.value.anyOf=[
+ {properties:{packages:{maxItems:0}}},
+ {properties:{name:{minLength:1,pattern:'\\S'},goal:{minLength:1,pattern:'\\S'}}}
+];
 module.exports={taskGuideMethods:methods,rules,issues,ruleVersion};
