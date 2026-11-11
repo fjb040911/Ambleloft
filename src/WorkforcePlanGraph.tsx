@@ -84,7 +84,7 @@ export default function WorkforcePlanGraph({requestKinds,planId,name,packages,em
  </>}
  </div>;
 }
-export function PlanGraphPreview({definitions,employees,projects}:{definitions:PackageDefinition[];employees:Employee[];projects:Project[]}){
- const L=useCopy(),[selected,setSelected]=useState<string>(),[open,setOpen]=useState(false);const item=definitions.find(p=>p.id===selected);
- return <details className="wf-graph-preview" onToggle={e=>setOpen(e.currentTarget.open)}><summary>{L('预览依赖流程','Preview dependencies')} · {definitions.length}</summary>{open&&<WorkforcePlanGraph preview planId="draft" name={L('未保存计划','Unsaved plan')} packages={previewPackages(definitions)} employees={employees} projects={projects} selectedId={selected} onSelect={setSelected} onClear={()=>setSelected(undefined)}/>} {item&&<section className="wf-graph-preview-detail"><h4>{item.title}</h4><p>{item.instruction}</p><p>{L('交付：','Delivery: ')}{item.deliverables}</p><p>{L('验收：','Acceptance: ')}{item.acceptance}</p></section>}</details>;
+export function PlanGraphPreview({definitions,employees,projects,defaultOpen=false}:{definitions:PackageDefinition[];employees:Employee[];projects:Project[];defaultOpen?:boolean}){
+ const L=useCopy(),[selected,setSelected]=useState<string>(),[open,setOpen]=useState(defaultOpen);const item=definitions.find(p=>p.id===selected);
+ return <details className="wf-graph-preview" open={open} onToggle={e=>setOpen(e.currentTarget.open)}><summary>{L('预览依赖流程','Preview dependencies')} · {definitions.length}</summary>{open&&<WorkforcePlanGraph preview planId="draft" name={L('未保存计划','Unsaved plan')} packages={previewPackages(definitions)} employees={employees} projects={projects} selectedId={selected} onSelect={setSelected} onClear={()=>setSelected(undefined)}/>} {item&&<section className="wf-graph-preview-detail"><h4>{item.title}</h4><p>{item.instruction}</p><p>{L('交付：','Delivery: ')}{item.deliverables}</p><p>{L('验收：','Acceptance: ')}{item.acceptance}</p></section>}</details>;
 }

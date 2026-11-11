@@ -30,8 +30,8 @@ test('ready reply prepares once with the selected model, clarifies, then waits f
 
 test('resuming preserves edits and unsent clarification without another model request',async({page})=>{
  await enter(page);await handoff(page).getByRole('button',{name:'整理为任务'}).click();let guide=page.getByRole('region',{name:'整理为任务'});
- await expect(guide.locator('.wf-guide-candidate')).toHaveAttribute('open');await expect(guide.getByLabel('共同目标')).toHaveValue('核对所有发布链接');await guide.getByLabel('共同目标').fill('只检查用户指定的三个链接');await page.getByLabel('这次想推进什么？',{exact:true}).fill('未发送的限制');
- await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await handoff(page).getByRole('button',{name:'查看并确认'}).click();guide=page.getByRole('region',{name:'整理为任务'});await expect(guide.locator('.wf-guide-candidate')).toHaveAttribute('open');
+ await guide.getByRole('button',{name:'编辑计划',exact:true}).click();await expect(guide.getByLabel('共同目标')).toHaveValue('核对所有发布链接');await guide.getByLabel('共同目标').fill('只检查用户指定的三个链接');await page.getByLabel('这次想推进什么？',{exact:true}).fill('未发送的限制');
+ await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await handoff(page).getByRole('button',{name:'继续完善'}).click();guide=page.getByRole('region',{name:'整理为任务'});await guide.getByRole('button',{name:'编辑计划',exact:true}).click();
  await expect(guide.getByLabel('共同目标')).toHaveValue('只检查用户指定的三个链接');await expect(page.getByLabel('这次想推进什么？',{exact:true})).toHaveValue('未发送的限制');expect(await calls(page,'guideTask')).toHaveLength(1);expect(await calls(page,'control')).toHaveLength(0);
 });
 
@@ -65,7 +65,7 @@ test('long task proposals expand on demand; editing does not collapse the active
  await page.evaluate(()=>{const api=window.desktop!.spaces!,original=api.guideTask;api.guideTask=async input=>{const d=await original(input);if(input.message){d.value.packages=Array.from({length:6},(_,i)=>({...d.value.packages[0],id:'long-'+i,title:'跨项目验证接口契约、模型路由与远端部署流程 '+(i+1),dependencies:i?['long-'+(i-1)]:[]}));(window as any).spaceQA.snapshot.taskDrafts[0]=structuredClone(d);}return d;};});
  await handoff(page).getByRole('button',{name:'整理为任务'}).click();const guide=page.getByRole('region',{name:'整理为任务'});
  await guide.getByLabel('需要检查哪些链接？').fill('已确认的六项隔离验证工作');await guide.getByRole('button',{name:'提交补充并检查'}).click();
- await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();const packages=guide.locator('.wf-guide-package');await expect(packages).toHaveCount(6);await expect(guide.locator('.wf-guide-package[open]')).toHaveCount(0);
+ await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();await guide.getByRole('button',{name:'编辑计划',exact:true}).click();const packages=guide.locator('.wf-guide-package');await expect(packages).toHaveCount(6);await expect(guide.locator('.wf-guide-package[open]')).toHaveCount(0);
  await packages.first().locator('summary').click();await packages.first().getByLabel('任务名称',{exact:true}).fill('只检查这轮发布的接口契约');await expect(packages.first()).toHaveAttribute('open');
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeHidden();await expect(page.locator('form.composer')).toHaveCount(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await packages.first().locator('summary').scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/task-proposals-long-narrow.png'});
@@ -94,11 +94,11 @@ test('manual guide can close during assessment and ignores a late response',asyn
 test('incomplete manual edits do not prevent leaving and are restored locally',async({page})=>{
  await enter(page);await handoff(page).getByRole('button',{name:'整理为任务'}).click();
  const guide=page.getByRole('region',{name:'整理为任务'});
- await guide.getByLabel('共同目标').fill('');await page.getByLabel('这次想推进什么？',{exact:true}).fill('需要从头核实');
+ await guide.getByRole('button',{name:'编辑计划',exact:true}).click();await guide.getByLabel('共同目标').fill('');await page.getByLabel('这次想推进什么？',{exact:true}).fill('需要从头核实');
  await page.evaluate(()=>{window.desktop!.spaces!.saveTaskDraft=async()=>{throw Error('不完整的数据不能保存');};});
  await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await expect(guide).toHaveCount(0);
- await handoff(page).getByRole('button',{name:'查看并确认'}).click();
- await expect(guide.getByLabel('共同目标')).toHaveValue('');await expect(page.getByLabel('这次想推进什么？',{exact:true})).toHaveValue('需要从头核实');
+ await handoff(page).getByRole('button',{name:'继续完善'}).click();
+ await guide.getByRole('button',{name:'编辑计划',exact:true}).click();await expect(guide.getByLabel('共同目标')).toHaveValue('');await expect(page.getByLabel('这次想推进什么？',{exact:true})).toHaveValue('需要从头核实');
  expect(await calls(page,'guideTask')).toHaveLength(1);
 });
 
@@ -109,4 +109,23 @@ test('the composer talks to the host even while the old manual guide is open',as
  await page.getByLabel('这次想推进什么？',{exact:true}).fill('开始新的引导');await page.getByRole('button',{name:'发起讨论',exact:true}).click();
  await expect(guide).toHaveCount(0);await expect(page.getByText('我们重新讨论目标，旧草稿保留。',{exact:true})).toBeInViewport();
  expect(await calls(page,'host-from-editor')).toHaveLength(1);expect(await calls(page,'guideTask')).toHaveLength(1);
+});
+
+for(const width of [1280,390])test('AI plan summary replaces empty and automatic forms at '+width,async({page})=>{
+ await page.setViewportSize({width,height:900});await enter(page);
+ await page.evaluate(()=>{const api=window.desktop!.spaces!,original=api.guideTask;(window as any).releaseGuide=null;api.guideTask=input=>new Promise(resolve=>{(window as any).releaseGuide=()=>original(input).then(resolve);});});
+ await handoff(page).getByRole('button',{name:'整理为任务'}).click();const guide=page.getByRole('region',{name:'整理为任务'});
+ await expect(guide.getByText('正在检查需求、分工与验收条件')).toBeVisible();
+ await expect(guide.getByLabel('计划名称',{exact:true})).toHaveCount(0);await expect(guide.getByLabel('共同目标',{exact:true})).toHaveCount(0);
+ await expect(guide.getByRole('region',{name:'计划预览'})).toHaveCount(0);await expect(guide.getByLabel('编辑节点')).toHaveCount(0);
+ await page.evaluate(()=>(window as any).releaseGuide());
+ const preview=guide.getByRole('region',{name:'计划预览'});
+ await expect(preview.getByRole('heading',{name:'新版发布验证'})).toBeVisible();await expect(preview.getByText('核对所有发布链接',{exact:true})).toBeVisible();
+ await expect(preview.locator('.wf-plan-graph')).toBeVisible();await expect(preview.getByLabel('共同目标',{exact:true})).toHaveCount(0);
+ await expect(guide.getByLabel('需要检查哪些链接？')).toBeVisible();
+ await preview.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/ai-plan-preview-'+width+'.png'});
+ expect(await preview.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
+ await preview.getByRole('button',{name:'编辑计划',exact:true}).click();await preview.getByLabel('共同目标',{exact:true}).fill('仅核对三个已确认链接');
+ await preview.getByRole('button',{name:'收起编辑',exact:true}).click();await expect(preview.getByText('仅核对三个已确认链接',{exact:true})).toBeVisible();
+ await expect(preview.getByLabel('共同目标',{exact:true})).toHaveCount(0);expect(await calls(page,'control')).toHaveLength(0);
 });
