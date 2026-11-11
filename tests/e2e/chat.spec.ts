@@ -669,7 +669,7 @@ test('activity and thinking indicators animate only while running and respect re
  await expect(page.locator('[data-slot="marker"] [data-slot="spinner"]')).toHaveCount(0);
 });
 
-test('message scroller follows output, pauses for reading, and resumes at the latest message',async({page})=>{
+for(const resume of ['button','wheel'] as const)test(`message scroller follows output, pauses for reading, and resumes at the latest message via ${resume}`,async({page})=>{
  await prepare(page,('初始回答\n\n').repeat(80));
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];(window as any).__emit();});
  const viewport=page.locator('.conversation-scroll:visible');
@@ -681,10 +681,21 @@ test('message scroller follows output, pauses for reading, and resumes at the la
  await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('新输出\n\n').repeat(40);(window as any).__emit();});
  await page.waitForTimeout(150);
  expect(Math.abs(await viewport.evaluate(el=>el.scrollTop)-top)).toBeLessThan(3);
- await page.getByRole('button',{name:'回到最新消息'}).click();
+ if(resume==='button')await page.getByRole('button',{name:'回到最新消息'}).click();
+ else await page.mouse.wheel(0,100000);
  await expect.poll(distance).toBeLessThan(3);
- await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('继续输出\n\n').repeat(20);(window as any).__emit();});
- await expect.poll(distance).toBeLessThan(3);
+ for(let i=0;i<3;i++){
+  await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('继续输出\n\n').repeat(20);(window as any).__emit();});
+  await expect.poll(distance).toBeLessThan(3);
+ }
+ // Resuming must not prevent the reader from pausing the next stream again.
+ await viewport.hover();await page.mouse.wheel(0,-500);
+ await expect.poll(distance).toBeGreaterThan(200);
+ const paused=await viewport.evaluate(el=>el.scrollTop);
+ await page.evaluate(()=>{(window as any).__demoRun.messages.at(-1).text+='\n\n'+('后续输出\n\n').repeat(20);(window as any).__emit();});
+ await expect(viewport).toContainText('后续输出');
+ await page.waitForTimeout(200);
+ expect(Math.abs(await viewport.evaluate(el=>el.scrollTop)-paused)).toBeLessThan(3);
 });
 
 test('tool summaries describe actions while commands and output remain expandable',async({page})=>{

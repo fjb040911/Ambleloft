@@ -10,7 +10,7 @@ import {unwrapInputResult} from './input-action-result';
 import {Button} from './components/ui/button';
 import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
-import {createPortal} from 'react-dom';
+import {createPortal,flushSync} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
 import SupplementalInputDock from './SupplementalInputDock';
 import {PersistentInputRecord} from './InputProcessRecord';
@@ -110,8 +110,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const trackScroll = () => {
     const el=scroll.current;
     if(!visibleRef.current||!el?.clientHeight)return;
+    // A delayed scroll event after content growth must not cancel following.
+    if(el.scrollHeight-el.scrollTop-el.clientHeight<60)following.current=true;
+    else if(el.scrollTop<savedTop.current)following.current=false;
     savedTop.current=el.scrollTop;
-    following.current=el.scrollHeight-el.scrollTop-el.clientHeight<60;
     onFollowingChange(following.current);
   };
   const jumpTurn=(id:string)=>{scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});};
@@ -265,7 +267,11 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
           </MessageScrollerItem>)}
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
         </MessageScrollerContent>
-      </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant"/></MessageScroller>
+      </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
+        // Enable following before the primitive handles this click. Waiting for
+        // the resulting scroll event can miss the next streamed content resize.
+        following.current=true;flushSync(()=>onFollowingChange(true));
+      }}/></MessageScroller>
     </div>
     <div className="conversation-dock">
       {inlineInputs}{outboxPanel}{pendingSurface}
