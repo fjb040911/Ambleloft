@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 for(const expert of [false,true])test(`native subagent progress and individual stop (${expert?'expert':'chat'})`,async({page})=>{
  await page.addInitScript(({expert})=>{
+  sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
   const run:any={id:'demo',title:'分析验收',model:'fixture',baseUrl:'http://127.0.0.1/v1',cwd:'/fixture',createdAt:new Date().toISOString(),status:'running',error:'',approvals:[],messages:[{id:'u',role:'user',text:'并行审查'}],tools:[{id:'analysis-test',nativeThreadId:'native-child-1',turnKey:'u',order:1,type:'analysis',label:'交互审查',analysisAgent:{id:'analysis-test',name:'交互审查',avatar:0},status:'running',analysisTask:'检查交互',analysisReads:['src/App.tsx','src/Conversation.tsx'],detail:'读取 src/App.tsx'}],...(expert?{employee:{id:'expert',name:'审查专家'}}:{})};
   run.tools.push({id:'analysis-evidence',nativeThreadId:'native-child-2',turnKey:'u',order:2,type:'analysis',label:'证据审查',analysisAgent:{id:'analysis-evidence',name:'证据审查',avatar:1},status:'completed',detail:'证据检查完成'});
   (window as any).__analysisRun=run;let callback:any;

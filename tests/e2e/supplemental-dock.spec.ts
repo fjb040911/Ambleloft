@@ -1,6 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 async function setup(page:Page,paused=false,native=false,creation=false){
  await page.addInitScript(({paused,native,creation})=>{
+ sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
  const w=window as any;let event:any,runEvent:any;const now=new Date().toISOString();
  const run:any={id:'dock-run',title:'补充表单测试',model:'fixture',baseUrl:'http://localhost/v1',cwd:'/tmp',createdAt:now,status:'running',messages:[{id:'u',role:'user',text:'帮我做一份旅游攻略'}],tools:[],approvals:[]};
  if(native)run.questions=[{id:'native-question',questions:[{id:'transport',question:'怎样出行？'}]}];
@@ -95,7 +96,7 @@ test('submission freezes fields until acknowledged without disabling the convers
  await page.evaluate(()=>(window as any).__releaseSubmit());await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('已提交');
  // The next pending question now opens automatically; collapse it to inspect history.
  await dock.getByRole('button',{name:'稍后填写'}).click();
- await page.getByRole('button',{name:'补充出行计划',exact:true}).click();await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('上海');
+ await page.getByRole('button',{name:/^补充出行计划(?: |$)/}).click();await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('上海');
 });
 
 test('replacement preview preserves original draft; reject keeps it and accept creates the new form',async({page})=>{
@@ -108,7 +109,7 @@ test('replacement preview preserves original draft; reject keeps it and accept c
  await expect(dock.getByRole('textbox',{name:'目的地 *',exact:true})).toHaveValue('上海');await expect(dock.getByRole('button',{name:'查看并确认'})).toHaveCount(0);
  await page.evaluate(()=>(window as any).__proposal());await dock.getByRole('button',{name:'查看并确认'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'确认采用'}).click();
  await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('已替换');await dock.getByLabel('选择待补充事项').selectOption('replacement');await expect(dock.getByRole('textbox',{name:'目的地 *',exact:true})).toHaveValue('北京');
- await page.getByRole('button',{name:'补充出行计划',exact:true}).click();await page.getByRole('button',{name:'查看原填写'}).click();await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('上海');
+ await page.getByRole('button',{name:/^补充出行计划(?: |$)/}).click();await page.getByRole('button',{name:'查看原填写'}).click();await expect(page.getByRole('region',{name:'任务执行过程'})).toContainText('上海');
 });
 test('cancellation requires confirmation and leaves a readable original entry',async({page})=>{
  await setup(page,true);const dock=page.getByRole('region',{name:'待补充信息',exact:true});
@@ -133,7 +134,7 @@ test('submitted answers stay at the request position with delivery status and no
  await setup(page);const process=page.getByRole('region',{name:'任务执行过程'}),dock=page.getByRole('region',{name:'待补充信息',exact:true});
  await dock.getByRole('textbox',{name:'目的地 *',exact:true}).fill('上海');
  await expect.poll(()=>page.evaluate(()=>(window as any).__snapshot.requests[0].draft.city)).toBe('上海');
- await process.getByRole('button',{name:'补充出行计划',exact:true}).click();await expect(process).not.toContainText('上海');
+ await process.getByRole('button',{name:/^补充出行计划(?: |$)/}).click();await expect(process).not.toContainText('上海');
  await dock.getByRole('button',{name:'提交补充信息',exact:true}).click();await expect(process).toContainText('上海');await expect(process).toContainText('等待发送');
  await expect(process.getByRole('textbox')).toHaveCount(0);
  await page.screenshot({path:'test-results/input-process-record.png',animations:'disabled'});
@@ -150,20 +151,20 @@ test('answer status follows delivery and history stays in the originating turn',
  }
  await page.evaluate(()=>(window as any).__nextTurn());
  await page.locator('[data-turn-id="u"]').getByRole('button',{name:'本轮已结束',exact:true}).click();
- await expect(page.locator('[data-turn-id="u"]').getByRole('button',{name:'补充出行计划',exact:true})).toBeVisible();
- await expect(page.locator('[data-turn-id="u2"]').getByRole('button',{name:'补充出行计划',exact:true})).toHaveCount(0);
+ await expect(page.locator('[data-turn-id="u"]').getByRole('button',{name:/^补充出行计划(?: |$)/})).toBeVisible();
+ await expect(page.locator('[data-turn-id="u2"]').getByRole('button',{name:/^补充出行计划(?: |$)/})).toHaveCount(0);
 });
 
 test('input tools render readable answers and keep protocol data behind technical details',async({page})=>{
  await setup(page);
  await page.evaluate(()=>{const w=window as any;w.__snapshot.requests[0].template.steps[0].fields.push({name:'pace',type:'select',label:'旅行节奏',options:[{label:'轻松',value:'relaxed'}]});w.__refresh();w.__setTools([{id:'read',turnKey:'u',order:3,type:'mcpToolCall',label:'input_read_answer',status:'completed',detail:JSON.stringify({arguments:{requestId:'a'},result:{content:[{type:'text',text:JSON.stringify({ok:true,value:{requestId:'a',state:'answered',answer:{values:{city:'北京',pace:'relaxed'},displayLabels:{city:'目的地',pace:'旅行节奏'}}}})}]}})}]);});
  const process=page.getByRole('region',{name:'任务执行过程'});
- await process.getByRole('button',{name:'读取你的回答',exact:true}).click();
+ await process.getByRole('button',{name:/^读取你的回答(?: |$)/}).click();
  await expect(process).toContainText('北京');await expect(process).toContainText('轻松');
  await expect(process.getByText('relaxed',{exact:true})).toHaveCount(0);
- await expect(process.locator('pre')).toHaveCount(0);
+ await expect(process.locator('pre:visible')).toHaveCount(0);
  await page.getByRole('button',{name:'稍后填写',exact:true}).click();
- await process.getByRole('button',{name:'读取你的回答',exact:true}).scrollIntoViewIfNeeded();
+ await process.getByRole('button',{name:/^读取你的回答(?: |$)/}).scrollIntoViewIfNeeded();
  await page.screenshot({path:'test-results/input-readable-tool.png',animations:'disabled'});
  await process.getByRole('button',{name:'技术详情',exact:true}).click();await expect(process.locator('pre')).toContainText('requestId');
  await page.evaluate(()=>(window as any).__setTools([{id:'read',turnKey:'u',order:3,type:'mcpToolCall',label:'input_read_answer',status:'completed',detail:'broken json'}]));
@@ -213,6 +214,7 @@ test('creation overview yields to the form and keeps details available at deskto
  await expect(overview.getByRole('button',{name:'继续创建'})).toHaveCount(0);
  const before=await overview.boundingBox(),form=await dock.boundingBox();expect(form!.y-(before!.y+before!.height)).toBeGreaterThanOrEqual(12);expect(before!.height).toBeLessThan(65);
  await page.screenshot({path:'test-results/creation-intake-light.png',animations:'disabled'});
+ await dock.getByRole('combobox',{name:/现有调试工具/}).selectOption('gdb');
  await overview.locator('summary').click();await expect(overview).toContainText('设备地址和工具路径');
  await page.setViewportSize({width:760,height:900});await page.evaluate(()=>(window as any).__locale());
  await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
@@ -220,6 +222,13 @@ test('creation overview yields to the form and keeps details available at deskto
  await page.getByRole('region',{name:'Creation progress',exact:true}).locator('summary').click();await page.setViewportSize({width:390,height:844});
  await expect(page.getByRole('region',{name:'Needs your input',exact:true}).getByRole('button',{name:'Submit answers'})).toBeInViewport();await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const mobileOverview=page.getByRole('region',{name:'Creation progress',exact:true}),mobileDock=page.getByRole('region',{name:'Needs your input',exact:true});
+ const heading=await mobileOverview.boundingBox(),fields=await mobileDock.boundingBox();expect(fields!.y-(heading!.y+heading!.height)).toBeGreaterThanOrEqual(12);
+ await expect(mobileDock.getByRole('combobox',{name:/现有调试工具/})).toHaveValue('gdb');
+ await page.screenshot({path:'test-results/creation-intake-mobile.png',animations:'disabled'});
+ await mobileDock.getByRole('button',{name:'Submit answers',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__commands.filter((c:any)=>c.action==='submit').length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).__commands.find((c:any)=>c.action==='submit').values.city)).toBe('gdb');
 });
 
 test('unconfirmed submission retries the original receipt without sending a second answer',async({page})=>{

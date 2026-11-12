@@ -2,7 +2,7 @@
 const http=require('node:http');const {randomBytes,timingSafeEqual}=require('node:crypto');
 const TOOLS=[{name:'extension_list_operations',description:'List authorized extension operations for this task project.',inputSchema:{type:'object',properties:{},additionalProperties:false}},{name:'extension_invoke_operation',description:'Invoke an operation returned by extension_list_operations. Host authorization and confirmation always apply. Never retry an unknown outcome automatically.',inputSchema:{type:'object',properties:{operationId:{type:'string'},input:{type:'object'}},required:['operationId','input'],additionalProperties:false}}];
 async function createAgentChannel({list,invoke,tools,resource,forms,skills,ui,inputs,remote,creation,collaboration}){
- const token=randomBytes(32).toString('hex'),controllers=new Set();let closed=false;
+ const token=randomBytes(32).toString('hex'),controllers=new Set();let closed=false,paused=false;
  const server=http.createServer(async(req,res)=>{
   const supplied=Buffer.from(req.headers.authorization||''),expected=Buffer.from('Bearer '+token);
   if(closed||supplied.length!==expected.length||!timingSafeEqual(supplied,expected)||req.headers.origin||req.url!=='/mcp'){res.writeHead(403);res.end();return;}
@@ -10,6 +10,7 @@ async function createAgentChannel({list,invoke,tools,resource,forms,skills,ui,in
   if(controllers.size>=16){res.writeHead(429);res.end();return;}
   const abort=new AbortController();controllers.add(abort);res.on('close',()=>abort.abort());
   let m;try{let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>270*1024)throw Error('Request too large');}m=JSON.parse(raw);let result;
+   if(paused&&m.method==='tools/call')throw Error('权限正在切换，请等待完成');
    if(m.id===undefined){res.writeHead(202);res.end();return;}
    if(m.method==='initialize')result={protocolVersion:m.params?.protocolVersion||'2024-11-05',capabilities:{tools:{},...(resource?{resources:{}}:{})},serverInfo:{name:'amble-extensions',version:'1'}};
    else if(m.method==='ping')result={};
@@ -48,6 +49,6 @@ async function createAgentChannel({list,invoke,tools,resource,forms,skills,ui,in
  });
  server.requestTimeout=150000;server.headersTimeout=10000;
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
- return {config:{url:`http://127.0.0.1:${server.address().port}/mcp`,http_headers:{Authorization:'Bearer '+token},tool_timeout_sec:270},close(){closed=true;for(const c of controllers)c.abort();server.closeAllConnections();server.close();}};
+ return {config:{url:`http://127.0.0.1:${server.address().port}/mcp`,http_headers:{Authorization:'Bearer '+token},tool_timeout_sec:270},async pause(){paused=true;for(const c of controllers)c.abort();const deadline=Date.now()+10000;while(controllers.size){if(Date.now()>deadline)throw Error('宿主工具尚未停止，权限未确认生效');await new Promise(r=>setTimeout(r,25));}},resume(){if(!closed)paused=false;},close(){closed=true;for(const c of controllers)c.abort();server.closeAllConnections();server.close();}};
 }
 module.exports={createAgentChannel,TOOLS};

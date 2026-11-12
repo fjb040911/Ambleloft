@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 async function setup(page:import('@playwright/test').Page){
  await page.addInitScript(()=>{
+ sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
  const providers=[{id:'a',name:'服务 A',model:'Model A',models:['Model A','Model B'],configured:true,baseUrl:'http://localhost/v1',hasKey:false,executable:''},{id:'b',name:'服务 B',model:'Model 1',models:['Model 1'],configured:true,baseUrl:'http://localhost/v2',hasKey:false,executable:''}];
  const run={id:'r',providerId:'a',title:'现有任务',model:'Model A',baseUrl:providers[0].baseUrl,cwd:'/tmp',createdAt:new Date().toISOString(),status:'completed',error:'',messages:[{id:'u',role:'user',text:'你好'},{id:'a',role:'assistant',text:'你好'}],tools:[],approvals:[]};
  (window as any).desktop={getProvider:async()=>providers[0],listProviders:async()=>({defaultId:'a',providers}),getDevice:async()=>({name:'Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>[run],onRun:()=>()=>{},onCommand:()=>()=>{},selectAttachments:async()=>[{name:'brief.txt',path:'/tmp/brief.txt'}],startRun:async(input:any)=>{(window as any).__sent=input;return {...run,model:input.model,providerId:input.providerId,status:'running'};}};
@@ -71,7 +72,7 @@ test('composer grows, handles IME and retains running drafts until explicitly se
  const input=page.getByRole('textbox',{name:'继续对话'});
  await input.fill('下一轮的草稿');await input.press('Enter');
  await expect(input).toHaveValue('下一轮的草稿');
- await expect(page.locator('.composer-hint:visible')).toContainText('草稿尚未发送');
+ await expect(page.locator('.composer-notice:visible')).toContainText('草稿尚未发送');
  expect(await page.evaluate(()=>(window as any).__sent.prompt)).toBe('中文输入\n');
 });
 

@@ -32,6 +32,7 @@ export default function InputDeliveryPanel({snapshot,selected,onSelected,onConti
  const selectable=pending.filter(item=>item.state==='queued'&&(snapshot.policy.paused||item.held));
  const description=snapshot.policy.paused?(pending.length?'未发送的内容已保留。勾选需要发送的内容，再继续任务。':'可以补充回答或调整要求后继续。收起此提示不会恢复任务。'):pending.some(item=>item.state==='unknown')?'有内容需要核实，请查看记录后再决定下一步。':pending.some(item=>item.state==='failed')?'有内容未能发送，原文已保留。':selectable.length?'部分内容仍暂停发送，可展开后选择继续。':'可以继续编辑，下方内容将按顺序送达。';
  if(snapshot.policy.paused&&!pending.length&&dismissed)return <Button size="sm" variant="ghost" className="mb-2" onClick={()=>setDismissed(false)}>{t('查看暂停状态')}</Button>;
+ if(!pending.length&&!snapshot.policy.paused&&latest?.source==='user')return null;
  if(!pending.length&&!snapshot.policy.paused)return <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"><Check className="size-3.5" aria-hidden="true"/>{t('补充消息已送达')}</div>;
  return <Alert role="region" aria-label={t('补充消息')} className="input-delivery-panel mb-3 rounded-2xl border-border px-4 py-3 shadow-sm">
   {snapshot.policy.paused?<Pause aria-hidden="true"/>:<Send aria-hidden="true"/>}

@@ -16,6 +16,76 @@ async function fixture(t){
 const response=(extra={})=>({action:'reply',message:'Let us clarify the goal.',brief:{goal:'Repair tickets',items:[]},questions:[],delegates:[],...extra});
 const delegate=(employeeId)=>response({action:'delegate',message:'Invite '+employeeId,delegates:[{employeeId,instruction:'Analyze only your assigned scope.',reason:'The next stage needs this conclusion.'}]});
 
+function inbox(f,t){
+ const {ChatInputs}=require('../core/forms/chat-inputs.cjs');
+ const deliveries=[];f.runtime.spaces=f.service;
+ f.runtime.deliverFormInput=async(item,{dispatch})=>{
+  const run=f.runtime.runs.find(r=>r.id===item.runId);
+  const sent=await dispatch({mode:'steer',turnKey:'test-turn'},async()=>{
+   run.status='running';run.conversation ||= {version:0,updates:[]};
+   run.conversation.updates.push({inputId:item.id,version:++run.conversation.version,state:'delivered'});deliveries.push(item);
+  });await sent.receipt;
+ };
+ const queue=new ChatInputs({runtime:f.runtime,database:f.service.database,validate:()=>assert.fail('Discussion update must not use form validation'),publish(){}});
+ f.runtime.chatInputs=queue;t.after(()=>queue.shutdown());return {queue,deliveries};
+}
+
+test('live host answers progress without interrupting experts or consuming a pending form',async t=>{
+ const f=await fixture(t);let calls=0;
+ f.service.generateDiscussionHost=async()=>++calls===1?delegate('product'):response();
+ f.service.generateDiscussionConversation=async(_c,job)=>{assert.equal(job.input.participants[0].status,'running');return {action:'reply',message:'Product is still analyzing.',targets:[]};};
+ await f.start();await until(()=>f.runtime.runs.length===1);const r=(await f.service.read()).requests[0];
+ await f.service.change(s=>{s.requests[0].host.question={requestKey:'untouched',prefill:{answer0:'draft'}};});
+ const input={requestId:r.id,clientRequestId:randomUUID(),prompt:'How is it going?'};
+ await f.service.followupDiscussion(input);await until(()=>!f.service.discussionFollowupJobs.size);
+ const updated=(await f.service.snapshot()).requests[0];assert.equal(updated.followups[0].reply,'Product is still analyzing.');assert.equal(updated.followups[0].deliveries.length,0);assert.equal(updated.host.question.answeredBy,undefined);
+ assert.equal(f.runtime.runs[0].status,'running');assert.equal(calls,1);assert.equal(f.runtime.starts.length,1);
+ await f.service.followupDiscussion(input);assert.equal((await f.service.read()).requests[0].followups.length,1);
+ await assert.rejects(f.service.followupDiscussion({...input,prompt:'Changed'}),/标识/);
+ f.runtime.runs[0].status='completed';await f.finish();
+});
+
+test('live requirement targets only the affected expert and distinguishes delivery from application',async t=>{
+ const f=await fixture(t),io=inbox(f,t);let calls=0;
+ f.service.generateDiscussionHost=async(_c,job)=>++calls===1?response({action:'delegate',delegates:['product','architect'].map(employeeId=>({employeeId,instruction:'Review',reason:'Needed'}))}):response({message:'Updated summary',brief:{goal:'Updated',items:[{id:'constraint',kind:'decision',text:'Preserve order',sourceIds:[job.input.taskUpdates[0].id]}]}});
+ f.service.generateDiscussionConversation=async()=>({action:'update',message:'I will pass that requirement to the architect.',targets:['architect']});
+ await f.start();await until(()=>f.runtime.runs.length===2);const r=(await f.service.read()).requests[0];
+ await f.service.followupDiscussion({requestId:r.id,clientRequestId:randomUUID(),prompt:'Preserve exact task order.'});
+ await until(()=>io.deliveries.length===1);await f.service.pumpDiscussionUpdates();
+ const delivery=io.deliveries[0],run=f.runtime.runs.find(r=>r.id===delivery.runId);assert.equal(run.employee.id,'architect');assert.equal(delivery.text,'Preserve exact task order.');
+ assert.equal((await f.service.read()).requests[0].followups[0].deliveries[0].state,'delivered');
+ run.conversation.updates[0].state='applied';await f.service.pumpDiscussionUpdates();assert.equal((await f.service.read()).requests[0].followups[0].deliveries[0].state,'applied');
+ f.runtime.runs.forEach(r=>r.status='completed');const result=await f.finish();assert.equal(result.host.status,'completed');assert.equal(result.host.steps.at(-1).text,'Updated summary');assert.equal(f.runtime.starts.length,2);
+});
+
+test('a requirement arriving during synthesis discards the stale summary and waits for revised expert work',async t=>{
+ const f=await fixture(t),io=inbox(f,t);let calls=0,release;
+ f.service.generateDiscussionHost=async()=>{calls++;if(calls===1)return delegate('product');if(calls===2)return new Promise(r=>release=r);return response({message:'Revised result'});};
+ f.service.generateDiscussionConversation=async()=>({action:'update',message:'Updating the task.',targets:[]});
+ await f.start();await until(()=>f.runtime.runs.length===1);f.runtime.runs[0].status='completed';await until(()=>!!release);
+ const r=(await f.service.read()).requests[0];await f.service.followupDiscussion({requestId:r.id,clientRequestId:randomUUID(),prompt:'Change acceptance criteria.'});
+ await until(()=>io.deliveries.length===1);release(response({message:'STALE RESULT'}));await tick();await tick();
+ assert.equal(calls,2);assert.ok(!(await f.service.read()).requests[0].host.steps.some(s=>s.text==='STALE RESULT'));
+ f.runtime.runs[0].conversation.updates[0].state='applied';f.runtime.runs[0].status='completed';const result=await f.finish();assert.equal(result.host.steps.at(-1).text,'Revised result');
+});
+
+test('discussion stop cancels the independent host reply and every active expert',async t=>{
+ const f=await fixture(t);let reply;
+ f.service.generateDiscussionHost=async()=>delegate('product');f.service.generateDiscussionConversation=()=>new Promise(r=>reply=r);
+ await f.start();await until(()=>f.runtime.runs.length===1);const r=(await f.service.read()).requests[0];
+ await f.service.followupDiscussion({requestId:r.id,clientRequestId:randomUUID(),prompt:'Progress?'});await until(()=>!!reply);
+ await f.service.stopDiscussionHost({requestId:r.id});reply({action:'reply',message:'Late reply',targets:[]});await until(()=>!f.service.discussionFollowupJobs.size);
+ const stopped=(await f.service.read()).requests[0];assert.equal(stopped.followups[0].state,'interrupted');assert.equal(stopped.followups[0].reply,undefined);assert.equal(f.runtime.runs[0].status,'interrupted');
+});
+
+test('an unconfirmed update cannot be silently incorporated into a successful host summary',async t=>{
+ const f=await fixture(t),io=inbox(f,t);let calls=0;f.service.generateDiscussionHost=async()=>{calls++;return delegate('product');};
+ f.service.generateDiscussionConversation=async()=>({action:'update',message:'Received',targets:[]});
+ await f.start();await until(()=>f.runtime.runs.length===1);const r=(await f.service.read()).requests[0];
+ await f.service.followupDiscussion({requestId:r.id,clientRequestId:randomUUID(),prompt:'New constraint'});await until(()=>io.deliveries.length===1);
+ f.runtime.runs[0].status='completed';const result=await f.finish();assert.equal(result.host.status,'needs-input');assert.equal(calls,1);assert.equal(result.followups[0].deliveries[0].state,'unconfirmed');
+});
+
 for(const locale of ['zh-CN','en'])test(`host prose guidance preserves structured task context and references (${locale})`,async t=>{
  const f=await fixture(t);
  f.service.generateDiscussionHost=async(_config,job)=>{
@@ -443,6 +513,112 @@ test('multiple refinement rounds reuse the current revision draft of a running t
  await f.start({replyTo:first.id,prompt:'修改当前任务'});const revised=await f.finish();assert.notEqual(revised.host.status,'failed',revised.host.error);
  await f.start({replyTo:revised.id,prompt:'继续补充当前修订'});const refined=await f.finish();assert.notEqual(refined.host.status,'failed',refined.host.error);assert.equal(refined.host.task.draftId,revised.host.task.draftId);
  const state=await f.service.read();assert.equal(state.plans[0].id,p.id);assert.equal(state.plans[0].status,'running');assert.equal(state.taskDrafts.filter(d=>!d.planId).length,1);
+});
+
+test('direct expert discussions accept host follow-ups and preserve a targeted send across completion',async t=>{
+ const f=await fixture(t),outbox=inbox(f,t),requestId=randomUUID();
+ await f.service.start({spaceId:f.space.id,clientRequestId:requestId,prompt:'Review architecture',mode:'discussion',employeeIds:['architect']},{});
+ f.service.generateDiscussionConversation=async()=>({action:'update',message:'Requirement received',targets:[]});
+ await f.service.followupDiscussion({requestId,clientRequestId:randomUUID(),prompt:'Keep the existing input flow',employeeIds:['architect']});
+ await until(()=>outbox.deliveries.length===1);assert.equal(f.runtime.starts.length,1);
+ f.runtime.runs[0].conversation.updates[0].state='applied';f.runtime.runs[0].status='completed';
+ await f.service.settleDiscussionFollowups(requestId,new AbortController().signal);
+ await f.service.followupDiscussion({requestId,clientRequestId:randomUUID(),prompt:'Review another case',employeeIds:['architect']});
+ assert.equal(f.runtime.starts.length,2);assert.equal(f.runtime.starts[1].input.employeeId,'architect');
+ assert.equal(f.runtime.starts[1].input.prompt,'Review another case');
+});
+
+test('pending live messages prevent deleting a finished direct discussion; stopping prevents late replies',async t=>{
+ const f=await fixture(t),requestId=randomUUID();let release;
+ await f.service.start({spaceId:f.space.id,clientRequestId:requestId,prompt:'Review',mode:'discussion',employeeIds:['product']},{});
+ f.service.generateDiscussionConversation=()=>new Promise(resolve=>{release=resolve;});
+ await f.service.followupDiscussion({requestId,clientRequestId:randomUUID(),prompt:'Progress?'});await until(()=>release);
+ f.runtime.runs[0].status='completed';
+ await assert.rejects(f.service.discussionLifecycle({requestId,action:'delete',expectedRevision:0}),/仍有专家/);
+ await f.service.stopDiscussionHost({requestId});release({action:'reply',message:'late response',targets:[]});
+ await until(()=>!f.service.discussionFollowupJobs.size);
+ const r=(await f.service.snapshot()).requests[0];assert.equal(r.followups[0].state,'interrupted');assert.equal(r.followups[0].reply,undefined);
+});
+
+test('restart preserves follow-up text and interrupts uncertain delivery without replaying it',async t=>{
+ const f=await fixture(t),requestId=randomUUID(),followupId=randomUUID();
+ await f.service.start({spaceId:f.space.id,clientRequestId:requestId,prompt:'Review',mode:'discussion',employeeIds:['product']},{});
+ await f.service.change(s=>{s.requests[0].followups=[{id:followupId,text:'Keep this requirement',state:'handled',action:'update',deliveries:[{id:'pending-delivery',employeeId:'product',runId:f.runtime.runs[0].id,state:'queued'}]}];});
+ await f.service.shutdown();f.service.closing=false;await f.service.initialize();clearInterval(f.service.plans.timer);
+ const r=(await f.service.snapshot()).requests[0];assert.equal(r.followups[0].text,'Keep this requirement');assert.equal(r.followups[0].deliveries[0].state,'interrupted');assert.equal(r.liveStopped,true);
+ await assert.rejects(f.service.validateDiscussionInput({id:'pending-delivery',discussionRequestId:requestId,discussionFollowupId:followupId,runId:f.runtime.runs[0].id,text:'Keep this requirement'}),{code:'CANCELLED'});
+ assert.equal(f.runtime.starts.length,1);
+});
+
+test('discussion permission switch updates all active experts and future delegation without consuming follow-ups',async t=>{
+ const f=await fixture(t);let calls=0;
+ f.service.generateDiscussionHost=async()=>++calls===1?response({action:'delegate',delegates:[...delegate('product').delegates,...delegate('architect').delegates]}):response();
+ await f.start();await until(()=>f.runtime.runs.length===2);const r=(await f.service.read()).requests[0];
+ const switched=[];f.runtime.switchPermission=async input=>{switched.push(input);return {state:'applied',effective:input.permission};};
+ await f.service.change(s=>{s.requests[0].host.question={requestKey:'pending',prefill:{answer0:'draft'}};});
+ const result=await f.service.changeDiscussionPermission({requestId:r.id,permission:'full',confirmed:true});const updated=result.requests[0];
+ assert.equal(updated.permissionChange.state,'applied');assert.equal(updated.composer.permission,'full');assert.equal(switched.length,2);assert.equal(updated.host.question.answeredBy,undefined);assert.equal(f.runtime.starts.length,2);
+ f.runtime.runs.forEach(run=>run.status='completed');await f.finish();
+});
+
+test('partial discussion permission failure stops the whole round and reports no aggregate success',async t=>{
+ const f=await fixture(t);f.service.generateDiscussionHost=async()=>response({action:'delegate',delegates:[...delegate('product').delegates,...delegate('architect').delegates]});
+ await f.start();await until(()=>f.runtime.runs.length===2);const r=(await f.service.read()).requests[0];let calls=0;
+ f.runtime.switchPermission=async()=>++calls===1?{state:'applied'}:{state:'failed',error:'Engine rejected policy'};
+ const result=await f.service.changeDiscussionPermission({requestId:r.id,permission:'full',confirmed:true});
+ assert.equal(result.requests[0].permissionChange.state,'failed');assert.equal(result.requests[0].permissionChange.effective,null);assert.ok(f.runtime.runs.every(r=>r.status==='interrupted'));
+});
+
+function modelProviders(f){
+ f.service.workforce.providers.secret=async(id='a',model='old')=>({id,model,baseUrl:'https://'+id+'.invalid/v1'});
+ f.runtime.switchModel=async input=>{const run=f.runtime.runs.find(r=>r.id===input.runId);Object.assign(run,{providerId:input.providerId,model:input.model});return {state:'applied',effective:{providerId:input.providerId,model:input.model}};};
+}
+test('discussion model switch updates active experts, host replies and later delegation without consuming form drafts',async t=>{
+ const f=await fixture(t);modelProviders(f);let calls=0;
+ f.service.generateDiscussionHost=async config=>{calls++;if(calls>1)assert.equal(config.model,'new');return calls===1?delegate('product'):calls===2?delegate('architect'):response();};
+ await f.start({providerId:'a',model:'old'});await until(()=>f.runtime.runs.length===1);const requestId=(await f.service.read()).requests[0].id;
+ await f.service.change(s=>{s.requests[0].host.question={requestKey:'pending-form',prefill:{answer0:'my draft'}};});
+ const changed=await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new',confirmProviderChange:true});assert.equal(changed.requests[0].modelChange.state,'applied');assert.equal(changed.requests[0].host.question.answeredBy,undefined);
+ f.service.generateDiscussionConversation=async config=>{assert.equal(config.model,'new');return {action:'reply',message:'The expert is still working.',targets:[]};};
+ await f.service.followupDiscussion({requestId,clientRequestId:randomUUID(),prompt:'Progress?'});await until(()=>!f.service.discussionFollowupJobs.size);
+ f.runtime.runs[0].status='completed';await until(()=>f.runtime.runs.length===2);assert.equal(f.runtime.starts[1].input.model,'new');assert.equal(f.runtime.starts[1].context.modelOverride,true);
+ f.runtime.runs[1].status='completed';await f.finish();assert.equal(f.runtime.runs[0].model,'new');
+});
+test('changing the discussion model cancels a pending old host inference and ignores its late output',async t=>{
+ const f=await fixture(t);modelProviders(f);let release,started=false;
+ f.service.generateDiscussionHost=config=>{if(config.model==='old'){started=true;return new Promise(r=>release=r);}return response({message:'Reply from the new model'});};
+ await f.start({providerId:'a',model:'old'});await until(()=>started);const requestId=(await f.service.read()).requests[0].id;
+ await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new'});const finished=await f.finish();assert.equal(finished.host.steps.at(-1).text,'Reply from the new model');
+ release(response({message:'Late old-model reply'}));await tick();assert.equal((await f.service.read()).requests[0].host.steps.some(s=>s.text==='Late old-model reply'),false);
+});
+test('model changes retry an in-flight follow-up against the new model without losing or duplicating input',async t=>{
+ const f=await fixture(t);modelProviders(f);let release,started=false,calls=0;
+ f.service.generateDiscussionHost=async()=>++calls===1?delegate('product'):response();await f.start({providerId:'a',model:'old'});await until(()=>f.runtime.runs.length===1);const requestId=(await f.service.read()).requests[0].id;
+ f.service.generateDiscussionConversation=config=>{if(config.model==='old'){started=true;return new Promise(r=>release=r);}return {action:'reply',message:'New model progress',targets:[]};};
+ const clientRequestId=randomUUID();await f.service.followupDiscussion({requestId,clientRequestId,prompt:'Do not lose this progress question'});await until(()=>started);
+ await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new',confirmProviderChange:true});await until(()=>!f.service.discussionFollowupJobs.size);
+ release({action:'update',message:'Late response',targets:[]});await tick();const r=(await f.service.read()).requests[0];assert.equal(r.followups.length,1);assert.equal(r.followups[0].id,clientRequestId);assert.equal(r.followups[0].reply,'New model progress');assert.equal(r.followups[0].deliveries.length,0);
+ f.runtime.runs[0].status='completed';await f.finish();
+});
+test('discussion cross-provider confirmation is checked before any expert changes',async t=>{
+ const f=await fixture(t);modelProviders(f);f.service.generateDiscussionHost=async()=>delegate('product');await f.start({providerId:'a',model:'old'});await until(()=>f.runtime.runs.length===1);const requestId=(await f.service.read()).requests[0].id;
+ f.runtime.switchModel=()=>assert.fail('No expert may switch before confirmation');await assert.rejects(f.service.changeDiscussionModel({requestId,providerId:'b',model:'new'}),/确认/);assert.equal((await f.service.read()).requests[0].modelChange,undefined);assert.equal(f.runtime.runs[0].status,'running');await f.service.stopDiscussionHost({requestId});
+});
+
+test('switching models during planning preserves the same draft and rejects a late old-model plan',async t=>{
+ const f=await fixture(t);modelProviders(f);let release;
+ f.service.generateDiscussionHost=async()=>response({action:'plan'});
+ f.service.generateTaskGuide=config=>config.model==='old'?new Promise(r=>release=r):taskResult({summary:'Plan from the new model'});
+ await f.start({providerId:'a',model:'old',prompt:'生成任务'});await until(()=>release);const before=await f.service.read(),requestId=before.requests[0].id,draftId=before.taskDrafts[0].id;
+ await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new'});const finished=await f.finish();assert.equal(finished.host.status,'ready',finished.host.error);assert.equal(finished.host.task.draftId,draftId);assert.equal(finished.host.task.summary,'Plan from the new model');
+ release(taskResult({summary:'Late old plan'}));await tick();const state=await f.service.read();assert.equal(state.taskDrafts.length,1);assert.equal(state.requests[0].host.task.summary,'Plan from the new model');
+});
+
+test('discussion reports queued model changes as pending until the selected experts apply them',async t=>{
+ const f=await fixture(t);modelProviders(f);f.service.generateDiscussionHost=async()=>delegate('product');await f.start({providerId:'a',model:'old'});await until(()=>f.runtime.runs.length===1);const requestId=(await f.service.read()).requests[0].id,run=f.runtime.runs[0];
+ f.runtime.switchModel=async input=>{run.modelChange={id:'queued-model',state:'configured',requested:{providerId:input.providerId,model:input.model},effective:null};return run.modelChange;};
+ await f.service.changeDiscussionModel({requestId,providerId:'a',model:'new',confirmProviderChange:true});let r=(await f.service.read()).requests[0];assert.equal(r.modelChange.state,'configured');assert.equal(r.modelChange.effective,null);
+ run.modelChange.state='applied';run.modelChange.effective=run.modelChange.requested;await f.service.pumpDiscussionUpdates();r=(await f.service.read()).requests[0];assert.equal(r.modelChange.state,'applied');assert.equal(r.modelChange.effective.model,'new');await f.service.stopDiscussionHost({requestId});
 });
 
 for(const recover of [true,false])test('host output limit retries once and preserves diagnostics: '+recover,async t=>{

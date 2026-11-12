@@ -76,6 +76,33 @@ test('ordinary text uses host identity, is idempotent and retains user provenanc
  await assert.rejects(queue.append({...input,source:'extension'}),{code:'INVALID_ARGUMENT'});
  await assert.rejects(queue.append({...input,runId:'missing'}),{code:'NOT_FOUND'});
 });
+
+test('ordinary followups are recorded at enqueue without a conversation agent; form inputs keep their own path',async t=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.changed=()=>{};runtime.persist=async()=>{};
+ const run={id:'run',status:'preparing',messages:[{id:'root',role:'user',text:'Original task'}],tools:[]};
+ runtime.runs=[run];const context={key:'c',run,turnKey:'root'};runtime.contexts.set('c',context);
+ const {queue}=await fixture(t,runtime);
+ const item=await queue.append({runId:'run',clientMutationId:'followup',text:'现在进展如何？'});await flush(queue);
+ const message=run.messages.find(m=>m.userInputId===item.id);
+ assert.equal(message.text,'现在进展如何？');assert.equal(message.agentRole,'conversation');assert.equal(message.inputDeliveryState,'queued');
+ assert.equal(await runtime.hasFormInput(item),false);
+ await queue.append({runId:'run',clientMutationId:'followup',text:'现在进展如何？'});await flush(queue);
+ assert.equal(run.messages.filter(m=>m.userInputId===item.id).length,1);
+ await queue.enqueue(answer('form'));await flush(queue);assert.equal(run.messages.some(m=>m.formSubmissionId==='form'),false);
+ run.status='running';run.threadId='thread';run.turnId='turn';context.rpc={call:async()=>({})};
+ queue.tick();await flush(queue);
+ assert.equal(message.inputDeliveryState,'delivered');assert.equal((await queue.get(item.id)).state,'delivered');
+ const form=run.messages.find(m=>m.formSubmissionId==='form');assert.ok(form);assert.equal(form.agentRole,undefined);assert.equal(form.userInputId,undefined);
+});
+
+test('legacy ordinary input stays in chat, while form and structured input records stay in the process',()=>{
+ const ts=require('typescript'),vm=require('node:vm'),exports={};
+ vm.runInNewContext(ts.transpileModule(require('node:fs').readFileSync('src/conversation-message.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});
+ assert.equal(exports.isConversationMessage({role:'user',userInputId:'user:one'}),true);
+ assert.equal(exports.isConversationMessage({role:'user',inputSource:'user'}),true);
+ assert.equal(exports.isConversationMessage({role:'user',formSubmissionId:'form'}),false);
+ assert.equal(exports.isConversationMessage({role:'assistant',inputRecord:{requestId:'question'}}),false);
+});
 test('pause survives queue recreation and selective resume holds unselected inputs',async t=>{
  const sent=[],runtime={runs:[{id:'run'}],deliverFormInput:async(item,{dispatch})=>{const result=await dispatch({},()=>{sent.push(item.id);return Promise.resolve();});await result.receipt;}};
  const {database,queue}=await fixture(t,runtime);await queue.pause('run');

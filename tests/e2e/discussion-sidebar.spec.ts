@@ -4,6 +4,38 @@ async function enter(page:Page,theme='light'){
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();
  await page.getByRole('tab',{name:'讨论',exact:true}).click();
 }
+async function longDiscussion(page:Page,extraTopics=0){
+ await page.evaluate(extraTopics=>{const qa=(window as any).spaceQA,request=qa.snapshot.requests.find((r:any)=>r.id==='discussion');request.participants[0].output='侧栏吸顶回归验证。\n\n'.repeat(120);
+  for(let i=0;i<extraTopics;i++)qa.snapshot.requests.push({...structuredClone(request),id:'sidebar-topic-'+i,prompt:'测试话题 '+i,participants:[]});qa.emit();
+ },extraTopics);
+ await expect(page.getByText('侧栏吸顶回归验证。',{exact:true}).first()).toBeVisible();
+ await expect.poll(()=>page.locator('.qa-scroll').evaluate(el=>el.scrollHeight)).toBeGreaterThan(2000);
+}
+for(const theme of ['light','dark'])test(`whole topic navigator stays below pinned tabs during long discussion in ${theme}`,async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await enter(page,theme);await longDiscussion(page);
+ const scroller=page.locator('.qa-scroll'),navigation=page.locator('.wf-space-navigation'),browser=page.getByRole('region',{name:'话题与相关内容'}),search=browser.getByRole('textbox',{name:'搜索话题'});
+ await scroller.evaluate(el=>el.scrollTop=0);expect((await browser.boundingBox())!.y).toBeGreaterThan((await navigation.boundingBox())!.y+(await navigation.boundingBox())!.height);
+ for(const top of [350,900,1800]){
+  await scroller.evaluate((el,top)=>el.scrollTop=top,top);
+  await expect.poll(async()=>{const nav=(await navigation.boundingBox())!,box=(await browser.boundingBox())!;return Math.abs(box.y-nav.y-nav.height);}).toBeLessThan(2);
+  await expect(search).toBeInViewport();await expect(browser.getByRole('button',{name:'明确发布目标',exact:true})).toBeInViewport();
+ }
+ await search.fill('没有匹配的话题');await expect(browser.getByText('没有匹配的话题',{exact:true})).toBeInViewport();await search.fill('');
+ await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await expect(browser).toBeHidden();
+ await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect(search).toBeInViewport();
+ await page.screenshot({path:`/tmp/discussion-sidebar-sticky-fixed-${theme}.png`});
+});
+test('long topic list scrolls inside the pinned sidebar without moving the discussion',async({page})=>{
+ await page.setViewportSize({width:1280,height:720});await enter(page);await longDiscussion(page,40);
+ const scroller=page.locator('.qa-scroll'),browser=page.getByRole('region',{name:'话题与相关内容'}),list=browser.locator('.wf-topic-scroll');
+ await scroller.evaluate(el=>el.scrollTop=900);
+ await expect.poll(async()=>{const b=(await browser.boundingBox())!;return b.y+b.height;}).toBeLessThanOrEqual(720);
+ const before=await scroller.evaluate(el=>el.scrollTop);await list.hover();await page.mouse.wheel(0,5000);
+ await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+ expect(await scroller.evaluate(el=>el.scrollTop)).toBe(before);
+ await expect(browser.getByRole('textbox',{name:'搜索话题'})).toBeInViewport();await expect(browser.getByRole('button',{name:'测试话题 39',exact:true})).toBeInViewport();
+ await page.setViewportSize({width:1280,height:560});await expect.poll(async()=>{const b=(await browser.boundingBox())!;return b.y+b.height;}).toBeLessThanOrEqual(560);
+});
 for(const theme of ['light','dark'])test(`discussion sidebar resizes, collapses and remembers width in ${theme}`,async({page})=>{
  await page.setViewportSize({width:1280,height:900});await enter(page,theme);
  const sidebar=page.getByRole('complementary',{name:'讨论上下文'}),main=page.getByRole('region',{name:'讨论对话'}),input=page.getByLabel('这次想推进什么？');
