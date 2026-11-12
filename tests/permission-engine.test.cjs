@@ -13,7 +13,7 @@ test('bundled engine interrupts and resumes the same active thread with confirme
  const run={id:'probe',permission:'default',status:'running',threadId:null,turnId:null,messages:[{id:'root',role:'user',text:'Wait for the test'}],tools:[],questions:[],approvals:[]};
  const context={key:'context',run,turnKey:'root',config,dualAgent:false};runtime.runs=[run];runtime.contexts.set(context.key,context);
  const rpc=new CodexRPC({executable,config,home:directory,cwd:directory,notification:m=>runtime.notification(context,m),request:m=>runtime.request(context,m),exit(){}});context.rpc=rpc;
- t.after(async()=>{context.done=true;rpc.close();server.closeAllConnections();await new Promise(r=>server.close(r));await new Promise(r=>setTimeout(r,100));await fs.rm(directory,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
+ t.after(async()=>{context.done=true;await rpc.close();server.closeAllConnections();await new Promise(r=>server.close(r));await fs.rm(directory,{recursive:true,force:true,maxRetries:8,retryDelay:200});});
  await rpc.call('initialize',{clientInfo:{name:'permission-engine-test',version:'1'}});rpc.send({method:'initialized',params:{}});
  const thread=await rpc.call('thread/start',{model:'fixture',modelProvider:'atelier',sandbox:'read-only',approvalPolicy:'on-request'});run.threadId=thread.thread.id;
  const turn=await rpc.call('turn/start',{threadId:run.threadId,input:[{type:'text',text:'Wait for the test'}]});run.turnId=turn.turn.id;

@@ -59,6 +59,7 @@ class CodexRPC {
     const env = codexEnvironment(config, home);
     if(extensionMcp)env.AMBLE_EXTENSION_AUTH=extensionMcp.http_headers.Authorization;
     this.child = spawn(executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home, extensionMcp)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.stopped = new Promise(resolve => this.child.once('close', resolve));
     this.child.stdin.on('error', () => {});
     this.child.stderr.on('data', data => { this.tail = redact((this.tail + data.toString()).slice(-5000), config.apiKey); });
     this.reader = createInterface({ input: this.child.stdout, crlfDelay: Infinity });
@@ -93,12 +94,13 @@ class CodexRPC {
     });
   }
   close() {
-    if (this.closed) return;
+    if (this.closed) return this.stopped;
     this.closed = true;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('执行已停止')); }
     this.pending.clear(); this.reader.close(); this.child.kill('SIGTERM');
     const child = this.child;
     const timer = setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 2000); timer.unref();
+    return this.stopped;
   }
 }
 module.exports = { CodexRPC, findCodex, configurationArgs, codexEnvironment };
