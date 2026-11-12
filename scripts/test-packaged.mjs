@@ -30,11 +30,17 @@ const networkMarker = realNetwork ? 'Example Domain' : 'APPROVED_PUBLIC_DATA';
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === '/public-data') { publicReads++; res.writeHead(200, { 'content-type': 'text/plain' }); res.end('APPROVED_PUBLIC_DATA'); return; }
+    if (req.method === 'GET' && req.url === '/v1/models') { res.writeHead(200, {'content-type':'application/json'}); res.end(JSON.stringify({data:[{id:'fixture',context_window:128000,max_output_tokens:32768}]})); return; }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const data = JSON.parse(raw); requests.push(data);
-    if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }
-    if (mode === 'error') { res.writeHead(401); res.end(JSON.stringify({ error: { message: 'fixture rejection' } })); return; }
+    if (data.stream !== false && mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }
+    if (data.stream !== false && mode === 'error') { res.writeHead(401); res.end(JSON.stringify({ error: { message: 'fixture rejection' } })); return; }
     let item = { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Packaged Ambleloft verified', annotations: [] }] };
+    // Conversation routing uses non-streaming structured output before execution.
+    if (data.stream === false) {
+      res.writeHead(200, {'content-type':'application/json'});
+      res.end(JSON.stringify({status:'completed',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify({action:'execute',reply:'Starting the packaged verification task.'})}]}]}));return;
+    }
     const tools = (data.tools || []).flatMap(tool => tool.type === 'namespace' ? tool.tools.map(t => ({ ...t, namespace: tool.name })) : [tool]);
     if (!issued && ['shell', 'plan', 'approval'].includes(mode)) {
       const tool = tools.find(t => mode === 'plan' ? /atelier_progress.*update_plan/.test(`${t.namespace || ''}${t.name}`) : ['shell_command', 'exec_command'].includes(t.name));
@@ -151,14 +157,18 @@ try {
     const line = stdout.split('\n').find(line => { const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/); return match && Number(match[2]) === process.pid && match[3] === process.resourcesPath + '/engine/bin/codex'; });
     return line ? Number(line.trim().split(/\s+/)[0]) : null;
   });
-  const crashPid = await ownEnginePid(); assert.ok(crashPid);
+  let crashPid;
+  for (let i = 0; i < 100 && !crashPid; i++) { crashPid = await ownEnginePid(); if (!crashPid) await new Promise(resolve => setTimeout(resolve, 100)); }
+  assert.ok(crashPid, 'execution engine starts after conversation routing');
   process.kill(crashPid, 'SIGKILL');
   assert.equal((await wait(crashed.id)).status, 'failed');
   assert.ok((await other.call('model/list', {})).data);
   const count = requests.length;
   const exiting = await start('Fixture exit during turn');
   for (let i = 0; i < 100 && requests.length === count; i++) await new Promise(resolve => setTimeout(resolve, 100));
-  const exitPid = await ownEnginePid(); assert.ok(exitPid);
+  let exitPid;
+  for (let i = 0; i < 100 && !exitPid; i++) { exitPid = await ownEnginePid(); if (!exitPid) await new Promise(resolve => setTimeout(resolve, 100)); }
+  assert.ok(exitPid, 'execution engine starts before exit cleanup');
   await mkdir(path.join(root, 'test-results'), { recursive: true });
   await page.screenshot({ path: path.join(root, 'test-results/packaged-app.png') });
   await app.close(); app = null;
