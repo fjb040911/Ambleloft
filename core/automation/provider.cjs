@@ -3,6 +3,8 @@ const {parseStructuredOutput,outputError}=require('./structured-output.cjs');
 const capabilities=require('./output-capabilities.cjs');
 const Ajv=require('ajv');
 const {inferenceDeadline,abortable}=require('./inference-deadline.cjs');
+const {resolveBudget,recoverBudget,estimateInput,thinking}=require('../models/budget.cjs');
+const {discoverCapacity}=require('../models/capacity.cjs');
 // One shared budget for protocol/format negotiation and a single content repair.
 // Nothing outside this inference is retried; all mutations remain with callers.
 async function generate(config,job,signal,onProgress){
@@ -13,6 +15,8 @@ async function generate(config,job,signal,onProgress){
 }
 async function generateWithinDeadline(config,job,signal,onProgress){
  let validate;try{validate=new Ajv({strict:false,allErrors:true,logger:false}).compile(job.outputSchema);}catch{throw Object.assign(Error('INVALID_SCHEMA'),{definitive:true});}
+ await discoverCapacity(config,signal);
+ job={...job,outputBudget:resolveBudget(config,{profile:job.budgetProfile,requested:job.maxOutputTokens,reasoning:thinking(config),inputTokens:estimateInput({prompt:job.prompt,input:job.input,schema:job.outputSchema})})};
  let protocol=usesChat(config)?'chat':'responses',available=capabilities.formats(job.outputSchema);
  let unsupported=[];
  const choose=()=>{unsupported=capabilities.profile(config,protocol,!!onProgress)?.unsupported||[];const found=available.findIndex(mode=>!unsupported.includes(mode));return found<0?available.length-1:found;};
@@ -30,16 +34,16 @@ async function generateWithinDeadline(config,job,signal,onProgress){
    await capabilities.remember(config,{protocol,streaming:!!onProgress,mode,unsupported});
    signal.throwIfAborted();return result;
   }catch(error){
-   error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode,...(error.message==='OUTPUT_LIMIT'?{maxOutputTokens:outputBudget(config,job),outputLimitRetried:outputRetried}: {})};
+   error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode,budget:job.outputBudget,...(error.message==='OUTPUT_LIMIT'?{maxOutputTokens:outputBudget(config,job),outputLimitRetried:outputRetried}: {})};
    signal.throwIfAborted();if(attempt===3)throw error;
    const probeRoute=job.probeProtocol&&error.message==='PROVIDER_REJECTED'&&error.diagnostics?.httpStatus===404;
    if((error.message==='PROTOCOL_UNSUPPORTED'||probeRoute)&&(!config.protocol||config.protocol==='auto')&&!switched){protocol=protocol==='chat'?'responses':'chat';switched=true;index=choose();}
    else if(['FORMAT_UNSUPPORTED','SCHEMA_UNSUPPORTED'].includes(error.message)&&index<available.length-1){if(error.message==='FORMAT_UNSUPPORTED')unsupported=[...new Set([...unsupported,mode])];index++;}
    else if(job.retryOutputLimit&&!outputRetried&&error.message==='OUTPUT_LIMIT'){
+    const next=recoverBudget(job.outputBudget);
+    if(!next)throw error;
     outputRetried=true;
-    const current=outputBudget(config,job);
-    const ceiling=config.effectiveLimits?.maxOutputTokens||current;
-    job={...job,maxOutputTokens:Math.min(current*2,ceiling)};
+    job={...job,outputBudget:next};
     repair='The previous response reached its output limit. Return one complete JSON value matching the schema. Keep prose concise and avoid repetition across fields. Preserve all requested scope, tasks, dependencies and user-confirmed constraints; do not omit requirements to shorten the response.';
    }
    else if(job.repairInvalidOutput&&!repaired&&error.message==='INVALID_OUTPUT'&&['content','schema'].includes(error.diagnostics.stage)){
@@ -51,8 +55,7 @@ async function generateWithinDeadline(config,job,signal,onProgress){
  }
 }
 function outputBudget(config,job){
- const requested=Number.isInteger(job.maxOutputTokens)?Math.max(256,job.maxOutputTokens):2048;
- return Math.min(requested,config.effectiveLimits?.maxOutputTokens||requested);
+ return job.outputBudget.maxOutputTokens;
 }
 async function request(config,job,signal,onProgress,mode){
  const id=require('node:crypto').randomUUID(),startedAt=new Date().toISOString();let usage=null,providerRequestId=null,status='unknown',dispatched=false;

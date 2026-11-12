@@ -214,7 +214,7 @@ test('H12 malformed host output retries only inference and preserves submitted a
  f.service.generateDiscussionHost=require('../core/automation/provider.cjs').generate;
  global.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'private invalid text'}}]}));};
  await f.start({replyTo:first.id,answerTo:first.id,answers:{answer0:'test'},prompt:'Confirm access'});const failed=await f.finish();
- assert.equal(calls,2);assert.equal(failed.host.status,'failed');assert.equal(failed.host.errorCode,'INVALID_OUTPUT');assert.match(failed.host.error,/选择.*保留/);assert.ok(!failed.host.error.includes('INVALID_OUTPUT'));assert.deepEqual(failed.host.outputDiagnostics,{stage:'content',reason:'invalid-json',characters:20,attempts:2,protocol:'chat',mode:'schema'});
+ assert.equal(calls,2);assert.equal(failed.host.status,'failed');assert.equal(failed.host.errorCode,'INVALID_OUTPUT');assert.match(failed.host.error,/选择.*保留/);assert.ok(!failed.host.error.includes('INVALID_OUTPUT'));assert.equal(failed.host.outputDiagnostics.budget.profile,'discussion-host');const {budget,...details}=failed.host.outputDiagnostics;assert.deepEqual(details,{stage:'content',reason:'invalid-json',characters:20,attempts:2,protocol:'chat',mode:'schema'});
  assert.equal(failed.prompt,'Access?：Test HTTP');const state=await f.service.read();assert.equal(state.requests.find(r=>r.id===first.id).host.question.answers.answer0,'test');assert.equal(state.plans.length,0);assert.equal(f.runtime.runs.length,0);
  calls=0;global.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:calls===1?'bad':JSON.stringify(response())}}]}));};
  await f.start({replyTo:failed.id,prompt:'Continue with my confirmed choices'});const recovered=await f.finish();assert.equal(recovered.host.status,'completed');assert.equal(calls,2);assert.equal(recovered.host.steps.length,1);assert.equal(f.runtime.runs.length,0);
@@ -629,4 +629,17 @@ for(const recover of [true,false])test('host output limit retries once and prese
  await f.start();const result=await f.finish();assert.equal(calls,2);assert.equal(f.runtime.starts.length,0);
  if(recover){assert.equal(result.host.status,'completed');assert.equal(result.host.steps.length,1);}
  else{assert.equal(result.host.status,'failed');assert.equal(result.host.errorCode,'OUTPUT_LIMIT');assert.equal(result.host.outputDiagnostics.maxOutputTokens,12000);assert.equal(result.host.outputDiagnostics.attempts,2);assert.match(result.host.error,/12000 tokens/);assert.ok(!JSON.stringify(result).includes('PRIVATE'));}
+});
+
+test('host recovers without configured output capacity and applies only the complete decision',async t=>{
+ const f=await fixture(t),old=global.fetch,budgets=[];t.after(()=>{global.fetch=old;});
+ f.service.workforce.providers.secret=async()=>({model:'test',protocol:'chat',baseUrl:'https://model.example/v1',effectiveLimits:{}});
+ global.fetch=async(_url,options)=>{
+  const body=JSON.parse(options.body);budgets.push(body.max_tokens);
+  if(budgets.length===1){assert.equal((await f.service.read()).requests[0].host.steps.length,0);}
+  else {assert.equal((await f.service.read()).taskDrafts.length,0);assert.equal(f.runtime.starts.length,0);}
+  return new Response(JSON.stringify({choices:[{finish_reason:budgets.length===1?'length':'stop',message:{content:budgets.length===1?JSON.stringify(delegate('product')):JSON.stringify(response({message:'We can review the three projects, then verify the remote container.'}))}}]}));
+ };
+ await f.start({prompt:'本地测试通过后到远端构建 Docker 镜像再测试。检查三个项目的功能缺陷和流程。'});const result=await f.finish();
+ assert.deepEqual(budgets,[8192,16384]);assert.equal(result.host.status,'completed',result.host.error);assert.equal(result.host.steps.length,1);assert.equal(f.runtime.starts.length,0);assert.equal((await f.service.read()).taskDrafts.length,0);
 });

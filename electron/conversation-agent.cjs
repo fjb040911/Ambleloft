@@ -36,7 +36,7 @@ class ConversationAgent {
   try{
    const result=await abortable(this.infer(config,{prompt:instructions,outputSchema,
     input:{initial,userMessage:text,projectContext:context.projectDescription||'',role:context.employee?{name:context.employee.name,responsibilities:context.employee.responsibilities,methods:context.employee.methods,deliverables:context.employee.deliverables}:null,task:snapshot(context.run,context.turnKey)},
-    timeoutMs:this.timeoutMs,maxOutputTokens:1600,repairInvalidOutput:true,
+    timeoutMs:this.timeoutMs,budgetProfile:'conversation',retryOutputLimit:true,repairInvalidOutput:true,
     observeUsage:require('../core/project-insights/usage.cjs').observer(this.runtime.database,{projectId:context.run.projectId,runId:context.run.id,turnId:context.turnKey,providerId:context.config.id,model:context.config.model,purpose:'development',origin:'conversation-agent'})
    },signal),signal);
    if(context.config!==config)throw Object.assign(Error('MODEL_CHANGED'),{code:'BUSY'});

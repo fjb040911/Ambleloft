@@ -867,8 +867,11 @@ test('running summary exposes the current step while failed tools automatically 
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='failed';(window as any).__demoRun.tools[0].detail='Report generation failed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeVisible();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
  await page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.tools[0].status='completed';(window as any).__emit();});
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeHidden();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeVisible();
+ await page.evaluate(()=>{(window as any).__emit();});
+ await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
 });
 
 test('queued execution follows application language',async({page})=>{
