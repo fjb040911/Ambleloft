@@ -1,0 +1,46 @@
+name: Attach verified macOS preview
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful macOS preview build run ID
+        required: true
+      tag:
+        description: Existing draft version tag (vX.Y.Z)
+        required: true
+permissions:
+  actions: read
+  contents: write
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.run_id }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate source build and draft release
+        shell: bash
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
+          jq -e '.conclusion == "success" and .path == ".github/workflows/macos-preview-build.yml"' run.json
+          gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' | grep -qx true
+      - name: Download and verify immutable CI artifact
+        shell: bash
+        run: |
+          gh run download "$BUILD_RUN" --name macos-preview-arm64 --dir release
+          version="${RELEASE_TAG#v}"
+          test -f "release/Ambleloft-$version-mac-arm64.dmg"
+          test -f "release/Ambleloft-$version-mac-arm64.zip"
+          sha256sum --check release/SHA256SUMS-macos-arm64.txt
+          cd release
+          sha256sum "Ambleloft-$version-mac-arm64.dmg" "Ambleloft-$version-mac-arm64.zip" > SHA256SUMS-macos-arm64.txt
+      - name: Attach assets without replacing existing files or publishing
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          gh release upload "$RELEASE_TAG" "release/Ambleloft-$version-mac-arm64.dmg" "release/Ambleloft-$version-mac-arm64.zip" release/SHA256SUMS-macos-arm64.txt
