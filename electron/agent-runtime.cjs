@@ -324,7 +324,7 @@ class AgentRuntime {
       if(context.cancelled||context.done)return;
       context.bridge=await startChatBridge(config, run.modelSessionId, !usesChat(config), diagnostic => {
         if(context.config===config)this.modelDiagnostic(context,diagnostic);
-      },require('../core/project-insights/usage.cjs').observer(this.database,{projectId:run.projectId,runId:run.id,turnId:context.turnKey,providerId:config.id,model:config.model,purpose:'development',origin:run.collaboration?'workforce-expert':'chat'}));
+      },require('../core/project-insights/usage.cjs').observer(this.database,{projectId:run.projectId,runId:run.id,turnId:context.turnKey,providerId:config.id,model:config.model,purpose:'development',origin:run.collaboration?'workforce-expert':'chat'}),{profile:run.employee?'expert':'chat'});
       if(context.cancelled||context.done){context.bridge?.close();return structuredClone(run);}
       if(this.extensionRouter||context.remoteProject||run.collaboration&&this.spaces){const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
        const extensionContext=signal=>({caller:'agent',projectId:run.projectId,owner:context.owner,signal,validate:()=>{if(context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});}});

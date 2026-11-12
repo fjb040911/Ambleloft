@@ -92,7 +92,7 @@ function createProviderStore(directory, encryption, database) {
       const capabilityKey=outputCapabilities.key({...stored,...config});
       const outputProfiles=(stored.outputProfiles||[]).filter(p=>outputCapabilities.valid(p,capabilityKey));
       const detected=outputProfiles.toSorted((a,b)=>b.verifiedAt-a.verifiedAt)[0]?.protocol;
-      const result={...config,effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,revision:stored.revision||0,apiKey,outputProfiles,...(config.protocol==='auto'&&detected?{detectedProtocol:detected}:{})};
+      const result={...config,discoverModelLimits:true,effectiveLimits:resolveLimits(config.limits,config.modelLimits[config.model]),id:stored.id,revision:stored.revision||0,apiKey,outputProfiles,...(config.protocol==='auto'&&detected?{detectedProtocol:detected}:{})};
       require('../core/project-insights/usage.cjs').bind(result,database);
       return outputCapabilities.bind(result,profile=>mutate(state=>{
         const current=state.providers.find(p=>p.id===stored.id);

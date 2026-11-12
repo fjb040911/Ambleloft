@@ -19,8 +19,8 @@ import type { ConversationTurn } from './conversation-turns';
 const statusText:Record<string,string>={inProgress:'进行中',running:'进行中',completed:'已完成',failed:'失败',declined:'已拒绝',pending:'待处理'};
 export function TurnProgress({turn,status,duration,onToggle,paused=false,...inputs}:{paused?:boolean;onToggle():void;turn:ConversationTurn;status:string;duration:ReactNode}&InputProps) {
  const hasFailure=turn.outcome==='failed'||turn.tools.some(tool=>tool.status==='failed');
- const [expanded,setExpanded]=useState(turn.active||hasFailure);
- useEffect(()=>{setExpanded(turn.active||hasFailure);},[turn.active,hasFailure,turn.outcome]);
+ const [expanded,setExpanded]=useState(turn.active||turn.outcome==='failed');
+ useEffect(()=>{setExpanded(turn.active||turn.outcome==='failed');},[turn.active,hasFailure,turn.outcome]);
  const step=turn.plan?.steps.find(step=>step.status==='inProgress');
  const completed=turn.plan?.steps.filter(step=>step.status==='completed').length||0;
  return <Trace className="turn-progress my-2"><TraceCollapsible open={expanded} onOpenChange={open=>{onToggle();setExpanded(open);}}><TraceCollapsibleTrigger className="turn-progress-toggle"><TraceLine status={turn.active&&!paused?'running':hasFailure?'error':undefined}><TraceTitle>{t(turn.active?status:turn.outcome==='completed'?'本轮已结束':turn.outcome==='failed'?'执行失败':'已中断')}</TraceTitle>{turn.active&&step&&<TraceTitle>{step.step}</TraceTitle>}{turn.active&&!!turn.plan?.steps.length&&<TraceDescription>{completed}/{turn.plan.steps.length}</TraceDescription>}{duration}{!turn.active&&turn.tools.length>0&&<TraceDescription>{turn.tools.length} {t('次工具调用')}</TraceDescription>}</TraceLine></TraceCollapsibleTrigger><TraceCollapsibleContent keepMounted><ProcessPanel turn={turn} paused={paused} showAnalysis={expanded} {...inputs}/></TraceCollapsibleContent></TraceCollapsible>{!expanded&&turn.tools.filter(tool=>tool.type==='analysis').map(tool=><AnalysisTask key={tool.id} tool={tool}/>)}</Trace>;

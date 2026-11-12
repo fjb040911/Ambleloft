@@ -42,7 +42,7 @@ export function DiscussionHostReply({host,children}:{host:DiscussionHost;childre
   {live&&<div className="wf-host-activity" aria-label={L('主持人运行状态','Host activity')}>
    {activity?.reasoning&&activity.phase==='reasoning'?<ThinkingWindow text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live/>:<ProcessIndicator title={host.status==='preparing'?L('正在准备','Preparing'):host.status==='stopping'?L('正在停止','Stopping'):activity?.phase==='planning'?L('正在规划任务与检查项目关系','Planning tasks and checking project relationships'):activity?.phase==='experts'?L('等待专家完成分析','Waiting for expert analysis'):activity?.phase==='responding'?L('正在整理回复','Preparing a response'):L('等待模型响应','Waiting for the model')}/>}
   </div>}
-  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<details className="wf-host-trace"><summary>{L('查看模型思考','View model reasoning')}</summary><ThinkingWindow text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/></details>}
+  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<details key={`${activity.id}:${live}`} className="wf-host-trace"><summary>{L('查看模型思考','View model reasoning')}</summary><ThinkingWindow text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/></details>}
   {host.steps.length>1&&<details className="wf-host-trace"><summary>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</summary>{host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</details>}
   {host.steps.at(-1)&&<Markdown text={host.steps.at(-1)!.text}/>}
   {host.error&&<Alert variant="destructive"><AlertDescription>{host.error}</AlertDescription></Alert>}

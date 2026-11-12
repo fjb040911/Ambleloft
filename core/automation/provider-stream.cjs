@@ -3,7 +3,7 @@ const {parseStructuredOutput,outputError}=require('./structured-output.cjs');
 const invalid=code=>Object.assign(Error(code),{definitive:true});
 // SSE repeats IDs, model metadata and sometimes usage on every token. The
 // transfer budget must allow this overhead independently of the retained text.
-// 32 MiB leaves headroom for the adapter's maximum 16K-token request; decoded
+// Transfer headroom is independent of request/recovery token budgets; decoded
 // reasoning and structured output still each have a 256K-character ceiling.
 const MAX_STREAM_BYTES=32*1024*1024,MAX_TEXT_CHARACTERS=256*1024;
 

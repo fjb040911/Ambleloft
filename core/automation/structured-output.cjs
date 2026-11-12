@@ -19,6 +19,8 @@ function outputLimitDetails(error,locale='zh-CN'){
 }
 function structuredErrorMessage(error,locale='zh-CN'){
  const en=locale==='en';
+ if(error.message==='CONTEXT_LIMIT')return en?'The conversation exceeds the model context capacity. Reduce the supplied context or choose a model with a larger context window. Saved tasks are preserved.':'本轮上下文超过模型容量。请减少参考内容或选择上下文更大的模型，已保存任务保留。';
+ if(error.message==='OUTPUT_BUDGET_REJECTED')return en?'The service rejected the output budget. Check this endpoint’s model output limit. Saved tasks are preserved.':'模型服务不接受当前输出预算。请核对该端点的模型输出上限，已保存任务保留。';
  if(error.message==='DISCUSSION_STOPPED')return en?'Discussion stopped. Your submitted answers and saved content are preserved.':'讨论已停止。已提交的回答和已保存内容均保留。';
  if(error.message==='MODEL_RESPONSE_TIMEOUT')return en?'The model service did not send new content within the response window. Your submitted answers are preserved. Retry this round or switch models.':'模型服务长时间没有返回新内容，本轮等待已结束。已提交的回答保留，可重试本轮或切换模型。';
  if(error.message==='MODEL_TIMEOUT')return en?'The model response exceeded the time limit. Your submitted answers are preserved. Retry this round, narrow its scope, or switch models.':'模型响应超过本轮时间上限。已提交的回答保留，可重试本轮、缩小范围或切换模型。';

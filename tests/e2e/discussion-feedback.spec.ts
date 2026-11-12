@@ -55,3 +55,15 @@ for(const [english,dark,reduced] of [[false,false,false],[true,true,true]] as co
  await expect(thought).toContainText('VeryLongUnbrokenProviderText');expect(await thought.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
+
+
+test('host closes previously opened reasoning when the round completes',async({page})=>{
+ await enter(page);
+ await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'running',revision:1,ruleVersion:'fixture',steps:[],brief:null,activity:{id:'model-pass',phase:'responding',reasoning:'保留这段思考记录',reasoningFormat:'text',startedAt:new Date().toISOString()}};q.emit();});
+ const trace=page.locator('.wf-host-trace'),thought=trace.getByRole('region',{name:'思考过程'});
+ await trace.locator('summary').click();await expect(thought).toBeVisible();
+ await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.status='completed';h.revision++;q.emit();});
+ await expect(thought).toBeHidden();
+ await trace.locator('summary').click();await expect(thought).toBeVisible();await expect(thought).toContainText('保留这段思考记录');
+ await page.evaluate(()=>{(window as any).spaceQA.emit();});await expect(thought).toBeVisible();
+});
