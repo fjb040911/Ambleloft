@@ -175,8 +175,8 @@ test('timeout persists the draft and allows a new attempt',async t=>{
 });
 test('output limit preserves input, explains recovery, and does not accept a truncated plan',async t=>{
  const f=await setup(t);
- f.service.generateTaskGuide=async(_config,req)=>{assert.equal(req.maxOutputTokens,16384);assert.equal(req.retryOutputLimit,true);throw Error('OUTPUT_LIMIT');};
- await assert.rejects(guide(f,f.draft,{message:'Keep the agreed local and remote scope',locale:'en'}),/output limit.*draft is preserved/);
+ f.service.generateTaskGuide=async(_config,req)=>{assert.equal(req.budgetProfile,'task-plan');assert.equal(req.retryOutputLimit,true);throw Object.assign(Error('OUTPUT_LIMIT'),{diagnostics:{maxOutputTokens:8000,attempts:2}});};
+ await assert.rejects(guide(f,f.draft,{message:'Keep the agreed local and remote scope',locale:'en'}),e=>e.code==='OUTPUT_LIMIT'&&e.diagnostics.maxOutputTokens===8000&&/output limit.*draft is preserved/.test(e.message)&&/8000 tokens/.test(e.message));
  const d=(await f.service.read()).taskDrafts[0];assert.equal(d.status,'needs-input');assert.equal(d.assessment,undefined);assert.equal(d.messages[0].text,'Keep the agreed local and remote scope');assert.equal((await f.service.read()).plans.length,0);
  f.service.generateTaskGuide=async()=>response();assert.equal((await guide(f,d)).status,'ready');
 });

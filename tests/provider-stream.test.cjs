@@ -27,7 +27,7 @@ test('opted-in inference retries malformed content once, discards partial decisi
 });
 test('empty JSON-mode content retries once and failed diagnostics contain no raw response',async t=>{
  let calls=0;mock(t,async()=>{calls++;return stream([chat({content:'   '},'stop')]);});
- await assert.rejects(generate(config,{...job,repairInvalidOutput:true},new AbortController().signal,()=>{}),e=>{assert.deepEqual(e.diagnostics,{stage:'content',reason:'empty-content',characters:3,attempts:2,protocol:'chat',mode:'json'});return e.message==='INVALID_OUTPUT';});assert.equal(calls,2);
+ await assert.rejects(generate(config,{...job,repairInvalidOutput:true},new AbortController().signal,()=>{}),e=>{assert.equal(e.diagnostics.budget.source,'fallback');const {budget,...details}=e.diagnostics;assert.deepEqual(details,{stage:'content',reason:'empty-content',characters:3,attempts:2,protocol:'chat',mode:'json'});return e.message==='INVALID_OUTPUT';});assert.equal(calls,2);
  global.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'private malformed response'}}]}));
  await assert.rejects(generate(config,job,new AbortController().signal),e=>e.diagnostics.reason==='invalid-json'&&!JSON.stringify(e).includes('private'));
 });
@@ -137,13 +137,30 @@ for(const protocol of ['chat','responses'])for(const streaming of [false,true])t
  assert.deepEqual(bodies.map(b=>b.max_tokens||b.max_output_tokens),[16384,24000]);
  assert.ok(!JSON.stringify(bodies[1]).includes('PRIVATE'));
 });
-test('output-limit recovery retries only once and respects a fixed configured ceiling',async t=>{
+test('output-limit recovery does not repeat a request already at its configured ceiling',async t=>{
  const budgets=[];mock(t,async(_url,options)=>{budgets.push(JSON.parse(options.body).max_tokens);return stream([chat({content:'{}'},'length')]);});
  await assert.rejects(generate({...config,effectiveLimits:{maxOutputTokens:8000}},{...job,maxOutputTokens:16384,retryOutputLimit:true},undefined,()=>{}),/OUTPUT_LIMIT/);
- assert.deepEqual(budgets,[8000,8000]);
+ assert.deepEqual(budgets,[8000]);
 });
 test('output-limit recovery can be cancelled before redispatch',async t=>{
  let calls=0;const controller=new AbortController();mock(t,async()=>{calls++;return stream([chat({content:'{}'},'length')]);});
  await assert.rejects(generate(config,{...job,retryOutputLimit:true},controller.signal,p=>{if(p.phase==='waiting')controller.abort();}),/abort/i);
  assert.equal(calls,1);
+});
+
+// Most compatible endpoints expose no maxOutputTokens metadata. Missing
+// metadata must not turn the first request budget into a permanent ceiling.
+for(const protocol of ['chat','responses'])for(const streaming of [false,true])test(`${protocol} unknown output ceiling grows the recovery budget (${streaming})`,async t=>{
+ const budgets=[];mock(t,async(_url,options)=>{
+  const body=JSON.parse(options.body);budgets.push(body.max_tokens||body.max_output_tokens);const limited=budgets.length===1;
+  if(streaming)return stream(protocol==='chat'?[chat({reasoning_content:'PRIVATE thought'}),chat({content:limited?'PRIVATE truncated':'{"ok":true}'},limited?'length':'stop')]:limited?[{type:'response.incomplete',response:{incomplete_details:{reason:'max_output_tokens'}}}]:[{type:'response.output_text.delta',delta:'{"ok":true}'},{type:'response.completed',response:{status:'completed'}}]);
+  return new Response(JSON.stringify(protocol==='chat'?{choices:[{finish_reason:limited?'length':'stop',message:{content:limited?'PRIVATE truncated':'{"ok":true}'}}]}:limited?{status:'incomplete',incomplete_details:{reason:'max_output_tokens'}}:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'{"ok":true}'}]}]}));
+ });
+ assert.deepEqual(await generate({...config,protocol,effectiveLimits:{}},{...job,maxOutputTokens:8192,retryOutputLimit:true},undefined,streaming?()=>{}:undefined),{ok:true});
+ assert.deepEqual(budgets,[8192,16384]);
+});
+for(const initial of [16384,24000,40000])test('unknown ceiling recovery stays bounded from '+initial,async t=>{
+ const budgets=[];mock(t,async(_url,options)=>{budgets.push(JSON.parse(options.body).max_tokens);return stream([chat({content:'PRIVATE truncated'},'length')]);});
+ await assert.rejects(generate(config,{...job,maxOutputTokens:initial,retryOutputLimit:true},undefined,()=>{}),e=>e.message==='OUTPUT_LIMIT'&&e.diagnostics.attempts===2&&e.diagnostics.outputLimitRetried===true&&!JSON.stringify(e.diagnostics).includes('PRIVATE'));
+ assert.deepEqual(budgets,[initial,Math.max(initial,Math.min(initial*2,65536))]);
 });

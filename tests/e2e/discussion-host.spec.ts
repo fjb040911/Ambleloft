@@ -15,6 +15,29 @@ async function prepare(page:Page,english=false,dark=false){
  },{english});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:english?'Discussion':'讨论',exact:true}).click();
 }
+test('live discussion keeps follow-ups visible, experts running and unsubmitted clarification intact',async({page})=>{
+ await prepare(page);const input=page.getByLabel('这次想推进什么？');
+ await input.fill('规划设备维修工单');await input.press('Enter');
+ const question=page.getByRole('combobox',{name:'谁来使用？'});await question.selectOption('customers');
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);
+  r.host.status='running';r.participants=[{employeeId:'writer',status:'running',output:'',role:{name:'文案员工',revision:1,skills:[]}},{employeeId:'architect',status:'running',output:'',role:{name:'架构专家',revision:1,skills:[]}}];
+  window.desktop!.spaces!.followupDiscussion=async(input:any)=>{q.calls.push({action:'followup',input});r.followups||=[];r.followups.push({id:input.clientRequestId,text:input.prompt,state:'processing',deliveries:[]});q.emit();return structuredClone(q.snapshot);};q.emit();
+ });
+ await input.fill('当前进度如何？');await page.getByRole('button',{name:'发送追问',exact:true}).click();
+ const followup=page.getByLabel('讨论追问',{exact:true});await expect(followup).toContainText('当前进度如何？');
+ await expect(followup).toContainText('专家继续工作');await expect(input).toHaveValue('');
+ await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);Object.assign(r.followups[0],{state:'handled',action:'reply',reply:'两位专家仍在分析，尚未完成。'});q.emit();});
+ await expect(followup).toContainText('两位专家仍在分析');await expect(question).toHaveValue('customers');
+ await input.fill('@文案员工 保留原有补充信息功能');await input.press('Enter');
+ await expect(followup).toHaveCount(2);
+ const calls=await page.evaluate(()=>(window as any).spaceQA.calls);expect(calls.filter((c:any)=>c.action==='host')).toHaveLength(1);expect(calls.filter((c:any)=>c.action==='direct')).toHaveLength(0);expect(calls.filter((c:any)=>c.action==='followup')[1].input.employeeIds).toEqual(['writer']);
+ await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);Object.assign(r.followups[1],{state:'handled',action:'update',reply:'已接收补充要求。',deliveries:[{id:'d',employeeId:'writer',state:'delivered'}]});q.emit();});
+ await expect(followup.nth(1)).toContainText('已送达，等待应用确认');await expect(question).toHaveValue('customers');
+ await page.screenshot({path:'/tmp/discussion-live-followups.png',fullPage:true});
+ await page.getByRole('button',{name:'停止',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='stopHost').length)).toBe(1);
+});
+
 test('default host, precise mention and one-turn recipient selection',async({page})=>{
  await prepare(page);const input=page.getByLabel('这次想推进什么？');
  await expect(page.getByRole('button',{name:'本条发送给'})).toContainText('主持人');
@@ -91,4 +114,19 @@ for(const output of ['专家回复内容',''])test(`execution record lives in th
  await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();
  await page.getByRole('button',{name:'返回项目空间'}).click();
  await expect(page.getByRole('tab',{name:'讨论',exact:true})).toHaveAttribute('aria-selected','true');
+});
+
+test('discussion permissions apply to the running expert group while preserving clarification drafts',async({page})=>{
+ await prepare(page);const input=page.getByLabel('这次想推进什么？');await input.fill('规划任务');await input.press('Enter');const question=page.getByRole('combobox',{name:'谁来使用？'});await question.selectOption('customers');
+ await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);r.host.status='running';r.composer={permission:'default'};r.participants=[{employeeId:'writer',status:'running',output:'',role:{name:'文案员工',skills:[]}}];window.desktop!.spaces!.changeDiscussionPermission=async(input:any)=>{q.calls.push({action:'permission',input});r.permissionChange={id:'p',previous:'default',requested:input.permission,state:'switching',effective:null};q.emit();return new Promise(resolve=>{(window as any).__applyDiscussionPermission=()=>{r.permissionChange.state='applied';r.permissionChange.effective=input.permission;r.executionPermission=input.permission;q.emit();resolve(structuredClone(q.snapshot));};});};q.emit();});
+ const composer=page.locator('.wf-discussion-composer');await composer.getByRole('button',{name:'默认权限',exact:true}).click();await page.getByRole('dialog',{name:'权限模式'}).getByRole('button',{name:'完全访问',exact:true}).click();await expect(page.getByRole('alertdialog')).toContainText('本轮全部专家及其子 Agent');await page.getByRole('alertdialog').getByRole('button',{name:'允许完全访问',exact:true}).click();
+ await expect(page.getByText('完全访问 · 权限切换中，尚未确认生效',{exact:true})).toBeVisible();await expect(question).toHaveValue('customers');
+ await page.evaluate(()=>(window as any).__applyDiscussionPermission());await expect(page.getByText('完全访问 · 权限已生效',{exact:true})).toBeVisible();await expect(question).toHaveValue('customers');expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(1);
+});
+
+test('running discussion applies the model without creating another round or consuming clarification',async({page})=>{
+ await prepare(page);const input=page.getByLabel('这次想推进什么？');await input.fill('保留协作任务');await input.press('Enter');const question=page.getByRole('combobox',{name:'谁来使用？'});await question.selectOption('customers');
+ await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);r.host.status='running';r.participants=[{employeeId:'writer',status:'running',output:'',role:{name:'文案员工',skills:[]}}];window.desktop!.spaces!.changeDiscussionModel=async(input:any)=>{q.calls.push({action:'model',input});r.modelChange={id:'m',previous:{model:'模型 A'},requested:{providerId:input.providerId,model:input.model},state:'switching',effective:null};q.emit();return new Promise(resolve=>{(window as any).applyDiscussionModel=()=>{r.modelChange.state='applied';r.modelChange.effective=r.modelChange.requested;r.executionModel=r.modelChange.requested;r.host.model=input.model;q.emit();resolve(structuredClone(q.snapshot));};});};q.emit();});
+ await input.fill('保留未发送的补充要求');const picker=page.getByRole('button',{name:'选择模型',exact:true});await picker.click();await page.getByRole('option',{name:/模型 B/}).click();await expect(page.getByText('模型 B · 模型切换中，尚未确认生效',{exact:true})).toBeVisible();await expect(question).toHaveValue('customers');
+ await page.evaluate(()=>(window as any).applyDiscussionModel());await expect(page.getByText('模型 B · 新模型已生效',{exact:true})).toBeVisible();await expect(picker).toContainText('模型 B');await expect(picker).not.toContainText('下一轮');await expect(input).toHaveValue('保留未发送的补充要求');await expect(question).toHaveValue('customers');expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(1);
 });

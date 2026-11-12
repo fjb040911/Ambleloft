@@ -74,6 +74,13 @@ class NativeSubagents {
   }
   return false;
  }
+ async stopAll(context){
+  if(!context.rpc||context.rpc.closed)return;
+  await Promise.allSettled([...context.nativeThreads?.values()||[]].filter(tool=>live(tool.status)).map(async tool=>{
+   await context.rpc.call('thread/archive',{threadId:tool.nativeThreadId},5000);
+   tool.status='interrupted';
+  }));
+ }
  finish(context){for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';context.nativeThreads?.clear();}
  recover(run){for(const tool of run.tools||[])if(tool.type==='analysis'&&live(tool.status))tool.status='interrupted';}
 }

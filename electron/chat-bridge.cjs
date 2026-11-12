@@ -1,4 +1,6 @@
 const {applyImageInputPolicy}=require('./model-capabilities.cjs');
+const {resolveBudget,recoverBudget,estimateInput,thinking,limitErrorKind}=require('../core/models/budget.cjs');
+const {discoverCapacity}=require('../core/models/capacity.cjs');
 // Codex owns tool execution and approvals. The bridge translates protocols,
 // records metadata and stops further requests when a no-progress loop persists.
 const http = require('node:http');
@@ -131,13 +133,16 @@ async function readUpstreamError(response,key){
   const message=sanitizeError(typeof error==='string'?error:error?.message,key);
   const code=sanitizeError(error?.code||error?.type,key);
   const hint=message+' '+code;
-  const category=/context.{0,30}(length|window|limit)|too many tokens|maximum.{0,20}tokens/i.test(hint)?'context_length_exceeded':
+  const limitKind=limitErrorKind(hint);
+  const category=limitKind==='context'?'context_length_exceeded':limitKind==='output'?'output_budget_rejected':
     /image|vision|multimodal/i.test(hint)?'image_request_error':'upstream_error';
-  const label=category==='context_length_exceeded'?'上下文超限':category==='image_request_error'?'图片请求不受支持或格式无效':'请求被模型服务拒绝';
+  const label=category==='context_length_exceeded'?'上下文超限':category==='output_budget_rejected'?'输出预算不受服务支持':category==='image_request_error'?'图片请求不受支持或格式无效':'请求被模型服务拒绝';
   return {upstreamCode:code||category,errorCategory:category,upstreamMessage:message?`${label}；${message}`:label};
 }
-async function startChatBridge(config, sessionId = randomUUID(), passthrough = false, onDiagnostic = () => {}, onUsage = () => {}) {
+async function startChatBridge(config, sessionId = randomUUID(), passthrough = false, onDiagnostic = () => {}, onUsage = () => {}, options = {}) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(sessionId)) throw new Error("模型会话 ID 无效");
+  // Make discovered context capacity available before the engine is launched.
+  await discoverCapacity(config);
   const token=randomUUID();const active=new Set();
   const loopGuard=new ToolLoopGuard();
   const server=http.createServer(async(req,res)=>{
@@ -166,7 +171,10 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       if(diagnostic.loopGuard?.action==='warn'){
         data={...data,input:[...(typeof data.input==='string'?[{role:'user',content:data.input}]:data.input||[]),{role:'developer',content:REMINDER}]};
       }
-      if(config.effectiveLimits?.maxOutputTokens)data.max_output_tokens=config.effectiveLimits.maxOutputTokens;
+      await discoverCapacity(config,controller.signal);
+      let budget=resolveBudget(config,{profile:options.profile||'chat',requested:data.max_output_tokens,reasoning:thinking(config,data),inputTokens:estimateInput({input:data.input,instructions:data.instructions,tools:data.tools})});
+      data.max_output_tokens=budget.maxOutputTokens;
+      diagnostic.budget=budget;diagnostic.outputBudgets=[budget.maxOutputTokens];
       const {body,definitions}=passthrough ? {body:normalizeToolSelection(data)} : translateRequest(data,config);
       const requestBody=JSON.stringify(body);
       diagnostic.requestBytes=Buffer.byteLength(requestBody);
@@ -195,8 +203,8 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       const response={id:'resp_'+randomUUID(),object:'response',created_at:Math.floor(Date.now()/1000),model:data.model,status:'in_progress',output:[]};
       emit('response.created',{response});let reasoningItem,textItem;let usage;
       const add=item=>{item.index=response.output.length;response.output.push(item);emit('response.output_item.added',{output_index:item.index,item:{...item,index:undefined}});return item;};
-      let calls,finish;
-      for(let attempt=0;attempt<2;attempt++){
+      let calls,finish,outputRetried=false,correctionUsed=false;
+      for(let attempt=0;attempt<3;attempt++){
         calls=new Map();finish=undefined;let done=false,attemptUsage;
         for await(const rawEvent of readSSE(upstream.body)){
           if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
@@ -222,24 +230,43 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             acc.args+=call.function?.arguments||'';if(call.id&&call.id!==acc.id)acc.id+=call.id;calls.set(call.index,acc);
           }
         }
-        await usageNotify(done&&finish?'succeeded':'unknown');usageAttempt=null;
+        await usageNotify(done&&finish?(finish==='length'?'failed':'succeeded'):'unknown');usageAttempt=null;
         if(attemptUsage){usage||={prompt_tokens:0,completion_tokens:0,total_tokens:0};for(const key of Object.keys(usage))usage[key]+=attemptUsage[key]||0;}
         diagnostic.stage='validate_completion';
         if(!done||!finish)throw new Error('模型流未完整结束，请重试');
         if(!['stop','tool_calls','length'].includes(finish))throw new Error(`模型未正常完成：${finish}`);
+        if(finish==='length'){
+          // Tool calls are buffered below. Retry only while no answer text or
+          // executable call has been delivered; never replay a visible answer.
+          const next=recoverBudget(budget,{attempts:outputRetried?1:0,committed:!!textItem});
+          if(next&&attempt<2){
+            outputRetried=true;budget=next;body.max_tokens=next.maxOutputTokens;
+            diagnostic.outputLimitRetried=true;diagnostic.budget=next;diagnostic.outputBudgets.push(next.maxOutputTokens);
+            diagnostic.stage='recover_output';diagnostic.done=false;diagnostic.finishReason=null;
+            controller.signal.throwIfAborted();await usageBegin(attempt+1);
+            upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-output-recovery',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(body),redirect:'error',signal:controller.signal});
+            diagnostic.httpStatus=upstream.status;
+            if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
+            continue;
+          }
+          diagnostic.outputRecovery= textItem?'visible-output-preserved':'budget-exhausted';
+        }
         // Never execute a truncated tool call.
         if(finish==='length'&&calls.size)throw new Error('工具参数被输出长度限制截断，未执行');
         diagnostic.calls=[...(diagnostic.calls||[]),...[...calls.values()].slice(0,64).map(call=>callDiagnostic(call.name,resolveStreamTool(call.nameParts,definitions)?.name,call.args,fingerprint,attempt))].slice(0,64);
         const unknown=[...calls.values()].filter(call=>!resolveStreamTool(call.nameParts,definitions));
-        if(unknown.length&&attempt===0){
+        if(unknown.length&&!correctionUsed&&attempt<2){
+          correctionUsed=true;
           diagnostic.toolCorrectionAttempts=1;
           const names=unknown.map(call=>/^[a-zA-Z0-9_.-]{1,160}$/.test(call.name)?call.name:'[invalid tool name]');
           diagnostic.rejectedTools=names.slice(0,20);
-          const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
+          const catalog=(body.tools||[]).map(tool=>({name:tool.function.name,requiredArguments:tool.function.parameters?.required||[]}));
+          const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. This is a FUNCTION NAME error, not an argument error. The complete list of callable function names and their required argument keys for THIS request is: '+JSON.stringify(catalog)+'. Copy the exact name from this list, including its namespace prefix. Argument keys (such as cmd or command) are not function names. Do not combine a namespace from one tool with the name of another, or reuse tools from earlier sessions. Use the matching schema in tools for the arguments. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
+          body.messages=correction.messages;
           // Separate any streamed narration from the corrected response.
           if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
-          await usageBegin(1);
+          await usageBegin(attempt+1);
           upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:controller.signal});
           diagnostic.httpStatus=upstream.status;
           if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
@@ -261,7 +288,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             repeatedChunks:call.nameParts.length>1&&call.nameParts.every(part=>part===call.nameParts[0]),
             validCharacters:/^[a-zA-Z0-9_.-]+$/.test(call.name)};
           diagnostic.availableTools=[...definitions.keys()].slice(0,100).map(safeName);
-          throw new Error('模型调用了未提供或名称不唯一的工具');
+          throw new Error('模型调用了未提供或名称不唯一的工具：'+sanitizeError(diagnostic.returnedTool,config.apiKey)+'；已尝试一次自动纠正，未执行本次响应中的工具调用');
         }
         const args=JSON.parse(call.args);const item={id:'fc_'+randomUUID(),call_id:call.id||randomUUID(),type:def.type==='custom'?'custom_tool_call':'function_call',name:def.name,...(def.namespace?{namespace:def.namespace}:{}),status:'completed'};
         if(def.type==='custom'){if(typeof args.input!=='string')throw new Error('工具输入无效');item.input=args.input;}else item.arguments=call.args;
@@ -280,7 +307,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       diagnostic.errorType=error.name;
       diagnostic.causeCode=typeof error.cause?.code==='string'?error.cause.code:undefined;
       // Error details are bounded and sanitized before they reach diagnostics.
-      diagnostic.reason=error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
+      diagnostic.reason=error.message==='CONTEXT_LIMIT'?'模型上下文容量不足，请减少参考内容或压缩对话':error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
       report();
       if(!res.destroyed){if(res.headersSent){emit('error',{message:error.message,code:'bridge_error'});res.end();}else{res.writeHead(error.httpStatus||502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:diagnostic.reason,code:error.code||'bridge_error'}}));}}}
     finally{await usageNotify(controller.signal.aborted?'unknown':diagnostic.failed?'failed':'unknown');if(!diagnostic.failed)report();controller.abort();active.delete(controller);}

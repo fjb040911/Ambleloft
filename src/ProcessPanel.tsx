@@ -1,3 +1,4 @@
+import {isConversationMessage} from './conversation-message';
 import UserMessage from './UserMessage';
 import ProcessTool from './ProcessTool';
 import AnalysisTask from './AnalysisTask';
@@ -18,8 +19,8 @@ import type { ConversationTurn } from './conversation-turns';
 const statusText:Record<string,string>={inProgress:'进行中',running:'进行中',completed:'已完成',failed:'失败',declined:'已拒绝',pending:'待处理'};
 export function TurnProgress({turn,status,duration,onToggle,paused=false,...inputs}:{paused?:boolean;onToggle():void;turn:ConversationTurn;status:string;duration:ReactNode}&InputProps) {
  const hasFailure=turn.outcome==='failed'||turn.tools.some(tool=>tool.status==='failed');
- const [expanded,setExpanded]=useState(turn.active||hasFailure);
- useEffect(()=>{setExpanded(turn.active||hasFailure);},[turn.active,hasFailure,turn.outcome]);
+ const [expanded,setExpanded]=useState(turn.active||turn.outcome==='failed');
+ useEffect(()=>{setExpanded(turn.active||turn.outcome==='failed');},[turn.active,hasFailure,turn.outcome]);
  const step=turn.plan?.steps.find(step=>step.status==='inProgress');
  const completed=turn.plan?.steps.filter(step=>step.status==='completed').length||0;
  return <Trace className="turn-progress my-2"><TraceCollapsible open={expanded} onOpenChange={open=>{onToggle();setExpanded(open);}}><TraceCollapsibleTrigger className="turn-progress-toggle"><TraceLine status={turn.active&&!paused?'running':hasFailure?'error':undefined}><TraceTitle>{t(turn.active?status:turn.outcome==='completed'?'本轮已结束':turn.outcome==='failed'?'执行失败':'已中断')}</TraceTitle>{turn.active&&step&&<TraceTitle>{step.step}</TraceTitle>}{turn.active&&!!turn.plan?.steps.length&&<TraceDescription>{completed}/{turn.plan.steps.length}</TraceDescription>}{duration}{!turn.active&&turn.tools.length>0&&<TraceDescription>{turn.tools.length} {t('次工具调用')}</TraceDescription>}</TraceLine></TraceCollapsibleTrigger><TraceCollapsibleContent keepMounted><ProcessPanel turn={turn} paused={paused} showAnalysis={expanded} {...inputs}/></TraceCollapsibleContent></TraceCollapsible>{!expanded&&turn.tools.filter(tool=>tool.type==='analysis').map(tool=><AnalysisTask key={tool.id} tool={tool}/>)}</Trace>;
@@ -67,7 +68,7 @@ export default function ProcessPanel({ turn, showAnalysis=true, paused=false,req
  const hasPendingInput=!!nativePending.length||allRequests.some(request=>request.state==='pending');
  const entries=[
   ...requests.map(r=>({id:'request-'+r.id,order:r.order??Number.MAX_SAFE_INTEGER,command:'',iconKind:'',type:'supplemental',title:'',text:'',status:'',summary:'',live:false})),
-  ...turn.messages.filter(message=>message.id!==turn.final?.id&&!deliveries.some(d=>d.id===message.formSubmissionId&&(d.source==='inputRequest'||requests.some(r=>r.id===d.requestId)))&&(turn.active||message.kind!=='reasoning')).map((message,index)=>({id:'message-'+message.id,order:message.order??index,command:'',iconKind:'',type:message.role==='user'?'input':message.kind==='reasoning'?'reasoning':'progress',title:message.kind==='reasoning'?(message.reasoningFormat==='text'?'思考过程':'思考摘要'):'继续处理',text:message.text,status:'',summary:'',live:message.role==='assistant'&&turn.active&&!paused&&message.id===turn.messages.at(-1)?.id})),
+  ...turn.messages.filter(message=>!isConversationMessage(message)&&message.id!==turn.final?.id&&!deliveries.some(d=>d.id===message.formSubmissionId&&(d.source==='inputRequest'||requests.some(r=>r.id===d.requestId)))&&(turn.active||message.kind!=='reasoning')).map((message,index)=>({id:'message-'+message.id,order:message.order??index,command:'',iconKind:'',type:message.role==='user'?'input':message.kind==='reasoning'?'reasoning':'progress',title:message.kind==='reasoning'?(message.reasoningFormat==='text'?'思考过程':'思考摘要'):'继续处理',text:message.text,status:'',summary:'',live:message.role==='assistant'&&turn.active&&!paused&&message.id===turn.messages.at(-1)?.id})),
   ...turn.tools.map((tool,index)=>({id:'tool-'+tool.id,order:tool.order??turn.messages.length+index,command:tool.type==='commandExecution'?tool.label:'',type:tool.type,iconKind:tool.type==='commandExecution'?commandPresentation(tool).kind:tool.type,title:tool.type==='commandExecution'?commandPresentation(tool).title:tool.type==='contextCompaction'?(tool.status==='completed'?'上下文已压缩':turn.active&&toolBusy(tool.status)?'正在压缩上下文':'上下文压缩'):tool.type==='fileChange'?'修改文件':tool.type==='webSearch'?'搜索资料':tool.type==='plan'?'任务规划':tool.label,text:tool.detail,status:!turn.active&&toolBusy(tool.status)?(turn.outcome==='completed'?'未确认完成':'已停止'):tool.status,summary:toolSummary(tool),live:turn.active&&!paused&&toolBusy(tool.status)}))
  ].sort((a,b)=>a.order-b.order);
  if(!turn.active&&!entries.length&&!turn.plan?.steps.length)return null;

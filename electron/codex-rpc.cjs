@@ -47,8 +47,9 @@ function configurationArgs(config, home, extensionMcp, platform = process.platfo
   };
   if(config.remoteOnly){values['features.shell_tool']=false;values['features.unified_exec']=false;values['features.shell_snapshot']=false;values['features.browser_use']=false;values['features.computer_use']=false;}
   if(extensionMcp){values['features.shell_snapshot']=false;values['mcp_servers.amble_extensions.url']=extensionMcp.url;values['mcp_servers.amble_extensions.env_http_headers.Authorization']='AMBLE_EXTENSION_AUTH';values['mcp_servers.amble_extensions.tool_timeout_sec']=extensionMcp.tool_timeout_sec;for(const name of ['creation_read','creation_update','creation_prepare','remote_list','remote_search','remote_read','remote_skill_read','remote_write','remote_exec','input_capabilities','input_list','input_request','input_read_answer','input_resolve_from_message','input_cancel','input_replace','extension_list_operations','extension_invoke_operation','forms_list','forms_present','forms_capabilities','forms_read_submission','ui_capabilities','ui_list','ui_present','ui_update','ui_read_submission','skills_install','space_list_documents','space_read_document','space_search_knowledge','space_propose_document'])values['mcp_servers.amble_extensions.tools.'+name+'.approval_mode']='approve';}
-  if(config.effectiveLimits?.contextWindow)values.model_context_window=config.effectiveLimits.contextWindow;
-  if(config.effectiveLimits?.autoCompactTokenLimit)values.model_auto_compact_token_limit=config.effectiveLimits.autoCompactTokenLimit;
+  const contextLimits=require('../core/models/budget.cjs').runtimeContextLimits(config);
+  if(contextLimits.contextWindow)values.model_context_window=contextLimits.contextWindow;
+  if(contextLimits.autoCompactTokenLimit)values.model_auto_compact_token_limit=contextLimits.autoCompactTokenLimit;
   if (config.apiKey) values['model_providers.atelier.env_key'] = 'ATELIER_PROVIDER_KEY';
   return Object.entries(values).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
 }

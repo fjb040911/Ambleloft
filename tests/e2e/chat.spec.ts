@@ -867,8 +867,11 @@ test('running summary exposes the current step while failed tools automatically 
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='failed';(window as any).__demoRun.tools[0].detail='Report generation failed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeVisible();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
  await page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.tools[0].status='completed';(window as any).__emit();});
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeHidden();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeVisible();
+ await page.evaluate(()=>{(window as any).__emit();});
+ await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
 });
 
 test('queued execution follows application language',async({page})=>{
@@ -935,11 +938,16 @@ test('user Bubble keeps message theme and typography across themes and narrow la
   const message=page.locator('[data-message-role=user]').first(),bubble=message.locator('[data-slot=bubble-content]');
   await expect(message).toHaveAttribute('data-align','end');await expect(bubble).toHaveCSS('background-color',theme==='light'?'rgb(0, 0, 0)':'rgb(48, 48, 48)');await expect(bubble).toHaveCSS('color','rgb(255, 255, 255)');
   await expect(bubble).toHaveCSS('font-size','15px');await expect(bubble).toHaveCSS('font-weight','500');await expect(bubble).toHaveCSS('line-height','22.5px');await expect(bubble).toHaveCSS('border-width','0px');
-  await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[0].text='第一行\n'+('很长的用户消息'.repeat(40));(window as any).__emit();});
-  await expect(bubble).toContainText('很长的用户消息'.repeat(40));
+  const text='第一行\n'+('很长的用户消息'.repeat(40));
+  await page.evaluate(text=>{const run=(window as any).__demoRun;run.messages[0].text=text;(window as any).__emit();},text);
+  await expect(bubble).toHaveText(text);
   expect(await message.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
-  // Read both rectangles in one frame after the streamed text reaches the DOM.
-  await expect.poll(()=>message.evaluate(el=>{const outer=el.getBoundingClientRect(),inner=el.querySelector('[data-slot=bubble-content]')!.getBoundingClientRect();return Math.abs(outer.right-inner.right);})).toBeLessThan(2);
+  // Read both edges in one browser task. Separate boundingBox calls can span
+  // frames while the responsive sidebar changes the conversation's position.
+  await expect.poll(()=>message.evaluate(el=>{
+   const outer=el.getBoundingClientRect(),inner=el.querySelector('[data-slot=bubble-content]')!.getBoundingClientRect();
+   return Math.abs(outer.right-inner.right);
+  })).toBeLessThan(2);
   await page.screenshot({path:`test-results/user-bubble-${theme}-${width}.png`});
  }
 });

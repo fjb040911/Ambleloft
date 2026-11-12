@@ -50,6 +50,8 @@ async function httpError(response){
  const error=data?.error||data;const detail=[error?.code,error?.param,error?.message].filter(v=>typeof v==='string').join(' ').toLowerCase();
  const unsupported=/not supported|unsupported|unknown parameter|unrecognized|not available|unavailable|must be one of|supported values|不支持/.test(detail);
  let code='PROVIDER_REJECTED';
+ const limitKind=require('../models/budget.cjs').limitErrorKind(detail);
+ if([400,413,422].includes(status)&&limitKind)code=limitKind==='context'?'CONTEXT_LIMIT':'OUTPUT_BUDGET_REJECTED';
  if([400,422].includes(status)&&/invalid_json_schema|invalid.*schema/.test(detail))code='SCHEMA_UNSUPPORTED';
  else if([400,422].includes(status)&&unsupported&&/response_format|json_schema|json_object|text\.format/.test(detail))code=/schema.*(keyword|property|field|additionalproperties|required)/.test(detail)?'SCHEMA_UNSUPPORTED':'FORMAT_UNSUPPORTED';
  if([400,404,405].includes(status)&&(/(endpoint|route|\/responses|\/chat\/completions).*(not found|not supported|unsupported|not available)|not supported.*(\/responses|\/chat\/completions)/.test(detail)||status===405))code='PROTOCOL_UNSUPPORTED';
