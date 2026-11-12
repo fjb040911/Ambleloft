@@ -30,6 +30,11 @@ const networkMarker = realNetwork ? 'Example Domain' : 'APPROVED_PUBLIC_DATA';
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === '/public-data') { publicReads++; res.writeHead(200, { 'content-type': 'text/plain' }); res.end('APPROVED_PUBLIC_DATA'); return; }
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ object: 'list', data: [{ id: 'fixture', object: 'model' }] }));
+      return;
+    }
     let raw = ''; for await (const chunk of req) raw += chunk;
     const data = JSON.parse(raw); requests.push(data);
     if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }

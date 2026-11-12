@@ -7,6 +7,7 @@ on:
       - 'electron/codex-rpc.cjs'
       - 'electron/model-switch.cjs'
       - 'package.json'
+      - 'scripts/test-packaged.mjs'
 permissions:
   contents: read
 jobs:
