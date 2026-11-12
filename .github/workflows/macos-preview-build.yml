@@ -38,6 +38,8 @@ jobs:
           hdiutil verify release/*.dmg
           unzip -t release/*.zip > /dev/null
           shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS-macos-arm64.txt
+      - name: Smoke test packaged macOS app
+        run: node scripts/test-packaged.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: macos-preview-arm64
