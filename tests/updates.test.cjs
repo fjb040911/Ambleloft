@@ -28,5 +28,47 @@ test('cancellation during disk preflight never starts the network download',asyn
  assert.equal(service.state.status,'available');assert.equal(count,0);assert.equal(service.busy,false);
  }finally{await fs.rm(directory,{recursive:true,force:true});}
 });
-test('scheduled restart can be revoked and does not install immediately',async()=>{let count=0;const {service}=setup(async()=>count++);await service.check();await service.download();service.schedule('1.1.0');assert.equal(service.state.status,'waiting');assert.equal(count,0);service.cancelSchedule();assert.equal(service.state.status,'ready');service.close();});
+test('scheduled restart waits for blockers and can be revoked',async()=>{let count=0;const {service}=setup(async()=>{count++;throw Error('busy');});await service.check();await service.download();service.schedule('1.1.0');await new Promise(setImmediate);assert.equal(service.state.status,'waiting');assert.equal(count,1);service.cancelSchedule();assert.equal(service.state.status,'ready');service.close();});
 test('partial shutdown failure requires recovery instead of retrying installation',async()=>{const {service}=setup(async()=>{throw Object.assign(Error('closed'),{recoveryRequired:true});});await service.check();await service.download();await service.restart('1.1.0');assert.equal(service.state.status,'recovery-required');});
+
+test('built-in updater accepts preview releases without permitting downgrades',async()=>{const {service,updater}=setup();assert.equal(updater.allowPrerelease,true);assert.equal(updater.allowDowngrade,false);updater.checkForUpdates=async()=>({updateInfo:{version:'0.9.0'}});await service.check();assert.equal(service.state.status,'current');});
+
+test('one click downloads and requests installation only after verification',async()=>{
+ let installed=0,scheduled=false;const {service,updater}=setup(async flag=>{installed++;scheduled=flag;});
+ let finish;updater.downloadUpdate=()=>new Promise(resolve=>{finish=()=>{updater.emit('update-downloaded');resolve();};});
+ await service.check();const operation=service.update();await service.update();assert.equal(installed,0);assert.equal(service.state.restartAfterDownload,true);
+ finish();await operation;await new Promise(setImmediate);assert.equal(installed,1);assert.equal(scheduled,true);assert.equal(service.state.restartAfterDownload,false);service.close();
+});
+
+test('one click cancellation or checksum failure never schedules installation',async()=>{
+ for(const cancel of [true,false]){let installed=0;const {service,updater}=setup(async()=>installed++);updater.downloadUpdate=token=>cancel?new Promise((_,reject)=>token.onCancel(()=>reject(Error('cancel')))):Promise.reject(Error('checksum'));
+ await service.check();const operation=service.update();if(cancel)service.cancel();await operation;assert.equal(installed,0);assert.equal(service.scheduleTimer,undefined);assert.equal(service.state.status,cancel?'available':'download-failed');service.close();}
+});
+
+test('automatic downloads never authorize an unattended restart',async()=>{let installed=0;const {service}=setup(async()=>installed++);service.state.autoDownload=true;await service.check();assert.equal(service.state.status,'ready');assert.equal(installed,0);assert.equal(service.scheduleTimer,undefined);});
+
+test('one click waits for active work before installing',async t=>{
+ t.mock.timers.enable({apis:['setInterval']});let busy=true,installed=0;const {service}=setup(async()=>{if(busy)throw Error('task running');installed++;});
+ await service.check();await service.update();await new Promise(setImmediate);assert.equal(service.state.status,'waiting');assert.equal(installed,0);assert.equal(service.state.error,'task running');
+ busy=false;t.mock.timers.tick(10000);await new Promise(setImmediate);assert.equal(installed,1);service.close();
+});
+
+test('published GitHub preview is discovered through the built-in feed and latest.yml',async()=>{
+ const {GitHubProvider}=require('electron-updater/out/providers/GitHubProvider');const {service,updater}=setup();
+ updater.currentVersion=require('semver').parse('1.0.0');const requests=[];
+ const provider=new GitHubProvider({provider:'github',owner:'fjb040911',repo:'Ambleloft'},updater,{platform:'win32',executor:{request:async options=>{
+  requests.push(options.path);
+  if(options.path.endsWith('/releases.atom'))return '<feed><entry><title>Windows Preview</title><link href="https://github.com/fjb040911/Ambleloft/releases/tag/v1.1.0"/><content>Preview update</content></entry></feed>';
+  if(options.path.endsWith('/v1.1.0/latest.yml'))return 'version: 1.1.0\nfiles:\n  - url: Ambleloft-1.1.0-windows-x64.exe\n    sha512: test\n    size: 100\n';
+  throw Error('Unexpected stable-only endpoint: '+options.path);
+ }}});
+ updater.checkForUpdates=async()=>({updateInfo:await provider.getLatestVersion()});
+ await service.check();assert.equal(service.state.status,'available');assert.equal(service.state.version,'1.1.0');assert.equal(requests.length,2);assert.ok(requests[1].endsWith('/v1.1.0/latest.yml'));
+});
+
+test('automatic notification checks run after startup and every fifteen minutes',async t=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});const {service,updater}=setup();let checks=0;
+ updater.checkForUpdates=async()=>{checks++;return {updateInfo:{version:'1.0.0'}};};
+ await service.initialize();t.mock.timers.tick(9999);assert.equal(checks,0);t.mock.timers.tick(1);await new Promise(setImmediate);assert.equal(checks,1);
+ t.mock.timers.tick(15*60000-10000);await new Promise(setImmediate);assert.equal(checks,2);service.close();
+});

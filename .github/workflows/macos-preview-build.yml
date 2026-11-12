@@ -1,0 +1,51 @@
+name: macOS preview build
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/macos-preview-build.yml'
+      - 'electron/codex-rpc.cjs'
+      - 'electron/model-switch.cjs'
+      - 'package.json'
+      - 'scripts/test-packaged.mjs'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run engine:prepare
+      - name: Verify engine replacement and permissions on macOS
+        run: node --test tests/model-engine.test.cjs tests/permission-engine.test.cjs tests/model-switch.test.cjs tests/updates.test.cjs
+      - name: Build ad-hoc signed preview
+        env:
+          # Preview identity is '-' and no signing credentials are available.
+          CSC_FOR_PULL_REQUEST: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac
+      - name: Verify packaged content and archives
+        run: |
+          node scripts/check-release-content.cjs release/mac-arm64/Ambleloft.app/Contents/Resources/app.asar
+          codesign --verify --deep --strict release/mac-arm64/Ambleloft.app
+          hdiutil verify release/*.dmg
+          unzip -t release/*.zip > /dev/null
+          shasum -a 256 release/*.dmg release/*.zip > release/SHA256SUMS-macos-arm64.txt
+      - name: Smoke test packaged macOS app
+        run: node scripts/test-packaged.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-preview-arm64
+          if-no-files-found: error
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/SHA256SUMS-macos-arm64.txt

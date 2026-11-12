@@ -20,6 +20,13 @@ async function fixture(t,{hook}={}){
  return {runtime,run,context,calls,transports,child};
 }
 const next={runId:'run',providerId:'a',model:'new'};
+test('model replacement waits for the previous engine to release its database',async t=>{
+ const f=await fixture(t),gate=deferred(),entered=deferred();
+ f.context.rpc.close=()=>{f.context.rpc.closed=true;entered.resolve();return gate.promise;};
+ const switching=f.runtime.switchModel(next);await entered.promise;
+ assert.equal(f.transports.length,1);
+ gate.resolve();assert.equal((await switching).state,'applied');assert.equal(f.transports.length,2);
+});
 test('live model switch rebuilds transport and retains thread IDs, roles, forms, update versions and permissions',async t=>{
  const f=await fixture(t),messages=f.run.messages,updates=f.run.conversation.updates;const result=await f.runtime.switchModel(next);
  assert.equal(result.state,'applied',result.error);assert.equal(f.run.model,'new');assert.equal(f.context.config.model,'new');assert.equal(f.context.turnKey,'root');assert.equal(f.run.messages,messages);assert.equal(f.run.conversation.updates,updates);assert.equal(f.context.nativeThreads.get('child'),f.child);assert.equal(f.run.permission,'default');assert.equal(f.transports.length,2);assert.equal(f.transports[0].closed,true);

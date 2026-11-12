@@ -1799,5 +1799,10 @@
   "读取项目 AI 用量": "Read project AI usage",
   "按需生成项目摘要": "Generate project summaries on demand",
   "仅扩展私有权限（暂不授权项目）": "Extension private permissions only (no project access)",
-  "只允许保存此扩展自己的设置、数据与凭据，不读取任何项目。": "Only stores this extension’s own settings, data and credentials. No project data is read."
+  "只允许保存此扩展自己的设置、数据与凭据，不读取任何项目。": "Only stores this extension’s own settings, data and credentials. No project data is read.",
+  "下载并在空闲时重启更新": "Download and restart to update when idle",
+  "一键更新": "Update now",
+  "重试更新": "Retry update",
+  "下载完成后，空闲时自动重启": "Restarts when idle after the download finishes",
+  "自动下载不会自动重启；一键更新会在空闲时重启。": "Automatic downloads do not restart the app. Update now restarts when idle."
 }
