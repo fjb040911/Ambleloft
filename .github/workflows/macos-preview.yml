@@ -1,0 +1,55 @@
+name: Build macOS preview release
+on:
+  push:
+    branches: [codex/macos-release-098]
+    paths: [.github/workflows/macos-preview.yml]
+permissions:
+  contents: write
+jobs:
+  macos-preview:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0.9.8
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify source and architecture
+        run: |
+          test "$(uname -m)" = arm64
+          node -e "if(require('./package.json').version !== '0.9.8')process.exit(1)"
+      - run: npm ci
+      - name: Build ad-hoc signed preview
+        run: npm run dist:mac
+      - name: Verify package contents and archives
+        run: |
+          node scripts/check-release-content.cjs release/mac-arm64/Ambleloft.app/Contents/Resources/app.asar
+          codesign --verify --deep --strict release/mac-arm64/Ambleloft.app
+          hdiutil verify release/Ambleloft-0.9.8-mac-arm64.dmg
+          unzip -tq release/Ambleloft-0.9.8-mac-arm64.zip
+      - name: Run current packaged smoke fixture
+        env:
+          FIXTURE_COMMIT: e51a82d
+        run: |
+          git show "$FIXTURE_COMMIT:scripts/test-packaged.mjs" > scripts/test-packaged.mjs
+          npm run test:packaged
+      - name: Upload verified assets to existing draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          test "$(gh release view v0.9.8 --json isDraft --jq '.isDraft')" = true
+          cd release
+          shasum -a 256 Ambleloft-0.9.8-mac-arm64.dmg Ambleloft-0.9.8-mac-arm64.zip > SHA256SUMS.txt
+          gh release upload v0.9.8 Ambleloft-0.9.8-mac-arm64.dmg Ambleloft-0.9.8-mac-arm64.zip SHA256SUMS.txt
+      - name: Save verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-098-verification
+          path: test-results/packaged-result.json
+          if-no-files-found: ignore
