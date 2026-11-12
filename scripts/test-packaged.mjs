@@ -36,26 +36,30 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     let raw = ''; for await (const chunk of req) raw += chunk;
-    const data = JSON.parse(raw); requests.push(data);
-    if (mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }
-    if (mode === 'error') { res.writeHead(401); res.end(JSON.stringify({ error: { message: 'fixture rejection' } })); return; }
-    let item = { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Packaged Ambleloft verified', annotations: [] }] };
+    const data = JSON.parse(raw);
     const tools = (data.tools || []).flatMap(tool => tool.type === 'namespace' ? tool.tools.map(t => ({ ...t, namespace: tool.name })) : [tool]);
-    if (!issued && ['shell', 'plan', 'approval'].includes(mode)) {
+    // Background model-capability/title requests must not consume a task's
+    // scripted tool call, failure or network-recovery step.
+    const execution = tools.length > 0;
+    if (execution) requests.push(data);
+    if (execution && mode === 'hang') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write(': waiting\n\n'); return; }
+    if (execution && mode === 'error') { res.writeHead(401); res.end(JSON.stringify({ error: { message: 'fixture rejection' } })); return; }
+    let item = { id: `msg_${requests.length}`, type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Packaged Ambleloft verified', annotations: [] }] };
+    if (execution && !issued && ['shell', 'plan', 'approval'].includes(mode)) {
       const tool = tools.find(t => mode === 'plan' ? /atelier_progress.*update_plan/.test(`${t.namespace || ''}${t.name}`) : ['shell_command', 'exec_command'].includes(t.name));
       assert.ok(tool, `Missing ${mode} tool; offered: ${tools.map(t => `${t.namespace || ''}/${t.name}`).join(',')}`);
       const args = mode === 'plan' ? { plan: [{ step: 'Verify packaged MCP', status: 'completed' }] } : { ...(tool.name === 'exec_command' ? { cmd: 'pwd', max_output_tokens: 100 } : { command: 'pwd', timeout_ms: 1000 }), ...(mode === 'approval' ? { sandbox_permissions: 'require_escalated', justification: 'Packaged approval fixture' } : {}) };
       item = { type: 'function_call', id: `fc_${requests.length}`, call_id: `call_${requests.length}`, name: tool.name, ...(tool.namespace ? { namespace: tool.namespace } : {}), arguments: JSON.stringify(args), status: 'completed' };
       issued = true;
     }
-    if (mode === 'network-recovery' && recoveryStep < 2) {
+    if (execution && mode === 'network-recovery' && recoveryStep < 2) {
       const tool = tools.find(t => ['shell_command', 'exec_command'].includes(t.name));
       assert.ok(tool, 'shell tool available for network recovery');
       const command = realNetwork ? '/usr/bin/curl --connect-timeout 10 --max-time 15 -fsS https://example.com/' : `/usr/bin/curl --noproxy '*' --connect-timeout 2 --max-time 4 -fsS http://127.0.0.1:${server.address().port}/public-data`;
       const args = { ...(tool.name === 'exec_command' ? { cmd: command, max_output_tokens: 1500, yield_time_ms: 10000 } : { command, timeout_ms: 20000 }), ...(recoveryStep === 1 ? { sandbox_permissions: 'require_escalated', justification: 'Allow this task to retrieve the requested public fixture data after sandbox failure.' } : {}) };
       item = { type: 'function_call', id: `fc_${requests.length}`, call_id: `call_${requests.length}`, name: tool.name, ...(tool.namespace ? { namespace: tool.namespace } : {}), arguments: JSON.stringify(args), status: 'completed' };
       recoveryStep++;
-    } else if (mode === 'network-recovery') {
+    } else if (execution && mode === 'network-recovery') {
       assert.ok(JSON.stringify(data.input).includes(networkMarker), 'approved tool result must return to model: ' + JSON.stringify((data.input || []).filter(i => i.type === 'function_call_output').slice(-1)));
     }
     const response = { id: `resp_${requests.length}`, object: 'response', model: data.model, status: 'completed', output: [item], usage: { input_tokens: 2, output_tokens: 2, total_tokens: 4 } };
