@@ -26,6 +26,10 @@ jobs:
       - name: Verify engine replacement and permissions on macOS
         run: node --test tests/model-engine.test.cjs tests/permission-engine.test.cjs tests/model-switch.test.cjs tests/updates.test.cjs
       - name: Build ad-hoc signed preview
+        env:
+          # Preview identity is '-' and no signing credentials are available.
+          CSC_FOR_PULL_REQUEST: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:mac
       - name: Verify packaged content and archives
         run: |
