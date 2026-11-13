@@ -506,7 +506,7 @@ app.whenReady().then(async () => {
     await require('node:fs/promises').writeFile(updateTransactionPath,JSON.stringify({...updateTransaction,status:'healthy',completedAt:new Date().toISOString()}));
     updateService.set({error:''});
   }
-  for(const action of ['snapshot','check','download','cancel','preferences','restart','schedule','cancelSchedule'])ipcMain.handle('update:'+action,(event,input)=>{authorize(event);return updateService[action](input);});
+  for(const action of ['snapshot','check','download','update','cancel','preferences','restart','schedule','cancelSchedule'])ipcMain.handle('update:'+action,(event,input)=>{authorize(event);return updateService[action](input);});
   createWindow();
   if(!extensionError)for(const item of services.extensions.items)extensionHosts.reconcile(item.id);
   app.on('activate', () => { if (!windows.records.size) createWindow(); });

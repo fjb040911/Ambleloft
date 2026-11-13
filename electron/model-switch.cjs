@@ -38,7 +38,9 @@ async function switchModel(input){
    // model credentials and adapter; the host context and input services survive.
    const oldConfig=context.config;
    this.conversation.stop(context);delete context.conversationAbort;
-   context.rpc.close();context.bridge?.close();context.bridge=bridge;
+   await context.rpc.close();
+   try{check();}catch(e){bridge?.close();throw e;}
+   context.bridge?.close();context.bridge=bridge;
    context.config=config;context.lastModelDiagnostic=null;
    if(context.engineParameters){const oldImages=imageInputInstructions(oldConfig);context.engineParameters={...context.engineParameters,model:config.model,developerInstructions:(oldImages?context.engineParameters.developerInstructions.replace(oldImages,''):context.engineParameters.developerInstructions)+imageInputInstructions(config)};}
    let rpc;
