@@ -62,11 +62,11 @@ test('unexpected close reconnects, while explicit disconnect cancels retry',asyn
  t.mock.timers.tick(1000);await new Promise(r=>setImmediate(r));assert.equal(clients.length,2);assert.equal((await ssh.list())[0].state,'connected');
  clients[1].emit('close');ssh.disconnect(a.id);t.mock.timers.tick(60000);await new Promise(r=>setImmediate(r));assert.equal(clients.length,2);assert.equal((await ssh.list())[0].state,'disconnected');ssh.shutdown();
 });
-test('reconnection stops after five failed attempts; passive reads cannot bypass the limit',async t=>{
+test('reconnection persists beyond five failures and recovers when the server returns',async t=>{
  t.mock.timers.enable({apis:['setTimeout']});const {ssh,clients}=setup();const a=await ssh.save({...base,password:'test'});await ssh.connect(a.id);
  let tries=0;ssh.clientFactory=()=>{const client=new EventEmitter();client.connect=()=>{tries++;queueMicrotask(()=>{client.emit('error',Object.assign(Error('offline'),{code:'ECONNREFUSED'}));client.emit('close');});};client.end=()=>client.emit('close');return client;};
  clients[0].emit('close');for(const delay of [1000,2000,4000,8000,16000]){t.mock.timers.tick(delay);await new Promise(r=>setImmediate(r));}
- assert.equal(tries,5);assert.match((await ssh.list())[0].error,/重连失败/);await assert.rejects(ssh.directory(a.id,'/work'),/未连接/);t.mock.timers.tick(60000);assert.equal(tries,5);ssh.shutdown();
+ assert.equal(tries,5);assert.equal((await ssh.list())[0].state,'reconnecting');await assert.rejects(ssh.directory(a.id,'/work'),/未连接/);t.mock.timers.tick(30000);await new Promise(r=>setImmediate(r));assert.equal(tries,6);ssh.clientFactory=()=>new clients[0].constructor();t.mock.timers.tick(30000);await new Promise(r=>setImmediate(r));assert.equal((await ssh.list())[0].state,'connected');ssh.shutdown();
 });
 
 test('cancelling a pending connection remains disconnected after late transport events',async()=>{
@@ -74,3 +74,23 @@ test('cancelling a pending connection remains disconnected after late transport 
  const a=await ssh.save({...base,password:'test'});const pending=ssh.connect(a.id);const cancelled=assert.rejects(pending,/已关闭|已取消/);await new Promise(r=>setImmediate(r));assert.equal((await ssh.list())[0].state,'connecting');
  ssh.disconnect(a.id);await cancelled;client.emit('ready');client.emit('error',Error('late failure'));assert.equal((await ssh.list())[0].state,'disconnected');assert.equal(ssh.clients.size,0);ssh.shutdown();
 });
+
+ test('SFTP channel errors reject operations and late errors stay handled',async()=>{
+  const {ssh}=setup();const a=await ssh.save({...base,password:'test'});const client=await ssh.connect(a.id);
+  const stream=new EventEmitter();let ended=0;stream.end=()=>{ended++;};client.sftp=cb=>cb(null,stream);
+  const operation=ssh.withSftp(a.id,()=>new Promise(()=>{}));await new Promise(r=>setImmediate(r));
+  stream.emit('error',Error('connection lost'));await assert.rejects(operation,/SFTP/);assert.equal(ended,1);
+  assert.doesNotThrow(()=>stream.emit('error',Error('late error')));ssh.shutdown();
+ });
+ test('SFTP opening times out and closes a late channel',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});const {ssh}=setup();const a=await ssh.save({...base,password:'test'});const client=await ssh.connect(a.id);
+  let callback;client.sftp=cb=>{callback=cb;};const pending=ssh.sftp(a.id);const rejected=assert.rejects(pending,/超时/);await new Promise(r=>setImmediate(r));t.mock.timers.tick(30000);await rejected;
+  const stream=new EventEmitter();let ended=false;stream.end=()=>{ended=true;};callback(null,stream);assert.equal(ended,true);ssh.shutdown();
+ });
+ test('SSH loss stops only matching active agents once',async()=>{
+  const {AgentRuntime}=require('../electron/agent-runtime.cjs');
+  const remote={run:{id:'remote'},remoteProject:{connectionId:'c'}},local={run:{id:'local'}},other={run:{id:'other'},remoteProject:{connectionId:'other'}};
+  const stopped=[];const runtime={contexts:new Map([['r',remote],['l',local],['o',other]]),stop:async id=>stopped.push(id)};
+  AgentRuntime.prototype.sshStateChanged.call(runtime,'c','error');AgentRuntime.prototype.sshStateChanged.call(runtime,'c','reconnecting');
+  assert.deepEqual(stopped,['remote']);assert.equal(remote.cancelled,true);assert.match(remote.loopPauseReason,/SSH/);assert.equal(local.cancelled,undefined);assert.equal(other.cancelled,undefined);
+ });

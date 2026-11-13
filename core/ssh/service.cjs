@@ -12,10 +12,10 @@ function validateConnection(value){
  return {id:value.id||randomUUID(),name:String(value.name||value.host).slice(0,120),host:value.host.trim(),port:value.port,username:value.username.trim(),authType:value.authType,...(value.authType==='key'?{privateKeyPath:value.privateKeyPath}:{})};
 }
 class SshService{
- constructor({database,encryption,publish=()=>{},confirmHost=async()=>false,clientFactory=()=>new Client()}){Object.assign(this,{database,encryption,publish,confirmHost,clientFactory});this.clients=new Map();this.opening=new Map();this.pending=new Map();this.secrets=new Map();this.states=new Map();this.timers=new Map();this.attempts=new Map();this.stopped=new Set();this.queue=Promise.resolve();this.closed=false;this.docker=new (require('./docker.cjs').DockerService)(this);}
+ constructor({database,encryption,publish=()=>{},onState=()=>{},confirmHost=async()=>false,clientFactory=()=>new Client()}){Object.assign(this,{database,encryption,publish,onState,confirmHost,clientFactory});this.clients=new Map();this.opening=new Map();this.pending=new Map();this.secrets=new Map();this.states=new Map();this.timers=new Map();this.attempts=new Map();this.stopped=new Set();this.queue=Promise.resolve();this.closed=false;this.docker=new (require('./docker.cjs').DockerService)(this);}
  async records(){return await this.database.call('readSetting',{key:'sshConnections'})||[];}
  async mutate(fn){const result=this.queue.then(async()=>{const records=await this.records();const value=await fn(records);await this.database.call('writeSetting',{key:'sshConnections',value:records});return value;});this.queue=result.catch(()=>{});return result;}
- state(id,state,error=''){this.states.set(id,{state,error});this.publish();}
+ state(id,state,error=''){this.states.set(id,{state,error});this.onState(id,state);this.publish();}
  async list(){return (await this.records()).map(({secret,...p})=>({...p,remember:!!secret,...(this.states.get(p.id)||{state:'disconnected',error:''})}));}
  async save(input){const p=validateConnection(input);if(this.pending.has(p.id))throw Error('连接正在建立，请稍后修改');if(typeof p.id!=='string'||p.id.length>120)throw Error('连接 ID 无效');
   const secret={password:typeof input.password==='string'?input.password:'',passphrase:typeof input.passphrase==='string'?input.passphrase:''};
@@ -63,11 +63,34 @@ class SshService{
   });
   return pending;
  }
- retry(id){const n=(this.attempts.get(id)||0)+1;this.attempts.set(id,n);if(n>5){this.state(id,'error','重连失败，请手动连接');return;}const timer=setTimeout(()=>{if(this.stopped.has(id)||this.closed)return;void this.connect(id,{manual:false}).catch(()=>{if(!this.stopped.has(id)&&!this.closed)this.retry(id);});},Math.min(30000,1000*2**(n-1)));timer.unref?.();this.timers.set(id,timer);}
+ retry(id){
+  clearTimeout(this.timers.get(id));
+  if(this.stopped.has(id)||this.closed)return;
+  const n=Math.min((this.attempts.get(id)||0)+1,6);this.attempts.set(id,n);
+  this.state(id,'reconnecting','连接中断，正在自动重连；执行中的命令不会自动重跑');
+  const timer=setTimeout(()=>{this.timers.delete(id);if(this.stopped.has(id)||this.closed)return;void this.connect(id,{manual:false}).catch(()=>this.retry(id));},Math.min(30000,1000*2**(n-1)));
+  timer.unref?.();this.timers.set(id,timer);
+ }
  disconnect(id){this.stopped.add(id);clearTimeout(this.timers.get(id));this.opening.get(id)?.end();this.clients.get(id)?.end();this.clients.delete(id);this.state(id,'disconnected');}
  async connected(id){if(this.closed)throw Error('SSH 服务已关闭');if(this.stopped.has(id))throw Error('SSH 已断开，请手动连接');if(this.clients.has(id))return this.clients.get(id);if(this.pending.has(id))return this.pending.get(id);throw Error('SSH 未连接，请先连接服务器');}
- async sftp(id){const client=await this.connected(id);return new Promise((resolve,reject)=>client.sftp((e,s)=>e?reject(Error('SFTP 不可用')):resolve(s)));}
- async withSftp(id,fn){const s=await this.sftp(id);let timer;try{return await Promise.race([fn(s),new Promise((_,reject)=>{timer=setTimeout(()=>{s.end();reject(Error('SFTP 操作超时'));},30000);})]);}finally{clearTimeout(timer);s.end();}}
+ async sftp(id){
+  const client=await this.connected(id);
+  return new Promise((resolve,reject)=>{
+   let settled=false;
+   const finish=(error,s)=>{if(settled){s?.end();return;}settled=true;clearTimeout(timer);client.removeListener('close',lost);error?reject(error):resolve(s);};
+   const lost=()=>finish(Error('SSH 已断开，SFTP 不可用'));
+   const timer=setTimeout(()=>finish(Error('SFTP 通道打开超时')),30000);
+   client.once('close',lost);
+   try{client.sftp((error,s)=>{if(s)s.on('error',()=>{});finish(error?Error('SFTP 不可用'):null,s);});}catch(error){finish(error);}
+  });
+ }
+ async withSftp(id,fn){
+  const s=await this.sftp(id);let timer,onError,onClose;
+  try{return await Promise.race([
+   new Promise((_,reject)=>{onError=()=>reject(Error('SFTP 通道中断'));onClose=()=>reject(Error('SFTP 通道已关闭'));s.once('error',onError);s.once('close',onClose);timer=setTimeout(()=>reject(Error('SFTP 操作超时')),30000);}),
+   Promise.resolve().then(()=>fn(s)),
+  ]);}finally{clearTimeout(timer);s.removeListener('error',onError);s.removeListener('close',onClose);s.end();}
+ }
  async directory(id,requested,environment){validateEnvironment(environment);if(environment?.kind==='docker')return (await this.docker.directory(id,requested,environment)).path;return this.withSftp(id,async s=>{const root=await call(s,'realpath',requested||'.'),stat=await call(s,'stat',root);if(!stat.isDirectory())throw Error('远端路径不是目录');return root;});}
  async browse(id,directory,environment){validateEnvironment(environment);if(environment?.kind==='docker')return this.docker.browse(id,directory,environment);return this.withSftp(id,async s=>{const root=await call(s,'realpath',directory||'.');const entries=await call(s,'readdir',root);return {path:root,parent:path.dirname(root),entries:entries.filter(e=>e.attrs.isDirectory()&&!['.','..'].includes(e.filename)).slice(0,1000).map(e=>({name:e.filename,path:path.join(root,e.filename)})).sort((a,b)=>a.name.localeCompare(b.name))};});}
  async resolve(s,root,relative='',newFile=false){
