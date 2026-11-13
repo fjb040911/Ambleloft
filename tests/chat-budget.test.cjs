@@ -2,10 +2,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {startChatBridge}=require('../electron/chat-bridge.cjs');
 const frame=value=>'data: '+JSON.stringify(value)+'\n\n';
 const answer=(delta,finish)=>new Response(frame({choices:[{delta,finish_reason:finish}]})+'data: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
-async function fixture(t,respond,{profile='chat',passthrough=false,config={}}={}){
+async function fixture(t,respond,{profile='chat',passthrough=false,config={},idleTimeoutMs}={}){
  const original=global.fetch,requests=[],diagnostics=[],usage=[];
  global.fetch=async(url,options)=>{if(!String(url).startsWith('https://budget.fixture'))return original(url,options);const body=JSON.parse(options.body);requests.push(body);return respond(body,requests.length,options.signal);};
- const bridge=await startChatBridge({baseUrl:'https://budget.fixture/v1',model:'deepseek-test',...config},'budget-test',passthrough,d=>diagnostics.push(d),u=>usage.push(u),{profile});
+ const bridge=await startChatBridge({baseUrl:'https://budget.fixture/v1',model:'deepseek-test',...config},'budget-test',passthrough,d=>diagnostics.push(d),u=>usage.push(u),{profile,idleTimeoutMs});
  t.after(()=>{bridge.close();global.fetch=original;});
  const send=async(data={},signal)=>{const result=await original(bridge.config.baseUrl+'/responses',{method:'POST',headers:{Authorization:'Bearer '+bridge.config.apiKey},body:JSON.stringify({model:'deepseek-test',input:'Check supplied data only.',...data}),signal});return {status:result.status,text:await result.text()};};
  return {requests,diagnostics,usage,send,bridge};
@@ -51,4 +51,14 @@ test('diagnostic export keeps budget provenance and excludes arbitrary capacity 
  const {diagnosticReport}=require('../electron/run-diagnostics.cjs');
  const report=diagnosticReport({modelRequests:[{budget:{profile:'expert',maxOutputTokens:32768,source:'discovered',private:'PRIVATE'},outputBudgets:[32768,65536,'PRIVATE'],outputLimitRetried:true}]},'test');
  assert.equal(report.requests[0].budget.source,'discovered');assert.deepEqual(report.requests[0].outputBudgets,[32768,65536]);assert.ok(!JSON.stringify(report).includes('PRIVATE'));
+});
+
+for(const phase of ['headers','heartbeat'])test('silent model times out while waiting for '+phase,async t=>{
+ const f=await fixture(t,(_body,_n,signal)=>phase==='headers'?new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>reject(signal.reason),{once:true});}):new Response(new ReadableStream({start(controller){const timer=setInterval(()=>controller.enqueue(new TextEncoder().encode(': heartbeat\n\n')),5);signal.addEventListener('abort',()=>{clearInterval(timer);controller.error(signal.reason);},{once:true});}}),{headers:{'content-type':'text/event-stream'}}),{idleTimeoutMs:40});
+ const result=await f.send();assert.match(result.text,/长时间未返回有效内容/);assert.equal(f.diagnostics.at(-1).timedOut,true);assert.equal(f.requests.length,1);
+});
+
+test('ongoing reasoning resets the idle deadline without imposing a total task timeout',async t=>{
+ const f=await fixture(t,(_body,_n,signal)=>{let count=0,ended=false;return new Response(new ReadableStream({start(controller){signal.addEventListener('abort',()=>{if(!ended){ended=true;controller.error(signal.reason);}},{once:true});},async pull(controller){await new Promise(resolve=>setTimeout(resolve,20));if(ended)return;count++;if(count<=6)controller.enqueue(new TextEncoder().encode(frame({choices:[{delta:{reasoning_content:'Still making progress'},finish_reason:null}]})));else{ended=true;controller.enqueue(new TextEncoder().encode(frame({choices:[{delta:{content:'Done'},finish_reason:'stop'}]})+'data: [DONE]\n\n'));controller.close();}}}),{headers:{'content-type':'text/event-stream'}});},{idleTimeoutMs:80});
+ const result=await f.send();assert.match(result.text,/response.completed/);assert.notEqual(f.diagnostics.at(-1).timedOut,true);
 });

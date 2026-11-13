@@ -397,3 +397,33 @@ test('ending a draft blocks a late model result and survives reopening the servi
  await f.service.discardTaskDraft({id:current.id,expectedRevision:current.revision});release(response());await assert.rejects(job,/更新|已结束/);
  const saved=(await f.service.read()).taskDrafts.find(d=>d.id===f.draft.id);assert.ok(saved.discardedAt);assert.equal(saved.value.packages.length,0);assert.equal(f.runtime.runs.length,0);
 });
+
+test('editing an existing multi-node draft sends schema-compatible values and preserves confirmed bindings',async t=>{
+ const f=await setup(t),v=value(),doc=await f.service.saveDocument({spaceId:f.space.id,title:'API basis',body:'Pinned source',adopted:true});
+ await f.service.change(s=>s.requests.push({id:'edit-source',spaceId:f.space.id,mode:'discussion',prompt:'Review three projects',documentRefs:[{id:doc.id,revision:1,hash:doc.hash}],createdAt:'2026-11-13',participants:[]}));
+ const draft=await f.service.createTaskDraft({spaceId:f.space.id,discussionId:'edit-source',commandId:randomUUID()});
+ v.packages[0].documentRefs=[{id:doc.id,revision:1,hash:doc.hash}];
+ v.packages=Array.from({length:3},(_,i)=>({...structuredClone(v.packages[0]),id:'node-'+i,...(i===1?{mode:'work',projectId:'project',projectBinding:{responsibility:'Maintain API',relations:[],confirmed:true}}:{})}));
+ const saved=await f.service.saveTaskDraft({id:draft.id,expectedRevision:draft.revision,value:v});
+ f.service.workforce.providers.secret=async()=>({model:'test',protocol:'chat',baseUrl:'https://model.example/v1'});
+ let calls=0;t.mock.method(global,'fetch',async(_url,options)=>{
+  calls++;const body=JSON.parse(options.body),input=JSON.parse(body.messages[1].content);
+  assert.ok(input.messages.some(m=>m.text==='Keep three parallel nodes and add dependency analysis to every report'));
+  assert.equal(input.value.packages[0].projectId,'');assert.deepEqual(input.value.packages[0].documentIds,[doc.id]);
+  assert.equal(input.value.packages[1].projectBinding.confirmed,undefined);
+  for(const p of input.value.packages){assert.equal(p.documentRefs,undefined);p.instruction+='; analyze cross-project interfaces and data dependencies';}
+  return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({summary:'Updated the three reports',ready:true,questions:[],value:input.value})}}]}));
+ });
+ const result=await guide(f,saved,{message:'Keep three parallel nodes and add dependency analysis to every report'});
+ assert.equal(calls,1);assert.equal(result.value.packages.length,3);assert.equal(result.value.packages[0].projectId,null);
+ assert.deepEqual(result.value.packages[0].documentRefs,[{id:doc.id,revision:1,hash:doc.hash}]);
+ assert.equal(result.value.packages[1].projectBinding.confirmed,true);assert.equal(result.value.packages[1].projectBinding.responsibility,'Maintain API');
+ assert.ok(result.value.packages.every(p=>p.instruction.includes('data dependencies')));assert.equal(f.runtime.runs.length,0);assert.equal((await f.service.read()).plans.length,0);
+});
+
+test('existing plans with more than twelve nodes can be edited without dropping tasks',async t=>{
+ const f=await setup(t),v=value();v.packages=Array.from({length:30},(_,i)=>({...v.packages[0],id:'node-'+i}));
+ const saved=await f.service.saveTaskDraft({id:f.draft.id,expectedRevision:f.draft.revision,value:v});
+ f.service.generateTaskGuide=async(_config,job)=>{const result={summary:'Preserved every node',ready:true,questions:[],value:job.input.value};const validate=new (require('ajv'))({strict:false}).compile(job.outputSchema);assert.ok(validate(result),JSON.stringify(validate.errors));return result;};
+ const result=await guide(f,saved);assert.equal(result.value.packages.length,30);assert.equal(result.status,'ready');
+});
