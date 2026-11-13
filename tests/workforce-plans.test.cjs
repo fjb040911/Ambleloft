@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path'),{randomUUID}=require('node:crypto');
 const {Database}=require('../electron/database.cjs'),{SpaceService}=require('../core/workforce/spaces.cjs');
 async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'amble-plans-')),db=new Database(root);await db.call('ready');await fs.mkdir(path.join(root,'a'));await fs.mkdir(path.join(root,'b'));
- const projects=[{id:'a',path:path.join(root,'a')},{id:'b',path:path.join(root,'b')},{id:'alias',path:path.join(root,'a')}],runtime={runs:[],async start(input,context){const run={id:randomUUID(),status:'running',projectId:input.projectId,employee:{id:input.employeeId},cwd:projects.find(p=>p.id===input.projectId)?.path,workEvidence:[{output:await require('../core/workforce/evidence.cjs').capture(projects.find(p=>p.id===input.projectId)?.path||root)}],collaboration:context.collaboration,messages:[],tools:[]};this.runs.push(run);return run;},async stop(id){this.runs.find(r=>r.id===id).status='interrupted';}};
+ const projects=[{id:'a',path:path.join(root,'a')},{id:'b',path:path.join(root,'b')},{id:'alias',path:path.join(root,'a')}],runtime={runs:[],async start(input,context){const run={id:randomUUID(),status:'running',projectId:input.projectId,employee:{id:input.employeeId},cwd:projects.find(p=>p.id===input.projectId)?.path,workEvidence:[{output:await require('../core/workforce/evidence.cjs').capture(projects.find(p=>p.id===input.projectId)?.path||root)}],collaboration:context.collaboration,messages:[],tools:[]};this.runs.push(run);return run;},async switchPermission(input){const run=this.runs.find(r=>r.id===input.runId);run.permission=input.permission;return {state:'applied',effective:input.permission};},async stop(id){this.runs.find(r=>r.id===id).status='interrupted';}};
  const service=new SpaceService({directory:root,database:db,workspace:{read:async()=>({projects})},workforce:{read:async()=>({employees:[{id:'one'},{id:'two'}]})},runtime});await service.initialize();clearInterval(service.plans.timer);
  const space=await service.save({value:{name:'Multi-repo',purpose:'Verify delivery',projectIds:['a','b','alias'],members:['one','two'].map(employeeId=>({employeeId,assignment:'Design and build',projectIds:['a','b','alias']}))}});
  t.after(async()=>{await service.shutdown();await db.close();await fs.rm(root,{recursive:true,force:true});});return {service,db,runtime,space};}
@@ -93,14 +93,14 @@ test('AI plan suggestions cannot invent project scope or mutate a saved plan',as
  f.service.generatePlan=async()=>({name:'Invalid scope',packages:[{...unit('first','outside'),documentIds:[]}]});
  await assert.rejects(f.service.suggestPlan({spaceId:f.space.id,goal:'Build',documentIds:[]}),/未分配/);
 });
-test('node permission applies only to its next execution and validates the mode',async t=>{
+test('node permission applies to active execution and validates the mode',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Permission scope',goal:'Keep executions isolated',packages:[unit('first','a'),unit('second','b')]}});
- const update=permission=>f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',packageId:'first',permission},{});
+ const update=permission=>f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',confirmed:true,packageId:'first',permission},{});
  await assert.rejects(update('invalid'),/权限模式无效/);
  await update('full');let current=(await f.service.read()).plans[0];assert.equal(current.packages[0].permission,'full');assert.equal(current.packages[1].permission,undefined);
  const calls=[];const original=f.runtime.start.bind(f.runtime);f.runtime.start=async(input,context)=>{calls.push(input);return original(input,context);};
  await control(f.service,current,'start');assert.equal(calls[0].permission,'full');assert.equal(calls[1].permission,'default');
- await update('default');assert.equal(calls[0].permission,'full');assert.equal(f.runtime.runs.length,2);
+ await update('default');assert.equal(calls[0].permission,'full');assert.equal(f.runtime.runs[0].permission,'default');assert.equal((await f.service.read()).plans[0].packages[0].permissionChange.state,'applied');assert.equal(f.runtime.runs.length,2);
 });
 test('continuing a paused plan resumes only pause-interrupted work and preserves failed nodes',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Pause semantics',goal:'Resume precisely',packages:[unit('first','a'),unit('second','b')]}});
@@ -110,17 +110,17 @@ test('continuing a paused plan resumes only pause-interrupted work and preserves
 });
 test('plan permission inherits without stopping active work and node overrides survive',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Inheritance',goal:'No implicit stop',packages:[unit('first','a'),unit('second','b')]}});
- const change=(permission,packageId)=>f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',permission,packageId},{});
+ const change=(permission,packageId)=>f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',confirmed:true,permission,packageId},{});
  await change('default','second');await change('full');const calls=[],original=f.runtime.start.bind(f.runtime);f.runtime.start=async(input,context)=>{calls.push(input);return original(input,context);};
  await control(f.service,plan,'start');assert.equal(calls[0].permission,'full');assert.equal(calls[1].permission,'default');
  let stopped=0;f.runtime.stop=async()=>{stopped++;};await change('default');assert.equal(stopped,0);
  await change('inherit','second');assert.equal((await f.service.read()).plans[0].packages[1].permission,undefined);
 });
-test('live SSH permission changes do not grant existing requests or change local active policy',async t=>{
+test('live permission changes reach both SSH and local runtimes',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Live permission',goal:'Apply truthfully',packages:[unit('remote','a'),unit('local','b')]}});
  await control(f.service,plan,'start');const remote=f.runtime.runs.find(r=>r.projectId==='a'),local=f.runtime.runs.find(r=>r.projectId==='b');remote.remote={path:'/remote'};remote.permission=local.permission='default';remote.approvals=[{id:'pending'}];f.runtime.changed=()=>{};f.runtime.persist=async()=>{};
- await f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',permission:'full'},{});
- assert.equal(remote.permission,'full');assert.equal(local.permission,'default');assert.deepEqual(remote.approvals,[{id:'pending'}]);assert.equal(remote.status,'running');
+ await f.service.controlPlan({id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',confirmed:true,permission:'full'},{});
+ assert.equal(remote.permission,'full');assert.equal(local.permission,'full');assert.deepEqual(remote.approvals,[{id:'pending'}]);assert.equal(remote.status,'running');
 });
 test('failed node retry uses the selected model without changing other nodes',async t=>{
  const f=await fixture(t),inputs=[],start=f.runtime.start.bind(f.runtime);f.runtime.start=async(input,context)=>{inputs.push(input);return start(input,context);};
@@ -197,4 +197,29 @@ test('confirmed analysis dispatch explains execution phase and preserves exact-o
  const plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Sum',goal:'先准备任务，暂不启动。求2+3',packages:[{...unit('sum','a'),mode:'discussion',projectId:null,instruction:'求2+3，只输出5',deliverables:'单独一行5',acceptance:'仅为5',constraints:'不调用工具、不访问网络、不写文件',verification:'人工核对2+3=5'}]}});
  assert.equal(starts.length,0);await control(f.service,plan,'start');assert.equal(starts.length,1);
  assert.match(starts[0].prompt,/用户已确认并启动本计划/);assert.match(starts[0].prompt,/当前工作包：sum/);assert.match(starts[0].prompt,/若要求仅输出指定文本/);assert.match(starts[0].prompt,/不调用工具、不访问网络、不写文件/);assert.doesNotMatch(starts[0].prompt,/报告实际变更、验证命令及结果/);assert.equal(starts[0].permission,'default');
+});
+
+
+test('node permission waits for engine receipt, prevents overlapping changes and preserves attempts',async t=>{
+ const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Switch',goal:'Live switch',packages:[unit('first','a'),unit('second','b')]}});
+ await control(f.service,plan,'start');
+ let release,entered;const ready=new Promise(r=>entered=r);const calls=[];
+ f.runtime.switchPermission=async input=>{calls.push(input);entered();return new Promise(r=>release=r);};
+ const input={id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',packageId:'first',permission:'full',confirmed:true};
+ const changing=f.service.controlPlan(input,{});await ready;
+ let current=(await f.service.read()).plans[0];assert.equal(current.packages[0].permissionChange.state,'switching');assert.equal(current.packages[1].permissionChange,undefined);
+ await assert.rejects(f.service.controlPlan({...input,commandId:randomUUID()},{}),/正在切换/);
+ release({state:'applied',effective:'full'});await changing;
+ current=(await f.service.read()).plans[0];assert.equal(current.packages[0].permissionChange.state,'applied');assert.equal(calls.length,1);assert.equal(current.packages[0].attempts.length,1);assert.equal(f.runtime.runs.length,2);
+ await f.service.controlPlan(input,{});assert.equal(calls.length,1);
+ f.runtime.switchPermission=async()=>{throw Error('engine unavailable');};
+ await f.service.controlPlan({...input,commandId:randomUUID(),permission:'default'},{});
+ current=(await f.service.read()).plans[0];assert.equal(current.packages[0].permissionChange.state,'failed');assert.equal(current.packages[0].permissionChange.effective,null);assert.match(current.packages[0].permissionChange.error,/engine unavailable/);
+});
+test('full access including inherited full access requires confirmation before saving',async t=>{
+ const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Confirm',goal:'Permission boundary',packages:[unit('first','a')]}});
+ const input={id:plan.id,expectedRevision:plan.revision,commandId:randomUUID(),action:'permission',permission:'full'};
+ await assert.rejects(f.service.controlPlan(input,{}),/确认/);
+ await f.service.controlPlan({...input,confirmed:true},{});
+ await assert.rejects(f.service.controlPlan({...input,commandId:randomUUID(),permission:'inherit',packageId:'first'},{}),/确认/);
 });

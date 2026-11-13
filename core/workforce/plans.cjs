@@ -21,7 +21,7 @@ function shape(value){
 }
 class PlanService {
  constructor(spaces){this.spaces=spaces;this.runtime=spaces.runtime;this.active=new Map();this.contexts=new Map();this.dirty=true;this.closed=false;}
- async initialize(){clearInterval(this.timer);const built=await buildGraph(this);Object.assign(this,built);await this.spaces.change(s=>{for(const plan of s.plans)if(['running','pausing'].includes(plan.status)){plan.status='paused';event(plan,'recovery','应用重新启动。请核对已有任务和工具结果后恢复调度。');}});this.timer=setInterval(()=>this.tick(),1200);this.timer.unref?.();}
+ async initialize(){await this.spaces.change(s=>{for(const plan of s.plans)for(const p of plan.packages)if(p.permissionChange?.state==='switching')Object.assign(p.permissionChange,{state:'failed',effective:null,error:'应用重启，权限未确认生效，请核对后重试'});});clearInterval(this.timer);const built=await buildGraph(this);Object.assign(this,built);await this.spaces.change(s=>{for(const plan of s.plans)if(['running','pausing'].includes(plan.status)){plan.status='paused';event(plan,'recovery','应用重新启动。请核对已有任务和工具结果后恢复调度。');}});this.timer=setInterval(()=>this.tick(),1200);this.timer.unref?.();}
  async save(input){
   const value=shape(input.value),state=await this.spaces.read(),space=state.spaces.find(s=>s.id===input.spaceId);if(!space)throw Error('空间不存在');
   for(const p of value.packages){const member=space.members.find(m=>m.employeeId===p.ownerId);if(!member||p.mode==='work'&&!member.projectIds.includes(p.projectId))throw Error('负责人没有获分配这个项目');for(const r of p.documentRefs){const doc=await this.spaces.document(r);if(doc.spaceId!==space.id||r.hash&&doc.hash!==r.hash||p.mode==='work'&&doc.state!=='adopted'&&!input.taskDraftId)throw Error('施工资料必须是本空间当前已采纳的版本');r.hash=doc.hash;}}
@@ -73,6 +73,7 @@ class PlanService {
  }
  async control(input,context){
   if(!id(input.commandId))throw Error('控制请求标识无效');
+  if(input.action==='permission')return require('./plan-permission.cjs').call(this,input);
   const result=await this.spaces.change(s=>{
    const plan=s.plans.find(p=>p.id===input.id);if(!plan)throw Error('计划不存在');this.spaces.writable(s,plan.spaceId);
    plan.commands ||= [];if(plan.commands.includes(input.commandId))return plan;
@@ -85,13 +86,6 @@ class PlanService {
    }
    if(['start','resume'].includes(action)){if(plan.status==='running')return plan;if(plan.status==='pausing')throw Error('请等待执行器确认暂停');for(const p of plan.packages)if(p.status==='interrupted'&&p.stopReason==='plan-pause'&&!p.stale){p.status='pending';p.reason='';p.rework=[p.rework,'此前因用户暂停而中断。先核对已有文件、工具结果及远端状态，只继续未完成工作，不要盲目重复副作用操作。'].filter(Boolean).join('\n');delete p.stopReason;}plan.status='running';event(plan,'resumed','已启动依赖调度；只执行具备输入且依赖已验收的工作包');}
    else if(['pause','stop'].includes(action)){for(const p of plan.packages)if(['starting','running','waiting','stopping'].includes(p.status))p.stopReason=action==='pause'?'plan-pause':'plan-stop';plan.status=action==='pause'?'pausing':'stopped';event(plan,action,action==='pause'?'正在停止调度并请求执行器暂停':'已停止调度，正在中断活跃工作');}
-   else if(action==='permission'){
-    if(!['default','full','inherit'].includes(input.permission)||!input.packageId&&input.permission==='inherit')throw Error('权限模式无效');
-    const p=input.packageId?plan.packages.find(p=>p.id===input.packageId):null;if(input.packageId&&!p)throw Error('任务不存在');
-    if(p){if(input.permission==='inherit')delete p.permission;else p.permission=input.permission;}else plan.permission=input.permission;
-    event(plan,'permission',p?'节点授权设置：'+input.permission:'计划默认授权设置：'+input.permission,p?.id);
-
-   }
    else if(action==='retry'){
     const p=plan.packages.find(p=>p.id===input.packageId);if(!p||!['failed','interrupted','rejected'].includes(p.status))throw Error('当前工作包不可重试');
     if(input.modelChoice){if(!id(input.modelChoice.providerId))throw Error('模型服务标识无效');p.modelChoice={providerId:input.modelChoice.providerId,model:text(input.modelChoice.model,'重试模型',200)};}
@@ -101,15 +95,6 @@ class PlanService {
   });
   if(['start','resume','retry'].includes(input.action)){this.contexts.set(result.id,context);await this.pulse(result.id);}
   else if(['pause','stop'].includes(input.action)){const requests=new Set(result.packages.map(p=>p.attempts.at(-1)?.requestId));await Promise.all(this.runtime.runs.filter(r=>requests.has(r.collaboration?.requestId)&&busy.has(r.status)).map(r=>this.runtime.stop(r.id)));await this.reconcile(result.id);}
-  if(input.action==='permission'){
-   for(const p of result.packages){if(input.packageId?p.id!==input.packageId:!!p.permission)continue;
-    const latest=p.attempts.at(-1);const run=this.runtime.runs.find(r=>r.id===latest?.runId||latest?.requestId&&r.collaboration?.requestId===latest.requestId);
-    // SSH tools consult run.permission on every new tool request. Local RPC sandbox
-    // policy is fixed for the active turn, so never claim it changed live.
-    if(run?.remote&&busy.has(run.status)&&this.runtime.changed){run.permission=p.permission||result.permission||'default';this.runtime.changed(run);}
-   }
-   if(this.runtime.persist)await this.runtime.persist();
-  }
   return (await this.spaces.read()).plans.find(p=>p.id===result.id);
  }
  async review(input){
@@ -160,7 +145,7 @@ class PlanService {
  }
  async resource(projectId){const project=(await this.spaces.workspace.read()).projects.find(p=>p.id===projectId);if(!project)throw Error('项目已移除');return project.type==='ssh'?{namespace:JSON.stringify([project.connectionId,project.environment?.kind==='docker'?project.environment.containerId:'host']),path:project.path}:{namespace:'local',path:await fs.realpath(project.path)};}
  async eligible(planId){
-  const state=await this.spaces.read(),plan=state.plans.find(p=>p.id===planId);if(plan.status!=='running'||this.closed)return [];
+  const state=await this.spaces.read(),plan=state.plans.find(p=>p.id===planId);if(plan.status!=='running'||this.closed||this.permissionJobs?.has(planId))return [];
   const resources=[];for(const run of this.runtime.runs.filter(r=>busy.has(r.status)&&r.projectId))try{resources.push(await this.resource(run.projectId));}catch{}
   const selected=[];for(const p of plan.packages){if(p.status!=='pending'||p.stale)continue;
    let reason=projectRelations.issues(plan.packages.map(v=>v.definition),state.spaces.find(v=>v.id===plan.spaceId),{onlyIds:[p.id]})[0]||'';
@@ -172,7 +157,7 @@ class PlanService {
   return selected;
  }
  async dispatch(planId,packageId){
-  const allocation=await this.spaces.change(s=>{const plan=s.plans.find(p=>p.id===planId),p=plan?.packages.find(p=>p.id===packageId);if(!plan||!p||plan.status!=='running'||p.status!=='pending'||p.stale)return null;
+  const allocation=await this.spaces.change(s=>{const plan=s.plans.find(p=>p.id===planId),p=plan?.packages.find(p=>p.id===packageId);if(!plan||!p||plan.status!=='running'||p.status!=='pending'||p.stale||this.permissionJobs?.has(planId))return null;
    // Eligibility is computed before dispatch (and checkpointed). Recheck the gate
    // in the same transaction that records the attempt; a stale selection is not approval.
    if(p.definition.dependencies.some(id=>{const source=plan.packages.find(v=>v.id===id);return !source||source.status!=='accepted'||source.stale;})){p.reason='等待上游工作包验收';return null;}

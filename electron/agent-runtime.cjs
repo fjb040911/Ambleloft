@@ -25,6 +25,7 @@ class AgentRuntime {
   drain() {
     if(this.closing)return;
     for(const context of [...this.pendingStarts]){
+      if(context.done||context.cancelled){this.pendingStarts=this.pendingStarts.filter(c=>c!==context);continue;}
       const running=[...this.contexts.values()].filter(c=>c.launched&&!c.done);
       if(running.length>=this.maxConcurrent)break;
       if(running.some(c=>c.run?.cwd===context.run?.cwd))continue;
@@ -388,6 +389,10 @@ class AgentRuntime {
     const run=context.run;
     run.modelRequests=[...(run.modelRequests||[]),{...diagnostic,turnKey:context.turnKey}].slice(-100);
     if(!diagnostic.parentThreadId)context.lastModelDiagnostic=diagnostic;
+    if(diagnostic.timedOut&&!context.done&&!context.modelTimeoutReason){
+      context.modelTimeoutReason='模型服务长时间未返回有效内容，任务已停止等待。已有记录保留，请检查模型服务后继续。';
+      void this.stop(run.id).catch(()=>this.finish(context,'interrupted',context.modelTimeoutReason));
+    }
     if(diagnostic.loopGuard?.action==='pause'&&!context.done&&!context.loopPauseReason){
       context.loopPauseReason=require('./tool-loop-guard.cjs').PAUSE_MESSAGE;
       // Set the reason before interrupting: turn/completed may race the RPC reply.
@@ -558,6 +563,7 @@ class AgentRuntime {
     if (context.done) return;
     if(context.cancelled)status='interrupted';
     if(context.loopPauseReason){status='interrupted';error=context.loopPauseReason;}
+    if(context.modelTimeoutReason){status='interrupted';error=context.modelTimeoutReason;}
     if(context.pendingModelChange){context.pendingModelChange.state='failed';context.pendingModelChange.effective=null;context.pendingModelChange.error=error||'任务未启动，新模型未确认生效';context.pendingModelChange=null;}
     context.done = true;this.conversation.stop(context);this.native.finish(context);context.inputDelivery?.reject(Object.assign(Error(error||'任务已停止'),{code:'CANCELLED'}));
     for(const finish of context.remoteApprovals?.values()||[])finish(false);

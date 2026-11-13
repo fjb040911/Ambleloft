@@ -24,7 +24,7 @@ function diagnosticReport(run, appVersion) {
     runId: run.id, threadId: run.threadId, model: run.model, status: run.status,
     coverage: 'Most recent 100 model requests. Tool metadata is available only for requests recorded after this feature was installed. No prompts, reasoning, commands, argument values, output text, URLs or credentials are exported.',
     requests: (run.modelRequests || []).slice(-100).map(d => ({
-      ...pick(d, ['requestId', 'threadId', 'parentThreadId', 'turnKey', 'startedAt', 'durationMs', 'protocol', 'stage', 'httpStatus', 'events', 'done', 'finishReason', 'failed', 'cancelled', 'requestBytes', 'messageCount', 'toolCorrectionAttempts', 'diagnosticVersion', 'toolChoice']),
+      ...pick(d, ['requestId', 'threadId', 'parentThreadId', 'turnKey', 'startedAt', 'durationMs', 'protocol', 'stage', 'httpStatus', 'events', 'done', 'finishReason', 'failed', 'cancelled', 'timedOut', 'requestBytes', 'messageCount', 'toolCorrectionAttempts', 'diagnosticVersion', 'toolChoice']),
       ...(d.loopGuard ? {loopGuard: pick(d.loopGuard, ['action', 'kind', 'count', 'warningAt', 'pauseAt'])} : {}),
       ...(d.usage ? {usage: pick(d.usage, ['input_tokens', 'output_tokens', 'total_tokens'])} : {}),
       ...(d.budget ? {budget:pick(d.budget,['profile','maxOutputTokens','requestedTokens','outputCeiling','contextWindow','inputTokens','contextReserve','availableOutputTokens','estimated','source','reasoning'])} : {}),
@@ -57,6 +57,7 @@ function responseObserver(diagnostic, fingerprint, onUsage) {
         const raw = block.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trimStart()).join('\n');
         if (!raw || raw === '[DONE]') continue;
         const event = JSON.parse(raw); diagnostic.events++;
+        if(typeof event.delta==='string'&&event.delta.length||['response.output_item.added','response.output_item.done','response.completed','response.incomplete','response.failed'].includes(event.type))diagnostic.progressEvents=(diagnostic.progressEvents||0)+1;
         if (event.type === 'response.output_item.done') item(event.item);
         if (['response.completed', 'response.incomplete', 'response.failed'].includes(event.type)) {
           diagnostic.done = true; diagnostic.finishReason = event.response?.status;

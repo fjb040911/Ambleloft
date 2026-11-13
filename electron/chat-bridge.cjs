@@ -149,6 +149,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
     if(req.headers.authorization!==`Bearer ${token}`){res.writeHead(401);res.end();return;}
     if(req.method!=='POST'||req.url!=='/v1/responses'){res.writeHead(404);res.end();return;}
     const controller=new AbortController();active.add(controller);res.on('close',()=>controller.abort());
+    const deadline=require('../core/automation/inference-deadline.cjs').inferenceDeadline(controller.signal,{timeoutMs:null,idleTimeoutMs:options.idleTimeoutMs||300000});
     const diagnostic={threadId:req.headers['thread-id'],parentThreadId:req.headers['x-codex-parent-thread-id'],requestId:randomUUID(),sessionId,startedAt:new Date().toISOString(),protocol:passthrough?'responses':'chat',stage:'request',events:0,done:false,finishReason:null};
     let usageAttempt=null;
     const usageNotify=async(status)=>{if(!usageAttempt)return;try{await onUsage({...usageAttempt,status,finishedAt:status==='running'?null:new Date().toISOString(),parentThreadId:diagnostic.parentThreadId,...(diagnostic.parentThreadId?{origin:'subagent'}:{})});}catch{}};
@@ -184,7 +185,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       if(config.effectiveLimits)diagnostic.limits={...config.effectiveLimits};
       await usageBegin(0);
-      let upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:controller.signal});
+      let upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:deadline.signal});
       diagnostic.httpStatus=upstream.status;diagnostic.stage='upstream_stream';
       if(!upstream.ok){
         const detail=await readUpstreamError(upstream,config.apiKey);
@@ -195,7 +196,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       if(passthrough){
         res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'application/json','Cache-Control':'no-cache'});
         const observe=responseObserver(diagnostic,fingerprint,(usage,id)=>{usageAttempt.usage=usage;usageAttempt.providerRequestId=id;});
-        for await(const chunk of upstream.body){if(res.destroyed)break;observe(chunk);res.write(chunk);}
+        for await(const chunk of upstream.body){if(res.destroyed)break;const before=diagnostic.progressEvents||0;observe(chunk);if(diagnostic.progressEvents>before)deadline.touch();res.write(chunk);}
         await usageNotify(diagnostic.done&&diagnostic.finishReason==='completed'?'succeeded':'unknown');usageAttempt=null;
         diagnostic.stage='forwarded';res.end();return;
       }
@@ -213,6 +214,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           const choice=chunk.choices?.[0];if(!choice)continue;
           if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
           const delta=choice.delta||{};
+          if(choice.finish_reason||delta.content||delta.reasoning_content||delta.reasoning||delta.reasoning_text||delta.tool_calls?.some(call=>call.function?.name||call.function?.arguments))deadline.touch();
           const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
           if(thought){
             if(!reasoningItem)reasoningItem=add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
@@ -244,7 +246,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             diagnostic.outputLimitRetried=true;diagnostic.budget=next;diagnostic.outputBudgets.push(next.maxOutputTokens);
             diagnostic.stage='recover_output';diagnostic.done=false;diagnostic.finishReason=null;
             controller.signal.throwIfAborted();await usageBegin(attempt+1);
-            upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-output-recovery',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(body),redirect:'error',signal:controller.signal});
+            upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-output-recovery',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(body),redirect:'error',signal:deadline.signal});
             diagnostic.httpStatus=upstream.status;
             if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
             continue;
@@ -267,7 +269,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
           await usageBegin(attempt+1);
-          upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:controller.signal});
+          upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:deadline.signal});
           diagnostic.httpStatus=upstream.status;
           if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
           continue;
@@ -304,13 +306,15 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       emit(finish==='length'?'response.incomplete':'response.completed',{response});diagnostic.stage='completed';res.end();
     }catch(error){
       diagnostic.failed=true;diagnostic.cancelled=controller.signal.aborted;
+      diagnostic.timedOut=deadline.signal.reason?.code==='MODEL_RESPONSE_TIMEOUT';
+      if(diagnostic.timedOut)error=Error('模型服务长时间未返回有效内容，已停止等待。请检查服务后继续任务。');
       diagnostic.errorType=error.name;
       diagnostic.causeCode=typeof error.cause?.code==='string'?error.cause.code:undefined;
       // Error details are bounded and sanitized before they reach diagnostics.
       diagnostic.reason=error.message==='CONTEXT_LIMIT'?'模型上下文容量不足，请减少参考内容或压缩对话':error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
       report();
       if(!res.destroyed){if(res.headersSent){emit('error',{message:error.message,code:'bridge_error'});res.end();}else{res.writeHead(error.httpStatus||502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:diagnostic.reason,code:error.code||'bridge_error'}}));}}}
-    finally{await usageNotify(controller.signal.aborted?'unknown':diagnostic.failed?'failed':'unknown');if(!diagnostic.failed)report();controller.abort();active.delete(controller);}
+    finally{deadline.dispose();await usageNotify(controller.signal.aborted?'unknown':diagnostic.failed?'failed':'unknown');if(!diagnostic.failed)report();controller.abort();active.delete(controller);}
   });
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
   return {config:{...config,baseUrl:`http://127.0.0.1:${server.address().port}/v1`,apiKey:token},close(){for(const controller of active)controller.abort();server.close();server.closeAllConnections();}};

@@ -8,13 +8,13 @@ import {Failure,useCopy} from './WorkforceInputs';
 import type {AgentRun,ProviderCatalog,TurnFileChanges} from './types';
 
 // Evidence stays in the space. The shared transcript owns paging and tool details.
-export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,onReady,readOnly=false,active=true,mode='delivery',hidden=false,onRework}:{onOptionsChange?(options:ComposerOptions):void;onRework?(text:string,options:ComposerOptions):Promise<void>;active?:boolean;mode?:'chat'|'delivery'|'actions';hidden?:boolean;readOnly?:boolean;onReady?(ready:boolean):void;runId?:string;catalog:ProviderCatalog;onOpenTask(id:string):void}){
+export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,onReady,awaitingRun=false,readOnly=false,active=true,mode='delivery',hidden=false,onRework}:{awaitingRun?:boolean;onOptionsChange?(options:ComposerOptions):void;onRework?(text:string,options:ComposerOptions):Promise<void>;active?:boolean;mode?:'chat'|'delivery'|'actions';hidden?:boolean;readOnly?:boolean;onReady?(ready:boolean):void;runId?:string;catalog:ProviderCatalog;onOpenTask(id:string):void}){
  const L=useCopy(),[run,setRun]=useState<AgentRun|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[changes,setChanges]=useState<TurnFileChanges|null>(null),[file,setFile]=useState<{name:string;text:string}|null>(null),[reload,setReload]=useState(0);
  const [selectedInput,setSelectedInput]=useState<{id:string;key:number}>(),actionRoot=useRef<HTMLDivElement>(null);
- useEffect(()=>{let live=true,receivedUpdate=false;setSelectedInput(undefined);onReady?.(false);setFile(null);setChanges(null);setError('');if(!runId){setRun(null);return;}
+ useEffect(()=>{let live=true,receivedUpdate=false;setSelectedInput(undefined);onReady?.(false);setFile(null);setChanges(null);setError('');if(!runId){if(!awaitingRun)setRun(null);setLoading(false);return;}
  setLoading(true);void (window.desktop?.getRunPage?window.desktop.getRunPage({id:runId}):Promise.reject(Error(L('执行记录接口暂不可用','Execution history is unavailable')))).then(r=>{if(live&&!receivedUpdate){setRun(r);onReady?.(r.status==='completed');}}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});
  const unsubscribe=window.desktop?.onRun?.(r=>{if(live&&r.id===runId){receivedUpdate=true;setError('');setLoading(false);setRun(r);onReady?.(r.status==='completed');}});return()=>{live=false;unsubscribe?.();};
- },[runId,reload]);
+ },[runId,reload,awaitingRun]);
  const switching=!!run&&run.id!==runId;
  const output=run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning');
  const finals=output?.filter(m=>m.phase==='final_answer');
@@ -30,7 +30,7 @@ export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,o
  }:null;
  if(mode==='actions')return <section><Failure message={error}/>{loading&&<p role="status">{L('正在读取待处理请求…','Loading requests…')}</p>}{conversationProps&&<Conversation key={run!.id} {...conversationProps} actionsOnly refreshRun={()=>setReload(n=>n+1)}/>}</section>;
  return <section className="wf-task-delivery" hidden={hidden}><Failure message={error}/>{error&&<Button variant="outline" onClick={()=>setReload(n=>n+1)}>{L('重新读取证据','Reload evidence')}</Button>}{loading&&!run&&<p role="status">{L('正在读取执行结果…','Loading execution results…')}</p>}
- {!runId&&<p className="wf-muted">{L('尚未执行，没有实际交付。','No execution or actual delivery yet.')}</p>}
+ {!runId&&!awaitingRun&&<p className="wf-muted">{L('尚未执行，没有实际交付。','No execution or actual delivery yet.')}</p>}
  {run&&<>{readOnly?<p className="wf-muted">{L('空间已归档，只能查看执行记录；恢复空间后再处理请求。','Archived space: execution records are read-only. Restore the space to handle requests.')}</p>:mode==='delivery'?<div ref={actionRoot}><Conversation key={run.id} {...conversationProps!} actionsOnly selectedInput={selectedInput} refreshRun={()=>setReload(n=>n+1)}/></div>:null}{mode==='delivery'&&<><h3>{L('实际交付','Actual delivery')}</h3>{!delivery.length&&['preparing','running','waiting','stopping'].includes(run.status)?<p className="wf-muted">{L('任务尚在进行，交付结果将在这里显示。','Work is in progress. Results will appear here.')}</p>:!delivery.length?<Alert><AlertDescription>{L('此执行没有可展示的交付说明，请核对下方执行过程与文件。','This run has no delivery summary. Inspect the execution and files below.')}</AlertDescription></Alert>:delivery.map(m=><Markdown key={m.id} text={m.text}/>)}
  </>}{!!run.artifacts?.length&&<div className="wf-actions">{run.artifacts.map(a=><Button variant="outline" key={a.id} onClick={()=>void window.desktop!.accessArtifact({runId:run.id,id:a.id,preview:true}).then(result=>{if(result)setFile({name:a.name,text:result.text});else setError(L('此文件无法内联预览','This file cannot be previewed inline'));}).catch(e=>setError(e.message))}>{a.title||a.name}</Button>)}</div>}
  {file&&<section><div className="wf-section-title"><h3>{file.name}</h3><Button variant="ghost" onClick={()=>setFile(null)}>{L('关闭预览','Close preview')}</Button></div><pre className="wf-evidence-text">{file.text}</pre></section>}
