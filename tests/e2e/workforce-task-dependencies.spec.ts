@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-// These regressions exercise the retained list view; graph behavior has its own suite.
+// Dependency navigation stays read-only in the current graph view.
 test.beforeEach(async({page})=>{await page.addInitScript(()=>sessionStorage.setItem('workforce.plan-views:space',JSON.stringify({launch:'list'})));});
 
 for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,true,true],[390,true,false]] as const)test(`task dependencies and responsive navigation ${width} ${english} ${dark}`,async({page})=>{
@@ -7,11 +7,10 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  await page.goto(`/tests/manual/project-space-qa.html?lang=${english?'en':'zh'}&theme=${dark?'dark':'light'}`);
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();
  await page.getByRole('tab',{name:english?'Tasks':'任务',exact:true}).click();
- const rows=page.locator('.wf-work-item');
+ const rows=page.locator('.wf-graph-node');
  const order=()=>rows.evaluateAll(nodes=>nodes.map(el=>el.getAttribute('data-package-id')));
- const original=await order();expect(original).toEqual(['copy','bundle','testing']);
- await expect(page.locator('[data-package-id="copy"]')).toContainText(english?'No prerequisites; scheduled independently':'无前置任务，可独立调度');
- await expect(page.locator('[data-package-id="bundle"]')).toContainText(english?'Awaiting acceptance: 发布文案':'等待前置验收：发布文案');
+ const original=await order();expect(original).toEqual(['copy','testing','bundle']);
+ await expect(page.locator('.wf-graph-node[data-package-id="bundle"]')).toContainText(english?'Waiting for prerequisites':'等待前置任务');
  await page.locator('[data-package-id="bundle"]').click();
  const detail=page.getByRole('region',{name:english?'Task details and review':'任务详情与验收'});
  const basis=detail.getByRole('region',{name:english?'Scheduling basis':'调度依据'});
@@ -19,9 +18,9 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  const dependency=basis.getByRole('button',{name:english?'发布文案 · Awaiting review':'发布文案 · 待验收',exact:true});
  await dependency.focus();await expect(dependency).toBeFocused();
  await dependency.press('Enter');await expect(detail.getByRole('heading',{name:'发布文案',exact:true})).toBeVisible();
- await detail.getByRole('button',{name:english?'Instructions and history':'任务说明与记录',exact:true}).click();
+ await detail.getByRole('tab',{name:english?'Delivery review':'交付验收',exact:true}).click();await detail.locator('.wf-task-context > summary').click();
  await expect(basis).toContainText(english?'No prerequisites; scheduled independently.':'无前置任务，可独立调度。');
- const back=detail.getByRole('button',{name:english?'Back to tasks':'返回任务列表',exact:true});
+ const back=detail.getByRole('button',{name:english?'Back to graph':'返回流程图',exact:true});
  await expect(page.locator('.wf-task-list-column')).toBeHidden();await back.click();
  await expect(page.locator('[data-package-id="copy"]')).toBeFocused();
  // Status updates must not reorder tasks or change the selected task.

@@ -6,7 +6,7 @@ test('short and empty knowledge results do not create blank page scrolling',asyn
  await expect(page.getByText(/当前使用本地原文检索/)).toHaveCount(0);
  expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
  await page.evaluate(()=>{window.desktop!.spaces!.knowledge=async()=>[];(window as any).spaceQA.emit();});
- await expect(page.getByText('没有匹配的已采纳资料',{exact:true})).toBeVisible();
+ await expect(page.getByText('没有匹配的执行依据',{exact:true})).toBeVisible();
  expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
  await page.screenshot({path:'/tmp/knowledge-empty-scroll.png'});
 });
@@ -21,8 +21,8 @@ for(const width of [390,1280])test(`knowledge excerpts use page scrolling and fi
  expect(await excerpt.evaluate(el=>el.scrollTop)).toBe(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  if(width===390)expect((await page.locator('.wf-knowledge-filters > [data-slot=input-group]').boundingBox())!.width).toBeGreaterThan(300);
- await page.getByRole('textbox',{name:'搜索已采纳知识'}).fill('不存在');
- await expect(page.getByText('没有匹配的已采纳资料',{exact:true})).toBeVisible();
+ await page.getByRole('textbox',{name:'搜索执行依据'}).fill('不存在');
+ await expect(page.getByText('没有匹配的执行依据',{exact:true})).toBeVisible();
  const blank=await page.locator('.wf-knowledge-results').evaluate(el=>{const scroll=el.closest('.qa-scroll')!;return scroll.scrollHeight>scroll.clientHeight?scroll.scrollHeight-(el.getBoundingClientRect().bottom-scroll.getBoundingClientRect().top+scroll.scrollTop):0;});expect(blank).toBeLessThanOrEqual(49);
  await page.screenshot({path:`/tmp/knowledge-filtered-${width}.png`});
 });
@@ -34,9 +34,9 @@ test('archived sources are labelled, searchable and read-only',async({page})=>{
  await scope.selectOption('space');await expect(page.locator('.wf-knowledge-entry')).toHaveCount(1);
  await page.screenshot({path:'/tmp/knowledge-archived-source.png',fullPage:true});
  const scroller=page.locator('.qa-scroll');await scroller.evaluate(el=>{el.scrollTop=100;});const top=await scroller.evaluate(el=>el.scrollTop);
- await page.getByRole('button',{name:'查看原文与替代关系'}).click();
+ await page.getByRole('button',{name:'查看原文与依据变更'}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
- await expect(dialog.getByRole('button',{name:'修订为新草稿'})).toBeDisabled();
+ await expect(dialog.getByRole('button',{name:'编辑文档'})).toBeDisabled();
  await dialog.getByRole('button',{name:'关闭',exact:true}).click();
  expect(await scroller.evaluate(el=>el.scrollTop)).toBe(top);
 });

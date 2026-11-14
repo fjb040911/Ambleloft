@@ -34,15 +34,14 @@ test('multiple plans show one graph and remember the selected plan',async({page}
  await expect(page.locator('#wf-plan-launch')).toBeVisible();await expect(select).toHaveCount(0);
 });
 
-test('related plans describe their source and open the selected graph',async({page})=>{
+test('related plans stay in their topic and open the selected graph',async({page})=>{
  await page.goto('/tests/manual/project-space-qa.html');
- await page.evaluate(()=>{const qa=(window as any).spaceQA;const discussion=qa.snapshot.requests.find((r:any)=>r.mode==='discussion');const p=structuredClone(qa.snapshot.plans[0]);p.id='discussion-plan';p.name='讨论生成计划';p.source={discussionId:discussion.id};qa.snapshot.plans.push(p);qa.emit();});
+ await page.evaluate(()=>{const qa=(window as any).spaceQA,p=structuredClone(qa.snapshot.plans[0]);p.id='discussion-plan';p.name='讨论生成计划';p.source={discussionId:'discussion'};qa.snapshot.plans.push(p);qa.emit();});
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();
- await page.getByRole('tab',{name:'本讨论的相关计划',exact:true}).click();
- const sidebar=page.getByRole('complementary',{name:'讨论上下文'});
- await expect(sidebar.getByRole('button',{name:'整理为任务',exact:true})).toHaveCount(0);
- const plan=sidebar.getByRole('button',{name:/讨论生成计划/});await expect(plan).toContainText('由本讨论生成');await expect(plan).toContainText('已验收');await plan.click();
- await expect(page.getByRole('tab',{name:'任务',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('combobox',{name:'选择协作计划'})).toHaveValue('discussion-plan');await expect(page.locator('#wf-plan-discussion-plan .wf-plan-graph')).toBeVisible();await expect(page.getByRole('region',{name:'任务详情与验收'})).toHaveCount(0);
+ const handoff=page.getByRole('region',{name:'本次任务'});await expect(handoff.getByRole('button',{name:'整理为任务',exact:true})).toHaveCount(0);
+ await handoff.getByRole('button',{name:'查看任务：讨论生成计划'}).click();
+ await expect(page.getByRole('tab',{name:'讨论',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.locator('#wf-plan-discussion-plan .wf-plan-graph')).toBeVisible();await expect(page.getByRole('region',{name:'任务详情与验收'})).toHaveCount(0);
+ await page.getByRole('button',{name:'返回讨论',exact:true}).click();await expect(handoff).toBeVisible();
 });
 
 test('single-node plan ignores legacy list preferences and returns to graph',async({page})=>{
