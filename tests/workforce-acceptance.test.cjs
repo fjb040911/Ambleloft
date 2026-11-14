@@ -82,7 +82,7 @@ test('service retry is delayed, bounded, and never replays a recorded tool effec
 test('policy parsing rejects unbounded retries and malformed metric thresholds',()=>{
  assert.throws(()=>acceptance.policy({mode:'auto',maxRetries:100}),/0–3/);assert.throws(()=>acceptance.checks([check({kind:'metric',target:'measure',evidence:'/value',expected:'NaN'})]),/数值/);
 });
-test('bounded remote fingerprints detect changes, ignore dependency caches and reject symlinks',async t=>{
+test('bounded remote fingerprints detect changes, ignore dependency caches and reject symlinks',{skip:process.platform==='win32'?'Remote POSIX shell fixture runs on macOS/Linux CI':false},async t=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'remote-evidence-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  const exec=require('node:util').promisify(require('node:child_process').execFile),remote=require('../core/workforce/remote-evidence.cjs');
  const ssh={async execute(id,cwd,command,options){assert.equal(id,'ssh');assert.equal(options.timeoutMs,8000);assert.match(command,/^python3 -c /);const result=await exec('/bin/sh',['-c',command],{cwd,timeout:8000});return {stdout:result.stdout,exitCode:0};}};
