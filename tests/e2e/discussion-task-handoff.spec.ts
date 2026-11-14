@@ -66,9 +66,9 @@ test('long task proposals expand on demand; editing does not collapse the active
  await handoff(page).getByRole('button',{name:'整理为任务'}).click();const guide=page.getByRole('region',{name:'整理为任务'});
  await guide.getByLabel('需要检查哪些链接？').fill('已确认的六项隔离验证工作');await guide.getByRole('button',{name:'提交补充并检查'}).click();
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();await guide.getByRole('button',{name:'编辑计划',exact:true}).click();const packages=guide.locator('.wf-guide-package');await expect(packages).toHaveCount(6);await expect(guide.locator('.wf-guide-package[open]')).toHaveCount(0);
- await packages.first().locator('summary').click();await packages.first().getByLabel('任务名称',{exact:true}).fill('只检查这轮发布的接口契约');await expect(packages.first()).toHaveAttribute('open');
+ await packages.first().locator(':scope > summary').click();await packages.first().getByLabel('任务名称',{exact:true}).fill('只检查这轮发布的接口契约');await expect(packages.first()).toHaveAttribute('open');
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeHidden();await expect(page.locator('form.composer')).toHaveCount(1);
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await packages.first().locator('summary').scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/task-proposals-long-narrow.png'});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await packages.first().locator(':scope > summary').scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/task-proposals-long-narrow.png'});
 });
 
 
