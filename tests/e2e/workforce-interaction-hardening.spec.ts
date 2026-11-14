@@ -3,7 +3,7 @@ const open=async(page:any)=>{await page.goto('/tests/manual/project-space-qa.htm
 test('review shortcuts land directly on delivery acceptance',async({page})=>{
  await open(page);await page.getByRole('button',{name:/待验收.*发布文案.*去验收/}).click();
  await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');await expect(page.getByRole('button',{name:'验收通过',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'返回流程图'}).click();await page.locator('.wf-plan-command-center summary').click();await page.getByRole('button',{name:/发布文案 · 检查交付并验收/}).click();await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');
+ await page.getByRole('button',{name:'返回流程图'}).click();await page.locator('.wf-plan-command-center summary').click();await page.getByRole('button',{name:'发布文案 · 待验收',exact:true}).click();await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');
 });
 test('register another project protects unsaved associations',async({page})=>{
  await open(page);await page.getByRole('tab',{name:'团队与项目'}).click();await page.getByRole('button',{name:'管理项目关联'}).click();
