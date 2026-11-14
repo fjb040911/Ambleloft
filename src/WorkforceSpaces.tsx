@@ -235,13 +235,13 @@ function DiscussionPanel({toolbar,space,projects,employees,data,requests,catalog
    await window.desktop!.spaces!.discussionLifecycle({requestId,expectedRevision:revision,action});
    if(action==='delete'){
     for(const r of visible)if(r.host?.question)localStorage.removeItem('workforce-host-answer:'+r.id+':'+r.host.question.requestKey);
-    chooseDiscussion(null);setTaskGuide(null);setFailedPrompt(null);setDocuments([]);setPinnedRefs([]);setMentionChoices({});
+    chooseDiscussion(null);setPrompt(prompt);setTaskGuide(null);setFailedPrompt(null);setDocuments([]);setPinnedRefs([]);setMentionChoices({});
    }
    await refresh();if(action==='delete')requestAnimationFrame(()=>promptRef.current?.focus());
   }catch(e){setError((e as Error).message);}finally{setBusy(false);}
  };
  // Another view can delete the selected discussion; do not retain a stale reply target.
- useEffect(()=>{if(selectedDiscussion&&data.discussionStates?.[selectedDiscussion]?.status==='deleted'){chooseDiscussion(null);setTaskGuide(null);}},[data.discussionStates,selectedDiscussion]);
+ useEffect(()=>{if(selectedDiscussion&&data.discussionStates?.[selectedDiscussion]?.status==='deleted'){chooseDiscussion(null);setPrompt(prompt);setTaskGuide(null);}},[data.discussionStates,selectedDiscussion]);
  useEffect(()=>{if(memberFilter){setMembers([memberFilter]);setHistory([]);}},[memberFilter]);
  const start=async(answer?:{text:string;requestId:string;values:Record<string,string|number|boolean>},message?:string,intent?:'explain-node'|'restart-guide')=>{if(sendingRef.current||busy||closed||stopping||active&&!!(answer||intent)||(!answer&&ambiguousMention)||space.archivedAt||!(answer?.text||message||prompt).trim()||recipients.length>8||documents.length>8)return false;const epoch=discussionEpoch.current;sendingRef.current=true;followingRef.current=true;setBusy(true);setError('');setFailedPrompt(null);setGuideDismissed(true);const exitManual=manualGuideExit.current;setTaskGuide(null);const submitted=answer?.text||message||prompt,targets=answer||message?[]:recipients;
  try{
