@@ -13,7 +13,7 @@ function createCoreServices({directory,database,encryption,publish,fileApplicati
  const localFiles=createProjectFiles({applications:fileApplications,cacheDirectory:require('node:path').join(directory,'office-preview'),getWorkspace:()=>workspace.read(),getRuns:()=>tasks.runs,
  getApprovedApps:async()=>await database.call('readSetting',{key:'fileApplications'})||[],
  setApprovedApps:value=>database.call('writeSetting',{key:'fileApplications',value})});
- const ssh=new (require('./ssh/service.cjs').SshService)({database,encryption});
+ const ssh=new (require('./ssh/service.cjs').SshService)({database,encryption,onState:(id,state)=>tasks.sshStateChanged(id,state)});
  const remoteFiles=new (require('./ssh/files.cjs').RemoteFiles)({ssh,workspace,runs:()=>tasks.runs,directory});
  tasks.ssh=ssh;tasks.remoteFiles=remoteFiles;
  const files=Object.fromEntries(Object.keys(localFiles).map(method=>[method,async(input,...rest)=>{

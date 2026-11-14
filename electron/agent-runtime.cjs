@@ -316,6 +316,7 @@ class AgentRuntime {
       if (context.cancelled) { await this.finish(context, 'interrupted'); return structuredClone(run); }
       context.launch=async()=>{
       if(context.pendingModelConfig){config=context.pendingModelConfig;context.config=config;executable=await findCodex(config.executable);run.providerId=config.id;run.model=config.model;run.baseUrl=config.baseUrl;run.providerFingerprint=fingerprint(config);run.modelSessionId=randomUUID();context.pendingModelChange.state='switching';context.pendingModelConfig=null;this.changed(run);}
+      if(context.remoteProject)await this.ssh.connected(context.remoteProject.connectionId);
       try { context.fileBaseline=context.remoteProject?null:await snapshot(run.cwd); } catch { context.fileBaseline=null; }
       if(run.collaboration?.mode==='work'){
         const basis={turnKey:context.turnKey,projectId:run.projectId,target:context.remoteProject?structuredClone(run.remote):{path:cwd},remote:!!context.remoteProject};
@@ -547,6 +548,15 @@ class AgentRuntime {
     if(record)record.inputRecord=inputRecord;
     else context.run.messages.push({id:randomUUID(),role:'assistant',phase:'commentary',text:'',inputRecord,turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1});
     context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(context.run);
+  }
+  sshStateChanged(id,state) {
+    if(!['error','reconnecting','disconnected','authentication','untrusted'].includes(state))return;
+    for(const context of this.contexts.values()){
+      if(context.done||context.cancelled||!context.run||context.remoteProject?.connectionId!==id)continue;
+      context.cancelled=true;context.extensionChannel?.close();
+      context.loopPauseReason='SSH 连接已断开，任务已中止。连接恢复后请核实远端执行结果，再手动继续。';
+      void this.stop(context.run.id).catch(()=>this.finish(context,'interrupted',context.loopPauseReason)).catch(()=>{});
+    }
   }
   async stop(id,{pause=true}={}) {
     if(await this.native.stop(id))return;
