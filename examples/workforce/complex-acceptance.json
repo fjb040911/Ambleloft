@@ -1,0 +1,277 @@
+{
+  "name": "多分支发布验证 · 隔离案例",
+  "goal": "验证并行编排、自动验收、有限修复、人工兜底和下游重跑；所有执行和模型输出均为测试数据。",
+  "acceptancePolicy": {
+    "mode": "auto",
+    "maxRepairs": 2,
+    "maxRetries": 2
+  },
+  "packages": [
+    {
+      "id": "scope",
+      "title": "明确交付范围",
+      "ownerId": "architect",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：明确交付范围。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [],
+      "documentRefs": [],
+      "deliverables": "明确交付范围的交付与验证记录",
+      "acceptance": "包含适用范围、操作步骤与明确的非目标",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "scope-check",
+          "kind": "rubric",
+          "requirement": "包含适用范围、操作步骤与明确的非目标",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "title": "实现服务接口",
+      "ownerId": "backend",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：实现服务接口。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "scope"
+      ],
+      "documentRefs": [],
+      "deliverables": "实现服务接口的交付与验证记录",
+      "acceptance": "实现服务接口符合约定",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "api-check",
+          "kind": "output-equals",
+          "requirement": "实现服务接口符合约定",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "OK",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "client",
+      "title": "实现客户端",
+      "ownerId": "frontend",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：实现客户端。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "scope"
+      ],
+      "documentRefs": [],
+      "deliverables": "实现客户端的交付与验证记录",
+      "acceptance": "实现客户端符合约定",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "client-check",
+          "kind": "output-equals",
+          "requirement": "实现客户端符合约定",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "OK",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "guide",
+      "title": "编写使用指南",
+      "ownerId": "writer",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：编写使用指南。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "scope"
+      ],
+      "documentRefs": [],
+      "deliverables": "编写使用指南的交付与验证记录",
+      "acceptance": "包含适用范围、操作步骤与明确的非目标",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "guide-check",
+          "kind": "rubric",
+          "requirement": "包含适用范围、操作步骤与明确的非目标",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "title": "验证访问边界",
+      "ownerId": "qa",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：验证访问边界。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "api"
+      ],
+      "documentRefs": [],
+      "deliverables": "验证访问边界的交付与验证记录",
+      "acceptance": "校验命令全部通过",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "security-check",
+          "kind": "tool-exit",
+          "requirement": "校验命令全部通过",
+          "evidence": "完整命令输出与退出码",
+          "target": "verify-security --json",
+          "expected": "0",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "integration",
+      "title": "验证端到端流程",
+      "ownerId": "qa",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：验证端到端流程。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "api",
+        "client"
+      ],
+      "documentRefs": [],
+      "deliverables": "验证端到端流程的交付与验证记录",
+      "acceptance": "端到端失败用例为 0",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "integration-check",
+          "kind": "metric",
+          "requirement": "端到端失败用例为 0",
+          "evidence": "/failed",
+          "target": "verify-integration --json",
+          "expected": "0",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "title": "验证响应时间",
+      "ownerId": "qa",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：验证响应时间。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "integration"
+      ],
+      "documentRefs": [],
+      "deliverables": "验证响应时间的交付与验证记录",
+      "acceptance": "P95 响应时间不超过 200 毫秒",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "performance-check",
+          "kind": "metric",
+          "requirement": "P95 响应时间不超过 200 毫秒",
+          "evidence": "/p95Ms",
+          "target": "verify-performance --json",
+          "expected": "200",
+          "operator": "lte"
+        }
+      ]
+    },
+    {
+      "id": "release",
+      "title": "核对发布材料",
+      "ownerId": "release-engineer",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：核对发布材料。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "guide",
+        "security",
+        "performance"
+      ],
+      "documentRefs": [],
+      "deliverables": "核对发布材料的交付与验证记录",
+      "acceptance": "校验命令全部通过",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "release-check",
+          "kind": "tool-exit",
+          "requirement": "校验命令全部通过",
+          "evidence": "完整命令输出与退出码",
+          "target": "verify-release --json",
+          "expected": "0",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "smoke",
+      "title": "发布后冒烟验证",
+      "ownerId": "qa",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：发布后冒烟验证。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "release"
+      ],
+      "documentRefs": [],
+      "deliverables": "发布后冒烟验证的交付与验证记录",
+      "acceptance": "发布后冒烟验证符合约定",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "smoke-check",
+          "kind": "output-equals",
+          "requirement": "发布后冒烟验证符合约定",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "OK",
+          "operator": "eq"
+        }
+      ]
+    },
+    {
+      "id": "archive",
+      "title": "归档运行记录",
+      "ownerId": "writer",
+      "mode": "discussion",
+      "projectId": null,
+      "instruction": "隔离自动化案例：归档运行记录。以预设运行记录验证编排，不连接真实项目或发布服务。",
+      "dependencies": [
+        "smoke"
+      ],
+      "documentRefs": [],
+      "deliverables": "归档运行记录的交付与验证记录",
+      "acceptance": "归档运行记录符合约定",
+      "verification": "核对本次运行的完整证据，不使用口头成功声明",
+      "acceptanceChecks": [
+        {
+          "id": "archive-check",
+          "kind": "output-equals",
+          "requirement": "归档运行记录符合约定",
+          "evidence": "交付内容",
+          "target": "",
+          "expected": "OK",
+          "operator": "eq"
+        }
+      ],
+      "acceptancePolicy": {
+        "mode": "complete",
+        "maxRepairs": 0,
+        "maxRetries": 0
+      }
+    }
+  ]
+}

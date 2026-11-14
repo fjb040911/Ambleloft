@@ -245,7 +245,7 @@ class SpaceService {
     // Each invocation gets an independent conversation and a frozen, explicitly selected context.
     for(const member of members){
       try{
-        const collaboration={requestId:request.id,spaceId:space.id,spaceName:space.name,purpose:space.purpose,projectContext,mode,assignment:member.assignment,documents:docs,historySpaceIds,priorDiscussion,...(request.discussion?{discussionId:request.discussion.id,contributionId:request.participants.find(p=>p.employeeId===member.employeeId).contribution.id}:{} )};
+        const collaboration={requestId:request.id,spaceId:space.id,spaceName:space.name,purpose:space.purpose,projectContext,...(planned?{acceptancePolicy:require('./acceptance.cjs').effective(planned.plan,planned.p)}:{}),mode,assignment:member.assignment,documents:docs,historySpaceIds,priorDiscussion,...(request.discussion?{discussionId:request.discussion.id,contributionId:request.participants.find(p=>p.employeeId===member.employeeId).contribution.id}:{} )};
         const run=await this.runtime.start({prompt,employeeId:member.employeeId,projectId:request.projectId,providerId:input.providerId,model:input.model,permission:input.permission||'default',attachments:input.attachments,selectedSkillIds:input.selectedSkillIds},{...hostContext,userAuthored:true,collaboration});
         await this.change(s=>{
           const p=s.requests.find(r=>r.id===request.id).participants.find(p=>p.employeeId===member.employeeId);p.status='started';

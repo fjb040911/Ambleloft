@@ -8,19 +8,20 @@ const {inferenceDeadline}=require('../automation/inference-deadline.cjs');
 const {normalizeDynamic}=require('../inputs/runtime-definition.cjs');
 const rules=readFileSync(join(__dirname,'skills/task-creation-guide/SKILL.md'),'utf8');
 const topicTask=require('./topic-task.cjs');
-const ruleVersion='task-creation-guide-v9';
+const ruleVersion='task-creation-guide-v10';
+const acceptance=require('./acceptance.cjs');
 const projectRelations=require('./project-relations.cjs');
 const relationGuide=require('./relation-guide.cjs');
 function abortable(promise,signal){
  return new Promise((resolve,reject)=>{const cancel=()=>reject(Error('整理已停止或超时，已保留草稿'));signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();Promise.resolve(promise).then(resolve,reject).finally(()=>signal.removeEventListener('abort',cancel));});
 }
 const packageFields=['title','instruction','deliverables','acceptance','verification','constraints','ownerId','projectId'];
-const blank=()=>({name:'',goal:'',packages:[]});
+const blank=()=>({name:'',goal:'',acceptancePolicy:{...acceptance.DEFAULT_POLICY},packages:[]});
 // The editable candidate uses the same wire shape as outputSchema. Storage-only
 // revision/confirmation fields stay in base.value and are reconciled after validation.
 function modelCandidate(value){
- return {name:value.name,goal:value.goal,packages:value.packages.map(p=>({
-  id:p.id,mode:p.mode,dependencies:[...p.dependencies],
+ return {name:value.name,goal:value.goal,acceptancePolicy:value.acceptancePolicy||{mode:'manual',maxRepairs:0,maxRetries:0},packages:value.packages.map(p=>({
+  id:p.id,mode:p.mode,...(p.acceptancePolicy?{acceptancePolicy:p.acceptancePolicy}:{}),acceptanceChecks:p.acceptanceChecks||[],dependencies:[...p.dependencies],
   ...Object.fromEntries(packageFields.map(key=>[key,p[key]??''])),
   documentIds:(p.documentRefs||[]).map(ref=>ref.id),
   projectBinding:{responsibility:p.projectBinding?.responsibility||'',relations:(p.projectBinding?.relations||[]).map(({targetProjectId,kind,description})=>({targetProjectId,kind,description})),reason:''}
@@ -31,10 +32,10 @@ function candidate(value){
  if(!value||!Array.isArray(value.packages)||value.packages.length>30)throw Error('任务草案格式无效');
  const packages=value.packages.map(p=>{
   if(!id(p.id)||!['discussion','work'].includes(p.mode)||!Array.isArray(p.dependencies)||p.dependencies.length>30)throw Error('任务草案格式无效');
-  return {...(p.projectBinding?{projectBinding:projectRelations.binding(p.projectBinding)}:{}),id:p.id,mode:p.mode,...Object.fromEntries(packageFields.map(k=>[k,text(p[k]||'',k,k==='instruction'?8000:k==='title'?120:2000,true)])),projectId:p.mode==='work'?text(p.projectId||'','项目',120,true):null,dependencies:p.dependencies.map(v=>{if(!id(v))throw Error('依赖无效');return v;}),documentRefs:(p.documentRefs||[]).map(r=>{if(!id(r.id)||!Number.isInteger(r.revision)||r.revision<1)throw Error('资料版本无效');return {id:r.id,revision:r.revision,hash:r.hash};})};
+  return {...(p.acceptancePolicy?{acceptancePolicy:acceptance.policy(p.acceptancePolicy)}:{}),...(p.acceptanceChecks?{acceptanceChecks:acceptance.checks(p.acceptanceChecks)}:{}),...(p.projectBinding?{projectBinding:projectRelations.binding(p.projectBinding)}:{}),id:p.id,mode:p.mode,...Object.fromEntries(packageFields.map(k=>[k,text(p[k]||'',k,k==='instruction'?8000:k==='title'?120:2000,true)])),projectId:p.mode==='work'?text(p.projectId||'','项目',120,true):null,dependencies:p.dependencies.map(v=>{if(!id(v))throw Error('依赖无效');return v;}),documentRefs:(p.documentRefs||[]).map(r=>{if(!id(r.id)||!Number.isInteger(r.revision)||r.revision<1)throw Error('资料版本无效');return {id:r.id,revision:r.revision,hash:r.hash};})};
  });
  if(new Set(packages.map(p=>p.id)).size!==packages.length)throw Error('工作包标识重复');
- return {name:text(value.name||'','计划名称',120,true),goal:text(value.goal||'','目标',4000,true),packages};
+ return {...(value.acceptancePolicy?{acceptancePolicy:acceptance.policy(value.acceptancePolicy)}:{}),name:text(value.name||'','计划名称',120,true),goal:text(value.goal||'','目标',4000,true),packages};
 }
 function issues(value,space,employees,locale='zh-CN'){
  const labels={'计划名称':'Plan name','共同目标':'Shared goal','至少一个任务':'At least one task','任务名称':'Task title','需求与范围':'Requirements and scope','交付物':'Deliverables','验收条件':'Acceptance criteria','验证方法':'Verification method','有效负责人':'Valid owner','获授权的执行项目':'Authorized execution project'};
@@ -90,7 +91,7 @@ const methods={
    if(basePlan&&s.plans.find(p=>p.id===basePlan.id)?.revision!==basePlan.revision)throw Error('计划已有新版本，请重新读取后修订');
    topicTask.assertAvailable(s,input.spaceId,discussionId,{planId:basePlan?.id||existing?.basePlanId,draftId:existing?.id});
    if(existing){if(input.refreshSource){existing.source=source;existing.sourceDocuments=[...new Map([...(existing.sourceDocuments||[]),...sourceDocuments].map(d=>[d.id+':'+d.revision,d])).values()];existing.revision++;existing.status='needs-input';delete existing.assessment;}return existing;}
-   const draft={id:randomUUID(),commandId:input.commandId,spaceId:input.spaceId,discussionId,revision:1,...(sourceFromRequestId?{sourceFromRequestId}:{}),...(basePlan?{basePlanId:basePlan.id,basePlanRevision:basePlan.revision}:{}),value:basePlan?{name:basePlan.name,goal:basePlan.goal,packages:basePlan.packages.map(p=>p.definition)}:blank(),source,sourceDocuments,messages:[],status:'needs-input',requirementsPending:true,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};s.taskDrafts.unshift(draft);return draft;
+   const draft={id:randomUUID(),commandId:input.commandId,spaceId:input.spaceId,discussionId,revision:1,...(sourceFromRequestId?{sourceFromRequestId}:{}),...(basePlan?{basePlanId:basePlan.id,basePlanRevision:basePlan.revision}:{}),value:basePlan?{acceptancePolicy:basePlan.acceptancePolicy,name:basePlan.name,goal:basePlan.goal,packages:basePlan.packages.map(p=>p.definition)}:blank(),source,sourceDocuments,messages:[],status:'needs-input',requirementsPending:true,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};s.taskDrafts.unshift(draft);return draft;
   });
  },
  async discardTaskDraft(input){
@@ -199,7 +200,7 @@ async function guide(input,options={}){
    if(!Array.isArray(result.nodes)||result.nodes.length>30||new Set(result.nodes.map(n=>n.packageId)).size!==result.nodes.length)throw Error('项目关系建议格式无效');
    for(const n of result.nodes){if(!gaps.includes(n.packageId))throw Error('不可修改已确认或不存在的任务');reasons[n.packageId]=text(n.reason||'','Reason',2000,true);}
    value=candidate({...base.value,packages:base.value.packages.map(p=>{const n=result.nodes.find(n=>n.packageId===p.id);return n?{...p,projectId:n.projectId,projectBinding:projectRelations.binding({...n,confirmed:false})}:p;})});
-  }else value=candidate({...result.value,packages:result.value?.packages?.map(p=>({...p,projectBinding:p.mode==='work'?projectRelations.proposal(p,space):undefined,documentRefs:(p.documentIds||[]).map(docId=>{const docs=(base.sourceDocuments||[]).filter(d=>d.id===docId);if(docs.length!==1)throw Error('任务引用了未提供或版本不唯一的资料');return {id:docs[0].id,revision:docs[0].revision,hash:docs[0].hash};})}))});
+  }else value=candidate({...result.value,acceptancePolicy:result.value?.acceptancePolicy||base.value.acceptancePolicy||{mode:'manual',maxRepairs:0,maxRetries:0},packages:result.value?.packages?.map(p=>({...p,projectBinding:p.mode==='work'?projectRelations.proposal(p,space):undefined,documentRefs:(p.documentIds||[]).map(docId=>{const docs=(base.sourceDocuments||[]).filter(d=>d.id===docId);if(docs.length!==1)throw Error('任务引用了未提供或版本不唯一的资料');return {id:docs[0].id,revision:docs[0].revision,hash:docs[0].hash};})}))});
   if(!relationsOnly)for(const p of result.value?.packages||[])if(p.projectBinding?.reason)reasons[p.id]=text(p.projectBinding.reason,'Reason',2000,true);
   if(!relationsOnly&&(typeof result.ready!=='boolean'||!Array.isArray(result.questions)||result.questions.length>1))throw Error('模型返回的补充问题格式无效');
   const questions=(relationsOnly?[]:result.questions).map((q,i)=>({name:'answer'+i,type:'textarea',label:text(q.label,'问题',300),help:text(q.help||'','帮助',1000,true),required:true}));
@@ -224,7 +225,7 @@ async function guide(input,options={}){
 }
 const str={type:'string'};
 const bindingSchema={type:'object',additionalProperties:false,required:['responsibility','relations','reason'],properties:{reason:str,responsibility:str,relations:{type:'array',maxItems:50,items:{type:'object',additionalProperties:false,required:['targetProjectId','kind','description'],properties:{targetProjectId:str,kind:{type:'string',enum:['api','artifact','contract']},description:str}}}}};
-const schema={type:'object',additionalProperties:false,required:['summary','ready','questions','value'],properties:{summary:str,ready:{type:'boolean'},questions:{type:'array',maxItems:1,items:{type:'object',additionalProperties:false,required:['label','help'],properties:{label:str,help:str}}},value:{type:'object',additionalProperties:false,required:['name','goal','packages'],properties:{name:str,goal:str,packages:{type:'array',maxItems:30,items:{type:'object',additionalProperties:false,required:['id','mode','dependencies','documentIds','projectBinding',...packageFields],properties:{projectBinding:bindingSchema,documentIds:{type:'array',maxItems:8,items:str},id:str,mode:{type:'string',enum:['discussion','work']},dependencies:{type:'array',items:str},...Object.fromEntries(packageFields.map(k=>[k,str]))}}}}}}};
+const schema={type:'object',additionalProperties:false,required:['summary','ready','questions','value'],properties:{summary:str,ready:{type:'boolean'},questions:{type:'array',maxItems:1,items:{type:'object',additionalProperties:false,required:['label','help'],properties:{label:str,help:str}}},value:{type:'object',additionalProperties:false,required:['name','goal','packages','acceptancePolicy'],properties:{acceptancePolicy:acceptance.policySchema,name:str,goal:str,packages:{type:'array',maxItems:30,items:{type:'object',additionalProperties:false,required:['id','mode','dependencies','documentIds','projectBinding','acceptanceChecks',...packageFields],properties:{acceptancePolicy:acceptance.policySchema,acceptanceChecks:acceptance.checksSchema,projectBinding:bindingSchema,documentIds:{type:'array',maxItems:8,items:str},id:str,mode:{type:'string',enum:['discussion','work']},dependencies:{type:'array',items:str},...Object.fromEntries(packageFields.map(k=>[k,str]))}}}}}}};
 // A generated workflow must carry its own summary. The shared provider repairs
 // missing metadata once before any draft mutation; genuine goal clarification
 // can still return no packages without fabricating a goal.

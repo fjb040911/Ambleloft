@@ -319,7 +319,7 @@ class AgentRuntime {
       try { context.fileBaseline=context.remoteProject?null:await snapshot(run.cwd); } catch { context.fileBaseline=null; }
       if(run.collaboration?.mode==='work'){
         const basis={turnKey:context.turnKey,projectId:run.projectId,target:context.remoteProject?structuredClone(run.remote):{path:cwd},remote:!!context.remoteProject};
-        try{basis.input=context.remoteProject?{complete:false,notice:'Remote revision must be checked from recorded remote commands'}:await require('../core/workforce/evidence.cjs').capture(cwd,context.fileBaseline);}catch{basis.input={complete:false,notice:'Input fingerprint unavailable'};}
+        try{basis.input=context.remoteProject?(run.collaboration?.acceptancePolicy?.mode==='auto'?await require('../core/workforce/remote-evidence.cjs').capture(this.ssh,context.remoteProject):{complete:false,notice:'Remote revision must be checked from recorded remote commands'}):await require('../core/workforce/evidence.cjs').capture(cwd,context.fileBaseline);}catch{basis.input={complete:false,notice:'Input fingerprint unavailable'};}
         run.workEvidence=[...(run.workEvidence||[]),basis];
       }
       if(context.cancelled||context.done)return;
@@ -476,6 +476,7 @@ class AgentRuntime {
         const previous = run.tools.find(tool => tool.id === item.id);
         const tool = { ...(previous || stamp()), id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
           detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : previous?.detail || '')) };
+        if(item.type==='commandExecution'&&Number.isInteger(item.exitCode))tool.exitCode=item.exitCode;
         if(item.type==='commandExecution'&&Array.isArray(item.commandActions))tool.commandActions=item.commandActions.filter(action=>['read','listFiles','search','unknown'].includes(action.type)).map(action=>({type:action.type,...Object.fromEntries(['name','path','query'].filter(key=>typeof action[key]==='string').map(key=>[key,clean(action[key])]))}));
         if(item.type==='contextCompaction'){tool.label='上下文压缩';tool.detail='';}
         const index = run.tools.findIndex(tool => tool.id === item.id); if (index < 0) run.tools.push(tool); else run.tools[index] = tool;
@@ -591,7 +592,7 @@ class AgentRuntime {
       } catch { context.run.fileChanges=[...(context.run.fileChanges||[]),{turnKey:context.turnKey,files:[],notice:'文件变更记录失败。'}]; }
       context.fileBaseline=null;
       const evidence=context.run.workEvidence?.find(e=>e.turnKey===context.turnKey);
-      if(evidence)try{evidence.output=context.remoteProject?{complete:false,notice:'Remote revision must be checked from recorded remote commands'}:await require('../core/workforce/evidence.cjs').capture(context.run.cwd);}catch{evidence.output={complete:false,notice:'Output fingerprint unavailable'};}
+      if(evidence)try{evidence.output=context.remoteProject?(context.run.collaboration?.acceptancePolicy?.mode==='auto'?await require('../core/workforce/remote-evidence.cjs').capture(this.ssh,context.remoteProject):{complete:false,notice:'Remote revision must be checked from recorded remote commands'}):await require('../core/workforce/evidence.cjs').capture(context.run.cwd);}catch{evidence.output={complete:false,notice:'Output fingerprint unavailable'};}
       try { if(!context.remoteProject)context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
     }
     if (context.run) { if(context.turnKey)context.run.terminalTurnId=context.turnKey; context.run.queued=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }

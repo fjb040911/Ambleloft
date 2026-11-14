@@ -100,7 +100,7 @@ test('node permission applies to active execution and validates the mode',async 
  await update('full');let current=(await f.service.read()).plans[0];assert.equal(current.packages[0].permission,'full');assert.equal(current.packages[1].permission,undefined);
  const calls=[];const original=f.runtime.start.bind(f.runtime);f.runtime.start=async(input,context)=>{calls.push(input);return original(input,context);};
  await control(f.service,current,'start');assert.equal(calls[0].permission,'full');assert.equal(calls[1].permission,'default');
- await update('default');assert.equal(calls[0].permission,'full');assert.equal(f.runtime.runs[0].permission,'default');assert.equal((await f.service.read()).plans[0].packages[0].permissionChange.state,'applied');assert.equal(f.runtime.runs.length,2);
+ await update('default');assert.equal(calls[0].permission,'full');assert.equal(f.runtime.runs.find(r=>r.projectId==='a').permission,'default');assert.equal((await f.service.read()).plans[0].packages[0].permissionChange.state,'applied');assert.equal(f.runtime.runs.length,2);
 });
 test('continuing a paused plan resumes only pause-interrupted work and preserves failed nodes',async t=>{
  const f=await fixture(t),plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Pause semantics',goal:'Resume precisely',packages:[unit('first','a'),unit('second','b')]}});
@@ -222,4 +222,13 @@ test('full access including inherited full access requires confirmation before s
  await assert.rejects(f.service.controlPlan(input,{}),/确认/);
  await f.service.controlPlan({...input,confirmed:true},{});
  await assert.rejects(f.service.controlPlan({...input,commandId:randomUUID(),permission:'inherit',packageId:'first'},{}),/确认/);
+});
+test('automatic review reserves the shared directory until evidence has been checked',async t=>{
+ const f=await fixture(t);f.service.workforce.providers={secret:async()=>({})};let release,entered;const started=new Promise(r=>entered=r);
+ f.service.generateAcceptance=async()=>{entered();return new Promise(r=>release=r);};
+ const plan=await f.service.savePlan({spaceId:f.space.id,value:{name:'Stable evidence',goal:'Review before overwriting',acceptancePolicy:{mode:'auto',maxRepairs:0,maxRetries:0},packages:[unit('first','a'),unit('second','alias')]}});
+ await control(f.service,plan,'start');f.runtime.runs[0].status='completed';f.runtime.runs[0].messages=[{role:'assistant',text:'Actual document content'}];await f.service.plans.pulse(plan.id);await started;
+ assert.equal(f.runtime.runs.length,1);assert.deepEqual(await f.service.plans.eligible(plan.id),[]);
+ release({results:[{id:'criteria',outcome:'pass',reason:'Contains required content',evidence:['output:0']}]});await f.service.plans.automationJobs.get(plan.id)?.promise;
+ assert.equal((await f.service.read()).plans[0].packages[0].status,'accepted');await f.service.plans.pulse(plan.id);assert.equal(f.runtime.runs.length,2);
 });

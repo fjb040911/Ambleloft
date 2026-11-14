@@ -1,5 +1,12 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');
-const exportsObject={};new Function('require','exports',ts.transpileModule(fs.readFileSync('src/workforce-space-state.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(require,exportsObject);
+const path=require('node:path'),cache=new Map();
+function load(file){
+ if(cache.has(file))return cache.get(file);
+ const exports={};cache.set(file,exports);
+ new Function('require','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>name.startsWith('.')?load(path.resolve(path.dirname(file),name+'.ts')):require(name),exports);
+ return exports;
+}
+const exportsObject=load(path.resolve('src/workforce-space-state.ts'));
 const {spaceSummary,documentImpact}=exportsObject;
 const pkg=(id,refs=[],dependencies=[],mode='work')=>({id,status:'review',definition:{id,title:id,mode,documentRefs:refs,dependencies},attempts:[]});
 test('document impact follows work references and downstream dependencies, excludes read-only discussion and deduplicates attempts',()=>{
@@ -70,4 +77,15 @@ test('current host workflow includes pending draft clarification but not an aban
 test('one paused plan never labels other schedulable work as fully paused',()=>{
  const data=snapshot([{...pkg('pending'),status:'pending'}],'paused');data.plans.push({...data.plans[0],id:'other',status:'running'});
  assert.equal(summary(data).state,'scheduling');data.plans[1].status='draft';assert.equal(summary(data).state,'partial-paused');
+});
+
+test('automatic verification, repair and delayed retry count as work rather than human attention',()=>{
+ const nodes=[{...withRun('review','review'),attempts:[{runId:'review',automaticReview:{state:'checking'}}]},{...withRun('repair','pending'),autoRepairs:1},{...withRun('retry','pending'),retryAt:Date.now()+1000}];
+ const result=summary(snapshot(nodes));assert.equal(result.running,3);assert.equal(result.state,'running');assert.equal(result.actionable.length,0);
+});
+
+test('pausing a scheduled automatic retry is not reported as running work or a manual failure',()=>{
+ const nodes=[{...withRun('retry','pending'),retryAt:Date.now()+1000},{...withRun('paused','interrupted'),stopReason:'plan-pause'}];
+ const result=summary(snapshot(nodes,'paused'));assert.equal(result.running,0);assert.equal(result.state,'paused');assert.equal(result.actionable.length,0);
+ assert.equal(!!exportsObject.needsAttention(nodes[1]),false);
 });

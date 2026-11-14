@@ -418,7 +418,7 @@
 .wf-evidence-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:480px;overflow:auto;padding:16px;background:var(--hover);border-radius:var(--radius-lg);font-size:12px}
 .wf-execution-evidence{min-width:0}
 .wf-task-delivery .discussion-expert-transcript{margin-top:20px}
-@container(max-width:900px){.wf-task-workspace{grid-template-columns:1fr}.wf-task-workspace[data-detail=true]>.wf-task-list-column{display:none}.wf-task-workspace[data-detail=false]>.wf-task-detail-column:has(>.empty){display:none}.wf-task-review{padding:16px}.wf-task-review .wf-task-back{display:inline-flex}}
+@container(max-width:900px){.wf-task-workspace{grid-template-columns:1fr}.wf-task-workspace[data-detail=true]>.wf-task-list-column{display:none}.wf-task-workspace[data-detail=false]>.wf-task-detail-column:has(>.empty){display:none}.wf-task-review{padding:16px}.wf-task-review .wf-task-back{display:inline-flex;flex-wrap:wrap;gap:4px;max-width:100%}}
 
 .wf-task-review .wf-task-delivery>h3{margin-bottom:0}.wf-task-review .wf-task-delivery{gap:12px}.wf-task-review .wf-section-title>div{min-width:0}
 
@@ -482,14 +482,14 @@
 .wf-task-guide>button{align-self:flex-start;}
 
 .wf-task-review{scroll-margin-top:calc(var(--wf-space-navigation-height,44px) + 16px);}
-.wf-task-review>.wf-section-title{flex-direction:row;gap:12px;}
+.wf-task-review>.wf-section-title{flex-direction:row;flex-wrap:wrap;gap:12px;}
 .wf-task-review .wf-review-actions:empty{display:none;}
 .wf-task-delivery>div:has(>.wf-run-actions:empty){display:none;}
 
 /* A selected node owns the workspace; keep the graph mounted to retain its viewport. */
 .wf-task-workspace[data-detail=true],.wf-task-workspace[data-graph=true][data-detail=true]{grid-template-columns:minmax(0,1fr)}
 .wf-task-workspace[data-detail=true]>.wf-task-list-column{display:none}
-.wf-task-review .wf-task-back{display:inline-flex}
+.wf-task-review .wf-task-back{display:inline-flex;flex-wrap:wrap;gap:4px;max-width:100%}
 .wf-node-summary{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-block:12px}
 .wf-node-summary label{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px}
 .wf-node-conversation{flex:1;min-height:0;display:flex;min-width:0;overflow:hidden}

@@ -10,7 +10,7 @@ async function setup(t){
  t.after(async()=>{await service.shutdown();await db.close();await fs.rm(root,{recursive:true,force:true});});
  return {service,runtime,space,draft,employees};
 }
-const value=()=>({name:'Review contract',goal:'Verify the API contract before implementation',packages:[{id:'review',title:'Review API',instruction:'Compare documented endpoints and report discrepancies; do not change code',ownerId:'expert',mode:'discussion',projectId:null,dependencies:[],documentRefs:[],deliverables:'Endpoint comparison and discrepancy list',acceptance:'Every documented endpoint is accounted for, with unresolved discrepancies labeled',verification:'Compare each endpoint with the supplied specification and cite the relevant section',constraints:'Do not change project files'}]});
+const value=()=>({acceptancePolicy:{mode:'auto',maxRepairs:2,maxRetries:2},name:'Review contract',goal:'Verify the API contract before implementation',packages:[{acceptanceChecks:[{id:'coverage',kind:'rubric',requirement:'Account for every endpoint',evidence:'Comparison with cited sections',target:'',expected:'',operator:'eq'}],id:'review',title:'Review API',instruction:'Compare documented endpoints and report discrepancies; do not change code',ownerId:'expert',mode:'discussion',projectId:null,dependencies:[],documentRefs:[],deliverables:'Endpoint comparison and discrepancy list',acceptance:'Every documented endpoint is accounted for, with unresolved discrepancies labeled',verification:'Compare each endpoint with the supplied specification and cite the relevant section',constraints:'Do not change project files'}]});
 const response=(extra={})=>({summary:'The task is ready for your review.',ready:true,questions:[],value:value(),...extra});
 async function confirmProject(f,d){const v=structuredClone(d.value);for(const p of v.packages)if(p.mode==='work')p.projectBinding={responsibility:'Implement the agreed project scope',relations:[],confirmed:true};const saved=await f.service.saveTaskDraft({id:d.id,expectedRevision:d.revision,value:v});return f.service.checkTaskDraft({id:saved.id,expectedRevision:saved.revision});}
 const guide=(f,draft,extra={})=>f.service.guideTask({id:draft.id,expectedRevision:draft.revision,requestId:randomUUID(),...extra});
@@ -32,7 +32,7 @@ test('generated plan metadata is repaired from discussion without asking the use
 });
 test('an unknown business outcome can be clarified without fabricating plan metadata',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async(_c,req)=>{
-  const proposed=response({ready:false,value:{name:'',goal:'',packages:[]},questions:[{label:'What outcome should this work deliver?',help:'This determines the scope.'}]});
+  const proposed=response({ready:false,value:{name:'',goal:'',acceptancePolicy:{mode:'auto',maxRepairs:2,maxRetries:2},packages:[]},questions:[{label:'What outcome should this work deliver?',help:'This determines the scope.'}]});
   const validate=new (require('ajv'))({strict:false}).compile(req.outputSchema);assert.equal(validate(proposed),true);
   return proposed;
  };
@@ -70,7 +70,7 @@ test('task allocation receives real expertise and environment kind without conne
   assert.doesNotMatch(JSON.stringify(req.input),/not-for-model|private-container|\/private\//);
   return response();
  };
- const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v9');assert.equal(f.runtime.runs.length,0);
+ const checked=await guide(f,f.draft);assert.equal(checked.assessment.ruleVersion,'task-creation-guide-v10');assert.equal(f.runtime.runs.length,0);
 });
 test('semantic gaps produce valid declarative forms, even with all fields populated',async t=>{
  const f=await setup(t);f.service.generateTaskGuide=async()=>response({ready:false,questions:[{label:'Which specification should be used?',help:'The two revisions conflict.'}]});
