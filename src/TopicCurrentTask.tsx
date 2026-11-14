@@ -35,10 +35,10 @@ export default function TopicCurrentTask({context,disabled,prepare,open,refresh,
   <div className="wf-current-task-row">
    <div className="wf-current-task-copy">
     <TaskStatusBadge state={topicTaskVisualState(task)}>{task.conflict?L('需处理','Needs attention'):plan?.status==='pausing'?L('正在暂停','Pausing'):topicTaskLabel(topicTaskDisplayStatus(task),L)}</TaskStatusBadge>
-    {!task.conflict&&(plan||draft)?<Button className="wf-current-task-name" size="sm" variant="ghost" title={name} aria-label={L('查看任务：','View task: ')+name} disabled={!plan&&(disabled||busy)} onClick={()=>plan?open(plan.id):prepare(draft!.id)}><span>{name}</span></Button>:<strong title={name}>{name}</strong>}
+    {!task.conflict&&(plan||draft)?<Button className="wf-current-task-name" size="sm" variant="ghost" title={name} aria-label={L('查看任务：','View task: ')+name} disabled={!plan&&(disabled||busy)} onClick={()=>plan?open(plan.id):prepare(draft!.id)}><span>{name}</span></Button>:<strong className="sr-only">{name}</strong>}
    </div>
    <div className="wf-current-task-actions">
-    <Button ref={actionRef} size="sm" variant={reviewing&&!task.conflict?'default':'outline'} disabled={busy||!!action.mutates&&disabled} onClick={action.run}>{busy?L('正在提交…','Submitting…'):action.label}</Button>
+    <Button ref={actionRef} className="wf-current-task-primary" title={name} size="sm" variant={reviewing&&!task.conflict?'default':'outline'} disabled={busy||!!action.mutates&&disabled} onClick={action.run}>{busy?L('正在提交…','Submitting…'):action.label}</Button>
     {!task.conflict&&(draft||canResume)&&<DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={L('更多任务操作','More task actions')}/> }><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent side="top" align="end"><DropdownMenuGroup>
      {canResume&&<DropdownMenuItem disabled={disabled||busy} onClick={()=>void control('resume')}>{L('恢复执行','Resume task')}</DropdownMenuItem>}
      {draft&&reviewing&&<DropdownMenuItem disabled={disabled||busy} onClick={()=>prepare(draft.id)}>{L('确认修订','Review revision')}</DropdownMenuItem>}

@@ -31,7 +31,7 @@ import RunActivity from './RunActivity';
 import TurnFiles from './TurnFiles';
 import TurnNavigation from './TurnNavigation';
 import TaskForms, {useTaskForms} from './TaskForms';
-import {mergeHistory,groupByTurn} from './conversation-data';
+import {mergeHistory,groupByTurn,retainRunHistory} from './conversation-data';
 import ChatComposer from './ChatComposer';
 import {CreationGuide} from './CreationGuide';
 import InputDeliveryPanel,{useInputDeliveries} from './InputDeliveryPanel';
@@ -189,13 +189,15 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
           {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</div>}
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
-  const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</><UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>
+  // The enclosing discussion already renders its prompt. Omit only the matching
+  // first prompt; later turns and paged history must retain their user messages.
+  const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</>{!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)&&<UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
             {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} text={message.text}/>:<Message key={message.id} role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={message.text}/></MessageContent></Message>)}
             <TurnProgress allRequests={deliveries.snapshot?.requests||[]} requests={(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1))} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
             {turn.final&&<Message role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></MessageContent></Message>}
             <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
             {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
-            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language]);
+            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language,embedded,embeddedPrompt,before]);
   const renderTurn=(turn:typeof turns[number])=>renderedTurns.get(turn.user.id);
   const actionableApprovals=active&&run.status!=='stopping'&&!run.archivedAt?[...new Map(run.approvals.map(a=>[a.id,a])).values()]:[];
   const requestKeys=[...actionableApprovals.map(r=>'approval:'+r.id),...(inputsInPanel?(run.questions||[]).map(r=>'question:'+r.id):[]),...(inputsInPanel?(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id):[])];
@@ -256,7 +258,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   if(embedded)return <div className="discussion-expert-transcript" data-run-id={run.id}>
     <PermissionStatus value={run.permissionChange}/><ModelStatus value={run.modelChange}/>
     {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<p role="alert">{historyError}</p>}
-    {turns.map((turn,index)=><div className="conversation-turn" key={turn.user.id} data-embedded-first={index===0&&!before&&turn.user.text===embeddedPrompt||undefined}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
+    {turns.map(turn=><div className="conversation-turn" key={turn.user.id}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
     {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact/>}
     {!hidePendingActions&&<>{inlineInputs}{outboxPanel}{pendingSurface}</>}
@@ -272,10 +274,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
         </div>}
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
         <MessageScrollerContent className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
-          {(floatingHost?turns.slice(-3):turns).map(turn => <MessageScrollerItem scrollAnchor messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
+          {(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
-          </MessageScrollerItem>)}
+          </ConversationScrollItem>)}
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
@@ -303,11 +305,23 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   return floatingHost?createPortal(view,floatingHost):view;
 }
 
+function ConversationScrollItem({following,...props}:ComponentProps<typeof MessageScrollerItem>&{following:boolean}){
+ // The primitive anchors newly appended items even when autoScroll is false.
+ // Defer that anchor while reading history; keep existing anchors for navigation.
+ const [anchor,setAnchor]=useState(following);
+ if(following&&!anchor)setAnchor(true);
+ return <MessageScrollerItem {...props} scrollAnchor={anchor||following}/>;
+}
 function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>){
  const {currentAnchorId}=useMessageScrollerVisibility();
  return <TurnNavigation turns={turns} offset={offset} selected={currentAnchorId||turns[0]?.user.id||''} jump={jump}/>;
 }
 export default function Conversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(true);
- return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
+ const [history,setHistory]=useState({input:props.run,value:props.run});
+ let run=history.value;
+ // Adjust before committing children so a rolling page never removes mounted
+ // history for one frame. All transcript hosts share this boundary.
+ if(history.input!==props.run){run=retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
+ return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
 }

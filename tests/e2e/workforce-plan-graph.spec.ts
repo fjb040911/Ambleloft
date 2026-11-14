@@ -8,7 +8,7 @@ for(const [width,en,dark] of [[1440,false,false],[390,false,true],[1440,true,tru
  await page.setViewportSize({width,height:1000});await enter(page,`?lang=${en?'en':'zh'}&theme=${dark?'dark':'light'}`);await tasks(page,en);
  const graph=page.locator('.wf-plan-graph');const node=graph.locator('[data-package-id="bundle"]');
  if(width===390){await expect.poll(async()=>Number((await graph.getByRole('status',{name:en?'Zoom level':'缩放比例'}).textContent())?.replace('%',''))).toBeGreaterThanOrEqual(80);await graph.scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/workforce-graph-initial-${en}.png`});}
- await expect(node).toContainText(en?'Awaiting prerequisites':'等待前置验收');await expect(node).toContainText('发布文案');
+ await expect(node).toContainText(en?'Waiting for prerequisites':'等待前置任务');await expect(node).toContainText('发布文案');
  await graph.getByRole('button',{name:en?'Read at 100 percent':'原始比例阅读'}).click();await expect(graph.getByRole('status',{name:en?'Zoom level':'缩放比例'})).toHaveText('100%');
  await graph.getByRole('button',{name:en?'Zoom in graph':'放大流程图'}).click();await graph.getByRole('button',{name:en?'Fit graph':'查看全图'}).click();
  await graph.getByRole('button',{name:new RegExp(en?'Locate attention':'定位待处理')}).click();await expect(graph.locator('[data-package-id="copy"]')).toBeFocused();
@@ -42,7 +42,7 @@ test('status updates retain positions, viewport, selected task across navigation
 });
 test('waiting authorization is not an ordinary dependency wait; archived graph still works',async({page})=>{
  await enter(page);await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.plans[0].packages[2].status='waiting';qa.snapshot.plans[0].packages[2].attempts=[{id:'wait',runId:'wait-run'}];const old=window.desktop!.getRunPage!;window.desktop!.getRunPage=async input=>input.id==='wait-run'?{...await old({id:'evidence'}),id:'wait-run',status:'waiting',approvals:[{id:'approval',method:'command',detail:'Fixture command'}]}:old(input);qa.snapshot.spaces[0].archivedAt='2026-11-02';qa.emit();});await tasks(page);
- await expect(page.locator('.wf-graph-node[data-package-id="testing"]')).toContainText('等待授权');await expect(page.locator('.wf-graph-node[data-package-id="bundle"]')).toContainText('等待前置验收');await expect(page.getByRole('button',{name:'暂停计划',exact:true})).toBeDisabled();
+ await expect(page.locator('.wf-graph-node[data-package-id="testing"]')).toContainText('等待授权');await expect(page.locator('.wf-graph-node[data-package-id="bundle"]')).toContainText('等待前置任务');await expect(page.getByRole('button',{name:'暂停计划',exact:true})).toBeDisabled();
  await page.locator('.wf-graph-node[data-package-id="testing"]').click();const detail=page.getByRole('region',{name:'任务详情与验收'});await expect(detail).toContainText('空间已归档，只能查看执行记录');await expect(detail.getByRole('button',{name:'允许本次',exact:true})).toHaveCount(0);
  expect(await mutationCalls(page)).toEqual([]);
 });
@@ -60,8 +60,8 @@ test('repair-workflow fork and join remains read-only and exposes every blocking
 });
 test('unsaved plan preview displays live dependencies, detects cycles and never saves',async({page})=>{
  await enter(page);await tasks(page);await page.evaluate(()=>{const qa=(window as any).spaceQA;const p=qa.snapshot.plans[0];p.status='paused';qa.emit();localStorage.setItem('workforce-plan-draft:space:launch',JSON.stringify({revision:p.revision,value:{name:'预览计划',goal:'验证依赖',packages:p.packages.map((w:any)=>w.definition)}}));});
- await page.getByRole('button',{name:'发布准备的计划操作',exact:true}).click();await page.getByRole('menuitem',{name:'修订计划',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'继续分配工作'}).click();await dialog.getByText('预览依赖流程',{exact:false}).click();
- const graph=dialog.locator('.wf-plan-graph');await expect(graph.locator('.wf-graph-node')).toHaveCount(3);await expect(graph.locator('.wf-graph-node-status').first()).toHaveText('计划预览');await expect(graph.locator('.is-accepted')).toHaveCount(0);
+ await page.getByRole('button',{name:'发布准备的计划操作',exact:true}).click();await page.getByRole('menuitem',{name:'修订计划',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('button',{name:'继续分配工作'}).click();
+ const graph=dialog.locator('.wf-plan-graph');await expect(graph.locator('.wf-graph-node')).toHaveCount(3);await expect(graph.locator('.wf-graph-node-status').first()).toHaveText('待确认项目关系');await expect(graph.locator('.is-accepted')).toHaveCount(0);
  if(await dialog.locator('.wf-package-editor').first().getAttribute('open')===null)await dialog.locator('.wf-package-editor').first().locator('summary').click();await dialog.locator('.wf-package-editor').first().getByRole('checkbox',{name:'发布包整理',exact:true}).check();
  await expect(graph.getByRole('alert')).toContainText('存在循环依赖');await expect(dialog.getByRole('button',{name:'检查计划',exact:true})).toBeDisabled();await expect(graph.locator('.wf-graph-canvas')).toHaveCount(0);expect(await mutationCalls(page)).toEqual([]);
 });
@@ -136,7 +136,7 @@ test('running nodes expose persistent input requests and clear them on input eve
  });
  await tasks(page);const graph=page.locator('.wf-plan-graph'),node=graph.locator('[data-package-id="bundle"]');
  await expect(node).toContainText('待补充信息');await expect(node).toHaveAttribute('data-tone','attention');
- await expect(page.getByRole('region',{name:'计划控制与待处理'}).locator('summary')).toContainText('待授权或补充 (1)');
+ await expect(page.getByRole('region',{name:'计划控制与待处理'}).locator('summary')).toContainText('待办详情 · 3');
  const locate=graph.getByRole('button',{name:/定位待处理/});await expect(locate).toContainText('3');
  await locate.click();await locate.click();await expect(node).toBeFocused();
  await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.inputPending=false;qa.inputListeners.forEach((fn:any)=>fn({runId:'input-run'}));});

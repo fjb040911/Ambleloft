@@ -3,7 +3,7 @@ const open=async(page:any)=>{await page.goto('/tests/manual/project-space-qa.htm
 test('review shortcuts land directly on delivery acceptance',async({page})=>{
  await open(page);await page.getByRole('button',{name:/待验收.*发布文案.*去验收/}).click();
  await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');await expect(page.getByRole('button',{name:'验收通过',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'返回流程图'}).click();await page.locator('.wf-plan-command-center summary').click();await page.getByRole('button',{name:/发布文案 · 检查交付并验收/}).click();await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');
+ await page.getByRole('button',{name:'返回流程图'}).click();await page.locator('.wf-plan-command-center summary').click();await page.getByRole('button',{name:'发布文案 · 待验收',exact:true}).click();await expect(page.locator('.wf-task-review')).toHaveAttribute('data-view','review');
 });
 test('register another project protects unsaved associations',async({page})=>{
  await open(page);await page.getByRole('tab',{name:'团队与项目'}).click();await page.getByRole('button',{name:'管理项目关联'}).click();
@@ -22,8 +22,8 @@ test('persistent requests update overview and graph consistently and failed read
 });
 test('failed start preserves saved plan and retries start without recreating it',async({page})=>{
  await open(page);await page.evaluate(()=>{const old=window.desktop!.spaces!.controlPlan;let fail=true;window.desktop!.spaces!.controlPlan=async input=>{if(fail){fail=false;throw Error("Error invoking remote method 'spaces:controlPlan': Error: 测试启动失败");}return old(input);};});
- await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.getByRole('tab',{name:'本讨论的相关计划',exact:true}).click();await page.getByRole('button',{name:'整理为任务',exact:true}).click();
- const guide=page.getByRole('region',{name:'整理为任务'});await guide.getByRole('button',{name:'根据讨论整理任务'}).click();await guide.getByRole('textbox',{name:'需要检查哪些链接？'}).fill('检查首页链接');await guide.getByRole('button',{name:'提交补充并检查'}).click();await guide.getByRole('button',{name:'确认并启动',exact:true}).click();
+ await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'ready',revision:1,steps:[],brief:{goal:'核对发布',items:[]}};q.emit();});await page.getByRole('button',{name:'整理为任务',exact:true}).click();
+ const guide=page.getByRole('region',{name:'整理为任务'});await guide.getByRole('textbox',{name:'需要检查哪些链接？'}).fill('检查首页链接');await guide.getByRole('button',{name:'提交补充并检查'}).click();await guide.getByRole('button',{name:'确认并启动',exact:true}).click();
  await expect(guide).toContainText('计划已保存，但启动未完成');await expect(guide.getByText('技术详情',{exact:true})).toBeVisible();await guide.getByRole('button',{name:'重试启动',exact:true}).click();await expect(guide).toBeHidden();
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='createGuidedPlan').length)).toBe(1);
 });

@@ -54,3 +54,17 @@ test('child output establishes running state and late initialization cannot regr
  assert.equal(context.run.tools[0].status,'running');spawn(runtime,context);
  assert.equal(context.run.tools[0].status,'running');
 });
+
+test('functional title and streaming tool details retain lifecycle and original identity',async()=>{
+ const {runtime,context}=fixture();
+ runtime.notification(context,{method:'item/completed',params:{threadId:'parent',turnId:'turn',item:{type:'collabAgentToolCall',tool:'spawnAgent',status:'completed',receiverThreadIds:['child'],prompt:'Task: Composer layout review\nCheck the composer without changing files.',agentsStates:{child:{status:'pendingInit'}}}}});await Promise.resolve();
+ const tool=context.run.tools[0];assert.equal(tool.analysisTitle,'Composer layout review');assert.equal(tool.analysisAgent.name,'Kepler');
+ const emit=(method,params)=>runtime.notification(context,{method,params:{threadId:'child',turnId:'child-turn',...params}});
+ emit('turn/started',{turn:{id:'child-turn'}});
+ emit('item/started',{item:{id:'cmd',type:'commandExecution',command:'inspect layout'}});
+ emit('item/commandExecution/outputDelta',{itemId:'cmd',delta:'partial secret'});assert.equal(tool.nativeActivity[0].text,'partial [REDACTED]');
+ emit('item/completed',{item:{id:'cmd',type:'commandExecution',command:'inspect layout',status:'completed',aggregatedOutput:'verified'}});
+ emit('turn/completed',{turn:{id:'child-turn',status:'completed'}});
+ assert.deepEqual(tool.nativeLifecycle.map(e=>e.status),['pending','running','completed']);assert.equal(tool.nativeActivity[0].text,'verified');assert.equal(tool.nativeActivity[0].status,'completed');
+ runtime.notification(context,{method:'item/completed',params:{threadId:'parent',turnId:'turn',item:{type:'collabAgentToolCall',tool:'wait',receiverThreadIds:['child'],agentsStates:{child:{status:'running'}}}}});assert.equal(tool.status,'completed');
+});

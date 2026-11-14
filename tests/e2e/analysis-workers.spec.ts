@@ -22,9 +22,14 @@ for(const expert of [false,true])test(`native subagent progress and individual s
  await agent.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));});
  await expect(agent.getByRole('button',{name:'停止分析',exact:true})).toBeInViewport();
  await page.screenshot({path:expert?'/tmp/amble-analysis-expert.png':'/tmp/amble-analysis-chat.png'});
- await page.getByRole('button',{name:'停止分析',exact:true}).click();await expect(page.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'})).toContainText('已停止');
+ await page.evaluate(()=>{const w=window as any,t=w.__analysisRun.tools[0];t.analysisTitle='Composer layout review';t.nativeLifecycle=[{status:'running',at:new Date().toISOString()}];t.nativeActivity=[{id:'inspect',title:'检查布局',status:'running',text:'第一段输出'}];w.__analysisEmit();});
+ await expect(trigger).toContainText('Composer layout review');await agent.locator('summary').filter({hasText:'检查布局'}).click();await expect(agent.getByText('第一段输出',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{const w=window as any;w.__analysisRun.tools[0].nativeActivity[0].text+='，第二段输出';w.__analysisEmit();});await expect(agent.getByText('第一段输出，第二段输出',{exact:true})).toBeVisible();
+ await expect(trigger).toHaveAttribute('aria-expanded','true');
+
+ await page.getByRole('button',{name:'停止分析',exact:true}).click();await expect(page.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:'Composer layout review'})).toContainText('已停止');
  expect(await page.evaluate(()=>(window as any).__stopped)).toBe('analysis-test');await expect(page.getByRole('button',{name:'停止分析',exact:true})).toHaveCount(0);
  await page.evaluate(()=>{const w=window as any;w.__analysisRun.status='completed';w.__analysisRun.tools[0].status='completed';w.__analysisEmit();});
- await expect(page.getByRole('img',{name:'交互审查 · 子代理头像'})).toBeVisible();
- await expect(page.locator('.analysis-agent:visible [data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'})).toContainText('已完成');
+ await expect(page.getByRole('img',{name:'Composer layout review · 子代理头像'})).toBeVisible();
+ await expect(page.locator('.analysis-agent:visible [data-slot=trace-collapsible-trigger]').filter({hasText:'Composer layout review'})).toContainText('已完成');
 });

@@ -1,10 +1,11 @@
+import {automationStage} from './workforce-automation-state';
 import {useState,useEffect,useLayoutEffect,useRef} from 'react';
 import type {Space,SpaceSnapshot,WorkPlan,WorkPackage} from './workforce-types';
 export type SpaceDestination={tab:'overview'|'discussion'|'documents'|'tasks'|'team';planId?:string;packageId?:string;detailTab?:'chat'|'review'|'info';requestId?:string;documentId?:string};
 export type SpaceAttentionKind='approval'|'input'|'review'|'failed'|'stale'|'unknown';
 export type SpaceAttention={id:string;title:string;detail:string;kind:SpaceAttentionKind;kinds:SpaceAttentionKind[];target:SpaceDestination};
 export type SpaceActivity={id:string;title:string;at:string;kind:'discussion'|'document'|'plan';target:SpaceDestination};
-export const needsAttention=(p:WorkPackage)=>p.stale||['waiting','review','failed','interrupted','rejected','stale'].includes(p.status);
+export const needsAttention=(p:WorkPackage)=>p.stale||!(p.status==='interrupted'&&p.stopReason==='plan-pause')&&p.attempts.at(-1)?.automaticReview?.state!=='checking'&&['waiting','review','failed','interrupted','rejected','stale'].includes(p.status);
 export type SpaceRuntimeState='archived'|'running'|'attention'|'unknown'|'stopping'|'paused'|'partial-paused'|'scheduling'|'ready'|'planning'|'completed'|'stopped'|'empty';
 const executing=(status:string)=>['started','starting','preparing','running'].includes(status);
 const attentionOrder:SpaceAttentionKind[]=['approval','input','review','failed','stale','unknown'];
@@ -25,10 +26,10 @@ export function spaceSummary(space:Space,data:SpaceSnapshot,requestKinds:Record<
   for(const p of plan.packages){
    const live=executing(p.status)||p.status==='waiting';
    const kinds:SpaceAttentionKind[]=live?liveKinds(p.attempts.at(-1)?.runId,p.status==='waiting'):[];
-   if(executing(p.status)&&!kinds.length&&requestKinds[p.attempts.at(-1)?.runId||'']!=='loading'){running++;planRunning[plan.id]=(planRunning[plan.id]||0)+1;}
+   if((executing(p.status)||plan.status==='running'&&!!automationStage(p))&&!kinds.length&&requestKinds[p.attempts.at(-1)?.runId||'']!=='loading'){running++;planRunning[plan.id]=(planRunning[plan.id]||0)+1;}
    if(p.status==='stopping')stopping=true;
    if(p.stale||p.status==='stale')kinds.push('stale');
-   if(p.status==='review')kinds.push('review');
+   if(p.status==='review'&&p.attempts.at(-1)?.automaticReview?.state!=='checking')kinds.push('review');
    if(['failed','interrupted','rejected'].includes(p.status)&&!(p.status==='interrupted'&&p.stopReason))kinds.push('failed');
    add({id:plan.id+':'+p.id,title:p.definition.title,detail:p.reason||plan.name,target:{tab:'tasks',planId:plan.id,packageId:p.id,detailTab:p.status==='review'?'review':'chat'}},kinds);
   }
