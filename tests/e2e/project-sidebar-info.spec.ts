@@ -33,7 +33,8 @@ test('SSH banner follows the active category and page without disconnecting the 
 test('grouped navigation keeps SSH details on project pages only',async({page})=>{
  await setup(page,'classic');const banner=page.getByRole('region',{name:'SSH 连接',exact:true});
  await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
- await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'扩展',exact:true}).click();await expect(banner).toHaveCount(0);
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();
  await remoteRow(page).locator('.project-tree-name').click();await expect(banner).toBeVisible();
 });
 for(const mode of ['activity','classic'])test(`${mode}: long names leave space for status and rich SSH metadata`,async({page})=>{
@@ -47,7 +48,7 @@ for(const mode of ['activity','classic'])test(`${mode}: long names leave space f
 test('minimum sidebar keeps status icon visible and card follows live connection failures',async({page})=>{
  await setup(page,'activity',200);const row=remoteRow(page);await expect(row.locator('.ssh-nav-state>span')).toBeHidden();await expect(row.locator('.ssh-nav-state>svg')).toBeVisible();await row.hover();const card=page.getByRole('region',{name:'项目信息',exact:true});await expect(card).toContainText('已连接');
  await page.evaluate(()=>{const w=window as any;w.__connections[0]={...w.__connections[0],state:'authentication',error:'Authentication failed'};w.__publish();});await expect(row.locator('.ssh-nav-state')).toHaveAttribute('data-state','authentication');await expect(card).toContainText('需要认证');await card.getByText('连接详情',{exact:true}).click();await expect(card).toContainText('Authentication failed');
- await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await expect.poll(()=>card.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(36, 39, 46)');await expect.poll(()=>card.evaluate(e=>getComputedStyle(e).color)).toBe('rgb(232, 234, 240)');await page.screenshot({path:'test-results/project-info-narrow-dark.png'});expect(await page.locator('.workspace-navigation').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await expect.poll(()=>card.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgb(36, 36, 36)');await expect.poll(()=>card.evaluate(e=>getComputedStyle(e).color)).toBe('rgb(237, 237, 237)');await page.screenshot({path:'test-results/project-info-narrow-dark.png'});expect(await page.locator('.workspace-navigation').evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
 });
 test('keyboard opens metadata, enters its action, and escapes back to the project',async({page})=>{
  await setup(page);const button=remoteRow(page).locator('.project-tree-name');await button.focus();const card=page.getByRole('region',{name:'项目信息',exact:true});await expect(card).toBeVisible();await page.keyboard.press('ArrowRight');await expect(card.getByRole('button',{name:'编辑项目'})).toBeFocused();await page.keyboard.press('Escape');await expect(card).toHaveCount(0);await expect(button).toBeFocused();

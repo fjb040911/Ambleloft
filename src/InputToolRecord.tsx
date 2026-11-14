@@ -7,8 +7,8 @@ import type {AgentRun,PersistentInputRequest} from './types';
 const titles:Record<string,string>={input_capabilities:'检查补充信息功能',input_list:'查看待补充事项',input_request:'请求补充信息',input_read_answer:'读取你的回答',input_resolve_from_message:'整理聊天中的回答',input_cancel:'取消补充请求',input_replace:'调整补充问题'};
 const object=(value:unknown):Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const parse=(value:unknown):Record<string,unknown>=>{try{return object(typeof value==='string'?JSON.parse(value):value);}catch{return {};}};
-export function inputToolTitle(label:string){const name=inputToolName(label);return name?titles[name]:null;}
-export function inputToolName(label:string){const name=label.split(/[/:]/).at(-1)||'';return Object.hasOwn(titles,name)?name:null;}
+export function inputToolTitle(label:unknown){const name=inputToolName(label);return name?titles[name]:null;}
+export function inputToolName(label:unknown){if(typeof label!=='string')return null;const name=label.split(/[/:]/).at(-1)||'';return Object.hasOwn(titles,name)?name:null;}
 
 export default function InputToolRecord({tool,requests}:{tool:AgentRun['tools'][number];requests:PersistentInputRequest[]}){
  const name=inputToolName(tool.label)!;

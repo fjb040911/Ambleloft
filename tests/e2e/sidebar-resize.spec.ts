@@ -4,7 +4,7 @@ for(const layoutMode of ['activity','classic'])test(`${layoutMode}: resize home 
  await page.goto('/');
  const home=page.getByRole('separator',{name:'调整首页侧栏宽度'});
  const sidebar=page.locator('.workspace-sidebar-container');
- const initial=layoutMode==='activity'?256:224;
+ const initial=256;
  await expect(sidebar).toHaveCSS('width',`${initial}px`);
  const box=(await home.boundingBox())!;
  await page.mouse.move(box.x+3,box.y+100);await page.mouse.down();await page.mouse.move(box.x+83,box.y+100,{steps:8});await page.mouse.up();
@@ -29,7 +29,7 @@ for(const layoutMode of ['activity','classic'])test(`${layoutMode}: resize home 
  await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(sidebar).toHaveCSS('width',`${initial+88}px`);
  await page.getByRole('button',{name:'设置',exact:true}).click();await expect(settingsSidebar).toHaveCSS('width','232px');
  await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.getByRole('button',{name:'设置',exact:true})).toBeFocused();await home.press('End');await expect(sidebar).toHaveCSS('width','420px');
- await page.setViewportSize({width:800,height:840});await expect(sidebar).toHaveCSS('width',layoutMode==='activity'?'340px':'400px');
+ await page.setViewportSize({width:800,height:840});await expect(sidebar).toHaveCSS('width','340px');
  await page.setViewportSize({width:1240,height:840});await expect(sidebar).toHaveCSS('width','420px');
  await home.dblclick();await expect(sidebar).toHaveCSS('width',`${initial}px`);
  await page.screenshot({path:`test-results/sidebar-resize-${layoutMode}-home.png`,animations:'disabled'});

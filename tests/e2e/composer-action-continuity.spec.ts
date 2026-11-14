@@ -20,7 +20,7 @@ for(const surface of ['task','workforce'])test(`Enter keeps one action and its s
   await page.emulateMedia({colorScheme:'dark'});
   await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;(window as any).setStage('ready');},theme);
   await expect(action).toHaveCount(1);await expect(action).toHaveAccessibleName('发送');await expect(action).toBeEnabled();await expect(action).toHaveCSS('width','32px');await expect(action).toHaveCSS('height','32px');
-  await expect(action).toHaveCSS('color',theme==='light'?'rgb(255, 255, 255)':'rgb(28, 30, 35)');
+  await expect(action).toHaveCSS('color',theme==='light'?'rgb(255, 255, 255)':'rgb(24, 24, 24)');
   const before=await colors();
   await page.getByRole('textbox',{name:'任务内容'}).press('Enter');
   await expect(action).toBeDisabled();await expect(action.locator('[data-slot="spinner"]')).toHaveCSS('width','14px');await expect.poll(colors).toEqual({...before,opacity:'0.5',parentOpacity:'0.5'});

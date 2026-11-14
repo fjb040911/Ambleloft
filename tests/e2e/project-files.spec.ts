@@ -43,9 +43,9 @@ test('independent toolbars, project page entry, typed icons and anchored context
  await expect(page.getByText('开发预览',{exact:true})).toHaveCount(0);
  // Measure both surfaces in the same frame after the open transition settles.
  await expect.poll(()=>page.evaluate(()=>{
-  const toolbar=document.querySelector('.conversation-shell > .toolbar')!.getBoundingClientRect();
+  const toolbar=document.querySelector('.toolbar')!.getBoundingClientRect();
   const panel=document.querySelector('.project-file-panel')!.getBoundingClientRect();
-  return Math.abs(toolbar.y-panel.y)<2&&toolbar.right<=panel.left+2;
+  return toolbar.bottom<=panel.top+2;
  })).toBe(true);
  const tree=page.getByRole('complementary',{name:'项目文件树'});
  const md=tree.getByRole('treeitem',{name:'README.md',exact:true});
@@ -83,8 +83,8 @@ for(const projectless of [false,true])test(`delivered filenames use the appropri
   desktop.listRuns=async()=>{const runs=await list();runs[0].artifacts=[{id:'doc',turnKey:'u',kind:'delivery',path:'/actual-task-root/README.md',name:'README.md',size:32,modifiedAt:''},{id:'office',turnKey:'u',kind:'delivery',path:'/actual-task-root/report.docx',name:'report.docx',size:64,modifiedAt:''}];if(projectless)runs[0].projectId=null;return runs;};
   if(projectless)desktop.readWorkspace=async()=>({tasks:[],projects:[],theme:'light',layoutMode:'classic'});
  },{projectless});
- await page.reload();await page.locator('.tree-task > button:first-child').click();
- const artifact=page.locator('.delivered-file').filter({hasText:'README.md'});
+ await page.reload();if(projectless)await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();await page.locator('.tree-task > button:first-child').click();
+ const artifact=page.locator('[data-slot=attachment]').filter({hasText:'README.md'});
  await expect(artifact.locator('[data-file-type=md]')).toBeVisible();
  await artifact.getByRole('button',{name:'预览 README.md',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'README.md'})).toContainText('弹窗中的文档');
@@ -105,7 +105,7 @@ for(const projectless of [false,true])test(`delivered filenames use the appropri
  await page.getByRole('button',{name:'隐藏侧边面板',exact:true}).click();
  await artifact.getByRole('button',{name:'README.md',exact:true}).focus();await page.keyboard.press('Enter');
  await expect(panel.locator('.markdown h1')).toHaveText('项目说明');
- await page.locator('.delivered-file-name').filter({hasText:'report.docx'}).click();
+ await page.locator('[data-slot=attachment]').getByRole('button',{name:'report.docx',exact:true}).click();
  await expect(panel.getByRole('tab',{name:'report.docx',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(panel).toContainText('此格式请使用外部应用打开');
  await page.evaluate(()=>{delete (window as any).__files['README.md'];});
@@ -192,24 +192,16 @@ test('expanded file panel keeps the current conversation draft, live messages an
  await page.screenshot({path:'test-results/file-floating-chat.png'});
 });
 
-test('sidebar categories disclose independently and arrows reflect expansion',async({page})=>{
- await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
- const projects=sidebar.getByRole('button',{name:'项目',exact:true});const chats=sidebar.getByRole('button',{name:'任务',exact:true});
- await expect(projects).toHaveAttribute('aria-expanded','true');await projects.click();await expect(projects).toHaveAttribute('aria-expanded','false');await expect(chats).toHaveAttribute('aria-expanded','true');
- await projects.click();const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder).toHaveAttribute('aria-expanded','true');await expect(folder.locator('.lucide-folder-open')).toBeVisible();
- const alignment=await sidebar.locator('.project-tree').first().evaluate(el=>({project:el.querySelector('.project-tree-name span')!.getBoundingClientRect().left,task:el.querySelector('.tree-task > button > span:nth-child(2)')!.getBoundingClientRect().left,folder:el.querySelector('.tree-toggle svg')!.getBoundingClientRect().right,dot:el.querySelector('.task-state')!.getBoundingClientRect().right}));
- expect(Math.abs(alignment.task-alignment.project)).toBeLessThan(2);expect(alignment.dot).toBeLessThan(alignment.task);
- await folder.click();await expect(sidebar.getByRole('button',{name:'展开项目：Demo'})).toHaveAttribute('aria-expanded','false');await expect(sidebar.getByRole('button',{name:'展开项目：Demo'}).locator('.lucide-folder')).toBeVisible();await expect(sidebar.locator('.tree-task')).not.toBeVisible();
- await sidebar.getByRole('button',{name:'展开项目：Demo'}).click();await expect(sidebar.locator('.tree-task')).toHaveCount(1);
- await chats.click();await expect(chats).toHaveAttribute('aria-expanded','false');
- await chats.hover();await expect(sidebar.getByRole('button',{name:'新建任务',exact:true})).toHaveCSS('opacity','1');
- await sidebar.getByRole('button',{name:'新建任务',exact:true}).click();await expect(chats).toHaveAttribute('aria-expanded','false');
- await expect.poll(()=>page.evaluate(()=>document.activeElement?.tagName)).toBe('TEXTAREA');
- await projects.focus();await expect(sidebar.getByRole('button',{name:'添加项目',exact:true})).toHaveCSS('opacity','1');
- await page.keyboard.press('Enter');await expect(projects).toHaveAttribute('aria-expanded','false');
+test('project disclosure survives activity group switching and keyboard activation',async({page})=>{
+ await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'}),rail=page.getByRole('navigation',{name:'分组导航'});
+ const folder=sidebar.getByRole('button',{name:'折叠项目：Demo',exact:true});await expect(folder).toHaveAttribute('aria-expanded','true');await expect(folder.locator('.lucide-folder-open')).toBeVisible();
+ await folder.click();const collapsed=sidebar.getByRole('button',{name:'展开项目：Demo',exact:true});await expect(collapsed).toHaveAttribute('aria-expanded','false');await expect(collapsed.locator('.lucide-folder')).toBeVisible();await expect(sidebar.locator('.tree-task')).not.toBeVisible();
+ await rail.getByRole('button',{name:'任务',exact:true}).click();await expect(sidebar.getByRole('button',{name:/^新建任务/})).toBeVisible();
+ await rail.getByRole('button',{name:'项目',exact:true}).click();await expect(collapsed).toHaveAttribute('aria-expanded','false');
+ await collapsed.focus();await page.keyboard.press('Enter');await expect(folder).toHaveAttribute('aria-expanded','true');await expect(sidebar.locator('.tree-task')).toHaveCount(1);
+ await folder.focus();await page.keyboard.press('Space');await expect(collapsed).toHaveAttribute('aria-expanded','false');
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});await page.screenshot({path:'test-results/sidebar-categories-dark.png'});
 });
-
 
 test('project names navigate without changing disclosure or management actions',async({page})=>{
  await prepare(page);const sidebar=page.getByRole('complementary',{name:'主导航'});
