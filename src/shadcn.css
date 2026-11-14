@@ -1,8 +1,12 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities) important;
+@import "tailwindcss/utilities.css" layer(utilities) important source(none);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Only UI sources supply utility classes. Scanning the whole repository makes
+   generated documents and test edits dependencies that can reload a live chat. */
+@source ".";
+@source "../tests/fixtures";
 @source not inline("shimmer");
 @custom-variant dark (&:is([data-theme="dark"] *));
 @theme inline {

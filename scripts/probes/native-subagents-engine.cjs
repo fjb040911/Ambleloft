@@ -23,7 +23,7 @@ async function probe(mode){
   const final=text=>emit({id:'msg'+requests.length,type:'message',role:'assistant',content:[{type:'output_text',text}],status:'completed'});
   const call=(name,args)=>{const tool=toolList.find(t=>t.name===name||t.name.endsWith('__'+name));assert.ok(tool,'Missing '+name);emit({id:'fc'+requests.length,call_id:'call'+requests.length,type:'function_call',name:tool.name,...(tool.namespace?{namespace:tool.namespace}:{}),arguments:JSON.stringify(args),status:'completed'});};
   const outputs=input.filter(i=>i.type==='function_call_output'||i.role==='tool');
-  if(!child&&(!outputs.length||(mode==='parallel'&&outputs.length<3))){call('spawn_agent',{message:'CHILD_NATIVE_ONLY: complete the isolated verification.'});return;}
+  if(!child&&(!outputs.length||(mode==='parallel'&&outputs.length<3))){call('spawn_agent',{message:'Task: Native verification\nCHILD_NATIVE_ONLY: complete the isolated verification.'});return;}
   if(child){
    if(mode==='stop'){held=res;return;}
    if(mode==='parallel'){parallelReplies.push(()=>final('CHILD_RESULT'));if(parallelReplies.length===3)parallelReplies.forEach(reply=>reply());return;}
@@ -44,12 +44,12 @@ async function probe(mode){
   if(mode==='stop'){await until(()=>held&&context.run.tools.length);await native.stop(context.run.tools[0].id);held.destroy();}
   await until(()=>events.some(e=>e.method==='turn/completed'&&e.params.threadId===rootId));
   await until(()=>context.run.tools[0]?.analysisAgent.name&&!context.run.tools[0].analysisAgent.name.startsWith('Subagent'));
-  const tool=context.run.tools[0];assert.equal(tool.nativeThreadId,childId);assert.ok(tool.analysisAgent.name);
+  const tool=context.run.tools[0];assert.equal(tool.nativeThreadId,childId);assert.ok(tool.analysisAgent.name);assert.equal(tool.analysisTitle,'Native verification');assert.ok(tool.nativeLifecycle.some(e=>e.status==='completed'||e.status==='interrupted'));
   if(mode==='stop')assert.equal(tool.status,'interrupted');else {assert.equal(tool.status,'completed');assert.equal(tool.detail,'CHILD_RESULT');}
   if(mode==='parallel'){assert.equal(parallelReplies.length,3);await until(()=>context.run.tools.length===3&&context.run.tools.every(t=>t.status==='completed'));}
   if(mode==='full')assert.equal(await fs.readFile(path.join(root,'native-proof.txt'),'utf8'),'native-ok');
   if(mode==='approval'){assert.equal(approvals.length,1);assert.equal(approvals[0].params.threadId,childId);}
   console.log(JSON.stringify({mode,passed:true,nativeThread:true,nickname:tool.analysisAgent.name,status:tool.status,requests:requests.length,approvals:approvals.length}));
- }finally{context.done=true;native.finish(context);rpc?.close();bridge?.close();server.closeAllConnections();server.close();await fs.rm(root,{recursive:true,force:true});}
+ }finally{context.done=true;native.finish(context);rpc?.close();bridge?.close();server.closeAllConnections();server.close();await fs.rm(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
 }
 (async()=>{for(const mode of ['responses','chat','parallel','full','approval','stop'])await probe(mode);})().catch(e=>{console.error(e);process.exitCode=1;});

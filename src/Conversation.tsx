@@ -31,7 +31,7 @@ import RunActivity from './RunActivity';
 import TurnFiles from './TurnFiles';
 import TurnNavigation from './TurnNavigation';
 import TaskForms, {useTaskForms} from './TaskForms';
-import {mergeHistory,groupByTurn} from './conversation-data';
+import {mergeHistory,groupByTurn,retainRunHistory} from './conversation-data';
 import ChatComposer from './ChatComposer';
 import {CreationGuide} from './CreationGuide';
 import InputDeliveryPanel,{useInputDeliveries} from './InputDeliveryPanel';
@@ -274,10 +274,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
         </div>}
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
         <MessageScrollerContent className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
-          {(floatingHost?turns.slice(-3):turns).map(turn => <MessageScrollerItem scrollAnchor messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
+          {(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
-          </MessageScrollerItem>)}
+          </ConversationScrollItem>)}
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
@@ -305,11 +305,23 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   return floatingHost?createPortal(view,floatingHost):view;
 }
 
+function ConversationScrollItem({following,...props}:ComponentProps<typeof MessageScrollerItem>&{following:boolean}){
+ // The primitive anchors newly appended items even when autoScroll is false.
+ // Defer that anchor while reading history; keep existing anchors for navigation.
+ const [anchor,setAnchor]=useState(following);
+ if(following&&!anchor)setAnchor(true);
+ return <MessageScrollerItem {...props} scrollAnchor={anchor||following}/>;
+}
 function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>){
  const {currentAnchorId}=useMessageScrollerVisibility();
  return <TurnNavigation turns={turns} offset={offset} selected={currentAnchorId||turns[0]?.user.id||''} jump={jump}/>;
 }
 export default function Conversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(true);
- return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
+ const [history,setHistory]=useState({input:props.run,value:props.run});
+ let run=history.value;
+ // Adjust before committing children so a rolling page never removes mounted
+ // history for one frame. All transcript hosts share this boundary.
+ if(history.input!==props.run){run=retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
+ return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
 }

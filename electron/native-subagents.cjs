@@ -3,11 +3,20 @@ const live=status=>['pending','running','waiting'].includes(status);
 const statuses={pendingInit:'pending',running:'running',completed:'completed',errored:'failed',interrupted:'interrupted',shutdown:'interrupted',notFound:'failed'};
 class NativeSubagents {
  constructor(runtime){this.runtime=runtime;}
+ changed(context){
+  for(const tool of context.nativeThreads?.values()||[]){
+   tool.nativeLifecycle ||= [];
+   if(tool.nativeLifecycle.at(-1)?.status!==tool.status)tool.nativeLifecycle.push({status:tool.status,at:new Date().toISOString()});
+   tool.nativeLifecycle=tool.nativeLifecycle.slice(-100);
+   if(!live(tool.status))for(const activity of tool.nativeActivity||[])if(['running','inProgress','pending'].includes(activity.status))activity.status='interrupted';
+  }
+  this.runtime.changed(context.run);
+ }
  child(context,id){return context.nativeThreads?.get(id);}
  register(context,id,prompt=''){
   context.nativeThreads??=new Map();let tool=context.nativeThreads.get(id);if(tool)return tool;
   const siblings=context.run.tools.filter(t=>t.nativeThreadId&&t.turnKey===context.turnKey);
-  tool={id:'native-'+id+'-'+context.turnKey,type:'analysis',nativeThreadId:id,analysisAgent:{id,name:'Subagent '+id.slice(-8),avatar:siblings.length%6},analysisTask:prompt,label:'Subagent '+id.slice(-8),status:'pending',detail:'',turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1};
+  tool={id:'native-'+id+'-'+context.turnKey,type:'analysis',nativeThreadId:id,analysisAgent:{id,name:'Subagent '+id.slice(-8),avatar:siblings.length%6},analysisTitle:prompt.trim().split('\n')[0].replace(/^(?:Task|任务|职责)[:：]\s*/i,'').slice(0,80)||'Task execution',analysisTask:prompt,label:'Subagent '+id.slice(-8),status:'pending',detail:'',turnKey:context.turnKey,order:context.run.nextEventOrder=(context.run.nextEventOrder||0)+1};
   context.run.tools.push(tool);context.nativeThreads.set(id,tool);
   this.readIdentity(context,tool);
   return tool;
@@ -25,7 +34,7 @@ class NativeSubagents {
   }).catch(error=>{
    tool.nativeIdentityError=redact(String(error.message||error),context.config.apiKey);
    if(!context.done&&lookup.attempts<3){lookup.timer=setTimeout(()=>{lookup.timer=null;this.readIdentity(context,tool);},lookup.attempts*500);lookup.timer.unref?.();}
-  }).finally(()=>{lookup.pending=false;this.runtime.changed(context.run);});
+  }).finally(()=>{lookup.pending=false;this.changed(context);});
  }
  notification(context,{method,params={}}){
   if(context.done||!context.run)return false;
@@ -41,9 +50,9 @@ class NativeSubagents {
     if(!tool&&item.tool==='spawnAgent'&&item.status==='completed'&&state?.status!=='notFound')tool=this.register(context,id,clean(item.prompt));
     if(!tool)continue;
     this.readIdentity(context,tool);
-    if(state){if(!(state.status==='shutdown'&&tool.status==='completed')&&!(state.status==='pendingInit'&&tool.status!=='pending'))tool.status=statuses[state.status]||tool.status;if(state.message)tool.detail=clean(state.message);}
+    if(state){if(!(!live(tool.status)&&['running','pendingInit'].includes(state.status)&&!['resumeAgent','sendInput'].includes(item.tool))&&!(state.status==='shutdown'&&tool.status==='completed')&&!(state.status==='pendingInit'&&tool.status!=='pending'))tool.status=statuses[state.status]||tool.status;if(state.message)tool.detail=clean(state.message);}
    }
-   this.runtime.changed(context.run);return true;
+   this.changed(context);return true;
   }
   if(!child)return false;
   if(method==='turn/started'){child.nativeTurnId=params.turn.id;child.status='running';}
@@ -54,7 +63,14 @@ class NativeSubagents {
   }else if(method==='item/completed'&&item?.type==='agentMessage'){
    if(child.status==='pending')child.status='running';
    child.nativeMessages??={};child.nativeMessages[item.id]=clean(item.text);child.detail=Object.values(child.nativeMessages).join('\n\n');
-  }else if(method==='item/completed'&&item){child.analysisReads??=[];child.analysisReads.push(clean(item.command||item.tool||item.type).slice(0,1000));child.analysisReads=child.analysisReads.slice(-100);}
+  }else if(['item/started','item/completed'].includes(method)&&item&&!['agentMessage','reasoning'].includes(item.type)){
+   child.nativeActivity ||= [];let activity=child.nativeActivity.find(a=>a.id===item.id);
+   if(!activity){activity={id:item.id,title:clean(item.command||item.tool||item.type).slice(0,1000),text:'',status:'running'};child.nativeActivity.push(activity);child.nativeActivity=child.nativeActivity.slice(-100);}
+   activity.status=method==='item/completed'?(item.status||'completed'):'running';
+   if(item.aggregatedOutput||item.output)activity.text=clean(typeof (item.aggregatedOutput||item.output)==='string'?(item.aggregatedOutput||item.output):JSON.stringify(item.output)).slice(-50000);
+  }else if(method==='item/commandExecution/outputDelta'){
+   const activity=child.nativeActivity?.find(a=>a.id===params.itemId);if(activity)activity.text=clean(activity.text+(params.delta||'')).slice(-50000);
+  }
   else if(method==='turn/completed'){
    if(child.nativeTurnId&&params.turn.id!==child.nativeTurnId)return true;
    child.status=params.turn.status==='completed'?'completed':params.turn.status==='interrupted'?'interrupted':'failed';if(params.turn.error?.message)child.detail=clean(params.turn.error.message);
@@ -63,14 +79,14 @@ class NativeSubagents {
    context.run.questions=(context.run.questions||[]).filter(q=>q.rpcId!==params.requestId);
    if(!context.cancelled)context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';
   }else return true;
-  this.runtime.changed(context.run);return true;
+  this.changed(context);return true;
  }
  async stop(id){
   for(const context of this.runtime.contexts.values())for(const tool of context.nativeThreads?.values()||[]){
    if(tool.id!==id)continue;if(context.done||!live(tool.status))return true;
    // Archive unloads the native child; the engine notifies its parent waiters.
    await context.rpc.call('thread/archive',{threadId:tool.nativeThreadId});
-   tool.status='interrupted';this.runtime.changed(context.run);return true;
+   tool.status='interrupted';this.changed(context);return true;
   }
   return false;
  }
@@ -81,7 +97,7 @@ class NativeSubagents {
    tool.status='interrupted';
   }));
  }
- finish(context){for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';context.nativeThreads?.clear();}
+ finish(context){for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';this.changed(context);context.nativeThreads?.clear();}
  recover(run){for(const tool of run.tools||[])if(tool.type==='analysis'&&live(tool.status))tool.status='interrupted';}
 }
 module.exports={NativeSubagents};

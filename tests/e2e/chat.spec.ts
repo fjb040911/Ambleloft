@@ -23,6 +23,41 @@ async function prepare(page: import('@playwright/test').Page, text = rich, langu
   await page.goto('/');
   await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
 }
+test('streaming preserves existing markdown table and link DOM instead of flashing and resetting scroll',async({page})=>{
+ await prepare(page,'| 名称 | 说明 |\n|---|---|\n| 数据 | '+('很长的内容'.repeat(80))+' |\n\n[参考资料](https://example.com)\n\n继续输出');
+ await page.evaluate(()=>{const table=document.querySelector('.table-scroll')!;const link=document.querySelector<HTMLAnchorElement>('.markdown a')!;(window as any).__markdownNodes={table,link};table.scrollLeft=120;link.focus();});
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+='，新增一段文字';w.__emit();});
+ await expect(page.locator('.markdown')).toContainText('新增一段文字');
+ expect(await page.evaluate(()=>{const {table,link}=(window as any).__markdownNodes;return {tableRetained:table===document.querySelector('.table-scroll'),linkRetained:link===document.querySelector('.markdown a'),focused:document.activeElement===link};})).toEqual({tableRetained:true,linkRetained:true,focused:true});
+});
+test('rolling history snapshots preserve the reader and mounted turns after the thirtieth turn',async({page})=>{
+ await prepare(page,'完成');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.tools=[];
+  r.messages=Array.from({length:30},(_,i)=>[{id:`u${i}`,role:'user',text:`问题 ${i}`},{id:`a${i}`,role:'assistant',phase:'final_answer',text:('历史回答 '+i+'\n\n').repeat(12)}]).flat();
+  r.turnOffset=0;r.historyBefore=null;r.totalTurns=30;w.__emit();
+ });
+ await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 21 轮：/}).click();
+ const anchor=page.locator('[data-turn-id="u20"]'),viewport=page.getByRole('region',{name:'任务消息'});
+ const top=await anchor.evaluate(el=>el.getBoundingClientRect().top);
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;w.__readerNode=document.querySelector('[data-turn-id="u20"]');w.__readerViewport=document.querySelector('.conversation-scroll');
+  // The host publishes only its last 30 turns; the frontend must not discard
+  // the already displayed prefix or mistake this sliding window for new anchors.
+  r.messages=[...r.messages.slice(2),{id:'u30',role:'user',text:'后台新增一轮'},{id:'a30',role:'assistant',phase:'final_answer',text:'继续输出'}];
+  r.turnOffset=1;r.historyBefore='u1';r.totalTurns=31;r.status='running';w.__emit();
+ });
+ await expect(page.locator('[data-turn-id]')).toHaveCount(31);
+ await expect.poll(async()=>Math.abs((await anchor.boundingBox())!.y-top)).toBeLessThan(2);
+ expect(await viewport.evaluate(el=>el===(window as any).__readerViewport)).toBeTruthy();
+ expect(await anchor.evaluate(el=>el===(window as any).__readerNode)).toBeTruthy();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+='，第二次推送';w.__emit();});
+ await expect(page.locator('[data-turn-id]')).toHaveCount(31);
+ await expect.poll(async()=>Math.abs((await anchor.boundingBox())!.y-top)).toBeLessThan(2);
+ await page.getByRole('button',{name:'回到最新消息'}).click();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+=('\n\n继续流式输出').repeat(40);w.__emit();});
+ await expect.poll(()=>viewport.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
+});
 test('final answers render while unfinished execution stays visible', async ({page})=>{
   await prepare(page);
   await expect(page.getByRole('region',{name:'任务执行过程'})).toBeVisible();

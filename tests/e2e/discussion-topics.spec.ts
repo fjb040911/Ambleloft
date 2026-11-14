@@ -1,4 +1,28 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page,type Locator} from '@playwright/test';
+async function checkTopicScrolling(page:Page,sidebar:Locator,wide:boolean){
+ const list=sidebar.locator('.wf-topic-scroll'),toolbar=sidebar.locator('.wf-topic-toolbar');
+ await expect(page.locator('.wf-discussion-layout')).toHaveAttribute('data-narrow',String(!wide));
+ await expect(list).toHaveCSS('overflow-y',wide?'auto':'visible');
+ await expect(list).toHaveCSS('mask-image','none');
+ if(wide){
+  await sidebar.scrollIntoViewIfNeeded();
+  const header=await toolbar.boundingBox(),pageTop=await page.locator('.qa-scroll').evaluate(el=>el.scrollTop);
+  expect(await list.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(0);
+  await list.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+  await expect.poll(()=>list.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
+  expect((await toolbar.boundingBox())!.y).toBeCloseTo(header!.y,0);
+  expect(await page.locator('.qa-scroll').evaluate(el=>el.scrollTop)).toBe(pageTop);
+  // The last topic remains reachable inside the bounded sidebar.
+  const bounds=await list.evaluate(el=>({bottom:el.getBoundingClientRect().bottom,last:el.lastElementChild!.getBoundingClientRect().bottom}));
+  expect(bounds.last).toBeLessThanOrEqual(bounds.bottom+1);
+  await list.evaluate(el=>{el.scrollTop=0;});
+ }else{
+  // On narrow screens, records expand into the page, without nested scrolling.
+  expect(await list.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
+  await list.evaluate(el=>{el.scrollTop=100;});
+  expect(await list.evaluate(el=>el.scrollTop)).toBe(0);
+ }
+}
 async function setup(page:Page,query=''){
  await page.goto('/tests/manual/project-space-qa.html'+query);
  await page.evaluate(()=>{const q=(window as any).spaceQA,base=q.snapshot.requests.find((r:any)=>r.id==='discussion');
@@ -25,6 +49,9 @@ test('switching topics preserves separate drafts and source selection',async({pa
 });
 for(const width of [1280,390])test(`topic plan reuses delivery review and shows scheduling in place ${width}`,async({page})=>{
  await page.setViewportSize({width,height:900});const sidebar=await setup(page,width===390?'?theme=dark':'');
+ const footer=page.locator('.wf-discussion-footer');
+ if((await footer.boundingBox())!.width<=760)await expect(footer.locator('.wf-current-task-name')).toBeHidden();
+ expect(await footer.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
  await page.getByRole('region',{name:'本次任务',exact:true}).getByRole('button',{name:'查看交付并验收',exact:true}).click();
  await expect(page.getByRole('tab',{name:'讨论',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.locator('.qa-scroll')).not.toHaveAttribute('data-wf-node-viewport','true');
@@ -35,6 +62,12 @@ for(const width of [1280,390])test(`topic plan reuses delivery review and shows 
  await expect(sidebar.getByRole('listitem')).toHaveCount(15);
  await page.screenshot({path:`/tmp/topic-review-in-place-${width}.png`});
  await page.getByRole('button',{name:'返回讨论',exact:true}).click();await expect(page.getByLabel('这次想推进什么？')).toBeVisible();
+ await expect(page.locator('.wf-discussion-toolbar .wf-current-task-primary')).toBeFocused();
+ // A separate failed node still needs attention despite the successor running.
+ await expect(page.locator('.wf-discussion-toolbar .wf-current-task')).toContainText('待处理');
+ await expect(page.locator('.wf-discussion-toolbar .wf-current-task-primary')).toHaveText('查看并处理');
+ await page.evaluate(()=>{const q=(window as any).spaceQA;q.snapshot.plans[0].packages[2].status='accepted';q.emit();});
+ await expect(page.locator('.wf-discussion-toolbar .wf-current-task')).toContainText('执行中');
  await page.getByRole('tab',{name:'任务',exact:true}).click();await expect(page.locator('.wf-task-review')).toHaveCount(0);await expect(page.locator('.wf-plan-graph')).toBeVisible();
 });
 
@@ -50,7 +83,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,true,true]] as const)
  await page.setViewportSize({width,height:900});const sidebar=await setup(page,`?lang=${english?'en':'zh'}&theme=${dark?'dark':'light'}`),root=sidebar.locator('[data-slot=item][data-topic-id="discussion"]');
  await expect(root).toHaveAttribute('data-selected','true');await expect(root).toContainText(english?'Needs attention':'待处理');await expect(root.getByRole('button')).toHaveCount(1);expect((await root.boundingBox())!.height).toBeLessThan(90);
  await expect(sidebar.locator('[data-topic-entry]')).toHaveCount(0);await expect(sidebar.getByRole('tab')).toHaveCount(0);
- const list=sidebar.locator('.wf-topic-scroll');await expect(list).toHaveCSS('overflow-y','visible');await expect(list).toHaveCSS('mask-image','none');const last=sidebar.locator('[data-slot=item]').last();
+ await checkTopicScrolling(page,sidebar,width===1280);const last=sidebar.locator('[data-slot=item]').last();
  await last.getByRole('button').focus();await page.keyboard.press('Enter');await expect(last).toHaveAttribute('data-selected','true');
  const summary=page.getByRole('region',{name:english?'Current task':'本次任务',exact:true});await expect(summary).toContainText(english?'Not created':'未生成');
  await sidebar.getByRole('textbox',{name:english?'Search topics':'搜索话题'}).fill('架构话题 13');await expect(sidebar.getByRole('listitem')).toHaveCount(1);
@@ -132,6 +165,33 @@ test('completed topic next-task action asks for a new goal without copying the p
  await expect(page.getByRole('region',{name:'本次任务',exact:true})).toContainText('已结束');
 });
 
+for(const width of [1280,390])test(`next-task host response updates the toolbar and preserves history ${width}`,async({page})=>{
+ await page.setViewportSize({width,height:900});const sidebar=await setup(page,width===390?'?theme=dark':'');
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,p=q.snapshot.plans[0];p.status='completed';p.packages.forEach((n:any)=>{n.status='accepted';});
+  // Controlled host response: this is UI verification, not a real model run.
+  window.desktop!.spaces!.coordinateDiscussion=async input=>{
+   q.calls.push({action:'coordinateDiscussion',input});
+   q.snapshot.taskDrafts.push({id:'next-draft',spaceId:'space',discussionId:'discussion',revision:1,status:'needs-input',requirementsPending:true,source:[],messages:[],value:{name:'',goal:'',packages:[]}});
+   q.snapshot.requests.push({id:input.clientRequestId,spaceId:'space',mode:'discussion',prompt:input.prompt,replyTo:input.replyTo,createdAt:new Date().toISOString(),participants:[],documentRefs:[],host:{status:'completed',revision:1,steps:[{id:'ask-goal',action:'reply',text:'这次希望完成什么新目标？',at:new Date().toISOString()}],task:{draftId:'next-draft'}}});
+   q.emit();return structuredClone(q.snapshot);
+  };q.emit();
+ });
+ const toolbar=page.locator('.wf-discussion-toolbar'),summary=toolbar.getByRole('region',{name:'本次任务',exact:true});
+ await expect(summary).toContainText('已结束');await summary.getByRole('button',{name:'创建下一项任务',exact:true}).click();
+ await expect(summary.locator('[data-slot=badge]')).toHaveText('梳理中');
+ await expect(summary.getByRole('button',{name:'继续完善',exact:true})).toBeEnabled();
+ await expect(summary.getByRole('button',{name:'创建下一项任务',exact:true})).toHaveCount(0);
+ await expect(page.getByText('这次希望完成什么新目标？',{exact:true})).toBeVisible();
+ await sidebar.getByRole('button',{name:'任务记录 · 1',exact:true}).click();
+ await expect(sidebar.getByRole('list',{name:'历史任务'})).toContainText('发布准备');
+ await expect(sidebar.getByRole('list',{name:'历史任务'}).locator('[data-status=completed]')).toBeVisible();
+ const calls=await page.evaluate(()=>(window as any).spaceQA.calls);
+ expect(calls.filter((c:any)=>c.action==='coordinateDiscussion').map((c:any)=>[c.input.intent,c.input.replyTo])).toEqual([['restart-guide','discussion']]);
+ expect(calls.some((c:any)=>['control','createGuidedPlan'].includes(c.action))).toBe(false);
+ expect(await toolbar.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+});
+
 for(const width of [1280,390])test(`conflicts stay compact and resolve explicitly without starting a plan ${width}`,async({page})=>{
  await page.setViewportSize({width,height:900});const sidebar=await setup(page,width===390?'?theme=dark':'');
  await page.evaluate(()=>{const q=(window as any).spaceQA,p=q.snapshot.plans[0];p.status='paused';p.name='多项目开发流程测试计划'.repeat(8);q.snapshot.taskDrafts=[{id:'extra',spaceId:'space',discussionId:'discussion',revision:1,status:'needs-input',source:[],messages:[],value:{name:'不再需要的旧草稿',goal:'',packages:[]}}];q.emit();});
@@ -140,13 +200,17 @@ for(const width of [1280,390])test(`conflicts stay compact and resolve explicitl
  expect((await summary.boundingBox())!.height).toBeLessThan(width===1280?57:100);
  await summary.getByRole('button',{name:'处理任务冲突'}).click();const dialog=page.getByRole('dialog',{name:'处理任务冲突'});
  await expect(dialog).toContainText('多项目开发流程测试计划');await expect(dialog).toContainText('不再需要的旧草稿');
+ await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(summary.locator('.wf-current-task-primary')).toBeFocused();
+ await page.keyboard.press('Enter');await expect(dialog).toBeVisible();
  await dialog.getByRole('button',{name:'结束草稿',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(dialog).toBeVisible();
  await dialog.getByRole('button',{name:'结束草稿',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'结束草稿',exact:true}).click();
  await expect(dialog).toBeHidden();await expect(summary).toContainText('已暂停');await expect(summary.getByRole('button',{name:'查看交付并验收',exact:true})).toBeVisible();
  await expect(sidebar.getByRole('button',{name:'任务记录 · 1',exact:true})).toBeVisible();await expect(summary).not.toContainText('任务记录');
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='control'))).toEqual([]);
  expect((await summary.boundingBox())!.height).toBeLessThan(width===1280?57:100);
- const title=await summary.locator('.wf-current-task-name').boundingBox(),bar=await summary.boundingBox();expect(title!.x+title!.width).toBeLessThanOrEqual(bar!.x+bar!.width+1);
+ const name=summary.locator('.wf-current-task-name');
+ if((await page.locator('.wf-discussion-footer').boundingBox())!.width<=760)await expect(name).toBeHidden();
+ else{const title=await name.boundingBox(),bar=await summary.boundingBox();expect(title!.x+title!.width).toBeLessThanOrEqual(bar!.x+bar!.width+1);}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  await page.screenshot({path:`/tmp/topic-status-compact-${width}.png`});
 });
@@ -185,7 +249,11 @@ for(const [width,lang,theme] of [[1280,'zh','light'],[390,'en','dark']] as const
  const topic=sidebar.locator('[data-topic-id="discussion"]');await expect(topic.locator('.wf-topic-status')).toHaveAttribute('data-slot','badge');
  await topic.getByRole('button',{name:/^(任务记录|Task records) · 3$/}).click();const history=topic.getByRole('list',{name:/^(历史任务|Task history)$/});
  await expect(history.locator('li>[data-slot=badge]')).toHaveCount(3);await expect(history.locator('[data-status=completed]')).toHaveCount(2);await expect(history.locator('[data-status=completed]').first()).toHaveAttribute('data-variant','success');await expect(history.locator('[data-status=discarded]')).toHaveAttribute('data-variant','outline');
- const bounds=await sidebar.evaluate(el=>{const list=el.querySelector('.wf-topic-scroll')!,last=el.querySelector('[aria-label="历史任务"] li:last-child,[aria-label="Task history"] li:last-child')!;return{listBottom:list.getBoundingClientRect().bottom,lastBottom:last.getBoundingClientRect().bottom,overflow:list.scrollHeight>list.clientHeight+1};});expect(bounds.overflow).toBe(false);expect(bounds.lastBottom).toBeLessThanOrEqual(bounds.listBottom);
+ await checkTopicScrolling(page,sidebar,width===1280);
+ // History has no inner scroll/fade; all records belong to the topic list.
+ await expect(history).toHaveCSS('overflow-y','visible');await expect(history).toHaveCSS('mask-image','none');
+ const lastRecord=history.locator('li').last();await lastRecord.scrollIntoViewIfNeeded();await expect(lastRecord).toBeInViewport();
+ const bounds=await sidebar.evaluate(el=>{const list=el.querySelector('.wf-topic-scroll')!,last=el.querySelector('[aria-label="历史任务"] li:last-child,[aria-label="Task history"] li:last-child')!;return{listTop:list.getBoundingClientRect().top,listBottom:list.getBoundingClientRect().bottom,lastTop:last.getBoundingClientRect().top,lastBottom:last.getBoundingClientRect().bottom};});expect(bounds.lastTop).toBeGreaterThanOrEqual(bounds.listTop-1);expect(bounds.lastBottom).toBeLessThanOrEqual(bounds.listBottom+1);
  const geometry=await topic.evaluate(el=>{const parent=el.getBoundingClientRect(),content=el.querySelector('[data-slot=item-content]')!.getBoundingClientRect();return{overflow:el.scrollWidth>el.clientWidth+1,contentRight:content.right,parentRight:parent.right,entries:[...el.querySelectorAll('.wf-topic-record-link,.wf-topic-record-name')].map(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return{x:r.x,right:r.right,align:s.textAlign,justify:s.justifyContent,overflow:e.scrollWidth>e.clientWidth+1};})};});
  expect(geometry.overflow).toBe(false);expect(geometry.contentRight).toBeLessThanOrEqual(geometry.parentRight);for(const e of geometry.entries){expect(e.overflow).toBe(false);expect(e.right).toBeLessThanOrEqual(geometry.parentRight);expect(Math.abs(e.x-geometry.entries[0].x)).toBeLessThan(1);}
  expect(geometry.entries[0].justify).toBe('flex-start');expect(geometry.entries[1].align).toBe('left');

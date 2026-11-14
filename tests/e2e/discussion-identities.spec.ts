@@ -45,3 +45,17 @@ test('live per-expert statuses, partial failure and legacy context remain truthf
  await second.getByRole('button',{name:'重新请求此专家'}).click();await expect(page.getByLabel('这次想推进什么？')).toHaveValue('明确发布目标');
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='start'))).toHaveLength(0);
 });
+
+test('discussion experts share functional subagent names, streaming details and terminal history',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>{const q=(window as any).identityQA; q.update('expert-0',{status:'running',questions:[],tools:[{id:'native-review',label:'Kepler',turnKey:'u0',order:1,type:'analysis',nativeThreadId:'child-review',analysisTitle:'API contract review',analysisAgent:{id:'child-review',name:'Kepler',avatar:0},analysisTask:'Review API contracts',status:'running',detail:'Reading interfaces',nativeLifecycle:[{status:'pending',at:'2026-11-14T01:00:00Z'},{status:'running',at:'2026-11-14T01:00:01Z'}],nativeActivity:[{id:'check',title:'Inspect contracts',status:'running',text:'First chunk'}]}]});});
+ const card=page.locator('.analysis-agent:visible').filter({hasText:'API contract review'});
+ const trigger=card.locator(':scope > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]');
+ await expect(trigger).toContainText('进行中');await expect(trigger).not.toContainText('Kepler');await trigger.click();
+ await expect(card.getByText('Review API contracts',{exact:true})).toBeVisible();await card.locator('summary').filter({hasText:'Inspect contracts'}).click();await expect(card.getByText('First chunk',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{const q=(window as any).identityQA,run=q.runs['expert-0'];run.tools[0].nativeActivity[0].text+='; next chunk';run.tools[0].detail='Checking compatibility';q.update(run.id,{});});
+ await expect(card.getByText('First chunk; next chunk',{exact:true})).toBeVisible();await expect(card.getByText('Checking compatibility',{exact:true})).toBeVisible();await expect(trigger).toHaveAttribute('aria-expanded','true');
+ await page.evaluate(()=>{const q=(window as any).identityQA,run=q.runs['expert-0'],tool=run.tools[0];tool.status='completed';tool.nativeActivity[0].status='completed';tool.nativeLifecycle.push({status:'completed',at:'2026-11-14T01:01:00Z'});q.update(run.id,{status:'completed'});});
+ await expect(trigger).toContainText('已完成');if(await trigger.getAttribute('aria-expanded')==='false')await trigger.click();
+ await expect(card.getByRole('list',{name:'执行记录'})).toContainText('开始工作');await expect(card.getByRole('list',{name:'执行记录'})).toContainText('已完成');await expect(card.getByRole('button',{name:'停止分析',exact:true})).toHaveCount(0);
+});
