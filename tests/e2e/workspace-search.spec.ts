@@ -29,7 +29,7 @@ test('search opens from sidebar, filters content and pages through results',asyn
  expect(await rows.nth(0).evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(await rows.nth(1).evaluate(el=>getComputedStyle(el).backgroundColor));
  await page.screenshot({path:'test-results/workspace-search.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
- await expect(dialog).toHaveCSS('background-color','rgb(36, 39, 46)');
+ await expect(dialog).toHaveCSS('background-color','rgb(36, 36, 36)');
  await page.screenshot({path:'test-results/workspace-search-dark.png'});
  await page.evaluate(()=>document.documentElement.dataset.theme='light');
  await page.keyboard.press('Enter');await expect(dialog).toHaveCount(0);await expect(page.locator('.tree-task.selected')).toContainText('任务 24');

@@ -1,19 +1,19 @@
 import {test,expect} from '@playwright/test';
-test('layout preference persists and group switching preserves draft and navigation state',async({page})=>{
+test('legacy layout preference migrates and group switching preserves draft and navigation state',async({page})=>{
  await page.addInitScript(()=>{if(!localStorage.getItem('atelier.workspace.v1'))localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'light',layoutMode:'classic',projects:[],tasks:[]}));});
  await page.goto('/');
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('布局切换保留输入');
  await page.getByRole('button',{name:'设置',exact:true}).click();
- await page.getByRole('button',{name:'活动栏 按项目、任务、协作工作平台、扩展分别浏览。',exact:true}).click();
+ await expect(page.locator('.settings-content')).toBeVisible();
  await page.getByRole('button',{name:'返回应用',exact:true}).click();
  await expect(page.locator('.activity-rail')).toBeVisible();await expect(input).toHaveValue('布局切换保留输入');
  await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
  await expect(page.getByRole('region',{name:'扩展工作区',exact:true})).toBeVisible();await page.getByRole('button',{name:'Ambleloft 工作台',exact:true}).click();await expect(input).toHaveValue('布局切换保留输入');await expect(page.getByRole('region',{name:'任务',exact:true})).toBeVisible();
- await expect(page.getByText('从一个问题开始')).toBeVisible();
+ await expect(input).toBeVisible();
  await page.getByRole('button',{name:'隐藏侧栏',exact:true}).click();await expect(page.locator('.activity-rail')).toBeVisible();await expect(page.getByRole('button',{name:'搜索工作台',exact:true})).toBeVisible();
  await page.reload();await expect(page.locator('.activity-rail')).toBeVisible();
- await page.locator('.activity-rail').getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'分组侧栏 所有分组一起展示，快速浏览。',exact:true}).click();await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.locator('.activity-rail')).toHaveCount(0);
- await page.reload();await expect(page.locator('.activity-rail')).toHaveCount(0);
+ await page.locator('.activity-rail').getByRole('button',{name:'设置',exact:true}).click();await expect(page.getByText('导航布局',{exact:true})).toHaveCount(0);await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.locator('.activity-rail')).toBeVisible();
+ await page.reload();await expect(page.locator('.activity-rail')).toBeVisible();
 });
 
 test('activity navigation exposes contextual actions, tooltips and date sections',async({page})=>{
@@ -53,7 +53,7 @@ test('activity task date groups and navigation labels follow interface language'
  await page.goto('/');const rail=page.locator('.activity-rail');
  await expect(page.getByRole('button',{name:'New project',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Save task draft',exact:true})).toBeVisible();
- await expect(page.locator('.composer-hint')).toHaveText('Enter to save draft · Shift+Enter for a new line');
+ await expect(page.locator('.composer textarea')).toHaveAccessibleDescription('Enter to save draft · Shift+Enter for a new line');
  await rail.getByRole('button',{name:'Tasks',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['Today','Yesterday','Previous 7 days','Earlier']);
  await expect(page.locator('.tree-task .task-status-label')).toHaveText(['Draft','Draft','Draft','Draft']);
@@ -70,5 +70,5 @@ test('activity task date groups and navigation labels follow interface language'
  test('fresh workspaces default to activity navigation',async({page})=>{
  await page.goto('/');await expect(page.locator('.activity-rail')).toBeVisible();
  await page.locator('.activity-rail').getByRole('button',{name:'设置',exact:true}).click();
- await expect(page.getByRole('button',{name:'活动栏 按项目、任务、协作工作平台、扩展分别浏览。',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByText('导航布局',{exact:true})).toHaveCount(0);await page.getByRole('button',{name:'返回应用',exact:true}).click();await expect(page.locator('.activity-rail').getByRole('button',{name:'项目',exact:true})).toBeVisible();
  });

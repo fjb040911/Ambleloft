@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 for(const layoutMode of ['activity','classic'])test(`${layoutMode}: sidebar and content follow the pointer without width animation`,async({page})=>{
  await page.addInitScript(({layoutMode})=>localStorage.setItem('atelier.workspace.v1',JSON.stringify({layoutMode,theme:'light',language:'zh-CN',projects:Array.from({length:8},(_,i)=>({id:'p'+i,name:'测试项目 '+i,path:'/tmp',createdAt:'2026-01-01'})),tasks:Array.from({length:40},(_,i)=>({id:'t'+i,title:'比较长的任务名称用来检测实时宽度 '+i,prompt:'测试',status:'draft',modelId:'',projectId:'p'+Math.floor(i/5),createdAt:'2026-01-01'}))})),{layoutMode});
  await page.goto('/');
- const initial=layoutMode==='activity'?256:224;const offset=layoutMode==='activity'?60:0;
+ const initial=256;const offset=60;
  await expect(page.locator('.workspace-sidebar-container')).toHaveCSS('width',`${initial}px`);
  const handle=page.getByRole('separator',{name:'调整首页侧栏宽度'});const box=(await handle.boundingBox())!;
  await page.mouse.move(box.x+3,box.y+80);await page.mouse.down();

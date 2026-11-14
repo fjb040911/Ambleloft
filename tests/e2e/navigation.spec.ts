@@ -1,11 +1,9 @@
 import { test, expect } from '@playwright/test';
-// These legacy workflow cases exercise the grouped sidebar explicitly.
-test.use({storageState:{cookies:[],origins:[{origin:'http://127.0.0.1:5173',localStorage:[{name:'atelier.workspace.v1',value:JSON.stringify({tasks:[],projects:[],theme:'light',layoutMode:'classic'})}]}]}});
 
 test('projects organize drafts, preview details, edit and detach safely',async({page})=>{
  await page.goto('/');
  await expect(page.getByText('最近的任务',{exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'添加项目',exact:true}).click();
+ await page.getByRole('button',{name:'新建项目',exact:true}).click();
  await page.getByRole('textbox',{name:'项目名称',exact:true}).fill('品牌设计');
  await page.locator('.project-description summary').click();
  await page.getByRole('textbox',{name:'项目说明',exact:true}).fill('品牌视觉与包装方案');
@@ -25,33 +23,36 @@ test('projects organize drafts, preview details, edit and detach safely',async({
  await expect(page.getByRole('textbox',{name:'项目名称'})).toHaveValue('品牌设计');
  await page.getByRole('button',{name:'关闭',exact:true}).click();
  await page.getByRole('button',{name:'项目',exact:true}).click();
- await expect(page.locator('#nav-projects')).toHaveAttribute('aria-hidden','true');
- await expect(page.getByRole('button',{name:'添加项目',exact:true})).toBeVisible();
+ await expect(page.getByRole('complementary',{name:'主导航'})).toBeHidden();
  await page.getByRole('button',{name:'项目',exact:true}).click();
  await expect(page.locator('.project-tree')).toBeVisible();
 
- await page.locator('.new-task').click();
+ await page.locator('.toolbar').getByRole('button',{name:'新建任务',exact:true}).click();
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();
  await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
  await page.getByRole('button',{name:'管理任务：设计包装'}).click();
  await page.getByRole('textbox',{name:'任务名称'}).fill('包装方案');
  await page.getByLabel('所属项目').selectOption('');
  await page.getByRole('button',{name:'保存修改'}).click();
+ if(await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).getAttribute('aria-expanded')!=='true')await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.getByRole('region',{name:'任务',exact:true})).toContainText('包装方案');
  await page.getByRole('button',{name:'任务',exact:true}).click();
- await expect(page.locator('#nav-chats')).toHaveAttribute('aria-hidden','true');
+ await expect(page.getByRole('complementary',{name:'主导航'})).toBeHidden();
  await page.getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.locator('#nav-chats')).toBeVisible();
 
  await page.getByRole('button',{name:'管理任务：包装方案'}).click();
  await page.getByLabel('所属项目').selectOption({label:'品牌设计'});
  await page.getByRole('button',{name:'保存修改'}).click();
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();
  await page.getByRole('button',{name:'管理项目：品牌设计'}).click();
  await page.getByRole('button',{name:'删除项目',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('项目文件不会被删除');
  await page.getByRole('button',{name:'确认删除项目',exact:true}).click();
  await expect(page.locator('.project-tree')).toHaveCount(0);
+ if(await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).getAttribute('aria-expanded')!=='true')await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.getByRole('region',{name:'任务',exact:true})).not.toContainText('包装方案');
- await page.reload();await expect(page.getByRole('region',{name:'任务',exact:true})).not.toContainText('包装方案');
+ await page.reload();if(await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).getAttribute('aria-expanded')!=='true')await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();await expect(page.getByRole('region',{name:'任务',exact:true})).not.toContainText('包装方案');
  await page.screenshot({path:'test-results/sidebar-new.png'});
 });
 
@@ -66,9 +67,10 @@ test('sidebar component preserves project and task pagination and keyboard acces
  // Offscreen project rows are virtualized; verify pagination through its user-facing control.
  await expect(projects.getByRole('button',{name:'加载更多项目'})).toBeAttached();
  await projects.getByRole('button',{name:'加载更多项目'}).click();await expect(projects.getByRole('button',{name:'加载更多项目'})).toHaveCount(0);await projects.locator('#nav-projects [data-slot=sidebar-group-content] > div').nth(31).scrollIntoViewIfNeeded();await expect(projects.getByRole('button',{name:'管理项目：项目 31',exact:true})).toBeAttached();
+ if(await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).getAttribute('aria-expanded')!=='true')await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
  await expect(tasks.locator('.tree-task')).toHaveCount(30);
  await tasks.getByRole('button',{name:/加载更多/}).click();await expect(tasks.locator('[data-slot=sidebar-menu-item]')).toHaveCount(35);await expect(tasks.getByRole('button',{name:/加载更多/})).toHaveCount(0);
- const toggle=page.getByRole('button',{name:'任务',exact:true});await toggle.focus();await page.keyboard.press('Enter');await expect(toggle).toHaveAttribute('aria-expanded','false');
+ const toggle=page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true});await toggle.focus();await page.keyboard.press('Enter');await expect(toggle).toHaveAttribute('aria-expanded','false');
  await page.keyboard.press('Space');await expect(toggle).toHaveAttribute('aria-expanded','true');
 });
 
@@ -81,16 +83,16 @@ test('project task and extension selection is mutually exclusive',async({page})=
  await nav.locator('.tree-task > button:first-child').click();
  await expect(nav.locator('[aria-current=page]')).toHaveCount(1);
  await expect(nav.locator('.tree-task.selected')).toHaveCount(1);
- await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'扩展',exact:true}).click();await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
  await expect(nav.locator('.tree-task.selected')).toHaveCount(0);
  await expect(nav.locator('[aria-current=page]')).toHaveCount(1);
  await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(1);
- await nav.locator('.project-tree-name').click();
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();await nav.locator('.project-tree-name').click();
  await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(0);
  await expect(nav.locator('[aria-current=page]')).toHaveCount(1);
- await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'扩展',exact:true}).click();await nav.getByRole('button',{name:'测试扩展',exact:true}).click();
  await expect(nav.locator('.project-tree-row.selected')).toHaveCount(0);
- await nav.getByRole('button',{name:'折叠项目：测试项目'}).count().then(async n=>{if(!n)await nav.getByRole('button',{name:'展开项目：测试项目'}).click();});
+ await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();await nav.getByRole('button',{name:'折叠项目：测试项目'}).count().then(async n=>{if(!n)await nav.getByRole('button',{name:'展开项目：测试项目'}).click();});
  await nav.locator('.tree-task > button:first-child').click();
  await expect(nav.locator('.extension-nav-row[aria-current=page]')).toHaveCount(0);
  await expect(nav.locator('.tree-task.selected')).toHaveCount(1);

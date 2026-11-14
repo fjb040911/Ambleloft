@@ -1,7 +1,4 @@
 import { test, expect } from '@playwright/test';
-// These legacy workflow cases exercise the grouped sidebar explicitly.
-test.use({storageState:{cookies:[],origins:[{origin:'http://127.0.0.1:5173',localStorage:[{name:'atelier.workspace.v1',value:JSON.stringify({tasks:[],projects:[],theme:'light',layoutMode:'classic'})}]}]}});
-
 
 test('draft survives reload, reopens for editing, and archives only after confirmation', async ({ page }) => {
   await page.goto('/');
@@ -11,6 +8,7 @@ test('draft survives reload, reopens for editing, and archives only after confir
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();
   const task=page.locator('.tree-task [data-slot=sidebar-menu-button]').filter({hasText:'整理我的品牌项目资料'});
+  await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
   await task.click();
   await expect(input).toHaveValue('整理我的品牌项目资料');
   await expect(input).toBeFocused();
@@ -45,11 +43,11 @@ test('model picker Escape restores focus', async ({ page }) => {
 
 test('project picker includes icons and padding in its native click target',async({page})=>{
  await page.goto('/');
- await page.getByRole('button',{name:'添加项目',exact:true}).click();
+ await page.getByRole('button',{name:'新建项目',exact:true}).click();
  await page.getByRole('textbox',{name:'项目名称',exact:true}).fill('交互验证项目');
  await page.getByRole('textbox',{name:'工作目录',exact:true}).fill('/tmp/project-picker');
  await page.getByRole('button',{name:'保存项目',exact:true}).click();
- await page.locator('.new-task').click();
+ await page.locator('.toolbar').getByRole('button',{name:'新建任务',exact:true}).click();
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('切换项目时保留草稿');
  const picker=page.locator('.project-picker-trigger');const select=page.getByRole('combobox',{name:'当前项目',exact:true});
  for(const fraction of [.08,.5,.94]){

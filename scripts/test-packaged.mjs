@@ -160,14 +160,22 @@ try {
     const line = stdout.split('\n').find(line => { const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/); return match && Number(match[2]) === process.pid && match[3] === process.resourcesPath + '/engine/bin/codex'; });
     return line ? Number(line.trim().split(/\s+/)[0]) : null;
   });
-  const crashPid = await ownEnginePid(); assert.ok(crashPid);
+  const waitForOwnEngine = async () => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const pid = await ownEnginePid();
+      if (pid) return pid;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.fail('Packaged app did not start its owned engine within 10 seconds');
+  };
+  const crashPid = await waitForOwnEngine();
   process.kill(crashPid, 'SIGKILL');
   assert.equal((await wait(crashed.id)).status, 'failed');
   assert.ok((await other.call('model/list', {})).data);
   const count = requests.length;
   const exiting = await start('Fixture exit during turn');
   for (let i = 0; i < 100 && requests.length === count; i++) await new Promise(resolve => setTimeout(resolve, 100));
-  const exitPid = await ownEnginePid(); assert.ok(exitPid);
+  const exitPid = await waitForOwnEngine();
   await mkdir(path.join(root, 'test-results'), { recursive: true });
   await page.screenshot({ path: path.join(root, 'test-results/packaged-app.png') });
   await app.close(); app = null;

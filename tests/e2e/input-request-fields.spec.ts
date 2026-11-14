@@ -19,8 +19,8 @@ test('dynamic fields preserve values and focus, localize host chrome, show error
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:'test-results/input-request-fields-light.png',fullPage:true});
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});
- await expect(page.getByLabel('称呼')).toHaveCSS('color','rgb(232, 234, 240)');
- await expect(page.getByLabel('目的地')).toHaveCSS('color','rgb(232, 234, 240)');
+ await expect(page.getByLabel('称呼')).toHaveCSS('color','rgb(237, 237, 237)');
+ await expect(page.getByLabel('目的地')).toHaveCSS('color','rgb(237, 237, 237)');
  await page.screenshot({path:'test-results/input-request-fields-dark.png',fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'切换只读'}).click();
  await expect(page.getByLabel('目的地')).toBeDisabled();await expect(page.getByLabel('称呼')).toBeDisabled();
