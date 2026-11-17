@@ -11,7 +11,7 @@
     {
       "sourceId": "curated",
       "id": "amble.product",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -176,17 +176,56 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "requirements",
+          "title": {
+            "zh-CN": "需求分析",
+            "en": "Requirements"
+          }
+        },
+        {
+          "id": "roadmap",
+          "title": {
+            "zh-CN": "产品规划",
+            "en": "Roadmapping"
+          }
+        },
+        {
+          "id": "acceptance",
+          "title": {
+            "zh-CN": "验收标准",
+            "en": "Acceptance criteria"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "产品经理",
+          "需求文档",
+          "产品规划",
+          "业务分析"
+        ],
+        "en": [
+          "PM",
+          "product manager",
+          "PRD",
+          "requirements",
+          "roadmap"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.architecture",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
       "categoryIds": [
-        "engineering"
+        "engineering",
+        "product"
       ],
       "content": {
         "zh-CN": {
@@ -344,12 +383,50 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "architecture",
+          "title": {
+            "zh-CN": "架构设计",
+            "en": "Architecture"
+          }
+        },
+        {
+          "id": "api-design",
+          "title": {
+            "zh-CN": "接口设计",
+            "en": "API design"
+          }
+        },
+        {
+          "id": "decision",
+          "title": {
+            "zh-CN": "技术决策",
+            "en": "Technical decisions"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "架构师",
+          "系统设计",
+          "模块边界",
+          "技术方案"
+        ],
+        "en": [
+          "architect",
+          "architecture",
+          "system design",
+          "ADR",
+          "API"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.web-ui",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -513,16 +590,56 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "ui-design",
+          "title": {
+            "zh-CN": "界面设计",
+            "en": "UI design"
+          }
+        },
+        {
+          "id": "interaction",
+          "title": {
+            "zh-CN": "交互设计",
+            "en": "Interaction design"
+          }
+        },
+        {
+          "id": "accessibility",
+          "title": {
+            "zh-CN": "无障碍",
+            "en": "Accessibility"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "设计师",
+          "网页设计",
+          "界面",
+          "交互",
+          "无障碍"
+        ],
+        "en": [
+          "UI",
+          "UX",
+          "web design",
+          "accessibility",
+          "design system"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.qa",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
       "categoryIds": [
+        "quality",
         "engineering"
       ],
       "content": {
@@ -682,12 +799,50 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "test-plan",
+          "title": {
+            "zh-CN": "测试规划",
+            "en": "Test planning"
+          }
+        },
+        {
+          "id": "regression",
+          "title": {
+            "zh-CN": "回归测试",
+            "en": "Regression testing"
+          }
+        },
+        {
+          "id": "acceptance",
+          "title": {
+            "zh-CN": "验收标准",
+            "en": "Acceptance criteria"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "测试工程师",
+          "质量保障",
+          "验收",
+          "测试用例"
+        ],
+        "en": [
+          "QA",
+          "quality assurance",
+          "test engineer",
+          "testing",
+          "regression"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.copy",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -851,12 +1006,50 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "copywriting",
+          "title": {
+            "zh-CN": "文案写作",
+            "en": "Copywriting"
+          }
+        },
+        {
+          "id": "editing",
+          "title": {
+            "zh-CN": "文案润色",
+            "en": "Copy editing"
+          }
+        },
+        {
+          "id": "positioning",
+          "title": {
+            "zh-CN": "价值表达",
+            "en": "Value messaging"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "文案专家",
+          "营销文案",
+          "官网文案",
+          "润色"
+        ],
+        "en": [
+          "copywriter",
+          "copywriting",
+          "marketing copy",
+          "editing",
+          "messaging"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.tutorial",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -1020,12 +1213,50 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "technical-writing",
+          "title": {
+            "zh-CN": "技术写作",
+            "en": "Technical writing"
+          }
+        },
+        {
+          "id": "tutorials",
+          "title": {
+            "zh-CN": "教程设计",
+            "en": "Tutorial design"
+          }
+        },
+        {
+          "id": "api-docs",
+          "title": {
+            "zh-CN": "接口文档",
+            "en": "API documentation"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "技术文档专家",
+          "教程",
+          "使用指南",
+          "接口说明"
+        ],
+        "en": [
+          "technical writer",
+          "documentation",
+          "tutorial",
+          "guide",
+          "API docs"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.integration",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -1188,17 +1419,56 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "backend",
+          "title": {
+            "zh-CN": "后端开发",
+            "en": "Backend development"
+          }
+        },
+        {
+          "id": "integration",
+          "title": {
+            "zh-CN": "系统集成",
+            "en": "System integration"
+          }
+        },
+        {
+          "id": "api-design",
+          "title": {
+            "zh-CN": "接口设计",
+            "en": "API design"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "后端工程师",
+          "集成工程师",
+          "系统对接",
+          "接口开发"
+        ],
+        "en": [
+          "backend",
+          "integration",
+          "API",
+          "service",
+          "server"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.frontend",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
       "categoryIds": [
-        "engineering"
+        "engineering",
+        "design"
       ],
       "content": {
         "zh-CN": {
@@ -1357,12 +1627,50 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "frontend",
+          "title": {
+            "zh-CN": "前端开发",
+            "en": "Frontend development"
+          }
+        },
+        {
+          "id": "components",
+          "title": {
+            "zh-CN": "组件实现",
+            "en": "Component implementation"
+          }
+        },
+        {
+          "id": "accessibility",
+          "title": {
+            "zh-CN": "无障碍",
+            "en": "Accessibility"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "前端工程师",
+          "网页开发",
+          "组件开发",
+          "界面实现"
+        ],
+        "en": [
+          "frontend",
+          "front-end",
+          "web developer",
+          "React",
+          "UI implementation"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.data",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
@@ -1526,17 +1834,57 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "data-analysis",
+          "title": {
+            "zh-CN": "数据分析",
+            "en": "Data analysis"
+          }
+        },
+        {
+          "id": "metrics",
+          "title": {
+            "zh-CN": "指标定义",
+            "en": "Metrics"
+          }
+        },
+        {
+          "id": "visualization",
+          "title": {
+            "zh-CN": "数据可视化",
+            "en": "Data visualization"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "数据分析师",
+          "数据统计",
+          "报表",
+          "指标",
+          "看板"
+        ],
+        "en": [
+          "data analyst",
+          "analytics",
+          "metrics",
+          "dashboard",
+          "report"
+        ]
+      }
     },
     {
       "sourceId": "curated",
       "id": "amble.devops",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "publisher": "Ambleloft",
       "status": "draft",
       "defaultLocale": "zh-CN",
       "categoryIds": [
-        "operations"
+        "operations",
+        "engineering"
       ],
       "content": {
         "zh-CN": {
@@ -1693,7 +2041,45 @@
             "state": "unresolved"
           }
         }
-      ]
+      ],
+      "tags": [
+        {
+          "id": "deployment",
+          "title": {
+            "zh-CN": "部署交付",
+            "en": "Deployment"
+          }
+        },
+        {
+          "id": "ci-cd",
+          "title": {
+            "zh-CN": "持续集成",
+            "en": "CI/CD"
+          }
+        },
+        {
+          "id": "diagnostics",
+          "title": {
+            "zh-CN": "故障排查",
+            "en": "Diagnostics"
+          }
+        }
+      ],
+      "keywords": {
+        "zh-CN": [
+          "运维工程师",
+          "部署",
+          "持续集成",
+          "故障排查"
+        ],
+        "en": [
+          "DevOps",
+          "deployment",
+          "CI/CD",
+          "operations",
+          "infrastructure"
+        ]
+      }
     }
   ]
 }
