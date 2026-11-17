@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS input_mutations(run_id TEXT NOT NULL,method TEXT NOT 
 function handlers(db,transaction,chatInput){
  const messages=(runId,ids)=>{
   const selection=ids?' AND item_key IN ('+ids.map(()=>'?').join(',')+')':'';
-  return db.prepare("SELECT position,data FROM run_items WHERE run_id=? AND collection='messages' AND json_extract(data,'$.role')='user' AND json_extract(data,'$.inputSource')='user' AND json_extract(data,'$.inputDeliveryState')='delivered' AND json_extract(data,'$.formSubmissionId') IS NULL"+selection+' ORDER BY position DESC LIMIT 21').all(runId,...(ids||[])).reverse().flatMap(row=>{const m=JSON.parse(row.data);return typeof m.text==='string'?[{id:m.id,sequence:row.position,text:m.text}]:[];});
+  return db.prepare("SELECT item_key,position,data FROM run_items WHERE run_id=? AND collection='messages' AND json_extract(data,'$.role')='user' AND json_extract(data,'$.inputSource')='user' AND json_extract(data,'$.inputDeliveryState')='delivered' AND json_extract(data,'$.formSubmissionId') IS NULL"+selection+' ORDER BY position DESC LIMIT 21').all(runId,...(ids||[])).reverse().flatMap(row=>{const m=require('../../electron/run-text-store.cjs').hydrateItem(db,runId,'messages',row);return typeof m.text==='string'?[{id:m.id,sequence:row.position,text:m.text}]:[];});
  };
  const get=(runId,id)=>{const row=db.prepare('SELECT data FROM input_requests WHERE run_id=? AND id=?').get(runId,id);return row?JSON.parse(row.data):null;};
  const put=r=>db.prepare('INSERT INTO input_requests VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,data=excluded.data').run(r.id,r.runId,r.state,JSON.stringify(r));

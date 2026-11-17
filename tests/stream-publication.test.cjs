@@ -18,3 +18,8 @@ test('pagination happens before cloning and leaves authoritative history intact'
  run.tools[0].notCloneable=()=>{};runtime.changed(run);assert.equal(events[0].messages.length,60);assert.equal(events[0].turnOffset,270);assert.equal(events[0].tools.length,30);assert.equal(events[0].modelRequests,undefined);assert.equal(run.tools.length,300);
  run.tools[299].detail='changed later';assert.equal(events[0].tools.at(-1).detail.length,20000);
 });
+test('versioned publication transfers the already isolated event without a second clone',t=>{
+ const {createRunPublisher}=require('../electron/run-events.mjs');const publisher=createRunPublisher('publication');let projected;
+ const {runtime,events}=fixture(t,run=>(projected=publisher.encode(pageRun(run))));const run={id:'r',status:'running',messages:[{id:'u',role:'user',text:'task'},{id:'a',role:'assistant',text:'first'}],tools:[]};
+ runtime.changed(run);assert.equal(events[0],projected);run.messages[1].text='second';runtime.changed(run);assert.equal(events[0].run.messages[1].text,'first');assert.equal(events[1],projected);assert.equal(events[1].kind,'run-delta');
+});

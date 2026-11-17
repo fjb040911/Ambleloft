@@ -40,3 +40,18 @@ test('preload exposes raw deltas and keeps legacy snapshots ordered across unsub
  assert.equal(raw[1],delta);assert.equal(legacy.length,1);off();const offNew=desktop.onRun(value=>legacy.push(value));pending.shift()(pub.snapshot('r'));await new Promise(resolve=>setImmediate(resolve));assert.equal(legacy.length,1);
  ipc.emit('agent:event',{},pub.snapshot('r'));ipc.emit('agent:event',{},first);assert.equal(legacy.length,2);assert.equal(legacy[1].status,'waiting');offRaw();offNew();assert.equal(ipc.listenerCount('agent:event'),0);
 });
+test('large MCP output is paged while structured input protocols remain intact',()=>{
+ const detail=JSON.stringify({result:'large-output '.repeat(20000)});
+ const tool={id:'mcp',type:'mcpToolCall',label:'search/server',detail};const preview=previewTool(tool);
+ assert.equal(preview.detail.length,2048);assert.equal(preview.detailPreview,true);
+ let full='';for(let offset=0;offset<detail.length;offset+=64000)full+=toolText({tools:[tool]},{toolId:'mcp',offset}).text;assert.equal(full,detail);
+ for(const label of ['amble_extensions/input_request','amble_extensions/forms_present','amble_extensions/ui_present']){const input={...tool,label};assert.equal(previewTool(input),input);}
+});
+test('unchanged tool and native activity previews reuse hashes, changes invalidate them without stale status',()=>{
+ const crypto=require('node:crypto');let hashes=0;const load=name=>{const module={exports:{}};require('node:vm').runInNewContext(require('node:fs').readFileSync(require.resolve('../electron/'+name),'utf8'),{module,Buffer,require:id=>id==='node:crypto'?{createHash:(...args)=>{hashes++;return crypto.createHash(...args);}}:id==='./runtime-text-cache.cjs'?load('runtime-text-cache.cjs'):require(id)});return module.exports;};const {previewTool}=load('tool-previews.cjs');
+ {const tool={type:'analysis',detail:'x'.repeat(10000),status:'running',nativeActivity:[{id:'n',text:'a'.repeat(1000)}]};const first=previewTool(tool);assert.equal(hashes,2);
+ tool.status='completed';assert.equal(previewTool(tool).status,'completed');assert.equal(hashes,2);
+ tool.detail+='next';const next=previewTool(tool);assert.equal(hashes,3);assert.notEqual(next.detailVersion,first.detailVersion);assert.equal(first.detail.endsWith('next'),false);
+ tool.nativeActivity[0].text+='last';previewTool(tool);assert.equal(hashes,4);
+ }
+});

@@ -22,8 +22,27 @@ function recordRun(db,run){const fingerprint=hash(material(run)),old=db.prepare(
  const messages=new Map((run.messages||[]).map(m=>[m.id,m])),tools=new Map((run.tools||[]).map(t=>[t.id,t]));
  for(const row of db.prepare("SELECT id,data FROM task_context_projections WHERE status='active'").all()){const p=JSON.parse(row.data);if(p.runId!==run.id)continue;if(p.projectId!==(run.projectId||null)||p.items.some(i=>i.fileEvidence?(i.fileTarget.cwd!==run.cwd||!!run.remote||hash((run.fileChanges||[]).find(b=>b.turnKey===i.fileEvidence.recorded.turnKey)?.files?.find(f=>f.path===i.fileEvidence.path)||null)!==i.changeFingerprint):i.toolId?(!tools.has(i.toolId)||hash(toolObservation(tools.get(i.toolId)))!==i.contentHash):i.messageId&&(!messages.has(i.messageId)||hash(messages.get(i.messageId).text||'')!==i.contentHash||i.kind==='user-instruction'&&!delivered(messages.get(i.messageId)))))db.prepare("UPDATE task_context_projections SET status='invalidated' WHERE id=?").run(row.id);}
 }
+// Validate only captured sources touched by this patch, not every historical item.
+function recordRunPatch(db,run,patch,fingerprint){
+ db.prepare('INSERT INTO task_context_heads VALUES(?,1,?) ON CONFLICT(run_id) DO UPDATE SET revision=revision+1,fingerprint=excluded.fingerprint').run(run.id,fingerprint);
+ const changed=new Set([...patch.upserts.map(i=>JSON.stringify([i.collection,i.key])),...patch.deletes.map(i=>JSON.stringify(i))]);
+ const affected=(collection,key)=>!!patch.keepItems||changed.has(JSON.stringify([collection,key]));
+ const cache=new Map(),read=(collection,key,hydrate=true)=>{
+  const lookup=JSON.stringify([collection,key]);if(cache.has(lookup))return cache.get(lookup);
+  const row=db.prepare('SELECT item_key,data FROM run_items WHERE run_id=? AND collection=? AND item_key=?').get(run.id,collection,key);
+  const value=row?(hydrate?require('../../electron/run-text-store.cjs').hydrateItem(db,run.id,collection,row):JSON.parse(row.data)):null;cache.set(lookup,value);return value;
+ };
+ for(const row of db.prepare("SELECT id,data FROM task_context_projections WHERE status='active' AND json_extract(data,'$.runId')=?").all(run.id)){
+  const p=JSON.parse(row.data),invalid=p.projectId!==(run.projectId||null)||p.items.some(i=>{
+   if(i.fileEvidence){if(i.fileTarget.cwd!==run.cwd||!!run.remote)return true;const turn=i.fileEvidence.recorded.turnKey;if(!affected('fileChanges',turn))return false;return hash(read('fileChanges',turn)?.files?.find(f=>f.path===i.fileEvidence.path)||null)!==i.changeFingerprint;}
+   if(i.toolId){if(!affected('tools',i.toolId))return false;const tool=read('tools',i.toolId,false);return !tool||hash(toolObservation(tool))!==i.contentHash;}
+   if(i.messageId&&affected('messages',i.messageId)){const message=read('messages',i.messageId);return !message||hash(message.text||'')!==i.contentHash||i.kind==='user-instruction'&&!delivered(message);}
+   return false;
+  });if(invalid)db.prepare("UPDATE task_context_projections SET status='invalidated' WHERE id=?").run(row.id);
+ }
+}
 function createTaskContext(db,continuity){
- const readRun=id=>{const row=db.prepare('SELECT data FROM runs WHERE id=?').get(id);if(!row)throw Error('TASK_CONTEXT_UNAVAILABLE');const run=JSON.parse(row.data);for(const c of ['messages','tools','questions','fileChanges'])run[c]=db.prepare('SELECT data FROM run_items WHERE run_id=? AND collection=? ORDER BY position').all(id,c).map(r=>JSON.parse(r.data));return run;};
+ const readRun=id=>{const row=db.prepare('SELECT data FROM runs WHERE id=?').get(id);if(!row)throw Error('TASK_CONTEXT_UNAVAILABLE');const run=JSON.parse(row.data);for(const c of ['messages','tools','questions','fileChanges'])run[c]=require('../../electron/run-text-store.cjs').readItems(db,id,c);return run;};
  const staff=()=>JSON.parse(db.prepare("SELECT data FROM settings WHERE key='workforce.roles.v1'").get()?.data||'{}').employees||[];
  function capture(anchor,excluded=[],question=''){if(anchor.kind!=='run')return null;const run=readRun(anchor.recordId);if(run.remote)throw Error('TASK_CONTEXT_REMOTE_UNSUPPORTED');if(!db.prepare('SELECT run_id FROM task_context_heads WHERE run_id=?').get(run.id))recordRun(db,run);const items=[],omissions=[];
   for(const m of run.messages){if(delivered(m)&&typeof m.text==='string'&&m.text.trim()){items.push({id:hash([run.id,m.id,hash(m.text)]),sourceKey:key('task-context',run.id,m.id),messageId:m.id,kind:'user-instruction',authority:'user-instruction',contentHash:hash(m.text),body:m.text.slice(0,3000),truncated:m.text.length>3000,originalSize:m.text.length,title:'任务用户指令'});}else if(m.role==='assistant'&&!m.kind&&(!m.phase||m.phase==='final_answer')&&!omissions.some(o=>o.kind==='assistant-report'))omissions.push({kind:'assistant-report',reason:'历史回答未提供完整输入依赖证明，未自动转交'});}
@@ -49,4 +68,4 @@ function createTaskContext(db,continuity){
  function revoke({conversationId,turnId},state){const t=state.turns.find(t=>t.id===turnId);if(!t?.taskContextProjectionId)throw Error('TASK_CONTEXT_UNAVAILABLE');const p=db.prepare('SELECT data FROM task_context_projections WHERE id=? AND conversation_id=?').get(t.taskContextProjectionId,conversationId);if(!p)throw Error('TASK_CONTEXT_UNAVAILABLE');db.prepare("UPDATE task_delegations SET status='revoked' WHERE id=?").run(JSON.parse(p.data).delegationId);continuity.invalidate('task-delegation');}
  return {capture,project,validate,revoke};
 }
-module.exports={schema,recordRun,createTaskContext};
+module.exports={schema,recordRun,recordRunPatch,createTaskContext};

@@ -47,7 +47,7 @@ async function switchModel(input){
    rpc=this.rpcFactory({executable,home,cwd,config:bridge?.config||config,extensionMcp:context.extensionChannel?.config,
     notification:m=>{if(context.rpc===rpc)this.notification(context,m);},request:m=>{if(context.rpc===rpc)this.request(context,m);},
     exit:e=>{if(context.rpc===rpc&&!context.done&&!context.permissionTransition)void this.finish(context,'failed',redact(e.message,config.apiKey));}});
-   context.rpc=rpc;context.rpcLocation={home,cwd};run.modelSessionId=nextSession;
+   context.rpc=rpc;rpc.setBackpressure?.(this.storagePressure);context.rpcLocation={home,cwd};run.modelSessionId=nextSession;
    await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}});check();rpc.send({method:'initialized',params:{}});
   },
   parameters:()=>({model:config.model,modelProvider:'atelier'}),

@@ -1,3 +1,4 @@
+const {metrics,startMetrics}=require('./performance-metrics.cjs');
 const {createRunPublisher}=require('./run-events.mjs');
 const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
@@ -89,6 +90,8 @@ function createWindow() {
 
 app.on('second-instance', (_event, argv) => { const link = argv.find(value => value.startsWith('ambleloft://')); if (link) receiveStoreURL(link); const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
 app.whenReady().then(async () => {
+  const stopMetrics=startMetrics();app.once('will-quit',stopMetrics);
+  app.on('web-contents-created',(_event,contents)=>contents.on('render-process-gone',(_event,details)=>metrics.exited(details.reason,details.exitCode)));
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
   let updateTransaction=null;
@@ -245,7 +248,7 @@ app.whenReady().then(async () => {
   runtime.expertChat=new ExpertChatService({database,runtime,continuity:runtime.continuity,workforce:workforceService,providers:services.providers,publish:id=>windows.broadcast(profileId,'expert-chat:event',{conversationId:id})});
   await runtime.expertChat.initialize();
   const {InvestigationService}=require('../core/continuity/investigation.cjs');
-  runtime.investigation=new InvestigationService({database,providers:services.providers,runtime,publish:async id=>{const job=await runtime.investigation.read({id});const run=(await database.call('readRuns')).find(r=>r.id===job.runId);if(run){const index=runtime.runs.findIndex(r=>r.id===run.id);if(index<0)runtime.runs.unshift(run);else runtime.runs[index]=run;runtime.publish(run);}windows.broadcast(profileId,'expert-chat:event',{conversationId:job.originId});}});
+  runtime.investigation=new InvestigationService({database,providers:services.providers,runtime,publish:async id=>{const job=await runtime.investigation.read({id});const run=await database.call('readRun',{id:job.runId});if(run){const index=runtime.runs.findIndex(r=>r.id===run.id);if(index<0)runtime.runs.unshift(run);else runtime.runs[index]=run;runtime.publish(run);}windows.broadcast(profileId,'expert-chat:event',{conversationId:job.originId});}});
   await runtime.investigation.initialize();
   ipcMain.handle('investigation:open',async(event,input)=>{const owner=authorize(event),job=await runtime.investigation.read({id:input.id});let runId=job.runId;if(input.origin){const state=await runtime.expertChat.call('read',{conversationId:job.originId});runId=state.anchor.recordId;}owner.window.webContents.send('extension:open-conversation',{kind:'run',recordId:runId});});
   for(const action of ['start','read','list','cancel','revokeWrite','resume','revokeResume'])ipcMain.handle('investigation:'+action,(event,input)=>{authorize(event);checkRuntime();if(['start','resume'].includes(action)&&configBusy)throw Error('正在更新模型配置');return runtime.investigation[action](input);});
@@ -394,14 +397,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:export-diagnostics', async (event, input) => {
     const owner=authorize(event);checkRuntime();
     const run=runtime.runs.find(r=>r.id===input?.id);if(!run)throw new Error('任务不存在');
-    const report=require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion());
+    const report={...require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion()),performance:{...metrics.snapshot(),runtimeTextCache:database.textCache?.stats()}};
     const result=await hostDialog('showSaveDialog',owner.window,{title:input?.language==='en'?'Export diagnostic data':'导出诊断数据',defaultPath:'ambleloft-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json',filters:[{name:'JSON',extensions:['json']}]});
     if(result.canceled||!result.filePath)return null;
     await require('node:fs/promises').writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
     return {saved:true};
   });
   ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在');if(project.type==='ssh')throw Error('请通过项目文件面板浏览远端目录'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
-  ipcMain.handle('agent:tool-text',(event,input)=>{authorize(event);checkRuntime();return require('./tool-previews.cjs').toolText(runtime.runs.find(r=>r.id===input?.id),input);});
+  ipcMain.handle('agent:tool-text',(event,input)=>{authorize(event);checkRuntime();const run=runtime.runs.find(r=>r.id===input?.id);if(run&&!['preparing','running','waiting','stopping'].includes(run.status)&&!runtime.dirtyRuns.has(run.id))return database.call('readToolText',input);return require('./tool-previews.cjs').toolText(run,input);});
   ipcMain.handle('agent:snapshot',(event,input)=>{authorize(event);checkRuntime();const source=runtime.runs.find(r=>r.id===input?.id);if(!source)throw Error('会话不存在');const cached=runPublisher.snapshot(input?.id);if(cached)return cached;const run=pageRun(source);runPublisher.encode(structuredClone(run));return runPublisher.snapshot(run.id);});
   ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
   const searchSnapshots=new Map();

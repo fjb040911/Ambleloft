@@ -11,6 +11,7 @@ const {validPlan,validDelivery,validUpdate} = require(engineRuntime().packaged ?
 const {snapshot,compare}=require('./file-changes.cjs');
 const {collectArtifacts} = require('./artifacts.cjs');
 const {startChatBridge,usesChat} = require('./chat-bridge.cjs');
+const {fields:streamFields,secrets:streamSecrets,cleanText}=require('./stream-redactor.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 
 class AgentRuntime {
@@ -18,12 +19,13 @@ class AgentRuntime {
     this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.projectRun=projectRun;this.publications=new WeakMap();
     this.native = new (require('./native-subagents.cjs').NativeSubagents)(this);
     this.conversation = new (require('./conversation-agent.cjs').ConversationAgent)(this,conversationOptions);
-    this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;
+    this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;this.dirtyItems=new Map();
+    this.streamBytes=new Map();this.storagePressure=false;this.unsubscribePressure=this.database?.subscribePressure?.(()=>this.updateStoragePressure());
     this.file = path.join(directory, 'conversations.json');
   }
   get active() { return this.contexts.values().next().value || null; }
   drain() {
-    if(this.closing)return;
+    if(this.closing||this.storagePressure)return;
     for(const context of [...this.pendingStarts]){
       if(context.done||context.cancelled){this.pendingStarts=this.pendingStarts.filter(c=>c!==context);continue;}
       const running=[...this.contexts.values()].filter(c=>c.launched&&!c.done);
@@ -35,16 +37,24 @@ class AgentRuntime {
       void context.launch().catch(error=>this.finish(context,'failed',redact(error.message,context.config.apiKey)));
     }
   }
+  updateStoragePressure(){
+    const bytes=(this.database?.pendingBytes||0)+[...this.streamBytes.values()].reduce((a,b)=>a+b,0);
+    const next=!!this.database?.pressure||bytes>=16*1024*1024||this.storagePressure&&bytes>4*1024*1024;
+    if(next===this.storagePressure)return;this.storagePressure=next;
+    for(const context of this.contexts.values()){context.rpc?.setBackpressure?.(next);if(context.run&&!context.done){context.run.storageBackpressure=next;this.publishRun(context.run);}}
+    if(!next)this.drain();
+  }
+  acknowledgeBytes(snapshot){for(const [id,bytes] of snapshot){const remaining=(this.streamBytes.get(id)||0)-bytes;if(remaining>0)this.streamBytes.set(id,remaining);else this.streamBytes.delete(id);}this.updateStoragePressure();}
   async init() {
     try {
-      this.runs = this.database ? await this.database.call('readRuns') : JSON.parse(await fs.readFile(this.file, 'utf8'));
+      this.runs = this.database ? await this.database.call(this.database.incrementalRuns?'readRuntimeRuns':'readRuns') : JSON.parse(await fs.readFile(this.file, 'utf8'));
       if (!Array.isArray(this.runs)) throw new Error('invalid conversations');
       for (const run of this.runs) if (BUSY.includes(run.status)) {
         run.queued=false; run.status = 'interrupted'; run.error = '上次应用退出时任务未完成。请核实工具结果后再继续，不会自动重试。'; run.approvals = []; run.questions=[]; run.retrying=false;
         const timing = run.messages?.findLast(message => message.role === 'user'&&!message.turnKey)?.timing;
         if (timing && !timing.outcome) timing.outcome = 'interrupted';
       }
-      for(const run of this.runs){if(['switching','configured'].includes(run.modelChange?.state)){run.modelChange.state='failed';run.modelChange.effective=null;run.modelChange.error='应用已重启，模型切换未确认生效。';await this.chatInputs?.pause(run.id);}if(run.permissionChange?.state==='switching'){run.permissionChange.state='failed';run.permissionChange.effective=null;run.permissionChange.error='应用已重启，权限切换未确认生效。';await this.chatInputs?.pause(run.id);}run.questions=[];this.native.recover(run);} // Old RPC requests never survive a process restart.
+      for(const run of this.runs){if(['switching','configured'].includes(run.modelChange?.state)){run.modelChange.state='failed';run.modelChange.effective=null;run.modelChange.error='应用已重启，模型切换未确认生效。';await this.chatInputs?.pause(run.id);}if(run.permissionChange?.state==='switching'){run.permissionChange.state='failed';run.permissionChange.effective=null;run.permissionChange.error='应用已重启，权限切换未确认生效。';await this.chatInputs?.pause(run.id);}run.questions=[];run.storageBackpressure=false;this.native.recover(run);} // Old RPC requests never survive a process restart.
       await this.persist();
     } catch (error) { if (error.code !== 'ENOENT') throw new Error('对话记录无法读取，未覆盖原始数据'); }
     this.initialized = true;
@@ -96,12 +106,13 @@ class AgentRuntime {
     const partial=!!terminal||!!dirtyRun;
     if(dirtyRun)this.dirtyRuns.set(dirtyRun.id,(this.dirtyRuns.get(dirtyRun.id)||0)+1);
     const operation=this.writes.then(async()=>{
-      const versions=new Map(this.dirtyRuns);
-      const runs=partial?this.runs.filter(run=>versions.has(run.id)||run.id===terminal?.runId):this.runs;
-      const snapshot=structuredClone(runs);
+      const runs=partial?this.runs.filter(run=>run.id===(dirtyRun?.id||terminal?.runId)):this.runs;
+      const ids=new Set(runs.map(run=>run.id)),versions=new Map([...this.dirtyRuns].filter(([id])=>ids.has(id))),streamSnapshot=new Map([...this.streamBytes].filter(([id])=>ids.has(id)));
+      const snapshot=this.database?.incrementalRuns?runs:structuredClone(runs);
       if(this.database)await this.database.call(terminal?'commitTurn':partial?'saveRunUpdates':'saveRuns',terminal?{runs:snapshot,...terminal,partial}:snapshot);
       else await writeJSON(this.file,structuredClone(this.runs));
-      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version)this.dirtyRuns.delete(id);
+      this.acknowledgeBytes(streamSnapshot);
+      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version){this.dirtyRuns.delete(id);this.dirtyItems.delete(id);}
     });
     this.writes=operation.catch(()=>{});return operation;
   }
@@ -111,21 +122,37 @@ class AgentRuntime {
     if(this.pendingSave)return this.pendingSave;
     const operation=this.writes.then(async()=>{
       this.pendingSave=null;
-      const versions=new Map(this.dirtyRuns);
+      const versions=new Map(this.dirtyRuns),streamSnapshot=new Map(this.streamBytes);
       const runs=this.runs.filter(run=>versions.has(run.id));
       if(!runs.length)return;
-      if(this.database)await this.database.call('saveRunUpdates',structuredClone(runs));
+      if(this.database){
+        const errors=[];
+        for(const run of runs){
+          const version=this.dirtyRuns.get(run.id),bytes=this.streamBytes.get(run.id)||0,value=this.dirtyItems.get(run.id),hints=new Map([[run.id,value instanceof Set?new Set(value):null]]);
+          try{await this.database.call('saveRunUpdates',this.database.incrementalRuns?[run]:structuredClone([run]),{hints});this.acknowledgeBytes(new Map([[run.id,bytes]]));if(this.dirtyRuns.get(run.id)===version){this.dirtyRuns.delete(run.id);this.dirtyItems.delete(run.id);}}
+          catch(error){errors.push({id:run.id,error});}
+        }
+        if(errors.length)throw Object.assign(errors[0].error,{runIds:errors.map(item=>item.id)});
+        return;
+      }
       else await writeJSON(this.file,structuredClone(this.runs));
-      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version)this.dirtyRuns.delete(id);
+      this.acknowledgeBytes(streamSnapshot);
+      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version){this.dirtyRuns.delete(id);this.dirtyItems.delete(id);}
     });
     this.pendingSave=operation;this.writes=operation.catch(()=>{});
     return operation;
   }
   publishRun(run) {
     const {modelRequests,...view}=run;
-    this.publish(structuredClone(this.projectRun(view)));
+    const projected=this.projectRun(view);
+    // The versioned publisher already owns an immutable snapshot/delta. Plain
+    // projections still need isolation from subsequent runtime mutations.
+    this.publish(['run-snapshot','run-delta'].includes(projected.kind)?projected:structuredClone(projected));
   }
-  changed(run, {stream=false}={}) {
+  changed(run, {stream=false,items,bytes=0}={}) {
+    if(!stream||!items)this.dirtyItems.set(run.id,null);
+    else if(this.dirtyItems.get(run.id)!==null){const dirty=this.dirtyItems.get(run.id)||new Set();for(const item of items)dirty.add(JSON.stringify(item));this.dirtyItems.set(run.id,dirty);}
+    if(bytes)this.streamBytes.set(run.id,(this.streamBytes.get(run.id)||0)+bytes);
     run.updatedAt = new Date().toISOString();
     this.dirtyRuns.set(run.id,(this.dirtyRuns.get(run.id)||0)+1);
     let publication=this.publications.get(run);
@@ -135,10 +162,13 @@ class AgentRuntime {
     // Only content deltas may wait. Every control/state update flushes immediately.
     if(!stream||remaining<=0)flush();
     else if(!publication.timer){publication.timer=setTimeout(flush,remaining);publication.timer.unref?.();}
+    const urgent=[...this.streamBytes.values()].reduce((a,b)=>a+b,0)>=256*1024;
+    if(urgent){clearTimeout(this.saveTimer);this.saveTimer=null;}
+    this.updateStoragePressure();
     if (!this.saveTimer) this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.persistChanged().catch(() => { run.error = '对话保存失败，请检查磁盘空间。'; this.publishRun(run); for(const context of this.contexts.values())if(context.run===run)void this.finish(context,'failed',run.error); });
-    }, 250);
+      this.persistChanged().catch(error => {for(const id of error.runIds||[run.id]){const failed=this.runs.find(item=>item.id===id)||run;failed.error=error.code==='DATABASE_BACKPRESSURE'?'待保存输出超过缓冲上限，任务已停止接收。已有已保存记录保留，请检查诊断后继续。':'对话保存失败，请检查磁盘空间。';this.publishRun(failed);for(const context of this.contexts.values())if(context.run===failed&&!context.done)void this.finish(context,'failed',failed.error);}});
+    }, urgent?0:250);
   }
   async patchWorkspace(input) {
     const projects=(await this.workspace.read()).projects;
@@ -339,7 +369,7 @@ class AgentRuntime {
       context.config = config;
       if (!previous && this.database) {
         const operation=this.writes.then(async()=>{
-          const identities=await this.database.call('commitRunStart',{runs:structuredClone([run,...this.runs]),draftId:draft?.id,expectedRevision:draft?.revision});
+          const identities=await this.database.call('commitRunStart',{runs:this.database.incrementalRuns?[run]:structuredClone([run,...this.runs]),partial:!!this.database.incrementalRuns,draftId:draft?.id,expectedRevision:draft?.revision});
           run.conversationId=identities.find(item=>item.id===run.id).conversationId;
           this.runs.unshift(run);
         });
@@ -377,7 +407,7 @@ class AgentRuntime {
       launchedRPC = this.rpcFactory({ executable, config:context.bridge?.config||config, home, cwd, extensionMcp:context.extensionChannel?.config,
         notification: message => {if(context.rpc===launchedRPC)this.notification(context, message);}, request: message => {if(context.rpc===launchedRPC)this.request(context, message);},
         exit: error => { if (context.rpc===launchedRPC&&!context.done) void this.finish(context, 'failed', redact(error.message, config.apiKey)); } });
-      context.rpc=launchedRPC;
+      context.rpc=launchedRPC;context.rpc.setBackpressure?.(this.storagePressure);run.storageBackpressure=this.storagePressure;
       void this.execute(context).catch(error => { if(context.rpc!==launchedRPC)return;context.inputDelivery?.reject(error); if (!context.done) void this.finish(context, context.cancelled ? 'interrupted' : 'failed', redact(error.message, config.apiKey)); });
       };
       run.queued=!context.dualAgent;
@@ -451,7 +481,7 @@ class AgentRuntime {
     if(eventTurnId&&run.turnId&&eventTurnId!==run.turnId)return;
     const wasRetrying=run.retrying;
     if(run.retrying&&['item/started','item/agentMessage/delta','item/reasoning/textDelta','item/reasoning/summaryTextDelta'].includes(method)){run.retrying=false;run.error='';}
-    const clean = value => redact(value || '', context.config.apiKey);
+    const clean = value => cleanText(context,value);
     run.lastEventAt=new Date().toISOString();
     const stamp = () => ({ turnKey: context.turnKey, order: run.nextEventOrder = (run.nextEventOrder || 0) + 1 });
     if(method==='serverRequest/resolved'){
@@ -466,15 +496,15 @@ class AgentRuntime {
     else if (method === 'item/agentMessage/delta') {
       let item = run.messages.find(item => item.id === params.itemId);
       if (!item) { item = { id: params.itemId, role: 'assistant', text: '', ...stamp() }; run.messages.push(item); }
-      item.text = clean(item.text + params.delta);
+      streamFields(context).append(item,'text',params.delta,streamSecrets(context),{scope:params.threadId});
     } else if (['item/reasoning/summaryTextDelta', 'item/reasoning/textDelta', 'item/reasoning/summaryPartAdded'].includes(method)) {
       let item = run.messages.find(item => item.id === params.itemId);
       if (!item) { item = { id: params.itemId, role: 'assistant', kind: 'reasoning', text: '', summary: [], content: [], status: 'running', ...stamp() }; run.messages.push(item); }
       const field = method === 'item/reasoning/textDelta' ? 'content' : 'summary';
       const index = field === 'content' ? params.contentIndex : params.summaryIndex;
       if (Number.isInteger(index) && index >= 0 && index < 1000) {
-        item[field] ||= []; item[field][index] = clean((item[field][index] || '') + (params.delta || ''));
-        item.text = (item.summary?.some(Boolean) ? item.summary : item.content || []).join('\n\n');
+        item[field] ||= [];streamFields(context).append(item[field],index,params.delta,streamSecrets(context),{scope:params.threadId});
+        streamFields(context).join(item,'text',()=> (item.summary?.some(Boolean)?item.summary:item.content||[]).join('\n\n'),params.threadId);
         item.reasoningFormat=item.summary?.some(Boolean)?'summary':'text';
       }
     } else if (method === 'item/started' || method === 'item/completed') {
@@ -483,6 +513,7 @@ class AgentRuntime {
       if (item.type === 'reasoning') {
         let existing = run.messages.find(message => message.id === item.id);
         if (!existing) { existing = { id: item.id, role: 'assistant', kind: 'reasoning', text: '', summary: [], content: [], ...stamp() }; run.messages.push(existing); }
+        for(const parts of [existing.summary,existing.content])for(let i=0;i<(parts?.length||0);i++)streamFields(context).flush(parts,i);
         if (item.summary?.length) existing.summary = item.summary.map(clean);
         if (item.content?.length) existing.content = item.content.map(clean);
         existing.text = (existing.summary?.some(Boolean) ? existing.summary : existing.content || []).join('\n\n');
@@ -491,7 +522,7 @@ class AgentRuntime {
       } else if (item.type === 'agentMessage') {
         let existing = run.messages.find(message => message.id === item.id);
         if (!existing) { existing = { id: item.id, role: 'assistant', text: '', ...stamp() }; run.messages.push(existing); }
-        existing.text = clean(item.text);
+        streamFields(context).reset(existing,'text');existing.text = clean(item.text);
         if (['commentary', 'final_answer'].includes(item.phase)) existing.phase = item.phase;
         existing.status = method === 'item/completed' ? 'completed' : 'running';
       } else if (['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch', 'plan', 'contextCompaction'].includes(item.type)) {
@@ -515,6 +546,8 @@ class AgentRuntime {
           this.changed(run);return;
         }
         const previous = run.tools.find(tool => tool.id === item.id);
+        if(previous)streamFields(context).flush(previous,'detail');
+        if(previous)streamFields(context).reset(previous,'detail');
         const tool = { ...(previous || stamp()), id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
           detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : previous?.detail || '')) };
         if(item.type==='commandExecution'&&Number.isInteger(item.exitCode))tool.exitCode=item.exitCode;
@@ -526,12 +559,12 @@ class AgentRuntime {
       const tool=run.tools.find(tool=>tool.id===params.itemId);if(tool)tool.progress=clean(params.message);
     } else if (method === 'item/commandExecution/outputDelta') {
       const tool = run.tools.find(tool => tool.id === params.itemId);
-      if (tool) tool.detail = clean(tool.detail + (params.delta || ''));
+      if (tool) streamFields(context).append(tool,'detail',params.delta,streamSecrets(context),{scope:params.threadId});
     } else if (method === 'turn/completed') {
       void this.finish(context, params.turn.status === 'completed' ? 'completed' : params.turn.status === 'interrupted' ? 'interrupted' : 'failed', clean(params.turn.error?.message)); return;
     } else if (method === 'error') { run.error = clean(params.error?.message || params.message); run.retrying=params.willRetry===true; }
     else return;
-    this.changed(run,{stream:!wasRetrying&&/\/(?:delta|outputDelta|textDelta|summaryTextDelta)$/.test(method)});
+    this.changed(run,{stream:!wasRetrying&&/\/(?:delta|outputDelta|textDelta|summaryTextDelta)$/.test(method),bytes:typeof params.delta==='string'?params.delta.length*2:0,items:params.itemId?[[method.includes('commandExecution')?'tools':'messages',params.itemId]]:undefined});
   }
   request(context, message) {
     if (context.done||context.cancelled) return;
@@ -617,6 +650,7 @@ class AgentRuntime {
     if(context.loopPauseReason){status='interrupted';error=context.loopPauseReason;}
     if(context.modelTimeoutReason){status='interrupted';error=context.modelTimeoutReason;}
     if(context.pendingModelChange){context.pendingModelChange.state='failed';context.pendingModelChange.effective=null;context.pendingModelChange.error=error||'任务未启动，新模型未确认生效';context.pendingModelChange=null;}
+    streamFields(context).finish(status!=='completed');
     context.done = true;this.conversation.stop(context);this.native.finish(context);context.inputDelivery?.reject(Object.assign(Error(error||'任务已停止'),{code:'CANCELLED'}));
     for(const finish of context.remoteApprovals?.values()||[])finish(false);
     context.extensionChannel?.close();context.rpc?.close(); context.bridge?.close();
@@ -646,10 +680,10 @@ class AgentRuntime {
       if(evidence)try{evidence.output=context.remoteProject?(context.run.collaboration?.acceptancePolicy?.mode==='auto'?await require('../core/workforce/remote-evidence.cjs').capture(this.ssh,context.remoteProject):{complete:false,notice:'Remote revision must be checked from recorded remote commands'}):await require('../core/workforce/evidence.cjs').capture(context.run.cwd);}catch{evidence.output={complete:false,notice:'Output fingerprint unavailable'};}
       try { if(!context.remoteProject)context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
     }
-    if (context.run) { if(context.turnKey)context.run.terminalTurnId=context.turnKey; context.run.queued=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
-    try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publish(structuredClone(context.run)); } }
-    this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);this.drain();
+    if (context.run) { if(context.turnKey)context.run.terminalTurnId=context.turnKey; context.run.queued=false;context.run.storageBackpressure=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
+    try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publishRun(context.run); } }
+    this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);if(context.run)this.streamBytes.delete(context.run.id);this.updateStoragePressure();this.drain();
   }
-  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown(); }
+  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown();this.unsubscribePressure?.(); }
 }
 module.exports = { AgentRuntime };

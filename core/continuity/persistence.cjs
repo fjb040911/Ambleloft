@@ -3,6 +3,7 @@ const {randomUUID}=require('node:crypto');
 const {hash,canonical,documentSources,runSources,reviewSources,expertChatSources}=require('./sources.cjs');
 const schema=`
 ${growthModule.schema}
+CREATE TABLE IF NOT EXISTS continuity_source_scans(run_id TEXT PRIMARY KEY,signature TEXT NOT NULL,source_ids TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS continuity_meta(id INTEGER PRIMARY KEY CHECK(id=1),epoch INTEGER NOT NULL);
 INSERT OR IGNORE INTO continuity_meta VALUES(1,0);
 CREATE TABLE IF NOT EXISTS continuity_objects(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,data TEXT NOT NULL,PRIMARY KEY(kind,id));
@@ -21,8 +22,17 @@ const id=v=>{if(typeof v!=='string'||!v||v.length>180)fail('INVALID_ARGUMENT');r
 const array=v=>{if(!Array.isArray(v)||v.length>100)fail('INVALID_ARGUMENT');return v;};
 const text=(v,max=10000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail('INVALID_ARGUMENT');return v;};
 function createPersistence(db,transaction,root){
- let liveBodies=new Map();
- const hydrate=s=>({...s,body:liveBodies.get(s.id)||''});
+ const readRun=(id,collections=['messages'])=>{const row=db.prepare('SELECT data FROM runs WHERE id=?').get(id);if(!row)return null;const run=JSON.parse(row.data);for(const collection of collections)run[collection]=require('../../electron/run-text-store.cjs').readItems(db,id,collection);return run;};
+ const lookupRuns={find:predicate=>{for(const row of db.prepare('SELECT id FROM runs').iterate()){const meta=db.prepare('SELECT data FROM runs WHERE id=?').get(row.id);if(predicate(JSON.parse(meta.data)))return readRun(row.id,['messages','tools','fileChanges']);}}};
+ const hydrate=s=>{
+  const current=state(),locator=s.locator;let candidates=[];
+  if(s.kind==='run-message'||s.kind==='discussion-statement'){const run=readRun(locator.runId);if(run)candidates=runSources(run,current);}
+  else if(s.kind==='space-document')candidates=documentSources({...current,documents:(current.documents||[]).filter(d=>d.id===locator.documentId&&d.spaceId===locator.spaceId).map(d=>({...d,versions:d.versions.filter(v=>v.revision===locator.revision)}))},root);
+  else if(s.kind==='plan-review')candidates=reviewSources({...current,plans:(current.plans||[]).filter(p=>p.id===locator.planId)},lookupRuns);
+  else if(s.kind==='expert-contribution')candidates=expertChatSources(db,locator.conversationId);
+  const value=candidates.find(v=>v.id===s.id);if(!value||value.contentHash!==s.contentHash)fail('SOURCE_CHANGED');
+  return {...s,body:value.body};
+ };
  const setting=key=>{const row=db.prepare('SELECT data FROM settings WHERE key=?').get(key);return row?JSON.parse(row.data):{};};
  const state=()=>setting('workforce.spaces.v1');
  const epoch=()=>db.prepare('SELECT epoch FROM continuity_meta WHERE id=1').get().epoch;
@@ -36,11 +46,24 @@ function createPersistence(db,transaction,root){
  const objects=kind=>db.prepare('SELECT data FROM continuity_objects WHERE kind=? ORDER BY id').all(kind).map(r=>JSON.parse(r.data));
  const sourceById=sourceId=>{const r=db.prepare('SELECT data FROM continuity_sources WHERE id=?').get(sourceId);return r?JSON.parse(r.data):null;};
  const sourceRows=()=>db.prepare('SELECT data FROM continuity_sources ORDER BY id').all().map(r=>JSON.parse(r.data));
- const readRuns=()=>db.prepare('SELECT id,data FROM runs').all().map(r=>{
-  const run=JSON.parse(r.data);for(const collection of ['messages','tools','fileChanges'])run[collection]=db.prepare('SELECT data FROM run_items WHERE run_id=? AND collection=? ORDER BY position').all(r.id,collection).map(m=>JSON.parse(m.data));return run;
- });
+ function* sourceValues(s){
+  for(const doc of s.documents||[])yield* documentSources({...s,documents:[doc]},root);
+  yield* reviewSources(s,lookupRuns);
+  const policy=hash(s);
+  for(const row of db.prepare('SELECT id,data FROM runs').iterate()){
+   const signature=require('node:crypto').createHash('sha256').update(policy).update(row.data);
+   for(const item of db.prepare("SELECT item_key,data FROM run_items WHERE run_id=? AND collection='messages' ORDER BY position").iterate(row.id))signature.update(JSON.stringify(item));
+   for(const field of db.prepare("SELECT item_key,field,revision FROM run_texts WHERE run_id=? AND collection='messages' ORDER BY item_key,field").iterate(row.id))signature.update(JSON.stringify(field));
+   const fingerprint=signature.digest('hex'),old=db.prepare('SELECT signature,source_ids FROM continuity_source_scans WHERE run_id=?').get(row.id);
+   if(old?.signature===fingerprint){for(const id of JSON.parse(old.source_ids)){const source=sourceById(id);if(source)yield source;}continue;}
+   const sources=runSources(readRun(row.id),s);yield* sources;
+   db.prepare('INSERT INTO continuity_source_scans VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET signature=excluded.signature,source_ids=excluded.source_ids').run(row.id,fingerprint,JSON.stringify(sources.map(v=>v.id)));
+  }
+  db.exec('DELETE FROM continuity_source_scans WHERE run_id NOT IN (SELECT id FROM runs)');
+  for(const row of db.prepare('SELECT id FROM expert_chats').iterate())yield* expertChatSources(db,row.id);
+ }
  function syncSources(){
-  const s=state(),runs=readRuns(),found=[...documentSources(s,root),...reviewSources(s,runs),...runs.flatMap(r=>runSources(r,s)),...expertChatSources(db)],seen=new Set();
+  const s=state(),seen=new Set();
   let changed=false;
   function put(value){
    const previous=sourceById(value.id);if(previous?.stateFingerprint===value.stateFingerprint)return;
@@ -53,9 +76,8 @@ function createPersistence(db,transaction,root){
    db.prepare('INSERT INTO continuity_sources VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state_hash=excluded.state_hash,data=excluded.data').run(value.id,value.sourceKey,value.revisionKey,value.stateFingerprint,JSON.stringify(stored));
    event(previous?'source.changed':'source.registered',value.id);
   }
-  for(const value of found){seen.add(value.id);put(value);}
+  for(const value of sourceValues(s)){seen.add(value.id);put(value);}
   for(const old of sourceRows())if(!seen.has(old.id)&&old.availability!=='deleted')put({...old,availability:'deleted',stateFingerprint:hash({previous:old.semanticHash,availability:'deleted'})});
-  liveBodies=new Map(found.filter(s=>s.availability==='available').map(s=>[s.id,s.body]));
  }
  function onSetting(key,before,after){
   if(key==='workforce.spaces.v1'){

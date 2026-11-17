@@ -13,14 +13,14 @@ function abortable(promise,signal){
 function inferenceDeadline(parent,{timeoutMs=180000,idleTimeoutMs}={}){
  const total=timeoutMs===null?null:Number.isFinite(timeoutMs)&&timeoutMs>0?Math.min(timeoutMs,MAX_INFERENCE_MS):180000;
  const idle=Number.isFinite(idleTimeoutMs)&&idleTimeoutMs>0?Math.min(idleTimeoutMs,total??Infinity):null;
- const controller=new AbortController(),started=Date.now();let lastProgress=started,idleTimer,disposed=false;
+ const controller=new AbortController(),started=Date.now();let lastProgress=started,idleTimer,disposed=false,paused=false,pausedAt=0;
  const signal=parent?AbortSignal.any([parent,controller.signal]):controller.signal;
  const expire=code=>controller.abort(Object.assign(Error(code),{code,diagnostics:{elapsedMs:Date.now()-started,silentMs:Date.now()-lastProgress,timeoutMs:total,idleTimeoutMs:idle}}));
  const totalTimer=total===null?null:setTimeout(()=>expire('MODEL_TIMEOUT'),total);totalTimer?.unref?.();
- const touch=()=>{if(disposed||signal.aborted)return;lastProgress=Date.now();clearTimeout(idleTimer);if(idle){idleTimer=setTimeout(()=>expire('MODEL_RESPONSE_TIMEOUT'),idle);idleTimer.unref?.();}};
+ const touch=()=>{if(disposed||signal.aborted)return;lastProgress=Date.now();clearTimeout(idleTimer);if(idle&&!paused){idleTimer=setTimeout(()=>expire('MODEL_RESPONSE_TIMEOUT'),idle);idleTimer.unref?.();}};
  const dispose=()=>{disposed=true;clearTimeout(totalTimer);clearTimeout(idleTimer);signal.removeEventListener('abort',dispose);};
  signal.addEventListener('abort',dispose,{once:true});
  if(signal.aborted)dispose();else touch();
- return {signal,touch,dispose,timeoutMs:total};
+ return {signal,touch,dispose,pause(){if(paused||disposed)return;paused=true;pausedAt=Date.now();clearTimeout(idleTimer);},resume(){if(!paused||disposed)return;lastProgress+=Date.now()-pausedAt;paused=false;if(idle){idleTimer=setTimeout(()=>expire('MODEL_RESPONSE_TIMEOUT'),Math.max(0,idle-(Date.now()-lastProgress)));idleTimer.unref?.();}},timeoutMs:total};
 }
 module.exports={inferenceDeadline,abortable,MAX_INFERENCE_MS};

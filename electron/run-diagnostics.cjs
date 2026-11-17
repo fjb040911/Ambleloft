@@ -25,6 +25,8 @@ function diagnosticReport(run, appVersion) {
     coverage: 'Most recent 100 model requests. Tool metadata is available only for requests recorded after this feature was installed. No prompts, reasoning, commands, argument values, output text, URLs or credentials are exported.',
     requests: (run.modelRequests || []).slice(-100).map(d => ({
       ...pick(d, ['requestId', 'threadId', 'parentThreadId', 'turnKey', 'startedAt', 'durationMs', 'protocol', 'stage', 'httpStatus', 'events', 'done', 'finishReason', 'failed', 'cancelled', 'timedOut', 'requestBytes', 'messageCount', 'toolCorrectionAttempts', 'diagnosticVersion', 'toolChoice']),
+      ...(typeof d.causeCode==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(d.causeCode)?{causeCode:d.causeCode}:{}),
+      ...(typeof d.lastEventAt==='string'&&/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(d.lastEventAt)?{lastEventAt:d.lastEventAt}:{}),
       ...(d.loopGuard ? {loopGuard: pick(d.loopGuard, ['action', 'kind', 'count', 'warningAt', 'pauseAt'])} : {}),
       ...(d.usage ? {usage: pick(d.usage, ['input_tokens', 'output_tokens', 'total_tokens'])} : {}),
       ...(d.budget ? {budget:pick(d.budget,['profile','maxOutputTokens','requestedTokens','outputCeiling','contextWindow','inputTokens','contextReserve','availableOutputTokens','estimated','source','reasoning'])} : {}),
