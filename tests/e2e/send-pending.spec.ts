@@ -8,12 +8,12 @@ async function setup(page:Page,existing=false,longHistory=false,interrupted=fals
   w.desktop={getProvider:async()=>provider,listProviders:async()=>({defaultId:'p',providers:[provider]}),getDevice:async()=>({name:'Test',memoryGB:32}),readWorkspace:async()=>({layoutMode:'classic',projects:[],tasks:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>existing?[run]:[],onRun:(fn:any)=>{listener=fn;return()=>{};},onCommand:()=>()=>{},skills:{list:async()=>[]},extensions:{list:async()=>({capabilities:{},installed:[]})},
    startRun:(input:any)=>{w.__calls++;w.__input=input;return new Promise((resolve,reject)=>{w.__reject=()=>reject(Error('测试发送失败'));w.__accept=()=>{const next={...run,status:'running',error:'',messages:[...(existing?run.messages:[]),{id:'new',role:'user',text:input.prompt}]};listener(next);resolve(next);};});},stopRun:async()=>{}
   };
- },{existing,longHistory,interrupted});await page.goto('/');if(existing)await page.locator('.tree-task > button:first-child').filter({hasText:'已有任务'}).click();
+ },{existing,longHistory,interrupted});await page.goto('/');if(existing){await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();await page.locator('.tree-task > button:first-child').filter({hasText:'已有任务'}).click();}
 }
 test('new task immediately shows a bubble, clears the draft and animates without duplicate sends',async({page})=>{
  await setup(page);const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('帮我整理方案');const color=await page.getByRole('button',{name:'发送任务',exact:true}).evaluate(e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color}));await input.press('Enter');
  await expect(input).toHaveValue('');await expect(page.getByLabel('正在发送的消息')).toContainText('帮我整理方案');const button=page.getByRole('button',{name:'正在发送…',exact:true});await expect(button).toBeDisabled();await expect(button.locator('[data-slot=spinner]')).toBeVisible();
- await expect.poll(()=>button.evaluate(e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color}))).toEqual(color);await expect(button).toHaveCSS('opacity','1');expect(await page.evaluate(()=>(window as any).__calls)).toBe(1);await page.screenshot({path:'test-results/new-task-sending.png'});
+ await expect.poll(()=>button.evaluate(e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color}))).toEqual(color);await expect(button).toHaveCSS('opacity','0.5');expect(await page.evaluate(()=>(window as any).__calls)).toBe(1);await page.screenshot({path:'test-results/new-task-sending.png'});
  await page.evaluate(()=>(window as any).__accept());await expect(page.getByLabel('正在发送的消息')).toHaveCount(0);await expect(page.getByLabel('你的消息',{exact:true})).toHaveCount(1);await expect(page.getByRole('button',{name:'停止',exact:true})).toBeVisible();
 });
 test('failed initial send restores the draft and enables retry',async({page})=>{

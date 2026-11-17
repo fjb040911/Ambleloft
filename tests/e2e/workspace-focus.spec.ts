@@ -1,15 +1,12 @@
 import {test,expect} from '@playwright/test';
-// These legacy workflow cases exercise the grouped sidebar explicitly.
-test.use({storageState:{cookies:[],origins:[{origin:'http://127.0.0.1:5173',localStorage:[{name:'atelier.workspace.v1',value:JSON.stringify({tasks:[],projects:[],theme:'light',layoutMode:'classic'})}]}]}});
-
 
 test('unconfigured tasks explicitly save drafts and reopen directly for editing',async({page})=>{
  await page.goto('/');const input=page.getByRole('textbox',{name:'任务内容',exact:true});
  await expect(page.getByRole('button',{name:'保存任务草稿',exact:true})).toHaveText('保存草稿');
- await expect(page.locator('.composer-hint')).toContainText('Enter 保存草稿');
+ await expect(input).toHaveAccessibleDescription('Enter 保存草稿 · Shift+Enter 换行');
  await input.fill('需要恢复编辑的草稿');await page.getByRole('button',{name:'保存任务草稿',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(input).toHaveValue('需要恢复编辑的草稿');
- await page.getByRole('button',{name:'新建任务',exact:true}).click();await expect(input).toHaveValue('');
+ await page.locator('.toolbar').getByRole('button',{name:'新建任务',exact:true}).click();await expect(input).toHaveValue('');
  await page.locator('.tree-task [data-slot=sidebar-menu-button]').click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(input).toHaveValue('需要恢复编辑的草稿');await expect(input).toBeFocused();
  await input.fill('更新后的草稿');await input.press('Enter');await expect(page.locator('.tree-task')).toHaveCount(1);await expect(page.locator('.tree-task')).toContainText('更新后的草稿');
@@ -31,7 +28,7 @@ test('home draft action reflows without preset prompts in English dark mode at l
  await page.addInitScript(()=>localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'dark',language:'en',fontScale:130,layoutMode:'activity',projects:[],tasks:[]})));
  await page.goto('/');await expect(page.locator('.home-page h1')).toHaveText('What would you like to work on today?');
  const action=page.getByRole('button',{name:'Save task draft',exact:true});await expect(action).toHaveText('Save draft');
- await expect(page.locator('.composer-hint')).toContainText('Enter to save draft');await expect(page.locator('.starter-section')).toHaveCount(0);
+ await expect(page.getByRole('textbox',{name:'Task prompt',exact:true})).toHaveAccessibleDescription('Enter to save draft · Shift+Enter for a new line');await expect(page.locator('.starter-section')).toHaveCount(0);
  expect(await page.locator('.home-page').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  expect(await page.locator('.composer').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.getByRole('textbox',{name:'Task prompt',exact:true}).fill('A draft to keep');await action.click();await expect(page.getByRole('dialog')).toHaveCount(0);

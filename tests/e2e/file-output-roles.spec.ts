@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {prepare} from './fixtures/file-panel';
-test('references, explicit deliveries and changes render independently',async({page})=>{
+test('legacy tools without labels preserve references, deliveries and changes',async({page})=>{
  await prepare(page);
  await page.addInitScript(()=>{
   const d=(window as any).desktop,list=d.listRuns;
