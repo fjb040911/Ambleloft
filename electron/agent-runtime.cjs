@@ -14,11 +14,11 @@ const {startChatBridge,usesChat} = require('./chat-bridge.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 
 class AgentRuntime {
-  constructor({ directory, provider, workspace, publish, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
-    this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;
+  constructor({ directory, provider, workspace, publish, projectRun = run => run, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
+    this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.projectRun=projectRun;this.publications=new WeakMap();
     this.native = new (require('./native-subagents.cjs').NativeSubagents)(this);
     this.conversation = new (require('./conversation-agent.cjs').ConversationAgent)(this,conversationOptions);
-    this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null;
+    this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;
     this.file = path.join(directory, 'conversations.json');
   }
   get active() { return this.contexts.values().next().value || null; }
@@ -54,6 +54,7 @@ class AgentRuntime {
     if (!input || typeof input.id !== 'string') throw new Error('任务无效');
     const run = this.runs.find(item => item.id === input.id);
     if (!run) throw new Error('任务不存在');
+    if(run.originHandoff)throw Error('受限调查记录请从原专家讨论中查看和停止');
     if (this.editing) throw new Error('请等待当前操作结束');
     if (BUSY.includes(run.status) || [...this.contexts.values()].some(context => context.run?.id === run.id)) throw new Error('请等待此任务结束后再操作');
     this.editing = true;
@@ -91,18 +92,52 @@ class AgentRuntime {
     }
     finally { this.editing = false; }
   }
-  persist(terminal) {
-    const operation = this.writes.then(() => {const snapshot=structuredClone(this.runs);return this.database ? this.database.call(terminal?'commitTurn':'saveRuns', terminal?{runs:snapshot,...terminal}:snapshot) : writeJSON(this.file, snapshot);});
-    this.writes = operation.catch(() => {});
+  persist(terminal,dirtyRun) {
+    const partial=!!terminal||!!dirtyRun;
+    if(dirtyRun)this.dirtyRuns.set(dirtyRun.id,(this.dirtyRuns.get(dirtyRun.id)||0)+1);
+    const operation=this.writes.then(async()=>{
+      const versions=new Map(this.dirtyRuns);
+      const runs=partial?this.runs.filter(run=>versions.has(run.id)||run.id===terminal?.runId):this.runs;
+      const snapshot=structuredClone(runs);
+      if(this.database)await this.database.call(terminal?'commitTurn':partial?'saveRunUpdates':'saveRuns',terminal?{runs:snapshot,...terminal,partial}:snapshot);
+      else await writeJSON(this.file,structuredClone(this.runs));
+      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version)this.dirtyRuns.delete(id);
+    });
+    this.writes=operation.catch(()=>{});return operation;
+  }
+  persistChanged() {
+    // At most one ordinary save waits behind an in-flight write. Snapshot only
+    // when it starts, so coalesced callers all persist the newest dirty versions.
+    if(this.pendingSave)return this.pendingSave;
+    const operation=this.writes.then(async()=>{
+      this.pendingSave=null;
+      const versions=new Map(this.dirtyRuns);
+      const runs=this.runs.filter(run=>versions.has(run.id));
+      if(!runs.length)return;
+      if(this.database)await this.database.call('saveRunUpdates',structuredClone(runs));
+      else await writeJSON(this.file,structuredClone(this.runs));
+      for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version)this.dirtyRuns.delete(id);
+    });
+    this.pendingSave=operation;this.writes=operation.catch(()=>{});
     return operation;
   }
-  changed(run) {
+  publishRun(run) {
+    const {modelRequests,...view}=run;
+    this.publish(structuredClone(this.projectRun(view)));
+  }
+  changed(run, {stream=false}={}) {
     run.updatedAt = new Date().toISOString();
-    // Diagnostics are exported on demand, not cloned into every token update.
-    const {modelRequests,...view}=run;this.publish(structuredClone(view));
+    this.dirtyRuns.set(run.id,(this.dirtyRuns.get(run.id)||0)+1);
+    let publication=this.publications.get(run);
+    if(!publication){publication={at:-Infinity,timer:null};this.publications.set(run,publication);}
+    const flush=()=>{clearTimeout(publication.timer);publication.timer=null;publication.at=performance.now();this.publishRun(run);};
+    const remaining=50-(performance.now()-publication.at);
+    // Only content deltas may wait. Every control/state update flushes immediately.
+    if(!stream||remaining<=0)flush();
+    else if(!publication.timer){publication.timer=setTimeout(flush,remaining);publication.timer.unref?.();}
     if (!this.saveTimer) this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.persist().catch(() => { run.error = '对话保存失败，请检查磁盘空间。'; this.publish(structuredClone(run)); for(const context of this.contexts.values())if(context.run===run)void this.finish(context,'failed',run.error); });
+      this.persistChanged().catch(() => { run.error = '对话保存失败，请检查磁盘空间。'; this.publishRun(run); for(const context of this.contexts.values())if(context.run===run)void this.finish(context,'failed',run.error); });
     }, 250);
   }
   async patchWorkspace(input) {
@@ -133,7 +168,7 @@ class AgentRuntime {
     const context=[...this.contexts.values()].find(c=>c.run===run&&!c.done);
     const turnKey=context?.turnKey||run.messages.findLast(m=>m.role==='user'&&!m.turnKey)?.id;
     if(!turnKey)return;
-    this.recordFormInput(run,item,turnKey,'queued');await this.persist();
+    this.recordFormInput(run,item,turnKey,'queued');await this.persist(undefined,run);
   }
   discussionUpdate(run,item,turnKey){
     run.conversation ||= {version:0,updates:[]};
@@ -167,7 +202,7 @@ class AgentRuntime {
           const target={mode:'conversation',turnKey:context.turnKey};
           const consume=async()=>{
             if(context.done||context.cancelled)throw Object.assign(busy(),{rpcRejected:true,turnBoundary:true});
-            this.recordFormInput(run,item,context.turnKey);update.state='handled';await this.persist();
+            this.recordFormInput(run,item,context.turnKey);update.state='handled';await this.persist(undefined,run);
           };
           if(dispatch){const sent=await dispatch(target,consume);await sent.receipt;}else{await onDispatch(target);await consume();}
           // Leave the outbox dispatch lock before propagating cancellation.
@@ -184,7 +219,7 @@ class AgentRuntime {
       catch(error){if(error.rpcRejected&&/no active turn|expected.*turn|turn.*mismatch/i.test(error.message))error.turnBoundary=true;if(update&&update.state!=='applied'&&!error.turnBoundary){update.state=error.rpcRejected&&error.code===-32602?'rejected':'unknown';this.changed(run);}throw error;}finally{context.formInputs.delete(item.id);}
       this.recordFormInput(run,item,context.turnKey);
       if(update&&update.state!=='applied')update.state='delivered';
-      this.changed(run);await this.persist();return;
+      this.changed(run);await this.persist(undefined,run);return;
     }
     if(conversationOnly)throw busy();
     if(item.activeOnly&&!item.allowIdle)throw Object.assign(busy(),{holdInput:true});
@@ -204,18 +239,21 @@ class AgentRuntime {
         await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}});rpc.send({method:'initialized',params:{}});}
       const result=await rpc.call('thread/read',{threadId,includeTurns:true});
       const found=result.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId===item.id));
-      if(found){this.recordFormInput(run,item,item.target.turnKey);await this.persist();}return found;
+      if(found){this.recordFormInput(run,item,item.target.turnKey);await this.persist(undefined,run);}return found;
     }finally{if(owned)rpc?.close();}
   }
-  switchModel(input){return require('./model-switch.cjs').switchModel.call(this,input);}
-  switchPermission(input){return require('./permission-switch.cjs').switchPermission.call(this,input);}
+  switchModel(input){if(this.runs.some(r=>r.id===input.runId&&r.originHandoff))throw Error('受限调查不支持通用模型切换');return require('./model-switch.cjs').switchModel.call(this,input);}
+  switchPermission(input){if(this.runs.some(r=>r.id===input.runId&&r.originHandoff))throw Error('受限调查不能提高权限');return require('./permission-switch.cjs').switchPermission.call(this,input);}
   async start(input, hostContext={}) {
+    if(input?.originHandoff||input?.runId&&this.runs.find(r=>r.id===input.runId)?.originHandoff)throw Error('受限调查不能转入通用执行，请从原讨论重新发起');
+    if(this.investigation)await this.investigation.guard({runId:input?.runId,projectId:input?.projectId});
     if (this.closing || this.editing) throw new Error('请等待当前操作结束');
     if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?(c.requestRunId===input.runId||c.run?.id===input.runId):c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
     if (!input || typeof input.prompt !== 'string' || (!input.prompt.trim() && !input.selectedSkillIds?.length) || input.prompt.length > 20000) throw new Error('请输入 1–20000 字的任务内容');
     // Reserve before any await so two windows/rapid clicks cannot start two processes.
     const context = { run: null, rpc: null, cancelled: false, done: false, startedAt: new Date().toISOString(), startedTick: performance.now() }; context.inputDelivery=hostContext.inputDelivery;context.owner=hostContext.owner;context.key=randomUUID();context.requestRunId=input.runId;context.draftId=input.draftId;this.contexts.set(context.key,context);
     try {
+      if(input.runId||input.draftId)await this.expertChat?.call('checkRun',{runId:input.runId,draftId:input.draftId});
       const previous = input.runId ? this.runs.find(run => run.id === input.runId) : null;
       if(input.runId&&!previous)throw Error('对话不存在');
       if(previous?.collaboration)await this.spaces?.authorizeRun(previous);
@@ -272,6 +310,7 @@ class AgentRuntime {
       if(remote)config.remoteOnly=true;
       const reservedTarget={namespace:remote?JSON.stringify([project.connectionId,project.environment?.kind==='docker'?project.environment.containerId:'host']):'local',path:remote?project.path:cwd};
       if([...this.contexts.values()].some(other=>other!==context&&other.reservedTarget&&(context.collaborationMode==='work'||other.collaborationMode==='work')&&require('../core/workforce/resources.cjs').overlap(reservedTarget,other.reservedTarget)))throw Error('此工作目录已有活跃任务；相同或嵌套目录的协作写入需要串行');
+      await this.investigation?.guard({runId:input.runId,projectId:context.requestProjectId,cwd:reservedTarget.path});
       context.reservedTarget=reservedTarget;
       const home = await prepareEngineHome(this.directory);
       if (context.cancelled) throw new Error('执行已取消');
@@ -312,7 +351,7 @@ class AgentRuntime {
       if(context.dualAgent)run.conversation ||= {version:0,updates:[]};
       if(this.creation&&context.skills?.snapshots.some(s=>s.id==='builtin-skill-master'))await this.creation.ensure(run.id);
       context.creationActive=!!(this.creation&&await this.creation.read(run.id).catch(()=>null));
-      await this.persist(); this.changed(run);
+      await this.persist(undefined,run); this.changed(run);
       if (context.cancelled) { await this.finish(context, 'interrupted'); return structuredClone(run); }
       context.launch=async()=>{
       if(context.pendingModelConfig){config=context.pendingModelConfig;context.config=config;executable=await findCodex(config.executable);run.providerId=config.id;run.model=config.model;run.baseUrl=config.baseUrl;run.providerFingerprint=fingerprint(config);run.modelSessionId=randomUUID();context.pendingModelChange.state='switching';context.pendingModelConfig=null;this.changed(run);}
@@ -380,7 +419,7 @@ class AgentRuntime {
     if(context.inputDelivery?.dispatch){const sent=await context.inputDelivery.dispatch(target,send);turn=await sent.receipt;}
     else{if(context.inputDelivery)await context.inputDelivery.onDispatch(target);turn=await send();}
     if(context.discussionUpdate&&context.discussionUpdate.state!=='applied')context.discussionUpdate.state='delivered';
-    {const message=run.messages.find(m=>m.id===context.turnKey);if(message?.inputSource==='user'||context.inputDelivery){message.inputDeliveryState='delivered';context.inputDelivery?.resolve();await this.persist();}}
+    {const message=run.messages.find(m=>m.id===context.turnKey);if(message?.inputSource==='user'||context.inputDelivery){message.inputDeliveryState='delivered';context.inputDelivery?.resolve();await this.persist(undefined,run);}}
     if (context.done) return;
     run.turnId = turn.turn.id;if(context.pendingModelChange){context.pendingModelChange.state='applied';context.pendingModelChange.effective=context.pendingModelChange.requested;context.pendingModelChange.finishedAt=new Date().toISOString();context.pendingModelChange=null;} this.changed(run);
     if (context.cancelled) await this.stop(run.id);
@@ -409,6 +448,7 @@ class AgentRuntime {
     // completion from another turn must never close this turn's MCP endpoint.
     const eventTurnId=params.turnId||params.turn?.id;
     if(eventTurnId&&run.turnId&&eventTurnId!==run.turnId)return;
+    const wasRetrying=run.retrying;
     if(run.retrying&&['item/started','item/agentMessage/delta','item/reasoning/textDelta','item/reasoning/summaryTextDelta'].includes(method)){run.retrying=false;run.error='';}
     const clean = value => redact(value || '', context.config.apiKey);
     run.lastEventAt=new Date().toISOString();
@@ -490,7 +530,7 @@ class AgentRuntime {
       void this.finish(context, params.turn.status === 'completed' ? 'completed' : params.turn.status === 'interrupted' ? 'interrupted' : 'failed', clean(params.turn.error?.message)); return;
     } else if (method === 'error') { run.error = clean(params.error?.message || params.message); run.retrying=params.willRetry===true; }
     else return;
-    this.changed(run);
+    this.changed(run,{stream:!wasRetrying&&/\/(?:delta|outputDelta|textDelta|summaryTextDelta)$/.test(method)});
   }
   request(context, message) {
     if (context.done||context.cancelled) return;
@@ -549,6 +589,7 @@ class AgentRuntime {
     context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(context.run);
   }
   async stop(id,{pause=true}={}) {
+    const managed=this.runs.find(r=>r.id===id)?.originHandoff;if(managed)return this.investigation?.cancel({id:managed.id});
     if(await this.native.stop(id))return;
     if(pause&&this.chatInputs&&this.runs.some(r=>r.id===id))await this.chatInputs.pause(id);
     const context = [...this.contexts.values()].find(c=>c.run?.id===id);

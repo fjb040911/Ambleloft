@@ -30,6 +30,7 @@ export type ModelChoice={providerId?:string;model:string};
 export interface ModelChange {id:string;requested:ModelChoice;previous:ModelChoice;state:'switching'|'configured'|'applied'|'failed';effective:ModelChoice|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface PermissionChange {id:string;requested:'default'|'full';previous:'default'|'full';state:'switching'|'applied'|'configured'|'failed';effective:'default'|'full'|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface AgentRun {
+  originHandoff?:{id:string;originConversationId:string;mode:'investigate'|'implement'};
   modelChange?:ModelChange;
   permissionChange?:PermissionChange;
   employee?:import('./workforce-types').EmployeeSnapshot;
@@ -43,7 +44,7 @@ export interface AgentRun {
   id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
   messages: { userInputId?:string; inputSource?:'user'; inputDeliveryState?:'queued'|'delivered'; agentRole?:'conversation'; inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
-  tools: { analysisTitle?:string; nativeLifecycle?:{status:string;at:string}[]; nativeActivity?:{id:string;title:string;text:string;status:string}[]; nativeThreadId?:string; nativeIdentityError?:string; analysisAgent?:{id:string;name:string;avatar:number}; analysisTask?:string; analysisReads?:string[]; commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
+  tools: { analysisTitle?:string; nativeLifecycle?:{status:string;at:string}[]; detailPreview?:boolean;detailVersion?:string;nativeActivity?:{textPreview?:boolean;textVersion?:string;id:string;title:string;text:string;status:string}[]; nativeThreadId?:string; nativeIdentityError?:string; analysisAgent?:{id:string;name:string;avatar:number}; analysisTask?:string; analysisReads?:string[]; commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
   approvals: { id: string; method: string; detail: string; progress?:string }[];
@@ -61,6 +62,9 @@ declare global {
     desktop?: {
       updates?: {update():Promise<import('./Updates').UpdateState>;schedule(version:string):Promise<import('./Updates').UpdateState>;cancelSchedule():Promise<import('./Updates').UpdateState>;snapshot():Promise<import('./Updates').UpdateState>;check():Promise<import('./Updates').UpdateState>;download():Promise<import('./Updates').UpdateState>;cancel():Promise<import('./Updates').UpdateState>;restart(version:string):Promise<import('./Updates').UpdateState>;preferences(input:{autoCheck?:boolean;autoDownload?:boolean}):Promise<import('./Updates').UpdateState>;onChanged(listener:(state:import('./Updates').UpdateState)=>void):()=>void};
       workforce?:import('./workforce-types').WorkforceAPI;
+      growth?:{status():Promise<{policy:{enabled:number;dailyLimit:number};counts:{state:string;count:number}[]}>;jobs():Promise<{id:string;state:string;employeeId:string;domainId:string;error?:string}[]>;policy(input:{enabled:boolean;dailyLimit:number}):Promise<unknown>;dismiss(input:{id:string}):Promise<void>};
+      investigation?:import('./Investigation').InvestigationAPI;
+      expertChat?:import('./expert-chat-types').ExpertChatAPI;
       spaces?:import('./workforce-types').SpaceAPI;
       store?:StoreAPI;
       creation?:import('./CreationGuide').CreationAPI;
@@ -120,6 +124,8 @@ declare global {
       testProvider(id?:string): Promise<{ message: string;capability?:{model:string;protocol:'chat'|'responses';mode:'schema'|'json'|'prompt';streaming:boolean;verifiedAt:number} }>;
       editRun(input: {id: string; title?: string; projectId?: string | null; remove?: boolean; archived?:boolean}): Promise<AgentRun[]>;
       openProject(id: string): Promise<void>;
+      getToolText?(input:{id:string;toolId:string;activityId?:string;offset?:number;limit?:number}):Promise<{text:string;offset:number;total:number;version:string}>;
+      getRunSnapshot?(input:{id:string}):Promise<unknown>;
       getRunPage?(input:{id:string;before?:string;limit?:number}):Promise<AgentRun>;
       exportRunDiagnostics?(input:{id:string;language:string}):Promise<{saved:boolean}|null>;
       touchSearchItem?(input:{kind:string;id:string}):Promise<void>;
@@ -132,6 +138,7 @@ declare global {
       stopRun(id: string): Promise<void>;
       answerRun(input:{runId:string;requestId:string;answers:Record<string,string>}):Promise<void>;
       approveRun(input: { runId: string; approvalId: string; decision: 'accept' | 'decline' }): Promise<void>;
+      onRunEvent?(callback:(event:unknown)=>void):()=>void;
       onRun(callback: (run: AgentRun) => void): () => void;
       openWindowMenu?(): Promise<void>;
       setWindowChrome?(input:{color:string;symbolColor:string}): Promise<void>;

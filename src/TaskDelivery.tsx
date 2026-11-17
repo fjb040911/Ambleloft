@@ -1,3 +1,4 @@
+import {subscribeRuns} from './run-events';
 import {useEffect,useState,useRef,type ComponentProps} from 'react';
 import Conversation from './Conversation';
 import type {ComposerOptions} from './ComposerControls';
@@ -13,7 +14,7 @@ export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,o
  const [selectedInput,setSelectedInput]=useState<{id:string;key:number}>(),actionRoot=useRef<HTMLDivElement>(null);
  useEffect(()=>{let live=true,receivedUpdate=false;setSelectedInput(undefined);onReady?.(false);setFile(null);setChanges(null);setError('');if(!runId){if(!awaitingRun)setRun(null);setLoading(false);return;}
  setLoading(true);void (window.desktop?.getRunPage?window.desktop.getRunPage({id:runId}):Promise.reject(Error(L('执行记录接口暂不可用','Execution history is unavailable')))).then(r=>{if(live&&!receivedUpdate){setRun(r);onReady?.(r.status==='completed');}}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});
- const unsubscribe=window.desktop?.onRun?.(r=>{if(live&&r.id===runId){receivedUpdate=true;setError('');setLoading(false);setRun(r);onReady?.(r.status==='completed');}});return()=>{live=false;unsubscribe?.();};
+ const unsubscribe=subscribeRuns(r=>{if(live&&r.id===runId){receivedUpdate=true;setError('');setLoading(false);setRun(r);onReady?.(r.status==='completed');}});return()=>{live=false;unsubscribe?.();};
  },[runId,reload,awaitingRun]);
  const switching=!!run&&run.id!==runId;
  const output=run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning');

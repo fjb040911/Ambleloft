@@ -21,7 +21,7 @@ class McpApps {
    const record={id:randomUUID(),turnKey,conversationId:run.conversationId,projectId:run.projectId,extensionId:item.id,revision,operationId:id,resourceUri:uri,title:this.service.localized(item,resource.title),extensionName:this.service.displayName(item),input:structuredClone(input),result:toolResult(result)};
    run.taskApps=[...(run.taskApps||[]),record];this.runtime.changed(run);
    // Persist the snapshot; reopening must never replay the producing operation.
-   try{await this.runtime.persist();}catch{run.error='交互内容未能保存，请检查磁盘空间。';this.runtime.changed(run);}
+   try{await this.runtime.persist(undefined,run);}catch{run.error='交互内容未能保存，请检查磁盘空间。';this.runtime.changed(run);}
   }
   return result;
  }

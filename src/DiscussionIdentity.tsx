@@ -1,3 +1,4 @@
+import {flushSync} from 'react-dom';
 import type {ReactNode} from 'react';
 import {Check,Clock,LoaderCircle,Pause,TriangleAlert,MoreHorizontal} from 'lucide-react';
 import {Avatar,AvatarFallback} from './components/ui/avatar';
@@ -16,9 +17,16 @@ export function DiscussionStatus({participant,run}:{participant:SpaceParticipant
  const [label,Icon]=status==='completed'?[L('已完成','Completed'),Check]:['failed','error'].includes(status)?[L('失败','Failed'),TriangleAlert]:status==='interrupted'?[L('已停止','Stopped'),Pause]:status==='waiting'?[L('等待处理','Needs input'),Pause]:status==='stopping'?[L('正在停止','Stopping'),LoaderCircle]:run?.queued?[L('排队中','Queued'),Clock]:status==='running'?[L('分析中','Analyzing'),LoaderCircle]:['preparing','started'].includes(status)?[L('准备中','Preparing'),Clock]:[L('状态未知','Unknown status'),Clock];
  return <Badge variant={['failed','error'].includes(status)?'destructive':'secondary'} className="wf-discussion-status"><Icon aria-hidden="true"/>{label}</Badge>;
 }
+export function revealContribution(request:SpaceRequest,participant:SpaceParticipant){
+ const group=document.getElementById('wf-experts-'+request.id);
+ // The target does not exist until the shadcn disclosure mounts its children.
+ flushSync(()=>group?.dispatchEvent(new CustomEvent('reveal-expert')));
+ const element=document.getElementById(contributionAnchor(request,participant));
+ element?.scrollIntoView({block:'start',behavior:'instant'});element?.focus({preventScroll:true});
+}
 export function DiscussionRoster({request,runs,names}:{request:SpaceRequest;runs:Record<string,AgentRun>;names:Record<string,string>}){
  const L=useCopy();
- return <nav className="wf-discussion-roster" aria-label={L('本轮专家进展','Expert progress in this round')}>{request.participants.map(p=><Button key={p.employeeId} variant="ghost" size="sm" onClick={()=>{const element=document.getElementById(contributionAnchor(request,p));const details=element?.closest('details');if(details)details.open=true;element?.scrollIntoView({block:'start',behavior:'instant'});element?.focus({preventScroll:true});}}><span className="wf-roster-name">{speakerName(p,names[p.employeeId])}</span><DiscussionStatus participant={p} run={p.runId?runs[p.runId]:undefined}/></Button>)}</nav>;
+ return <nav className="wf-discussion-roster" aria-label={L('本轮专家进展','Expert progress in this round')}>{request.participants.map(p=><Button key={p.employeeId} variant="ghost" size="sm" onClick={()=>revealContribution(request,p)}><span className="wf-roster-name">{speakerName(p,names[p.employeeId])}</span><DiscussionStatus participant={p} run={p.runId?runs[p.runId]:undefined}/></Button>)}</nav>;
 }
 export default function DiscussionIdentity({request,participant:p,run,fallbackName,archived,onSave,onOpenRecord,children}:{request:SpaceRequest;participant:SpaceParticipant;run?:AgentRun;fallbackName?:string;archived:boolean;onSave():void;onOpenRecord?:()=>void;children:ReactNode}){
  const L=useCopy(),name=speakerName(p,fallbackName),anchor=contributionAnchor(request,p),context=p.contribution?.context;

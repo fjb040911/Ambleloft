@@ -101,3 +101,16 @@ test('editing reuses installed additions directly and only prepares missing addi
  const edit=await w.submit({commandId:'add',id:first.id,expectedRevision:2,value:value([ref,extra])});assert.ok(edit.jobId);await settle(w);assert.equal(installs,1);
  const job=(await w.read()).jobs.find(j=>j.id===edit.jobId);assert.equal(job.steps[0].status,'reused');assert.ok(!job.events.some(e=>e.key===job.steps[0].key));assert.equal(job.steps[1].status,'installed');assert.deepEqual((await w.read()).employees.map(e=>e.id),order);
 });
+
+test('catalog metadata refresh never rewrites personal choices, drafts or task snapshots',async t=>{
+ const {w,ref}=await fixture(t);const discovery={categoryIds:['engineering'],tags:[{id:'fpga',title:{'zh-CN':'芯片调试',en:'Chip debug'}}],keywords:{'zh-CN':['我的芯片'],'en':['GDB']}};
+ const result=await w.submit({commandId:'create-personal',value:{...value([ref]),discovery}});await settle(w);
+ let expert=(await w.read()).employees[0];const task=await w.prepare(expert.id),taskBefore=structuredClone(task);
+ await w.submit({commandId:'personal-edit',id:expert.id,expectedRevision:expert.revision,value:{...expert,name:'Personal FPGA expert',responsibilities:'My custom boundary',skills:[],discovery:{...discovery,keywords:{'zh-CN':[],en:['my-debugger']}}}});await settle(w);
+ expert=(await w.read()).employees[0];const draft=await w.createDraft({commandId:'open-personal',employeeId:expert.id});await w.saveDraft({id:draft.id,expectedRevision:draft.revision,value:{...draft.value,domain:'Unsaved personal direction'},step:1,mode:'manual',brief:''});
+ const before=structuredClone(await w.read());w.expert={roles:async()=>({items:[{id:'new-version',discovery}],stale:false})};await w.roles({refresh:true});
+ assert.deepEqual(await w.read(),before);assert.deepEqual(task,taskBefore);assert.equal(expert.skills.length,0);
+ const copied=await w.createDraft({commandId:'copy-personal',employeeId:expert.id,copy:true});assert.deepEqual(copied.value.discovery,expert.discovery);assert.equal(copied.value.skills.length,0);
+ const unchanged=await w.submit({commandId:'personal-noop',id:expert.id,expectedRevision:expert.revision,value:expert});assert.equal(unchanged.noChange,true);
+ assert.ok(!(require('../core/workforce/service.cjs').roleInstructions(task)).includes('my-debugger'));
+});

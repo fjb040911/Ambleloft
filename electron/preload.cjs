@@ -1,7 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Keep the existing snapshot API for integrations. The app consumes raw deltas
+// through onRunEvent, avoiding full contextBridge copies on its hot path.
+const legacyRunListeners=new Set(),legacyVersions=new Map();
+let legacyGeneration=0;
+const legacyRunEvent=(_event,value)=>{
+ if(!value.kind?.startsWith('run-')){for(const listener of legacyRunListeners)listener(value);return;}
+ const generation=legacyGeneration;
+ const deliver=snapshot=>{if(generation!==legacyGeneration)return;const id=snapshot.run.id,previous=legacyVersions.get(id);if(previous?.epoch===snapshot.epoch&&previous.revision>=snapshot.revision)return;legacyVersions.set(id,{epoch:snapshot.epoch,revision:snapshot.revision});for(const listener of legacyRunListeners)listener(snapshot.run);};
+ if(value.kind==='run-snapshot')deliver(value);
+ else void ipcRenderer.invoke('agent:snapshot',{id:value.id}).then(deliver).catch(error=>console.error('Run snapshot unavailable',error));
+};
+
 if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   updates:{...Object.fromEntries(['snapshot','check','download','update','cancel','preferences','restart','schedule','cancelSchedule'].map(action=>[action,input=>ipcRenderer.invoke('update:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('update:event',h);return()=>ipcRenderer.removeListener('update:event',h);}},
+  growth:Object.fromEntries(['status','jobs','policy','dismiss'].map(action=>[action,input=>ipcRenderer.invoke('growth:'+action,input)])),
+  investigation:Object.fromEntries(['start','read','list','cancel','revokeWrite','resume','revokeResume','open'].map(action=>[action,input=>ipcRenderer.invoke('investigation:'+action,input)])),
+  expertChat:{...Object.fromEntries(['directory','read','submit','retry','cancel','exclude','revokeTaskContext','source','export'].map(action=>[action,input=>ipcRenderer.invoke('expert-chat:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('expert-chat:event',h);return()=>ipcRenderer.removeListener('expert-chat:event',h);}},
   spaces:Object.fromEntries(['changeDiscussionModel','changeDiscussionPermission','followupDiscussion','coordinateDiscussion','stopDiscussionHost','exportDocument','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','discardTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','controlPlan','knowledge','start'].map(action=>[action,input=>ipcRenderer.invoke('spaces:'+action,input)])),
   workforce:{...Object.fromEntries(['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion','importLocal','importRepository'].map(action=>[action,input=>ipcRenderer.invoke('workforce:'+action,input)])),onChanged:listener=>{const h=()=>listener();ipcRenderer.on('workforce:event',h);return()=>ipcRenderer.removeListener('workforce:event',h);}},
   creation:{...Object.fromEntries(['read','install','trial'].map(action=>[action,input=>ipcRenderer.invoke('creation:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('creation:event',h);return()=>ipcRenderer.removeListener('creation:event',h);}},
@@ -38,6 +53,8 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   editRun: input => ipcRenderer.invoke('agent:edit', input),
   exportRunDiagnostics: input => ipcRenderer.invoke('agent:export-diagnostics', input),
   openProject: id => ipcRenderer.invoke('project:open', id),
+  getToolText: input => ipcRenderer.invoke('agent:tool-text',input),
+  getRunSnapshot: input => ipcRenderer.invoke('agent:snapshot',input),
   getRunPage: input => ipcRenderer.invoke('agent:history',input),
   touchSearchItem: input => ipcRenderer.invoke('workspace:search-touch',input),
   searchWorkspace: input => ipcRenderer.invoke('workspace:search',input),
@@ -49,10 +66,14 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   stopRun: id => ipcRenderer.invoke('agent:stop', id),
   answerRun: input => ipcRenderer.invoke('agent:answer',input),
   approveRun: input => ipcRenderer.invoke('agent:approve', input),
+  onRunEvent: callback => {
+    const listener=(_event,value)=>callback(value);ipcRenderer.on('agent:event',listener);
+    return()=>ipcRenderer.removeListener('agent:event',listener);
+  },
   onRun: callback => {
-    const listener = (_event, run) => callback(run);
-    ipcRenderer.on('agent:event', listener);
-    return () => ipcRenderer.removeListener('agent:event', listener);
+    if(!legacyRunListeners.size)ipcRenderer.on('agent:event',legacyRunEvent);
+    legacyRunListeners.add(callback);
+    return()=>{legacyRunListeners.delete(callback);if(!legacyRunListeners.size){ipcRenderer.removeListener('agent:event',legacyRunEvent);legacyGeneration++;legacyVersions.clear();}};
   },
   onOpenConversation:callback=>{const listener=(_event,ref)=>callback(ref);ipcRenderer.on('extension:open-conversation',listener);return()=>ipcRenderer.removeListener('extension:open-conversation',listener);},
   openWindowMenu: () => ipcRenderer.invoke('window:menu'),

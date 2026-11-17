@@ -1,7 +1,8 @@
+import {createMarkdownSplitter} from './markdown-blocks.mjs';
 import {CodeBlock as TraceCodeBlock,CodeBlockContent} from './components/ui/code-block';
 import {Button} from './components/ui/button';
 import {t, useLanguage} from './i18n';
-import { createContext, useContext, memo, type ReactNode, isValidElement } from 'react';
+import { createContext, useContext, memo, useMemo, useRef, type ReactNode, isValidElement } from 'react';
 import ReactMarkdown, {type Components} from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -45,7 +46,13 @@ const MarkdownTable:NonNullable<Components['table']>=({children})=><div classNam
 const TracePre:NonNullable<Components['pre']>=({children})=><TraceCodeBlock size="sm"><CodeBlockContent wrap className="max-h-64">{textOf(children).replace(/\n$/,'')}</CodeBlockContent></TraceCodeBlock>;
 const components:Components={pre:CodeBlock,a:MarkdownLink,img:MarkdownImage,table:MarkdownTable};
 const traceComponents:Components={...components,pre:TracePre};
+const MarkdownBlock=memo(function MarkdownBlock({text,trace}:{text:string;trace:boolean}){
+ return <ReactMarkdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[[rehypeKatex,{strict:false,trust:false}],[rehypeHighlight,{detect:false}]]} components={trace?traceComponents:components}>{text}</ReactMarkdown>;
+});
 export default memo(function Markdown({ text, resourceUrl, onFileLink, context }: MarkdownResources & { context?:'trace'; text: string }) {
   useLanguage();
-  return <ResourceContext.Provider value={{resourceUrl,onFileLink}}><div className={context==='trace'?"trace-markdown text-sm leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_blockquote]:border-l [&_blockquote]:pl-3 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold":"markdown"}><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { strict: false, trust: false }], [rehypeHighlight, { detect: false }]]} components={context==='trace'?traceComponents:components}>{text}</ReactMarkdown></div></ResourceContext.Provider>;
+  const resources=useMemo(()=>({resourceUrl,onFileLink}),[resourceUrl,onFileLink]);
+  const split=useRef(createMarkdownSplitter());
+  const blocks=useMemo(()=>split.current(text),[text]);
+  return <ResourceContext.Provider value={resources}><div className={context==='trace'?"trace-markdown text-sm leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_blockquote]:border-l [&_blockquote]:pl-3 [&_h1]:font-semibold [&_h2]:font-semibold [&_h3]:font-semibold":"markdown"}>{blocks.map((block,index)=><MarkdownBlock key={index} text={block} trace={context==='trace'}/>)}</div></ResourceContext.Provider>;
 });

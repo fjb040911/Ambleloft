@@ -10,6 +10,7 @@ async function prepare(page: import('@playwright/test').Page, text = rich, langu
     let callback: any;
     (window as any).__demoRun = run;
     (window as any).__emit = () => callback(structuredClone(run));
+    (window as any).__emitEvent = (event:any) => callback(event);
     (window as any).desktop = {
       getProvider:async()=>({configured:true,baseUrl:run.baseUrl,model:'fixture',executable:'',hasKey:false}),
       getDevice:async()=>({name:'Test Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({language,layoutMode:'classic',tasks:[],projects:[],theme:'light'}),
@@ -65,9 +66,13 @@ test('final answers render while unfinished execution stays visible', async ({pa
   await expect(page.locator('.markdown table td')).toHaveCount(2);
   await expect(page.locator('.katex')).toHaveCount(1);
   await expect(page.locator('.hljs-keyword')).toHaveCount(1);
+  await page.locator('.artifact').nth(0).scrollIntoViewIfNeeded();
   await expect(page.getByAltText('Mermaid 图表')).toHaveCount(1);
+  await page.locator('.artifact').nth(1).scrollIntoViewIfNeeded();
   await expect(page.locator('.chart-canvas svg')).toHaveCount(1);
+  await page.locator('.artifact').nth(2).scrollIntoViewIfNeeded();
   await expect(page.getByRole('img',{name:'draw.io 基础图形'})).toHaveCount(1);
+  await page.locator('.artifact').nth(3).scrollIntoViewIfNeeded();
   await expect(page.getByAltText('SVG 图形')).toHaveCount(1);
   await page.locator('.artifact').first().getByRole('button',{name:'源码',exact:true}).click();
   await expect(page.locator('.artifact').first().locator('pre')).toContainText('flowchart');
@@ -182,6 +187,8 @@ test('progress stays until completion and can be reopened alongside plans and fi
  await expect(panel).toContainText('有个 Python 3.11 可用。');
  await panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]').click();
  await expect(panel).toContainText('Downloading python-docx');
+ await expect(panel.locator('.thinking-window')).toHaveCount(0);
+ await panel.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
  await expect(panel.locator('.thinking-window pre')).toHaveText('检查可用环境');
  await expect(panel.locator('.process-milestone')).toHaveText(['有个 Python 3.11 可用。','安装进行中，等待完成。']);
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='completed';(window as any).__emit();});
@@ -196,7 +203,7 @@ test('progress stays until completion and can be reopened alongside plans and fi
  await expect(page.getByLabel('任务清单')).toContainText('撰写文档');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';run.artifacts=[{id:'file',turnKey:'u',kind:'delivery',name:'report.md',path:'/fixture/report.md',size:1024}];(window as any).desktop.accessArtifact=async()=>({name:'report.md',text:'# 可预览的结果'});(window as any).__emit();});
  await expect(panel).toBeHidden();await expect(page.getByLabel('交付文件')).toContainText('report.md');
- await page.locator('.turn-progress-toggle').click();await expect(panel).toBeVisible();await expect(page.getByLabel('任务清单')).toContainText('未确认完成');await expect(panel.locator('.thinking-window')).toHaveCount(0);await expect(panel).not.toContainText('检查可用环境');
+ await page.locator('.turn-progress-toggle').click();await expect(panel).toBeVisible();await page.getByLabel('任务清单').locator('[data-slot=trace-collapsible-trigger]').click();await expect(page.getByLabel('任务清单')).toContainText('未确认完成');await expect(panel.locator('.thinking-window')).toHaveCount(0);await expect(panel).not.toContainText('检查可用环境');
  const traceBody=panel.locator('.process-milestone .trace-markdown').first();
  expect(await traceBody.evaluate(el=>getComputedStyle(el).fontSize)).toBe(await panel.locator('[data-slot=trace-line]').first().evaluate(el=>getComputedStyle(el).fontSize));
  const traceDetail=page.locator('[data-slot=trace-collapsible-content-inner]').first();
@@ -223,7 +230,7 @@ test('unclassified providers resolve on completion; failed turns retain their pr
 test('persistent activity survives folded logs and distinguishes silence, tools and approval',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'执行任务',timing:{startedAt:new Date().toISOString()}}];run.lastEventAt=new Date().toISOString();(window as any).__emit();});
- const activity=page.getByLabel('当前运行状态');await expect(activity).toContainText('任务进行中，可随时停止');
+ const activity=page.getByLabel('当前运行状态');await expect(activity).toContainText('执行中');
  await expect(page.getByLabel('任务执行过程')).toContainText('尚未收到模型的过程内容');
  await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeHidden();await expect(activity).toBeVisible();
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.tools=[{id:'t',turnKey:'u',type:'commandExecution',label:'python report.py',status:'inProgress',detail:''}];(window as any).__emit();});
@@ -243,6 +250,7 @@ test('persistent activity survives folded logs and distinguishes silence, tools 
 test('thinking scrolls independently, disappears after interruption, and tools stop shimmering',async({page})=>{
  await prepare(page);
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'研究任务'},{id:'a',role:'assistant',phase:'commentary',text:'**核实关键前提**',order:1},{id:'r',role:'assistant',kind:'reasoning',text:Array.from({length:60},(_,i)=>'分析步骤 '+i).join('\n'),order:2}];run.tools=[{id:'t',turnKey:'u',order:3,type:'commandExecution',label:'pwd',status:'inProgress',detail:''}];(window as any).__emit();});
+ await page.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
  const window=page.locator('.thinking-window');
  await expect(page.locator('.process-milestone strong')).toHaveText('核实关键前提');
  expect((await window.boundingBox())!.height).toBeLessThanOrEqual(180);
@@ -280,7 +288,7 @@ test('clarification collects explicit answers and retry state offers recovery wi
 });
 
 
-test('older turns load by cursor and long history retains mounted state with browser containment',async({page})=>{
+test('older turns load by cursor and long history unmounts offscreen content with measured placeholders',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
@@ -297,8 +305,8 @@ test('older turns load by cursor and long history retains mounted state with bro
  await expect.poll(async()=>Math.abs(await anchorTop()-14)).toBeLessThan(1);
  expect(await page.evaluate(()=>(window as any).__historyInput.before)).toBe('u30');
  await expect(page.locator('.conversation-turn')).toHaveCount(60);
- expect(await page.locator('[data-slot=message][data-align=start]').count()).toBeGreaterThanOrEqual(30);
- await expect(page.locator('[data-turn-id="u0"] > div')).toHaveCSS('content-visibility','auto');
+ expect(await page.locator('[data-slot=message][data-align=start]').count()).toBeLessThan(30);
+ await expect(page.locator('[data-turn-id="u0"] [data-virtualized=placeholder]')).toHaveCount(1);
  await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first().click();
  await expect(page.locator('[data-turn-id="u0"] [data-slot=message][data-align=start]')).toBeVisible();
  await page.getByRole('button',{name:'回到最新消息'}).click();
@@ -575,7 +583,7 @@ test('archive confirmation stays usable while another task waits for approval',a
   w.desktop.editRun=async(input:any)=>{
    if(w.__archiveFails)throw new Error('保存失败，请重试');
    w.__archiveInput=input;other.archivedAt=new Date().toISOString();
-   return [structuredClone(w.__demoRun),other];
+   return [structuredClone(w.__demoRun),other].map(run=>({...run,messages:[],tools:[],approvals:[],summaryOnly:true}));
   };
   w.desktop.listRuns=async()=>[structuredClone(w.__demoRun),other];
   // Feed the second task through the same subscription used for runtime updates.
@@ -661,7 +669,7 @@ test('activity and thinking indicators animate only while running and respect re
   run.messages=run.messages.slice(0,1);(window as any).__emit();
  });
  const status=page.locator('.run-activity [data-slot="marker"]');
- await expect(status).toContainText('任务进行中，可随时停止');
+ await expect(status).toContainText('执行中');
  await expect(status.locator('.shimmer')).toBeVisible();
  await expect(status.locator('[data-slot="spinner"]')).toBeVisible();
  await expect(status.locator('.shimmer')).toHaveCSS('animation-name','tw-shimmer');
@@ -759,6 +767,7 @@ test('tool summaries describe actions while commands and output remain expandabl
 test('thinking follows rapid output and hidden updates, but respects reading older lines',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'分析任务'},{id:'r',role:'assistant',kind:'reasoning',text:('分析内容\n').repeat(80)}];(window as any).__emit();});
+ await page.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
  const thinking=page.locator('.thinking-window');
  const distance=()=>thinking.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight);
  await expect.poll(distance).toBeLessThan(2);
@@ -856,6 +865,8 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  const strong=reply.locator('strong');
  expect(await strong.evaluate(el=>getComputedStyle(el).fontSize)).toBe(await strong.evaluate(el=>getComputedStyle(el.parentElement!).fontSize));
  const row=page.locator('.process-entry.commandExecution');
+ await expect(row.locator('[data-slot=trace-collapsible-trigger]')).toHaveAttribute('aria-expanded','false');
+ await row.locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(row.locator('[data-slot=trace-collapsible-trigger]')).toHaveAttribute('aria-expanded','true');
  await expect(row.getByLabel('工具输出')).toBeVisible();
  for(const width of [1240,640]){
@@ -864,7 +875,7 @@ test('transcript keeps long tool metadata and reply typography readable in narro
   const boxes=await row.locator('[data-slot=trace-collapsible-trigger]').evaluate(el=>{const title=el.querySelector('.activity-tool-title')!.getBoundingClientRect();const status=el.querySelector('.activity-tool-status')!.getBoundingClientRect();return {right:title.right,left:status.left,overflow:el.scrollWidth-el.clientWidth};});
   expect(boxes.right).toBeLessThanOrEqual(boxes.left);expect(boxes.overflow).toBeLessThanOrEqual(1);
   const activity=await page.locator('.run-activity').evaluate(el=>({label:el.querySelector('[data-slot="marker-content"]')!.getBoundingClientRect().bottom,detail:el.querySelector('.activity-target')!.getBoundingClientRect().top}));
-  expect(activity.detail).toBeGreaterThanOrEqual(activity.label);
+  expect(activity.detail).toBeLessThan(activity.label);
   await page.screenshot({path:'test-results/chat-layout-'+width+'.png'});
  }
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
@@ -894,13 +905,15 @@ test('reconciled forms replace stale local errors with the confirmed submission 
  await expect(card.getByRole('button',{name:'核实提交结果'})).toHaveCount(0);
 });
 
-test('running summary exposes the current step while failed tools automatically reveal details',async({page})=>{
+test('running summary exposes failures without overriding a manually folded process',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=run.messages.slice(0,1);run.plans=[{turnKey:'u',explanation:'执行计划',steps:[{step:'读取资料',status:'completed'},{step:'生成报告',status:'inProgress'}]}];run.tools=[{id:'report',turnKey:'u',type:'commandExecution',label:'python report.py',status:'inProgress',detail:'Generating report'}];(window as any).__emit();});
  await expect(page.locator('.turn-progress-toggle')).toContainText('生成报告');await expect(page.locator('.turn-progress-toggle')).toContainText('1/2');await expect(page.locator('.process-panel')).toBeVisible();
  await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeHidden();
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='failed';(window as any).__demoRun.tools[0].detail='Report generation failed';(window as any).__emit();});
- await expect(page.locator('.process-panel')).toBeVisible();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('.process-panel')).toHaveCount(0);await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.turn-progress-toggle [data-slot=trace-line]')).toHaveAttribute('data-status','error');
+ await page.locator('.turn-progress-toggle').click();
  await page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]').click();await expect(page.locator('.process-panel')).toContainText('Report generation failed');
  await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='completed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeHidden();await expect(page.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
@@ -940,6 +953,8 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
  await prepare(page);
  await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='running';r.approvals=[];r.messages=[{id:'u',role:'user',text:'检查过程'},{id:'p',role:'assistant',phase:'commentary',text:'## 步骤\n\n**检查**\n\n- 项目\n\n> 引用',order:1}];r.tools=[{id:'tool',turnKey:'u',type:'commandExecution',label:'node check.js',status:'inProgress',detail:'first output',order:2}];(window as any).__emit();});
  const entry=page.locator('.process-entry.commandExecution');
+ await expect(entry.getByLabel('工具输出')).toHaveCount(0);
+ await entry.locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(entry.getByLabel('工具输出')).toBeVisible();
  await expect(entry.locator('[data-slot=code-block]')).toHaveCount(2);
  await entry.getByRole('button').click();
@@ -960,6 +975,7 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
 test('Trace tools distinguish denied, pending and unfinished historical calls',async({page})=>{
  await prepare(page);
  await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=['declined','pending','inProgress','failed'].map((status,i)=>({id:String(i),turnKey:'u',type:'commandExecution',label:'command '+i,status,detail:i===3?'failure':''}));(window as any).__emit();});
+ await page.locator('.turn-progress-toggle').click();
  const rows=page.locator('.process-entry.commandExecution');
  await expect(rows.nth(0)).toContainText('已拒绝');await expect(rows.nth(0).getByRole('button')).toHaveCount(0);
  await expect(rows.nth(2).locator('[data-slot=trace-line]')).toHaveAttribute('data-status','error');
@@ -1060,4 +1076,110 @@ test('single review retries failures without acting on other concurrent approval
  await surface.getByRole('button',{name:'批准本次'}).click();await expect(surface.getByRole('button',{name:'正在批准…'})).toBeDisabled();
  await page.evaluate(()=>{const w=window as any;w.__demoRun.status='stopping';w.__emit();});await expect(surface).toHaveCount(0);
  await page.evaluate(()=>(window as any).__resolve());expect(await page.evaluate(()=>(window as any).__calls.map((c:any)=>c.approvalId))).toEqual(['a0']);
+});
+
+test('thinking and tool streams default to summaries and mount text only on demand',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.questions=[];run.messages=[run.messages[0],{id:'reasoning-lazy',role:'assistant',kind:'reasoning',text:'Hidden reasoning payload',order:1}];run.tools=[{id:'tool-lazy',turnKey:run.messages[0].id,type:'commandExecution',label:'pwd',status:'inProgress',detail:'Hidden tool payload',order:2}];(window as any).__emit();});
+ await expect(page.locator('.thinking-window')).toHaveCount(0);await expect(page.getByText('Hidden tool payload',{exact:true})).toHaveCount(0);
+ const thinking=page.locator('.process-entry.reasoning [data-slot=trace-collapsible-trigger]');await thinking.click();await expect(page.locator('.thinking-window')).toContainText('Hidden reasoning payload');await thinking.click();await expect(page.locator('.thinking-window')).toHaveCount(0);
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[1].text+=' more';run.tools[0].detail+=' more';(window as any).__emit();});await expect(page.locator('.thinking-window')).toHaveCount(0);
+ const tool=page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]');await tool.click();await expect(page.getByText('Hidden tool payload more',{exact:true})).toBeVisible();await tool.click();await expect(page.getByText('Hidden tool payload more',{exact:true})).toHaveCount(0);
+});
+
+test('collapsed execution unmounts large histories and restores disclosure choices with latest output',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.questions=[];r.messages=[r.messages[0],{id:'progress-heavy',role:'assistant',phase:'commentary',text:'**Progress evidence**\n\n'+('Long progress record. '.repeat(1000)),order:1}];r.tools=Array.from({length:200},(_,i)=>({id:'heavy-'+i,turnKey:r.messages[0].id,type:'commandExecution',label:'echo step-'+i,status:'completed',detail:'Output '+i+' '+('x'.repeat(12000)),order:i+2}));w.__emit();});
+ const progress=page.locator('.turn-progress'),toggle=progress.locator('.turn-progress-toggle');
+ await expect(progress.locator('.process-entry.commandExecution')).toHaveCount(200);
+ const first=progress.locator('.process-entry.commandExecution').first();
+ await first.locator('[data-slot=trace-collapsible-trigger]').click();
+ await expect(first.getByLabel('工具输出')).toBeVisible();
+ const expandedCount=await progress.locator('*').count();
+ await toggle.click();
+ await expect(progress.locator('.process-panel')).toHaveCount(0);
+ await expect(progress.locator('.markdown')).toHaveCount(0);
+ expect(await progress.locator('*').count()).toBeLessThan(expandedCount/10);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.tools[0].detail='Newest output while collapsed';w.__demoRun.messages[1].text+=' Latest progress';w.__emit();});
+ await expect(toggle).toHaveAttribute('aria-expanded','false');
+ await expect(progress.locator('.process-panel')).toHaveCount(0);
+ await toggle.click();
+ await expect(first.getByLabel('工具输出')).toHaveText('Newest output while collapsed');
+ await expect(progress.locator('.process-milestone')).toContainText('Latest progress');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__emit();});
+ await expect(toggle).toHaveAttribute('aria-expanded','false');
+ await expect(toggle).toContainText('200');
+ await expect(progress.locator('.process-panel')).toHaveCount(0);
+ await toggle.click();await expect(first.getByLabel('工具输出')).toHaveText('Newest output while collapsed');
+});
+
+test('hidden conversation freezes transcript DOM while retaining draft and latest approvals',async({page})=>{
+ await prepare(page,'Before hidden');
+ await page.getByRole('textbox',{name:'继续对话'}).fill('Draft survives hidden updates');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.approvals=[];w.__demoRun.status='running';w.__emit();});
+ const original=page.locator('.conversation-page').filter({hasText:'Before hidden'});
+ await page.getByRole('button',{name:/新建任务/}).first().click();
+ await expect(original).toBeHidden();
+ await page.evaluate(()=>{const w=window as any,el=[...document.querySelectorAll('.conversation-page')].find(el=>el.textContent?.includes('Before hidden'))!;w.__hiddenMutations=0;w.__hiddenObserver=new MutationObserver(()=>w.__hiddenMutations++);w.__hiddenObserver.observe(el,{subtree:true,childList:true,characterData:true});});
+ for(let i=0;i<5;i++)await page.evaluate(i=>{const w=window as any;w.__demoRun.messages.at(-1).text='After hidden '+i;w.__emit();},i);
+ await expect(original).toContainText('Before hidden');
+ expect(await page.evaluate(()=>(window as any).__hiddenMutations)).toBe(0);
+ await page.evaluate(()=>{const w=window as any;w.__hiddenObserver.disconnect();w.__demoRun.status='waiting';w.__demoRun.approvals=[{id:'new-approval',method:'commandExecution',detail:JSON.stringify({command:'echo latest approval'})}];w.__emit();});
+ await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
+ await expect(page.locator('.conversation-page:visible')).toContainText('After hidden 4');
+ await expect(page.getByRole('textbox',{name:'继续对话'})).toHaveValue('Draft survives hidden updates');
+ await expect(page.getByLabel('待执行命令')).toHaveText('echo latest approval');
+});
+
+test('shadcn plan keeps streaming counts while collapsed and restores its disclosure after process folding',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);r.plans=[{turnKey:'u',explanation:'Plan details on demand',steps:[{step:'Inspect current code',status:'inProgress'},{step:'Verify changes',status:'pending'}]}];w.__emit();});
+ const plan=page.getByLabel('任务清单'),toggle=plan.locator('[data-slot=trace-collapsible-trigger]');
+ await expect(toggle).toContainText('0/2');await expect(plan).toContainText('Inspect current code');
+ await toggle.click();await expect(plan.getByText('Inspect current code',{exact:true})).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any,p=w.__demoRun.plans[0];p.steps[0].status='completed';p.steps[1].status='inProgress';w.__emit();});
+ await expect(toggle).toContainText('1/2');await expect(toggle).toHaveAttribute('aria-expanded','false');
+ await page.locator('.turn-progress-toggle').click();await page.locator('.turn-progress-toggle').click();
+ await expect(toggle).toHaveAttribute('aria-expanded','false');await toggle.click();await expect(plan).toContainText('Verify changes');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.plans[0].steps[1].status='completed';w.__demoRun.status='completed';w.__emit();});
+ await expect(page.locator('.process-panel')).toHaveCount(0);await page.locator('.turn-progress-toggle').click();await expect(toggle).toContainText('2/2');
+});
+
+test('versioned streaming recovers a missing patch and preserves historical DOM',async({page})=>{
+ await prepare(page,'Initial answer');
+ await page.evaluate(async()=>{
+  const w=window as any,{createRunPublisher}=await import('/electron/run-events.mjs');
+  w.__publisher=createRunPublisher('test-session');
+  w.__wire=(skip=false)=>{const event=w.__publisher.encode(w.__demoRun);if(!skip)w.__wireReceive(event);};
+  w.__wireReceive=w.__emitEvent;
+  w.desktop.getRunSnapshot=async({id}:any)=>{w.__recoveries=(w.__recoveries||0)+1;return structuredClone(w.__publisher.snapshot(id));};
+  w.__wire();
+ });
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text='First delta';w.__wire(true);w.__demoRun.messages.at(-1).text='Recovered latest text';w.__demoRun.status='running';w.__demoRun.approvals=[];w.__wire();});
+ await expect(page.locator('.markdown')).toContainText('Recovered latest text');
+ expect(await page.evaluate(()=>(window as any).__recoveries)).toBe(1);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__demoRun.approvals=[{id:'delta-approval',method:'commandExecution',detail:'{"command":"echo delta"}'}];w.__wire();});
+ await expect(page.getByLabel('待执行命令')).toHaveText('echo delta');
+});
+
+test('long tool output is fetched only on disclosure and pages without losing text',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=[{id:'paged',turnKey:'u',type:'commandExecution',label:'cat log',status:'completed',detail:'Tail preview',detailPreview:true,detailVersion:'v1'}];w.__detailReads=[];w.desktop.getToolText=async(input:any)=>{w.__detailReads.push(input);const text='BEGIN '+('x'.repeat(100000))+' END',offset=input.offset??text.length-64000;return {text:text.slice(offset,offset+64000),total:text.length,offset,version:'v1'};};w.__emit();});
+ const tool=page.locator('.process-entry.commandExecution'),toggle=tool.locator('[data-slot=trace-collapsible-trigger]');
+ expect(await page.evaluate(()=>(window as any).__detailReads.length)).toBe(0);
+ await toggle.click();await expect(tool.getByLabel('工具输出')).toContainText('END');
+ await tool.getByRole('button',{name:'上一页',exact:true}).click();await expect(tool.getByLabel('工具输出')).toContainText('BEGIN');
+ await toggle.click();await expect(tool.getByLabel('工具输出')).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).__detailReads.length)).toBe(2);
+});
+
+test('visited history is actually unmounted and disclosure state survives remount',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:120},(_,i)=>[{id:'u'+i,role:'user',text:'Question '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(20)}]).flat();w.__emit();});
+ const first=page.locator('[data-turn-id=u0]'),last=page.locator('[data-turn-id=u119]');
+ await first.scrollIntoViewIfNeeded();await first.locator('.turn-progress-toggle').click();
+ await page.getByRole('textbox',{name:'继续对话'}).focus();await last.scrollIntoViewIfNeeded();
+ await expect(first.locator('.turn-progress-toggle')).toHaveCount(0);
+ expect(await page.locator('[data-turn-id] [data-message-role=user]').count()).toBeLessThan(25);
+ await first.scrollIntoViewIfNeeded();await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
 });

@@ -63,12 +63,12 @@ class ConversationAgent {
   // Selected workflows/attachments require the executor's actual tool access.
   if(context.skills?.snapshots?.length||context.attachments?.length)decision.action='execute';
   this.publish(context,decision,'conversation:'+context.turnKey);
-  if(decision.action==='execute'){await this.runtime.persist();return true;}
+  if(decision.action==='execute'){await this.runtime.persist(undefined,run);return true;}
   const complete=async()=>{
    if(context.done||context.cancelled)throw Object.assign(Error('CANCELLED'),{code:'CANCELLED'});
    message.inputDeliveryState='delivered';
    const reply=run.messages.find(m=>m.id==='conversation:'+context.turnKey);if(reply)reply.phase='final_answer';
-   await this.runtime.persist();context.inputDelivery?.resolve();
+   await this.runtime.persist(undefined,run);context.inputDelivery?.resolve();
   };
   const target={mode:'conversation',turnKey:context.turnKey};
   if(context.inputDelivery?.dispatch){const sent=await context.inputDelivery.dispatch(target,complete);await sent.receipt;}
@@ -93,7 +93,7 @@ class ConversationAgent {
    const cutoff=run.conversation.updates.length-100;
    run.conversation.updates=run.conversation.updates.filter((u,index)=>index>=cutoff||u.turnKey===context.turnKey&&u.action==='execute'&&['received','delivered','unknown'].includes(u.state));
    this.publish(context,decision,'conversation:'+item.id+':'+context.turnKey);
-   await this.runtime.persist();
+   await this.runtime.persist(undefined,run);
   }
   return update;
  }

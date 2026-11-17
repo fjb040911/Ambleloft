@@ -1,3 +1,7 @@
+import {ProcessDisclosureScope} from './process-disclosure';
+import {RunDetailsContext} from './ToolText';
+import {InvestigationDetails} from './Investigation';
+import {useExpertChat,ExpertRecipient,ExpertTranscript} from './ExpertChat';
 import {isConversationMessage} from './conversation-message';
 import RunDiagnosticsButton from './RunDiagnosticsButton';
 import RenderErrorBoundary from './RenderErrorBoundary';
@@ -16,7 +20,7 @@ import VirtualBlock from './VirtualBlock';
 import SupplementalInputDock from './SupplementalInputDock';
 import {PersistentInputRecord} from './InputProcessRecord';
 import { t, useLanguage } from './i18n';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { ChevronUp, Clock3 } from 'lucide-react';
 import SkillTags from './SkillTags';
 import ModelStatus from './ModelStatus';
@@ -25,7 +29,7 @@ import ComposerControls, {type ComposerOptions} from './ComposerControls';
 import type { ProviderCatalog, AgentRun, TurnTiming } from './types';
 import Markdown from './Markdown';
 import TurnActions from './TurnActions';
-import { conversationTurns } from './conversation-turns';
+import { conversationTurns, type ConversationTurn } from './conversation-turns';
 import {TurnProgress} from './ProcessPanel';
 import RunActivity from './RunActivity';
 import TurnFiles from './TurnFiles';
@@ -106,7 +110,12 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     plans:mergeHistory(older.plans,run.plans,a=>a.turnKey),
     artifacts:mergeHistory(older.artifacts,run.artifacts,a=>a.id),
   }:run,[run,older]);
-  const turns = useMemo(()=>conversationTurns(merged),[merged]);
+  const previousTurns=useRef(new Map<string,ConversationTurn>());
+  const turns = useMemo(()=>{
+   const next=actionsOnly?[]:conversationTurns(merged);
+   const retained=next.map(turn=>{const previous=previousTurns.current.get(turn.user.id);return previous&&sameTurn(previous,turn)?previous:turn;});
+   previousTurns.current=new Map(retained.map(turn=>[turn.user.id,turn]));return retained;
+  },[merged,actionsOnly]);
   const forms=useTaskForms(run.id);
   const formsByTurn=useMemo(()=>groupByTurn(forms),[forms]);
   const appsByTurn=useMemo(()=>groupByTurn(merged.taskApps),[merged.taskApps]);
@@ -152,7 +161,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     following.current=true;onFollowingChange(true);scrollToEnd({behavior:'instant'});
   },[pendingMessage,onFollowingChange,scrollToEnd]);
   const continueSelected=async()=>{if(sending.current||submitting||!selectedInputs.length)return;sending.current=true;setInputSending(true);setSendError('');try{await resumeInputs();}catch(error){setSendError((error as Error).message);await deliveries.refresh();}finally{sending.current=false;setInputSending(false);}};
+  const expertChat=useExpertChat(run.conversationId,run.projectId,visible&&!embedded&&!run.collaboration);
   const submit = async () => {
+    if(expertChat.busy)return;
+    if(expertChat.selected){if(active||run.archivedAt)return;if(options.attachments?.length||options.selectedSkillIds?.length){setSendError('专家讨论暂只支持文字，请移除附件和技能');return;}const sentText=prompt;const result=await expertChat.submit(sentText);if(result)setPrompt(current=>current===sentText?'':current);return;}
     if((!prompt.trim()&&!options.selectedSkillIds?.length)||submitting||sending.current||run.status==='stopping'||run.archivedAt)return;
     if(active&&!inputAPI)return;
     const supplemental=!!inputAPI&&(active||mutation.current?.text===prompt);
@@ -191,14 +203,17 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   // Draft edits must not rebuild rich history or retained tool panels.
   // The enclosing discussion already renders its prompt. Omit only the matching
   // first prompt; later turns and paged history must retain their user messages.
-  const renderedTurns=useMemo(()=>new Map(turns.map(turn=>[turn.user.id,<><VirtualBlock preserveState enabled={turns.length>30&&!turn.active}><>{turn.user.modelChange&&<div className="turn-duration">{t("已切换模型：")}{turn.user.modelChange}</div>}</>{!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)&&<UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={(deliveries.snapshot?.requests||[]).some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
-            {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} text={message.text}/>:<Message key={message.id} role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={message.text}/></MessageContent></Message>)}
-            <TurnProgress allRequests={deliveries.snapshot?.requests||[]} requests={(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1))} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} paused={run.status==='waiting'||!!run.queued} onToggle={()=>{following.current=false;onFollowingChange(false);}} turn={turn} status={runStatus[run.status]} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
-            {turn.final&&<Message role="article" aria-label={t("助手消息")}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference||window.desktop?.projectFiles?openReferenceFile:undefined}/></MessageContent></Message>}
-            <TaskForms flows={formsByTurn.get(turn.user.id)||[]} archived={!!run.archivedAt}/>
-            {(appsByTurn.get(turn.user.id)||[]).map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}
-            <TurnFiles run={merged} turnKey={turn.user.id} openFile={openFile} openReference={openReference||window.desktop?.projectFiles?openReferenceFile:undefined} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}</VirtualBlock></>])),[turns,deliveries.snapshot,run.questions,run.status,run.queued,run.archivedAt,run.id,merged,formsByTurn,appsByTurn,visible,floatingHost,openInput,onFollowingChange,openReference,openReferenceFile,openFile,openChanges,language,embedded,embeddedPrompt,before]);
-  const renderTurn=(turn:typeof turns[number])=>renderedTurns.get(turn.user.id);
+  const toggleProcess=useCallback(()=>{following.current=false;onFollowingChange(false);},[onFollowingChange]);
+  const fileActions=useRef({openFile,openReference:openReference||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges});
+  fileActions.current={openFile,openReference:openReference||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges};
+  const stableFiles=useMemo(()=>({openFile:(file:import('./types').DeliveredFile)=>fileActions.current.openFile?.(file),openReference:(path:string)=>fileActions.current.openReference?.(path),openChanges:(changes:import('./types').TurnFileChanges)=>fileActions.current.openChanges(changes)}),[]);
+  const renderTurn=(turn:ConversationTurn)=>{
+   const requests=(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1));
+   const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
+   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+    <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
+   </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
+  };
   const actionableApprovals=active&&run.status!=='stopping'&&!run.archivedAt?[...new Map(run.approvals.map(a=>[a.id,a])).values()]:[];
   const requestKeys=[...actionableApprovals.map(r=>'approval:'+r.id),...(inputsInPanel?(run.questions||[]).map(r=>'question:'+r.id):[]),...(inputsInPanel?(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id):[])];
   const pendingCount=requestKeys.length;
@@ -279,6 +294,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
             {turn===turns.at(-1)&&statusContent}
           </ConversationScrollItem>)}
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
+          {(!!expertChat.state?.turns.length||!!expertChat.error)&&<MessageScrollerItem messageId="expert-discussion"><ExpertTranscript chat={expertChat}/></MessageScrollerItem>}
         </MessageScrollerContent>
       </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
         // Enable following before the primitive handles this click. Waiting for
@@ -291,14 +307,14 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       {inlineInputs}{outboxPanel}{pendingSurface}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
-      <PermissionStatus value={run.permissionChange}/><ModelStatus value={run.modelChange}/>
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
-      <ChatComposer attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending} sending={submitting||inputSending}
+      <ExpertRecipient chat={expertChat}/>
+      <ChatComposer expertMentions={expertChat.mentions} attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending||expertChat.busy} sending={submitting||inputSending||expertChat.busy}
         label={reworkMode?t('修改要求'):t('继续对话')} placeholder={reworkMode?t('说明需要修改的内容，提交后重新执行并验收'):run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
-        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
+        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
         skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
-        controls={<ComposerControls catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
+        controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls permissionChange={run.permissionChange} modelChange={run.modelChange} catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 
     </div>
   </div>;
@@ -316,12 +332,44 @@ function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnN
  const {currentAnchorId}=useMessageScrollerVisibility();
  return <TurnNavigation turns={turns} offset={offset} selected={currentAnchorId||turns[0]?.user.id||''} jump={jump}/>;
 }
-export default function Conversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
+function RetainedConversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(true);
  const [history,setHistory]=useState({input:props.run,value:props.run});
  let run=history.value;
  // Adjust before committing children so a rolling page never removes mounted
  // history for one frame. All transcript hosts share this boundary.
- if(history.input!==props.run){run=retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
- return <RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><ConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary>;
+ if(history.input!==props.run){run=props.actionsOnly?props.run:retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
+ if(run.originHandoff)return <InvestigationDetails id={run.originHandoff.id}/>;
+ return <RunDetailsContext.Provider value={props.run.id}><RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><FrozenConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary></RunDetailsContext.Provider>;
+}
+
+// Keep history accumulation outside this boundary so background pagination cannot
+// drop turns. Local draft and scroll state stay mounted while text updates pause.
+const FrozenConversationBody=memo(ConversationBody,(previous,next)=>previous.run.id===next.run.id&&previous.visible===false&&next.visible===false);
+
+function sameItems(a:readonly unknown[]|undefined,b:readonly unknown[]|undefined){return a===b||(a?.length||0)===(b?.length||0)&&(a||[]).every((item,index)=>item===b?.[index]);}
+function sameTurn(a:ConversationTurn,b:ConversationTurn){return a.user===b.user&&a.final===b.final&&a.active===b.active&&a.outcome===b.outcome&&a.plan===b.plan&&a.model===b.model&&sameItems(a.messages,b.messages)&&sameItems(a.tools,b.tools)&&sameItems(a.artifacts,b.artifacts);}
+type TurnTranscriptProps={turn:ConversationTurn;run:AgentRun;requests:import('./types').PersistentInputRequest[];allRequests:import('./types').PersistentInputRequest[];deliveries:import('./types').InputDelivery[];nativePending:string[];onOpenInput(id:string):void;onToggle():void;paused:boolean;status:string;hidePrompt:boolean;language:string;openFile?(file:import('./types').DeliveredFile):void;openReference?(path:string):void;openChanges(changes:import('./types').TurnFileChanges):void};
+const TurnTranscript=memo(function TurnTranscript({turn,run,requests,allRequests,deliveries,nativePending,onOpenInput,onToggle,paused,status,hidePrompt,openFile,openReference,openChanges}:TurnTranscriptProps){
+ return <>
+  {turn.user.modelChange&&<div className="turn-duration">{t('已切换模型：')}{turn.user.modelChange}</div>}
+  {!hidePrompt&&<UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={allRequests.some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
+  {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><Markdown text={message.text}/></MessageContent></Message>)}
+  <TurnProgress allRequests={allRequests} requests={requests} deliveries={deliveries} nativePending={nativePending} onOpenInput={onOpenInput} paused={paused} onToggle={onToggle} turn={turn} status={status} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
+  {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference}/></MessageContent></Message>}
+  <TurnFiles run={run} turnKey={turn.user.id} openFile={openFile} openReference={openReference} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}
+ </>;
+},(a,b)=>a.turn===b.turn&&a.paused===b.paused&&a.status===b.status&&a.hidePrompt===b.hidePrompt&&a.language===b.language&&a.run.id===b.run.id&&a.run.cwd===b.run.cwd&&a.run.archivedAt===b.run.archivedAt&&sameItems(a.run.fileChanges,b.run.fileChanges)&&sameItems(a.requests,b.requests)&&sameItems(a.allRequests,b.allRequests)&&sameItems(a.deliveries,b.deliveries)&&sameItems(a.nativePending,b.nativePending)&&a.onOpenInput===b.onOpenInput&&a.onToggle===b.onToggle&&a.openFile===b.openFile&&a.openReference===b.openReference&&a.openChanges===b.openChanges);
+
+const MemoConversation=memo(RetainedConversation);
+export default function Conversation(props:ComponentProps<typeof RetainedConversation>){
+ const latest=useRef(props);latest.current=props;
+ const handlers=useRef<Record<string,(...args:any[])=>any>>({});
+ const forwarded={...props};
+ for(const key of ['send','stop','approve','openSettings','openFile','openReference','openChanges','onOpenInput','onOptionsChange'] as const){
+  if(typeof props[key]!=='function')continue;
+  handlers.current[key]??=(...args:any[])=>(latest.current[key] as ((...values:any[])=>any)|undefined)?.(...args);
+  (forwarded as Record<string,unknown>)[key]=handlers.current[key];
+ }
+ return <MemoConversation {...forwarded}/>;
 }

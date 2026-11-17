@@ -66,7 +66,7 @@ test('host evidence expands from a source citation; question drafts survive navi
  const field=page.getByRole('combobox',{name:'谁来使用？'});await field.selectOption('customers');await page.getByRole('tab',{name:'概览',exact:true}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();await expect(field).toHaveValue('customers');
  await page.evaluate(()=>{const qa=(window as any).spaceQA;window.desktop!.spaces!.coordinateDiscussion=async()=>{throw Error('暂时离线');};});await page.getByRole('button',{name:'确认并继续'}).click();await expect(page.getByText('暂时离线', {exact:true})).toBeVisible();await expect(field).toHaveValue('customers');await expect(field).toBeEnabled();
  await page.evaluate(()=>{const qa=(window as any).spaceQA,r=qa.snapshot.requests.find((r:any)=>r.host);r.host.question=null;r.host.status='completed';r.participants=[{employeeId:'writer',status:'completed',output:'真实记录：'.repeat(300),contribution:{id:'expert-source',author:{name:'文案员工',id:'writer',kind:'expert'},stage:'analysis',context:null,provenance:'recorded'}}];r.host.brief.items[0].sourceIds=['expert-source'];qa.emit();});
- const details=page.locator('.wf-host-experts');await expect(details).not.toHaveAttribute('open');await page.getByText('目标与决定的来源',{exact:true}).click();await page.locator('.wf-host-brief').getByRole('button',{name:'来源 1'}).click();await expect(details).toHaveAttribute('open');await expect(page.locator('[data-expert-id="writer"]')).toBeFocused();
+ const details=page.locator('.wf-host-experts');await expect(details.locator('[data-slot=trace-collapsible-trigger]').first()).toHaveAttribute('aria-expanded','false');await expect(details.locator('[data-expert-id]')).toHaveCount(0);await page.getByText('目标与决定的来源',{exact:true}).click();await page.locator('.wf-host-brief').getByRole('button',{name:'来源 1'}).click();await expect(details.locator('[data-slot=trace-collapsible-trigger]').first()).toHaveAttribute('aria-expanded','true');await expect(page.locator('[data-expert-id="writer"]')).toBeFocused();
  await page.screenshot({path:'/tmp/discussion-host-long-evidence.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 test('same-name experts require an explicit choice and never broadcast accidentally',async({page})=>{
@@ -129,4 +129,29 @@ test('running discussion applies the model without creating another round or con
  await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);r.host.status='running';r.participants=[{employeeId:'writer',status:'running',output:'',role:{name:'文案员工',skills:[]}}];window.desktop!.spaces!.changeDiscussionModel=async(input:any)=>{q.calls.push({action:'model',input});r.modelChange={id:'m',previous:{model:'模型 A'},requested:{providerId:input.providerId,model:input.model},state:'switching',effective:null};q.emit();return new Promise(resolve=>{(window as any).applyDiscussionModel=()=>{r.modelChange.state='applied';r.modelChange.effective=r.modelChange.requested;r.executionModel=r.modelChange.requested;r.host.model=input.model;q.emit();resolve(structuredClone(q.snapshot));};});};q.emit();});
  await input.fill('保留未发送的补充要求');const picker=page.getByRole('button',{name:'选择模型',exact:true});await picker.click();await page.getByRole('option',{name:/模型 B/}).click();await expect(page.getByText('模型 B · 模型切换中，尚未确认生效',{exact:true})).toBeVisible();await expect(question).toHaveValue('customers');
  await page.evaluate(()=>(window as any).applyDiscussionModel());await expect(page.getByText('模型 B · 新模型已生效',{exact:true})).toBeVisible();await expect(picker).toContainText('模型 B');await expect(picker).not.toContainText('下一轮');await expect(input).toHaveValue('保留未发送的补充要求');await expect(question).toHaveValue('customers');expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(1);
+});
+
+test('collapsed expert histories keep approvals and supplemental drafts outside the lazy transcript',async({page})=>{
+ await prepare(page);const input=page.getByLabel('这次想推进什么？');await input.fill('检查专家记录');await input.press('Enter');
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);
+  r.host.status='running';r.participants=[{employeeId:'writer',runId:'evidence',status:'waiting',output:'',role:{name:'文案员工',revision:1,skills:[]}}];
+  window.desktop!.getRunPage=async()=>({id:'evidence',title:'专家执行',cwd:'/fixture',createdAt:new Date().toISOString(),model:'fixture',baseUrl:'http://fixture',status:'waiting',error:'',messages:[{id:'u',role:'user',text:'任务'},{id:'a',role:'assistant',phase:'final_answer',text:'Lazy expert result'}],tools:[],approvals:[{id:'approve',method:'commandExecution',detail:JSON.stringify({command:'echo expert'})}],questions:[{id:'question',questions:[{id:'detail',question:'补充专家要求'}]}]}) as any;
+  window.desktop!.approveRun=async(args:any)=>{q.calls.push({action:'approve',args});};
+  window.desktop!.answerRun=async(args:any)=>{q.calls.push({action:'answer',args});};q.emit();
+ });
+ const experts=page.locator('.wf-host-experts');
+ const toggle=experts.locator(':scope > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]');
+ await expect(toggle).toHaveAttribute('aria-expanded','false');
+ await expect(experts.locator('[data-expert-id]')).toHaveCount(0);
+ await expect(experts.getByLabel('待执行命令')).toHaveText('echo expert');
+ await toggle.click();await expect(experts.getByText('Lazy expert result',{exact:true})).toBeVisible();
+ await toggle.click();await expect(experts.getByText('Lazy expert result',{exact:true})).toHaveCount(0);
+ await experts.getByRole('button',{name:'批准本次',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='approve').length)).toBe(1);
+ await experts.getByRole('button',{name:/查看下一项/}).click();
+ const question=experts.getByRole('textbox',{name:'补充专家要求'});await question.fill('保留补充信息功能');
+ await toggle.click();await toggle.click();await expect(question).toHaveValue('保留补充信息功能');
+ await experts.getByRole('button',{name:'提交回答',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='answer').length)).toBe(1);
 });

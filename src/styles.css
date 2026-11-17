@@ -476,3 +476,13 @@ main.chat-main { overflow: hidden; min-height: 0; display: flex; flex-direction:
 .update-card progress::-webkit-progress-bar{background:var(--selection)}
 .update-card progress::-webkit-progress-value{background:#3978f6;border-radius:4px}
 .update-card progress::-moz-progress-bar{background:#3978f6;border-radius:4px}
+
+/* Change acknowledgements float by their selectors without resizing the transcript. */
+.change-success { position:absolute; bottom:calc(100% + 6px); right:0; display:flex; align-items:center; gap:6px; max-width:min(280px,70vw); width:max-content; padding:4px 8px; border:1px solid var(--border); border-radius:8px; background:var(--background); color:var(--foreground); font-size:12px; line-height:18px; overflow-wrap:anywhere; pointer-events:none; z-index:20; }
+.run-activity-compact { align-items:center; min-height:28px; padding:4px; gap:8px; }
+.run-activity-compact [data-slot="marker-content"] { flex-shrink:0; }
+.run-activity-compact .activity-target::before { content:'· '; }
+.run-activity-compact { container:activity / inline-size; }
+@container activity (max-width:480px) { .activity-clock { display:none; } }
+
+.permission-feedback .change-success { left:0; right:auto; }

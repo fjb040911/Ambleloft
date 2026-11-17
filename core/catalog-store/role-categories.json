@@ -1,0 +1,51 @@
+[
+  {
+    "id": "product",
+    "title": {
+      "zh-CN": "产品与规划",
+      "en": "Product & planning"
+    }
+  },
+  {
+    "id": "design",
+    "title": {
+      "zh-CN": "设计与体验",
+      "en": "Design & experience"
+    }
+  },
+  {
+    "id": "engineering",
+    "title": {
+      "zh-CN": "研发工程",
+      "en": "Engineering"
+    }
+  },
+  {
+    "id": "quality",
+    "title": {
+      "zh-CN": "测试与质量",
+      "en": "Testing & quality"
+    }
+  },
+  {
+    "id": "operations",
+    "title": {
+      "zh-CN": "运维与交付",
+      "en": "Operations & delivery"
+    }
+  },
+  {
+    "id": "content",
+    "title": {
+      "zh-CN": "内容与文档",
+      "en": "Content & documentation"
+    }
+  },
+  {
+    "id": "analysis",
+    "title": {
+      "zh-CN": "数据与分析",
+      "en": "Data & analytics"
+    }
+  }
+]

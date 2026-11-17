@@ -47,3 +47,9 @@ test('legacy turns only index their last unclassified answer after completion',(
  run.status='completed';assert.equal(searchWorkspace(source,'currentProgress','task').length,1);
  run.status='interrupted';assert.equal(searchWorkspace(source,'currentProgress','task').length,0);
 });
+test('authorized expert contributions are searchable through the existing draft or run identity only',()=>{
+ const workspace={projects:[],tasks:[{id:'draft',conversationId:'c1',title:'讨论',prompt:''}]};
+ const source={workspace,extensions:{installed:[]},runs:[{id:'run',conversationId:'c2',title:'普通任务',messages:[]}],expertChats:{c1:'库存版本检查',c2:'授权背景复用'}};
+ assert.equal(searchWorkspace(source,'库存')[0].id,'draft');assert.equal(searchWorkspace(source,'复用')[0].id,'run');
+ assert.deepEqual(searchWorkspace({...source,expertChats:{}},'复用'),[]);
+});

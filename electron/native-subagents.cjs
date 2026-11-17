@@ -3,14 +3,14 @@ const live=status=>['pending','running','waiting'].includes(status);
 const statuses={pendingInit:'pending',running:'running',completed:'completed',errored:'failed',interrupted:'interrupted',shutdown:'interrupted',notFound:'failed'};
 class NativeSubagents {
  constructor(runtime){this.runtime=runtime;}
- changed(context){
+ changed(context,stream=false){
   for(const tool of context.nativeThreads?.values()||[]){
    tool.nativeLifecycle ||= [];
-   if(tool.nativeLifecycle.at(-1)?.status!==tool.status)tool.nativeLifecycle.push({status:tool.status,at:new Date().toISOString()});
+   if(tool.nativeLifecycle.at(-1)?.status!==tool.status){stream=false;tool.nativeLifecycle.push({status:tool.status,at:new Date().toISOString()});}
    tool.nativeLifecycle=tool.nativeLifecycle.slice(-100);
    if(!live(tool.status))for(const activity of tool.nativeActivity||[])if(['running','inProgress','pending'].includes(activity.status))activity.status='interrupted';
   }
-  this.runtime.changed(context.run);
+  this.runtime.changed(context.run,{stream});
  }
  child(context,id){return context.nativeThreads?.get(id);}
  register(context,id,prompt=''){
@@ -79,7 +79,7 @@ class NativeSubagents {
    context.run.questions=(context.run.questions||[]).filter(q=>q.rpcId!==params.requestId);
    if(!context.cancelled)context.run.status=context.run.approvals.length||context.run.questions.some(q=>q.blocking)?'waiting':'running';
   }else return true;
-  this.changed(context);return true;
+  this.changed(context,/\/(?:delta|outputDelta)$/.test(method));return true;
  }
  async stop(id){
   for(const context of this.runtime.contexts.values())for(const tool of context.nativeThreads?.values()||[]){
