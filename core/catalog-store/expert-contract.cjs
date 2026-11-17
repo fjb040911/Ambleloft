@@ -1,5 +1,6 @@
 // Shared publisher/host contract. Only this signed, bounded data may authorize a release.
 const crypto=require('node:crypto');
+const {validateDiscovery}=require('./role-discovery.cjs');
 const {validateSource,validateCatalog}=require('./catalog.cjs');
 const MAX=4*1024*1024, HEX=/^[a-f0-9]{64}$/, ID=/^[a-z0-9][a-z0-9._-]{0,119}$/;
 const fail=()=>{throw Error('EXPERT_INVALID_SNAPSHOT');};
@@ -26,7 +27,12 @@ function validateDocuments(docs){
   validateCatalog({schemaVersion:1,sourceId:'curated',generatedAt:'2026-01-01T00:00:00Z',expiresAt:'2026-01-02T00:00:00Z',items:[s]});
   if(s.kind!=='skill'||!s.author||!s.repository||!/^[a-f0-9]{40}$/.test(s.repository.commit)||!s.validation?.packageVerifiedAt)fail();
  }
+ unique(categories,c=>c.id);
+ for(const c of categories)if(typeof c.id!=='string'||!ID.test(c.id)||['zh-CN','en'].some(l=>typeof c.title?.[l]!=='string'||!c.title[l].trim()||c.title[l].length>80))fail();
+ const tagTitles=new Map();
  for(const r of roles){
+  if(!Array.isArray(r.categoryIds)||r.categoryIds.some(id=>!categories.some(c=>c.id===id)))fail();
+  if(r.tags!==undefined||r.keywords!==undefined){validateDiscovery(r);for(const t of r.tags){const title=JSON.stringify([t.title['zh-CN'],t.title.en]);if(tagTitles.has(t.id)&&tagTitles.get(t.id)!==title)fail();tagTitles.set(t.id,title);}}
   if(!ID.test(r.id)||!/^\d+\.\d+\.\d+$/.test(r.version)||r.status!=='published'||!Array.isArray(r.skills)||r.skills.length>20||!r.skills.some(s=>s.defaultSelected===true))fail();
   for(const lang of ['zh-CN','en']){
    const c=r.content?.[lang];if(!c?.name||!c.summary||!c.domain||!c.responsibilities?.length||!c.deliverables?.length||!c.requiredInputs?.length||!c.workingMethods?.length||!c.boundaries?.length)fail();
@@ -46,5 +52,5 @@ function declaration(binding,listing,locale,snapshotId,roleVersion){
  const language=locale==='en'?'en':'zh-CN',l=language==='en'?'en':'zh';
  return {name:listing.entityName,label:listing.title[l],purpose:listing.summary[l],source:{kind:'store',...binding.release,snapshotId},usage:{mode:'when-relevant',when:binding.usage.when[language],whenNot:binding.usage.whenNot[language]},selectionOrigin:{kind:binding.defaultSelected?'template-default':'user-selected',templateBindingId:binding.id,recommendationId:binding.recommendationId,roleVersion}};
 }
-function legacyRoles(docs,snapshotId){return docs.roles.map(r=>({id:r.id,version:r.version,publisher:r.publisher,content:r.content,zh:legacyDefinition(r.content['zh-CN']),en:legacyDefinition(r.content.en),skills:r.skills.map(b=>{const s=docs.skills.find(s=>s.id===b.release.listingId&&s.release.version===b.release.version),rec=docs.recommendations.find(x=>x.id===b.recommendationId);return {...declaration(b,s,'zh-CN',snapshotId,r.version),labelEn:s.title.en,purposeEn:s.summary.en,defaultSelected:b.defaultSelected,reason:rec.reason['zh-CN'],reasonEn:rec.reason.en,usageEn:{mode:'when-relevant',when:b.usage.when.en,whenNot:b.usage.whenNot.en},repository:s.repository,license:s.license,runtime:s.runtime.zh,runtimeEn:s.runtime.en,validation:s.validation};})}));}
+function legacyRoles(docs,snapshotId){return docs.roles.map(r=>({id:r.id,version:r.version,publisher:r.publisher,summary:{'zh-CN':r.content['zh-CN'].summary,en:r.content.en.summary},...(r.tags&&r.keywords?{discovery:validateDiscovery(r)}:{discovery:{categoryIds:r.categoryIds||[],tags:[],keywords:{'zh-CN':[],en:[]}}}),content:r.content,zh:legacyDefinition(r.content['zh-CN']),en:legacyDefinition(r.content.en),skills:r.skills.map(b=>{const s=docs.skills.find(s=>s.id===b.release.listingId&&s.release.version===b.release.version),rec=docs.recommendations.find(x=>x.id===b.recommendationId);return {...declaration(b,s,'zh-CN',snapshotId,r.version),labelEn:s.title.en,purposeEn:s.summary.en,defaultSelected:b.defaultSelected,reason:rec.reason['zh-CN'],reasonEn:rec.reason.en,usageEn:{mode:'when-relevant',when:b.usage.when.en,whenNot:b.usage.whenNot.en},repository:s.repository,license:s.license,runtime:s.runtime.zh,runtimeEn:s.runtime.en,validation:s.validation};})}));}
 module.exports={MAX,hash,verifyManifest,decodeDocument,validateDocuments,legacyRoles,declaration};

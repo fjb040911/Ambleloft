@@ -5,7 +5,7 @@ const fail = (code, message) => { const error = new Error(`${code}: ${message}`)
 const text = (v, max, empty = false) => typeof v === 'string' && v.length <= max && (empty || v.trim().length > 0);
 function validateRecord(kind, value) {
   if (!value || !text(value.id, 120) || !text(value.title ?? value.name, 120) || !text(value.createdAt, 100, true)) fail('INVALID_ARGUMENT', 'Invalid resource');
-  const allowed = kind === 'project' ? ['id','name','path','description','createdAt','revision','type','connectionId','environment'] : ['id','title','prompt','modelId','projectId','status','createdAt','archivedAt','selectedSkillIds','revision','conversationId'];
+  const allowed = kind === 'project' ? ['id','name','path','description','createdAt','revision','type','connectionId','environment'] : ['id','title','prompt','modelId','projectId','status','createdAt','archivedAt','selectedSkillIds','revision','conversationId','employeeId','employeeName'];
   if (Object.keys(value).some(k => !allowed.includes(k))) fail('INVALID_ARGUMENT', 'Unknown resource field');
   if (kind === 'project') {
     if (!text(value.path, 4096) || value.description !== undefined && !text(value.description, 10000, true)) fail('INVALID_ARGUMENT', 'Invalid project');
@@ -17,6 +17,7 @@ function validateRecord(kind, value) {
   } else {
     if (!text(value.prompt, 20000, true) || !text(value.modelId, 200, true) || value.status !== 'draft' || !(value.projectId === null || text(value.projectId, 120))) fail('INVALID_ARGUMENT', 'Invalid draft');
     if (value.archivedAt != null && !text(value.archivedAt, 100)) fail('INVALID_ARGUMENT', 'Invalid archive time');
+    if(value.employeeId!==undefined&&!text(value.employeeId,120)||value.employeeName!==undefined&&!text(value.employeeName,80))fail('INVALID_ARGUMENT','Invalid draft expert');
     if (value.selectedSkillIds !== undefined && (!Array.isArray(value.selectedSkillIds) || value.selectedSkillIds.length > 20 || value.selectedSkillIds.some(v => !text(v, 120)))) fail('INVALID_ARGUMENT', 'Invalid skills');
   }
 }

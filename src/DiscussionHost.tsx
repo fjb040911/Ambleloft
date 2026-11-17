@@ -1,4 +1,5 @@
-import {useState,useEffect} from 'react';
+import {TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent,TraceLine,TraceTitle,TraceDescription} from './components/ui/trace';
+import {useState,useEffect,useRef} from 'react';
 import {MessageCircle} from 'lucide-react';
 import {Avatar,AvatarFallback} from './components/ui/avatar';
 import {Badge} from './components/ui/badge';
@@ -8,7 +9,7 @@ import FormFields,{type FormValues} from './FormFields';
 import Markdown from './Markdown';
 import {ThinkingWindow,ProcessIndicator} from './ProcessPanel';
 import {useCopy} from './WorkforceInputs';
-import {contributionAnchor} from './DiscussionIdentity';
+import {revealContribution} from './DiscussionIdentity';
 import UserMessage from './UserMessage';
 import type {DiscussionHost,SpaceRequest} from './workforce-types';
 
@@ -28,10 +29,18 @@ export function DiscussionFollowups({request}:{request:SpaceRequest}){
  </div>)}</>;
 }
 
-export function ExpertContributions({request,children}:{request:SpaceRequest;children:React.ReactNode}){
- const L=useCopy();if(!request.host)return <>{children}</>;
+export function ExpertContributions({request,children,actions}:{request:SpaceRequest;children:React.ReactNode;actions?:React.ReactNode}){
+ const L=useCopy(),[open,setOpen]=useState(false),ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{const el=ref.current;if(!el)return;const reveal=()=>setOpen(true);el.addEventListener('reveal-expert',reveal);return()=>el.removeEventListener('reveal-expert',reveal);},[!!request.host,!!request.participants.length]);
+ if(!request.host)return <>{children}</>;
  if(!request.participants.length)return null;
- return <details className="wf-host-experts"><summary>{L('专家分析与执行记录','Expert analysis and execution records')} · {request.participants.length}</summary>{children}</details>;
+ return <div ref={ref} id={'wf-experts-'+request.id} className="wf-host-experts">
+  {actions}
+  <TraceCollapsible open={open} onOpenChange={setOpen}>
+   <TraceCollapsibleTrigger><TraceLine><TraceTitle>{L('专家分析与执行记录','Expert analysis and execution records')}</TraceTitle><TraceDescription>{request.participants.length}</TraceDescription></TraceLine></TraceCollapsibleTrigger>
+   <TraceCollapsibleContent>{open&&children}</TraceCollapsibleContent>
+  </TraceCollapsible>
+ </div>;
 }
 
 export function DiscussionHostReply({host,children}:{host:DiscussionHost;children?:React.ReactNode}){
@@ -69,7 +78,7 @@ export function DiscussionBrief({request,requests,createTasks,disabled,actionLab
  const L=useCopy(),brief=request.host?.brief;if(!brief)return null;
  const labels={decision:L('用户决定','User decision'),proposal:L('建议（未确认）','Suggestion (unconfirmed)'),question:L('待确认','Open question'),verification:L('待验证','To verify')};
  const sources=[...new Set(brief.items.flatMap(i=>i.sourceIds))],latest=requests.at(-1);
- const jump=(id:string)=>{if(onSource){onSource(id);return;}const r=requests.find(r=>r.id===id||r.followups?.some(f=>f.id===id||f.id+':host'===id)||r.host?.steps.some(step=>step.id===id)||r.participants.some(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id));if(!r)return;const p=r.participants.find(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id);const el=document.getElementById(p?contributionAnchor(r,p):'wf-request-'+r.id);const details=el?.closest('details');if(details)details.open=true;el?.scrollIntoView({block:'start'});el?.focus({preventScroll:true});};
+ const jump=(id:string)=>{if(onSource){onSource(id);return;}const r=requests.find(r=>r.id===id||r.followups?.some(f=>f.id===id||f.id+':host'===id)||r.host?.steps.some(step=>step.id===id)||r.participants.some(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id));if(!r)return;const p=r.participants.find(p=>p.contribution?.id===id||`${r.id}:${p.employeeId}`===id);if(p){revealContribution(r,p);return;}const el=document.getElementById('wf-request-'+r.id);const details=el?.closest('details');if(details)details.open=true;el?.scrollIntoView({block:'start'});el?.focus({preventScroll:true});};
  return <section className="wf-host-brief"><h3>{L('当前目标','Current goal')}</h3><p>{brief.goal}</p>{latest?.id!==request.id&&<p className="wf-muted">{L('后续有新讨论，等待主持人更新。','Newer discussion is awaiting consolidation.')}</p>}
   <ul>{brief.items.map(i=><li key={i.id}><Badge variant="outline">{labels[i.kind]}</Badge><p>{i.text}</p><div className="wf-host-sources">{i.sourceIds.map(id=><Button key={id} variant="link" size="sm" onClick={()=>jump(id)}>{L('来源','Source')} {sources.indexOf(id)+1}</Button>)}</div></li>)}</ul>
   {createTasks&&<Button variant="outline" disabled={disabled} onClick={createTasks}>{actionLabel||L('整理为任务','Shape into tasks')}</Button>}

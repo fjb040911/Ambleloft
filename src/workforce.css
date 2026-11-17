@@ -631,3 +631,18 @@
 .wf-task-conflict-list [data-slot=item-title]{white-space:normal;overflow-wrap:anywhere;display:block}
 .wf-task-conflict-list [data-slot=item-content]{min-width:140px}
 @container discussion-main (max-width:760px){@layer utilities{.wf-discussion-toolbar .wf-current-task-name{display:none!important}}.wf-current-task-actions{margin-left:auto}}
+
+/* Role discovery: wrap controls rather than creating a second scrolling toolbar. */
+.wf-role-categories{flex-wrap:wrap;width:100%;gap:8px}
+.wf-discovery-results{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:32px;color:var(--muted-foreground);margin:0}
+.wf-role-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.wf-role-tags button{white-space:normal;height:auto;min-height:32px;text-align:start;overflow-wrap:anywhere}
+.wf-discovery-editor{margin-block:8px}
+.wf-discovery-editor summary{cursor:pointer;margin-bottom:16px}
+.wf-discovery-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.wf-library-tools{min-width:0}
+.wf-library-tools [data-slot="input-group"]{min-width:0;flex:1}
+@media(max-width:600px){.wf-library-tools{width:100%}.wf-role-categories [data-slot="toggle"]{white-space:normal;height:auto;min-height:36px}}
+
+.wf-discovery-toolbar{display:flex;flex-direction:column;gap:12px}
+.wf-library-heading>input{max-width:340px}

@@ -1,5 +1,7 @@
+import {useToolText} from './ToolText';
+import {useProcessDisclosure} from './process-disclosure';
 import {useState} from 'react';
-import {BookOpen} from 'lucide-react';
+import {BookOpen,Play} from 'lucide-react';
 import {Trace,TraceLine,TraceIcon,TraceTitle,TraceDescription,TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent} from './components/ui/trace';
 import {Badge} from './components/ui/badge';
 import {Button} from './components/ui/button';
@@ -22,12 +24,16 @@ function AgentAvatar({name,variant}:{name:string;variant:number}){
  </svg>;
 }
 export default function AnalysisTask({tool}:{tool:Tool}) {
+ const [open,setOpen]=useProcessDisclosure('agent-'+tool.id);
+ const detail=useToolText({toolId:tool.id,text:tool.detail,preview:tool.detailPreview,version:tool.detailVersion},open);
  const [error,setError]=useState(''),[stopping,setStopping]=useState(false);
  const active=['pending','running','waiting'].includes(tool.status),agent=identity(tool);
- const labels:Record<string,string>={pending:tool.nativeThreadId?'初始化中':'排队中',running:'进行中',waiting:'等待输入',inProgress:'进行中',completed:'已完成',failed:'失败',interrupted:'已停止'};
+ const labels:Record<string,string>={pending:tool.nativeThreadId?'初始化中':'排队中',running:'开始工作',waiting:'等待输入',inProgress:'进行中',completed:'已完成',failed:'失败',interrupted:'已停止'};
+ const started=tool.nativeLifecycle?.find(event=>event.status==='running');
  async function stop(){setStopping(true);setError('');try{if(!window.desktop)throw Error(t('停止分析不可用'));await window.desktop.stopRun(tool.id);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setStopping(false);}}
  return <Trace className="analysis-agent my-2" data-agent-id={tool.analysisAgent?.id||tool.id}>
-  <TraceCollapsible>
+  {started&&tool.status!=='running'&&<Button variant="ghost" size="sm" className="w-fit max-w-full justify-start" onClick={()=>setOpen(true)} aria-label={`${agent.name} · ${t('开始工作')}`}><Play data-icon="inline-start"/><span className="truncate">{agent.name} · {t('开始工作')}</span><time dateTime={started.at} className="shrink-0 text-xs text-muted-foreground">{new Date(started.at).toLocaleTimeString()}</time></Button>}
+  <TraceCollapsible open={open} onOpenChange={setOpen}>
    <TraceCollapsibleTrigger>
     <TraceLine status={tool.status==='running'?'running':tool.status==='pending'?'pending':tool.status==='failed'?'error':undefined}>
      <TraceIcon aria-hidden={false}><AgentAvatar name={agent.name} variant={agent.avatar}/></TraceIcon>
@@ -35,17 +41,25 @@ export default function AnalysisTask({tool}:{tool:Tool}) {
      <TraceDescription role="status">{t(labels[tool.status]||tool.status)}</TraceDescription>
     </TraceLine>
    </TraceCollapsibleTrigger>
-   <TraceCollapsibleContent keepMounted className="flex flex-col gap-3">
+   <TraceCollapsibleContent className="flex flex-col gap-3">
+    {open&&<>
     <div className="flex flex-wrap gap-2"><Badge variant="secondary">{t('子代理')}</Badge><Badge variant="outline">{t(tool.nativeThreadId?'继承当前任务权限':'只读分析')}</Badge></div>
     {tool.analysisTask&&<p>{tool.analysisTask}</p>}
     {!!tool.nativeLifecycle?.length&&<ol className="m-0 list-none p-0 text-xs text-muted-foreground" aria-label={t('执行记录')}>{tool.nativeLifecycle.map((event,index)=><li key={index}>{new Date(event.at).toLocaleTimeString()} · {t(event.status==='running'?'开始工作':labels[event.status]||event.status)}</li>)}</ol>}
-    {!!tool.nativeActivity?.length&&<div className="flex min-w-0 flex-col gap-2" aria-label={t('执行详情')}>{tool.nativeActivity.map(activity=><details key={activity.id}><summary className="cursor-pointer break-words">{activity.title} · {t(labels[activity.status]||activity.status)}</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{activity.text||t('等待输出…')}</pre></details>)}</div>}
+    {!!tool.nativeActivity?.length&&<div className="flex min-w-0 flex-col gap-2" aria-label={t('执行详情')}>{tool.nativeActivity.map(activity=><ActivityDetails key={activity.id} activity={activity} toolId={tool.id} disclosureKey={'agent-'+tool.id+'-activity-'+activity.id} label={t(labels[activity.status]||activity.status)}/>)}</div>}
     {tool.nativeIdentityError&&<Alert><AlertDescription>{t('子代理名称读取失败')}: {tool.nativeIdentityError}</AlertDescription></Alert>}
     {!!tool.analysisReads?.length&&<Trace>{tool.analysisReads.map((read,index)=><TraceLine key={index}><TraceIcon><BookOpen/></TraceIcon><TraceTitle title={read}>{read}</TraceTitle></TraceLine>)}</Trace>}
-    <Markdown context="trace" text={tool.detail}/>
+    <Markdown context="trace" text={detail.text}/>{detail.controls}
     {active&&<div><Button variant="outline" size="sm" disabled={stopping} onClick={()=>void stop()}>{t(stopping?'正在停止':'停止分析')}</Button></div>}
+    </>}
    </TraceCollapsibleContent>
   </TraceCollapsible>
   {error&&<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
  </Trace>;
+}
+
+function ActivityDetails({activity,label,disclosureKey,toolId}:{toolId:string;disclosureKey:string;activity:{id:string;title:string;text:string;textPreview?:boolean;textVersion?:string};label:string}){
+ const [open,setOpen]=useProcessDisclosure(disclosureKey);
+ const detail=useToolText({toolId,activityId:activity.id,text:activity.text,preview:activity.textPreview,version:activity.textVersion},open);
+ return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)}><summary className="cursor-pointer break-words">{activity.title} · {label}</summary>{open&&<pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{detail.text||t('等待输出…')}</pre>}{detail.controls}</details>;
 }

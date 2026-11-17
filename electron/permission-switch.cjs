@@ -22,7 +22,7 @@ async function switchPermission(input,change){
  const wait=async()=>{check();if(Date.now()>deadline)throw Error('未能确认执行已暂停；权限未确认生效');await delay(25,undefined,{signal:transition.controller.signal});};
  this.changed(run);
  try{
-  await this.persist();
+  await this.persist(undefined,run);
   // Preparation keeps its original permissions until there is a confirmed engine turn.
   while(!run.threadId||!run.turnId||!context.rpc)await wait();check();
   let rpc=context.rpc;const p=policy(input.permission,context.remoteProject);
@@ -88,7 +88,7 @@ async function switchPermission(input,change){
    if(target.tool){target.tool.nativeTurnId=started.turn.id;target.tool.status='running';}else run.turnId=started.turn.id;
   }
   record.state='applied';record.effective=change?.requested||input.permission;record.finishedAt=new Date().toISOString();
-  context.permissionTransition=null;run.status=run.approvals.length||run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(run);await this.persist();
+  context.permissionTransition=null;run.status=run.approvals.length||run.questions.some(q=>q.blocking)?'waiting':'running';this.changed(run);await this.persist(undefined,run);
   if(transition.finalNotification)this.notification(context,transition.finalNotification);
   this.chatInputs?.tick();return structuredClone(record);
  }catch(e){
@@ -96,7 +96,7 @@ async function switchPermission(input,change){
   for(const threadId of archived)try{await context.rpc.call('thread/unarchive',{threadId},5000);}catch{}
   context.permissionTransition=null;
   // Never silently resume with a mixture of old and new child policies.
-  await this.stop(run.id);this.changed(run);await this.persist();
+  await this.stop(run.id);this.changed(run);await this.persist(undefined,run);
   return structuredClone(record);
  }
 }

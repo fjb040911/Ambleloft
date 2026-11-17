@@ -19,7 +19,7 @@ class ExpertClient{
   }catch(e){error=e.message;}
   return {...value,error,stale:!value||value.stale||!!error};
  }
- async roles(refresh){const v=await this.load(refresh);return {items:v.docs?legacyRoles(v.docs,v.manifest.snapshotId):[],source:this.source.id,stale:v.stale,error:v.error,snapshotId:v.manifest?.snapshotId};}
+ async roles(refresh){const v=await this.load(refresh);return {items:v.docs?legacyRoles(v.docs,v.manifest.snapshotId):[],categories:v.docs?.categories||[],source:this.source.id,stale:v.stale,error:v.error,snapshotId:v.manifest?.snapshotId};}
  async resolve(ref,{refresh=true}={}){
   const v=await this.load(refresh);if(!v.docs||v.stale)throw Error(v.error||'EXPERT_SNAPSHOT_EXPIRED');
   const s=v.docs.skills.find(s=>s.id===ref.listingId&&s.release.version===ref.version);

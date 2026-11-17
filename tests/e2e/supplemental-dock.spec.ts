@@ -261,3 +261,21 @@ test('each new question opens by default and a manually collapsed header has bal
  await expect(dock.getByText('下一轮补充',{exact:true})).toBeVisible();
  await expect(dock.getByRole('button',{name:'稍后填写'})).toHaveAttribute('aria-expanded','true');
 });
+
+test('collapsed process keeps supplemental actions reachable and preserves the draft through streaming',async({page})=>{
+ await setup(page);const dock=page.getByRole('region',{name:'待补充信息',exact:true});
+ await dock.getByRole('textbox',{name:'目的地 *',exact:true}).fill('上海');
+ await expect.poll(()=>page.evaluate(()=>(window as any).__snapshot.requests[0].draft.city)).toBe('上海');
+ await page.locator('.turn-progress-toggle').click();
+ await expect(page.locator('.process-panel')).toHaveCount(0);
+ await dock.getByRole('button',{name:'稍后填写'}).click();
+ const progress=page.locator('.turn-progress');
+ await expect(progress.getByRole('button',{name:'前往填写'})).toHaveCount(2);
+ await page.evaluate(()=>(window as any).__setTools([{id:'background',turnKey:'u',type:'commandExecution',label:'pwd',detail:'Streaming output',status:'inProgress'}]));
+ await expect(page.locator('.process-panel')).toHaveCount(0);
+ await progress.getByRole('button',{name:'前往填写'}).first().click();
+ await expect(dock.getByRole('textbox',{name:'目的地 *',exact:true})).toHaveValue('上海');
+ await dock.getByRole('button',{name:'提交补充信息'}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__commands.filter((c:any)=>c.action==='submit').length)).toBe(1);
+ await expect(progress.getByRole('button',{name:'前往填写'})).toHaveCount(1);
+});

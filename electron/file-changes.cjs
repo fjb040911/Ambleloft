@@ -36,7 +36,7 @@ async function compare(root,before,turnKey){
   if(old&&next&&((old.limited||next.limited)?old.signature===next.signature:old.hash===next.hash))continue;
   // A missing entry in a partial scan does not prove creation/deletion.
   if((!old&&before.incomplete)||(!next&&after.incomplete))continue;
-  const file={id:randomUUID(),path:name,status:!old?'added':!next?'deleted':'modified'};
+  const file={id:randomUUID(),path:name,status:!old?'added':!next?'deleted':'modified',beforeHash:old?.hash||null,afterHash:next?.hash||null};
   if(budget<=0){file.reason='差异内容较大，仅展示文件状态';}
   else if((!old||old.text!==undefined)&&(!next||next.text!==undefined)){
    const patch=structuredPatch(name,name,old?.text||'',next?.text||'','','',{context:3,maxEditLength:20000,timeout:200});

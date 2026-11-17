@@ -1,3 +1,4 @@
+const {createRunPublisher}=require('./run-events.mjs');
 const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
 const { app, BrowserWindow, ipcMain, Menu, dialog, session, safeStorage, shell, clipboard, protocol, nativeTheme, Notification, powerMonitor } = require('electron');
@@ -101,10 +102,11 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('无法打开数据库', error.message);
     await database.close().catch(() => {}); app.quit(); return;
   }
+  const runPublisher=createRunPublisher(require('node:crypto').randomUUID());
   const services=require('../core/services.cjs').createCoreServices({
     directory:app.getPath('userData'),database,encryption:createSecureStorage(app,safeStorage),
     fileApplications:require('./file-applications.cjs').createFileApplications({getIcon:async file=>(await app.getFileIcon(file,{size:'small'})).toDataURL()}),
-    publish:run=>windows.broadcast(profileId,'agent:event',pageRun(run))
+    projectRun:run=>runPublisher.encode(pageRun(run)),publish:value=>windows.broadcast(profileId,'agent:event',value.kind?.startsWith('run-')?value:runPublisher.encode(pageRun(value)))
   });
   store=services.workspace;runtime=services.tasks;ssh=services.ssh;
   ssh.publish=()=>windows.broadcast(profileId,'ssh:event');
@@ -235,6 +237,23 @@ app.whenReady().then(async () => {
   const {SpaceService}=require('../core/workforce/spaces.cjs');
   spaceService=new SpaceService({directory:app.getPath('userData'),database,workspace:store,workforce:workforceService,runtime,publish:()=>windows.broadcast(profileId,'workforce:event')});
   runtime.spaces=spaceService;
+  // Shared background mutations remain host-only; expert chat receives a narrow IPC surface.
+  const {ContinuityService}=require('../core/continuity/service.cjs');
+  runtime.continuity=new ContinuityService({database});
+  await runtime.continuity.initialize();
+  const {ExpertChatService}=require('../core/continuity/expert-chat.cjs');
+  runtime.expertChat=new ExpertChatService({database,runtime,continuity:runtime.continuity,workforce:workforceService,providers:services.providers,publish:id=>windows.broadcast(profileId,'expert-chat:event',{conversationId:id})});
+  await runtime.expertChat.initialize();
+  const {InvestigationService}=require('../core/continuity/investigation.cjs');
+  runtime.investigation=new InvestigationService({database,providers:services.providers,runtime,publish:async id=>{const job=await runtime.investigation.read({id});const run=(await database.call('readRuns')).find(r=>r.id===job.runId);if(run){const index=runtime.runs.findIndex(r=>r.id===run.id);if(index<0)runtime.runs.unshift(run);else runtime.runs[index]=run;runtime.publish(run);}windows.broadcast(profileId,'expert-chat:event',{conversationId:job.originId});}});
+  await runtime.investigation.initialize();
+  ipcMain.handle('investigation:open',async(event,input)=>{const owner=authorize(event),job=await runtime.investigation.read({id:input.id});let runId=job.runId;if(input.origin){const state=await runtime.expertChat.call('read',{conversationId:job.originId});runId=state.anchor.recordId;}owner.window.webContents.send('extension:open-conversation',{kind:'run',recordId:runId});});
+  for(const action of ['start','read','list','cancel','revokeWrite','resume','revokeResume'])ipcMain.handle('investigation:'+action,(event,input)=>{authorize(event);checkRuntime();if(['start','resume'].includes(action)&&configBusy)throw Error('正在更新模型配置');return runtime.investigation[action](input);});
+  const {GrowthService}=require('../core/continuity/growth.cjs');
+  runtime.growth=new GrowthService({continuity:runtime.continuity,providers:services.providers,runtime,publish:()=>windows.broadcast(profileId,'workforce:event')});
+  await runtime.growth.initialize();
+  for(const action of ['status','jobs','policy','dismiss'])ipcMain.handle('growth:'+action,(event,input)=>{authorize(event);checkRuntime();return runtime.growth[action](input);});
+  for(const action of ['directory','read','submit','retry','cancel','exclude','revokeTaskContext','source','export'])ipcMain.handle('expert-chat:'+action,(event,input)=>{authorize(event);if(action==='submit'||action==='retry'){checkRuntime();if(configBusy)throw Error('正在更新模型配置');}return runtime.expertChat[action](input).then(async result=>{if(action==='submit'&&!input?.conversationId)windows.broadcast(profileId,'workspace:event',await store.read());return result;});});
   ipcMain.handle('spaces:exportDocument',async(event,input)=>{const owner=authorize(event),doc=await spaceService.document(input);const result=await hostDialog('showSaveDialog',owner.window,{title:'导出文档',defaultPath:doc.title.replace(/[\\/:*?"<>|]/g,'-')+'.md',filters:[{name:'Markdown',extensions:['md']}]});if(result.canceled||!result.filePath)return null;await require('node:fs/promises').writeFile(result.filePath,doc.body+'\n\n<!-- Space document '+doc.id+' v'+doc.revision+' sha256:'+doc.hash+'; exported copy, not synchronized. -->\n');return {path:result.filePath};});
   for(const action of ['stopDiscussionHost','snapshot','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','discardTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','knowledge'])ipcMain.handle('spaces:'+action,(event,input)=>{authorize(event);return spaceService[action](input);});
   ipcMain.handle('spaces:controlPlan',(event,input)=>{const owner=authorize(event);checkRuntime();return spaceService.controlPlan(input,{owner});});
@@ -382,6 +401,8 @@ app.whenReady().then(async () => {
     return {saved:true};
   });
   ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在');if(project.type==='ssh')throw Error('请通过项目文件面板浏览远端目录'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
+  ipcMain.handle('agent:tool-text',(event,input)=>{authorize(event);checkRuntime();return require('./tool-previews.cjs').toolText(runtime.runs.find(r=>r.id===input?.id),input);});
+  ipcMain.handle('agent:snapshot',(event,input)=>{authorize(event);checkRuntime();const source=runtime.runs.find(r=>r.id===input?.id);if(!source)throw Error('会话不存在');const cached=runPublisher.snapshot(input?.id);if(cached)return cached;const run=pageRun(source);runPublisher.encode(structuredClone(run));return runPublisher.snapshot(run.id);});
   ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
   const searchSnapshots=new Map();
   const recentSearchUse=await database.call('readSetting',{key:'workspace.searchRecent'})||{};
@@ -397,14 +418,15 @@ app.whenReady().then(async () => {
     authorize(event);checkRuntime();
     const {query='',kind='all',cursor}=input;
     if(typeof query!=='string'||query.length>500||!['all','task','project','extension','skill'].includes(kind))throw Error('搜索条件无效');
+    const expertChats=await runtime.expertChat.searchable(),expertFingerprint=require('../core/continuity/sources.cjs').hash(expertChats);
     let snapshot=searchSnapshots.get(event.sender.id),offset=0;
     if(cursor){
       if(typeof cursor!=='string')throw Error('搜索分页已失效');
       const [token,index]=cursor.split(':');offset=Number(index);
-      if(!snapshot||snapshot.token!==token||snapshot.query!==query||snapshot.kind!==kind||!Number.isInteger(offset)||offset<0)throw Error('搜索分页已失效，请重新搜索');
+      if(!snapshot||snapshot.expertFingerprint!==expertFingerprint||snapshot.token!==token||snapshot.query!==query||snapshot.kind!==kind||!Number.isInteger(offset)||offset<0)throw Error('搜索分页已失效，请重新搜索');
     }else{
       const {searchWorkspace}=require('./workspace-search.cjs');
-      snapshot={token:require('node:crypto').randomUUID(),query,kind,items:searchWorkspace({runs:runtime.runs,workspace:await store.read(),extensions:extensionService().snapshot(),skills:await skills.list(),recent:recentSearchUse},query,kind)};
+      snapshot={token:require('node:crypto').randomUUID(),query,kind,expertFingerprint,items:searchWorkspace({expertChats,runs:runtime.runs,workspace:await store.read(),extensions:extensionService().snapshot(),skills:await skills.list(),recent:recentSearchUse},query,kind)};
       if(!searchSnapshots.has(event.sender.id))event.sender.once('destroyed',()=>searchSnapshots.delete(event.sender.id));
       searchSnapshots.set(event.sender.id,snapshot);
     }
@@ -465,6 +487,9 @@ app.whenReady().then(async () => {
     const blockers=()=>{
       const reasons=[];
       if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
+      if(runtime.growth?.active)reasons.push('合作内容正在提炼');
+      if(runtime.investigation?.active?.size||runtime.investigation?.resuming?.size)reasons.push('受限调查正在进行');
+      if(runtime.expertChat?.active?.size)reasons.push('专家正在回复');
       if(spaceService?.pending?.size||spaceService?.hostJobs?.size||spaceService?.discussionFollowupJobs?.size||spaceService?.suggestionJobs?.size||workforceService?.active?.size||workforceService?.suggestionJobs?.size)reasons.push('协作任务仍在运行');
       if(spaceService?.plans?.active?.size)reasons.push('Plan scheduling is active');
       if(services.automation.controllers.size)reasons.push('后台自动化仍在运行');
@@ -490,7 +515,7 @@ app.whenReady().then(async () => {
       const fs=require('node:fs/promises');const dir=path.join(app.getPath('userData'),'updates');await fs.mkdir(dir,{recursive:true});await fs.writeFile(path.join(dir,'transaction.json.tmp'),JSON.stringify({from:app.getVersion(),target:updateService.state.version,status:'installing',at:new Date().toISOString()}));await fs.rename(path.join(dir,'transaction.json.tmp'),path.join(dir,'transaction.json'));
       updateService.set({status:'installing',error:''});
       shuttingDown=true;
-      await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
+      await runtime.investigation?.shutdown();await runtime.growth?.shutdown();await runtime.expertChat?.shutdown();await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
       const backup=path.join(dir,'backup-'+Date.now());await fs.mkdir(backup);
       for(const name of ['atelier.sqlite','atelier.sqlite-wal','atelier.sqlite-shm','codex-home']){const source=path.join(app.getPath('userData'),name);try{await fs.lstat(source);}catch(error){if(error.code==='ENOENT')continue;throw error;}await fs.cp(source,path.join(backup,name),{recursive:true,dereference:false});}
       messageServiceForShutdown?.close();authenticationForShutdown?.close();terminals?.shutdown();ssh?.shutdown();
@@ -518,6 +543,6 @@ app.on('before-quit', event => {
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}
   messageServiceForShutdown?.close();
   authenticationForShutdown?.close();
-  Promise.resolve().then(()=>spaceService?.shutdown()).then(()=>workforceService?.shutdown()).then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
+  Promise.resolve().then(()=>runtime.investigation?.shutdown()).then(()=>runtime.growth?.shutdown()).then(()=>runtime.expertChat?.shutdown()).then(()=>spaceService?.shutdown()).then(()=>workforceService?.shutdown()).then(()=>catalogService?.shutdown()).then(()=>pageHost?.shutdown()).then(()=>extensionServiceForShutdown?.shutdown()).then(()=>runtime.shutdown()).catch(error => dialog.showErrorBox('保存失败', error.message))
     .finally(async () => { await database?.close().catch(error => dialog.showErrorBox('关闭数据库失败', error.message)); app.quit(); });
 });

@@ -1,3 +1,5 @@
+import {subscribeRuns} from './run-events';
+import {useExpertChat,ExpertRecipient,ExpertTranscript} from './ExpertChat';
 import {UpdateButton} from './Updates';
 import {collaborationDestination,type CollaborationTarget} from './collaboration-navigation';
 import ComposerAttachments from './ComposerAttachments';
@@ -162,6 +164,8 @@ function WorkspaceApp() {
   const [notice, setNotice] = useState('');
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const workspaceRef = useRef(workspace);
+  const visibleTaskRef = useRef({page,runId,draftId:continuingDraft?.id});
+  visibleTaskRef.current={page,runId,draftId:continuingDraft?.id};
   const writeQueue = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -177,7 +181,7 @@ function WorkspaceApp() {
   useEffect(() => {
     if (!window.desktop?.getProvider) return;
     refreshProviders().catch(error => setError(error.message));
-    const off = window.desktop.onRun(acceptRun);
+    const off = subscribeRuns(acceptRun);
     window.desktop.listRuns().then(list => setRuns(current => [...current, ...list.filter(item => !current.some(run => run.id === item.id))])).catch(error => setError(error.message));
     return off;
   }, []);
@@ -244,11 +248,35 @@ function WorkspaceApp() {
     await persist(state=>({...state,projects:state.projects.filter(p=>p.id!==projectEditor.id),tasks:state.tasks.map(t=>t.projectId===projectEditor.id?{...t,projectId:null,archivedAt:t.archivedAt||new Date().toISOString()}:t)}));
     if(projectId===projectEditor.id)newTask();setProjectEditor(null);
   });
+  const editRunMetadata = async(input:Parameters<NonNullable<typeof window.desktop>['editRun']>[0])=>{
+    const result=await window.desktop!.editRun(input);
+    const saved=result.find(run=>run.id===input.id);
+    if(!input.remove&&!saved)throw new Error('任务更新结果缺失，请重新打开任务确认');
+    // IPC returns summaries for every run. Applying that list would unmount other
+    // open conversations and overwrite events received while the edit was pending.
+    setRuns(current=>input.remove?current.filter(run=>run.id!==input.id):current.map(run=>
+      run.id===input.id&&saved?{...run,title:saved.title,projectId:saved.projectId,archivedAt:saved.archivedAt}:run));
+    return saved;
+  };
+  const afterTaskArchived=(task:{id:string;projectId?:string|null},draft=false)=>{
+    const view=visibleTaskRef.current;
+    if(view.page!=='home'||(draft?view.draftId:view.runId)!==task.id)return;
+    if(task.projectId&&workspaceRef.current.projects.some(project=>project.id===task.projectId)){
+      setPrompt('');setChoice(null);setComposerOptions({permission:'default'});setTaskDetail(null);setError('');
+      openProject(task.projectId);
+    }else newTask();
+  };
   const saveTaskEdit = (remove=false) => manage(async()=>{
     if(!taskEditor)return;
     if(taskEditor.draft)await persist(state=>{if(state.tasks.find(t=>t.id===taskEditor.id)?.revision!==taskEditor.revision)throw new Error('CONFLICT: 草稿已更新，请重新打开编辑');return {...state,tasks:remove?state.tasks.map(t=>t.id===taskEditor.id?{...t,archivedAt:new Date().toISOString()}:t):state.tasks.map(t=>t.id===taskEditor.id?{...t,title:taskEditor.title.trim(),projectId:taskEditor.projectId}:t)};});
-    else if(window.desktop)setRuns(await window.desktop.editRun({id:taskEditor.id,...(remove?{archived:true}:{title:taskEditor.title,projectId:taskEditor.projectId})}));
-    if(remove&&runId===taskEditor.id)newTask();setTaskEditor(null);setDeleteTask(false);
+    if(taskEditor.draft){
+      const saved=workspaceRef.current.tasks.find(task=>task.id===taskEditor.id);
+      if(remove&&saved)afterTaskArchived(saved,true);
+    }else if(window.desktop){
+      const saved=await editRunMetadata({id:taskEditor.id,...(remove?{archived:true}:{title:taskEditor.title,projectId:taskEditor.projectId})});
+      if(remove&&saved)afterTaskArchived(saved);
+    }
+    setTaskEditor(null);setDeleteTask(false);
   });
   useEffect(() => window.desktop?.onCommand(command => {
     if (command === 'terminal') window.dispatchEvent(new CustomEvent('terminal:open'));
@@ -275,8 +303,14 @@ function WorkspaceApp() {
   };
   const stopAgent = async (id: string) => { try { await window.desktop?.stopRun(id); } catch (error) { setError((error as Error).message); } };
   const approveAgent = async (id:string,approvalId:string,decision:'accept'|'decline')=>{await window.desktop?.approveRun({runId:id,approvalId,decision});};
+  const expertChat=useExpertChat(continuingDraft?.conversationId,projectId,page==='home'&&!currentRun);
   const saveTask = async (event?: FormEvent) => {
     event?.preventDefault();
+    if(expertChat.busy)return;
+    if(expertChat.selected){
+      if(composerOptions.attachments?.length||composerOptions.selectedSkillIds?.length){expertChat.setError('专家讨论暂只支持文字，请移除附件和技能');return;}
+      const sentText=prompt;const result=await expertChat.submit(sentText);if(result&&window.desktop){const state=await window.desktop.readWorkspace();workspaceRef.current=state;setWorkspace(state);setContinuingDraft(state.tasks.find(t=>t.conversationId===result.conversationId)||null);setPrompt(current=>current===sentText?'':current);}return;
+    }
     if (!ready || saving || submitting || (!prompt.trim()&&!composerOptions.selectedSkillIds?.length)) return;
     if (provider?.configured && window.desktop) {
       if(launchLock.current)return;launchLock.current=true;const text=prompt;setPendingLaunch(text);setPrompt('');
@@ -294,7 +328,7 @@ function WorkspaceApp() {
   const selectedProvider=choice ? catalog.providers.find(p=>p.id===choice.providerId) : provider;
   const changeArchive=async(task:NavTask,remove=false)=>{
     if(task.draft)await persist(state=>({...state,tasks:remove?state.tasks.filter(t=>t.id!==task.id):state.tasks.map(t=>t.id===task.id?{...t,archivedAt:null,projectId:state.projects.some(p=>p.id===t.projectId)?t.projectId:null}:t)}));
-    else if(window.desktop)setRuns(await window.desktop.editRun({id:task.id,...(remove?{remove:true}:{archived:false})}));
+    else if(window.desktop)await editRunMetadata({id:task.id,...(remove?{remove:true}:{archived:false})});
   };
   useEffect(()=>{void window.desktop?.extensionPage?.context({projectId:projectId||null,locale:activeLocale}).catch(()=>{});},[projectId,activeLocale,workspace.revision]);
   const currentProject=workspace.projects.find(p=>p.id===projectId);
@@ -345,13 +379,14 @@ function WorkspaceApp() {
         {page === 'home' && !currentRun && <div className={`home-page home-start${pendingLaunch!==null?' is-sending':''}`}>
           {pendingLaunch!==null?<PendingMessage text={pendingLaunch}/>:<header className="home-start-heading"><img className="home-start-mark" src="./brand/icon-128.png" alt="" aria-hidden="true"/><h1>{t(continuingDraft?"继续你的任务":"今天，想完成什么？")}</h1></header>}
           <div className="new-task-composer">
-          {continuingDraft&&<div className="draft-context-bar"><span>{t(workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt?'当前打开的是已归档草稿':'正在继续已有草稿')} · {continuingDraft.title}</span><Button type="button" variant="ghost" size="sm" disabled={submitting||saving} onClick={()=>{setContinuingDraft(null);setRunId(null);setError('');}}>{t('以当前内容新建聊天')}</Button>{workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt&&<Button type="button" variant="ghost" size="sm" onClick={()=>{setTaskDetail(workspace.tasks.find(task=>task.id===continuingDraft.id)||continuingDraft);setModal(null);}}>{t('查看归档草稿')}</Button>}</div>}
-          {composerOptions.employeeId&&<div className="wf-role-chip"><BriefcaseBusiness size={16}/><strong>{selectedEmployeeName}</strong><span>{t('发送时自动准备角色技能')}</span><Button variant="ghost" size="sm" onClick={()=>setComposerOptions(v=>({...v,employeeId:undefined}))}>{t('移除角色')}</Button></div>}
-          <ChatComposer attachments={<ComposerAttachments value={composerOptions} onChange={setComposerOptions} disabled={submitting||saving}/>} selectedSkillIds={composerOptions.selectedSkillIds} onSelectSkill={id=>setComposerOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} value={prompt} onChange={setPrompt} onSubmit={()=>void saveTask()} disabled={submitting||saving} sending={submitting} inputRef={promptRef}
+          {continuingDraft&&<div className="draft-context-bar"><span>{t(workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt?'当前打开的是已归档草稿':expertChat.state?.turns.length?'专家聊天':'正在继续已有草稿')} · {continuingDraft.title}</span><Button type="button" variant="ghost" size="sm" disabled={submitting||saving} onClick={()=>{setContinuingDraft(null);setRunId(null);setError('');}}>{t('以当前内容新建聊天')}</Button>{workspace.tasks.find(task=>task.id===continuingDraft.id)?.archivedAt&&<Button type="button" variant="ghost" size="sm" onClick={()=>{setTaskDetail(workspace.tasks.find(task=>task.id===continuingDraft.id)||continuingDraft);setModal(null);}}>{t('查看归档草稿')}</Button>}</div>}
+          {composerOptions.employeeId&&!expertChat.selected&&<div className="wf-role-chip"><BriefcaseBusiness size={16}/><strong>{selectedEmployeeName}</strong><span>{t('发送时自动准备角色技能')}</span><Button variant="ghost" size="sm" onClick={()=>setComposerOptions(v=>({...v,employeeId:undefined}))}>{t('移除角色')}</Button></div>}
+          <ExpertTranscript chat={expertChat}/><ExpertRecipient chat={expertChat}/>
+          <ChatComposer keepEditable={!!expertChat.selected} expertMentions={expertChat.mentions} attachments={<ComposerAttachments value={composerOptions} onChange={setComposerOptions} disabled={submitting||saving}/>} selectedSkillIds={composerOptions.selectedSkillIds} onSelectSkill={id=>setComposerOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} value={prompt} onChange={setPrompt} onSubmit={()=>void saveTask()} disabled={submitting||saving||expertChat.busy} sending={submitting||expertChat.busy} inputRef={promptRef}
             footer={<div className="home-project-context"><ProjectPicker projects={workspace.projects} value={projectId} onChange={setProjectId} disabled={submitting||saving||!!continuingDraft}/></div>}
-            label={t('任务内容')} placeholder={t('描述你想完成的事，或添加文件作为参考…')} canSend={!!ready&&(!!prompt.trim()||!!composerOptions.selectedSkillIds?.length)} saveDraft={!provider?.configured} sendLabel={provider?.configured?t('发送任务'):t('保存任务草稿')}
+            label={t('任务内容')} placeholder={t('描述你想完成的事，或添加文件作为参考…')} canSend={!!ready&&(!!prompt.trim()||!!composerOptions.selectedSkillIds?.length)} saveDraft={!expertChat.selected&&!provider?.configured} sendLabel={expertChat.selected?'发送给专家':provider?.configured?t('发送任务'):t('保存任务草稿')}
             skills={<SkillTags ids={composerOptions.selectedSkillIds} disabled={submitting||saving} onRemove={id=>setComposerOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
-            controls={<ComposerControls catalog={catalog} value={{providerId:choice?.providerId||expertChoice?.providerId||provider?.id,model:choice?.model||expertChoice?.model||provider?.model,...composerOptions}} onChange={next=>{setComposerOptions(next);if(next.providerId&&next.model)setChoice({providerId:next.providerId,model:next.model});}} disabled={submitting||saving} openSettings={section=>{setSettingsSection(section);navigate('settings');}}/>}/>
+            controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls catalog={catalog} value={{providerId:choice?.providerId||expertChoice?.providerId||provider?.id,model:choice?.model||expertChoice?.model||provider?.model,...composerOptions}} onChange={next=>{setComposerOptions(next);if(next.providerId&&next.model)setChoice({providerId:next.providerId,model:next.model});}} disabled={submitting||saving} openSettings={section=>{setSettingsSection(section);navigate('settings');}}/>}/>
 
           </div>
         </div>}
@@ -378,7 +413,7 @@ function WorkspaceApp() {
     {projectEditor && <ProjectEditor key={projectEditor.id} project={projectEditor} change={project=>{setManagementError('');setProjectEditor(project);}} existing={workspace.projects.some(p=>p.id===projectEditor.id)} busy={managing} error={managementError} close={()=>setProjectEditor(null)} save={()=>void saveProject()} remove={()=>void removeProject()} newTask={()=>{newTask(projectEditor.id);setProjectEditor(null);}}/>}
     {taskEditor && <ManagementDialog busy={managing} title={t("管理任务")} close={()=>{if(!managing)setTaskEditor(null);}}><form className="flex flex-col gap-4" onSubmit={e=>{e.preventDefault();void saveTaskEdit();}}><FieldSet disabled={managing}><FieldGroup>{managementError&&<p className="error-banner" role="alert">{managementError}</p>}<Field><FieldLabel htmlFor="project-2535">{t("任务名称")}</FieldLabel><Input id="project-2535" aria-label={t("任务名称")} required maxLength={120} value={taskEditor.title} onChange={e=>setTaskEditor({...taskEditor,title:e.target.value})}/></Field><Field><FieldLabel htmlFor="project-2708">{t("所属项目")}</FieldLabel><NativeSelect id="project-2708" aria-label={t("所属项目")} value={taskEditor.projectId||''} onChange={e=>setTaskEditor({...taskEditor,projectId:e.target.value||null})}><NativeSelectOption value="">{t("未关联项目（任务）")}</NativeSelectOption>{workspace.projects.map(p=><NativeSelectOption key={p.id} value={p.id}>{p.name}</NativeSelectOption>)}</NativeSelect></Field><FieldDescription>{t("移动后，下一次执行使用目标项目目录。已有对话内容仍保留。")}</FieldDescription>{deleteTask?<div key="archive-confirmation" className="flex flex-col gap-3"><p>{t("归档这条任务？可在设置的任务页面中还原。")}</p><Button type="button" variant="outline" onClick={()=>setDeleteTask(false)}>{t("保留任务")}</Button><Button type="button" variant="destructive" onClick={()=>void saveTaskEdit(true)}>{t("确认归档任务")}</Button></div>:<div key="task-actions" className="flex flex-wrap justify-end gap-2"><Button type="button" variant="destructive" onClick={()=>setDeleteTask(true)}>{t("归档任务")}</Button><Button  disabled={!taskEditor.title.trim()} type="submit">{t("保存修改")}</Button></div>}</FieldGroup></FieldSet></form></ManagementDialog>}
     {modal === 'help' && <AboutDialog close={() => setModal(null)}/>}
-    {taskDetail && <Modal title={t(taskDetail.archivedAt?"已归档的任务草稿":"任务草稿")} close={() => { setTaskDetail(null); setModal(null); }} wide><span className="badge neutral"><FileText size={12} />{t("已保存到本地")}</span><h3 className="task-detail-title">{taskDetail.title}</h3><div className="task-prompt">{taskDetail.prompt}</div><div className="detail-row"><span>{t("模型偏好")}</span><strong>{taskDetail.modelId || t('发送时选择模型服务')}</strong></div><div className="detail-row"><span>{t("项目")}</span><strong>{workspace.projects.find(project => project.id === taskDetail.projectId)?.name || t('未关联项目')}</strong></div><div className="info-box">{t(taskDetail.archivedAt?"这份草稿已归档。还原后可继续，也可以复制为新聊天。":"草稿尚未执行。")}{provider?.configured ? t("可以继续此任务，或复制为新任务后发送。") : t("请先在设置中配置模型服务。")}</div>{modal === 'delete' ? <div className="delete-confirm"><p>{t("归档这条任务草稿？可在设置中还原。")}</p><Button variant="outline" onClick={() => setModal(null)}>{t("保留")}</Button><Button variant="destructive" disabled={saving} onClick={async () => { try { await persist(state => ({ ...state, tasks: state.tasks.map(task => task.id === taskDetail.id ? {...task,archivedAt:new Date().toISOString()} : task) })); setTaskDetail(null); setModal(null); } catch { /* Shown by persist. */ } }}>{t("归档草稿")}</Button></div> : <div className="modal-actions"><Button variant="destructive" size="sm" onClick={() => setModal('delete')}><Trash2 size={14} />{t("归档草稿")}</Button>{taskDetail.archivedAt&&<Button variant="default" disabled={saving} onClick={async()=>{try{const id=taskDetail.id;await persist(state=>({...state,tasks:state.tasks.map(task=>task.id===id?{...task,archivedAt:null}:task)}));const restored=workspaceRef.current.tasks.find(task=>task.id===id);if(restored){setContinuingDraft(restored);setPrompt(restored.prompt);setComposerOptions({permission:'default',selectedSkillIds:restored.selectedSkillIds,employeeId:restored.employeeId});setProjectId(restored.projectId||'');setRunId(null);setTaskDetail(null);setError('');navigate('home',restored.projectId||'');}}catch{}}}>{t('还原并继续')}</Button>}<Button variant="default" disabled={!window.desktop?.patchWorkspace||!!taskDetail.archivedAt} onClick={()=>{setError('');setContinuingDraft(taskDetail);setRunId(null);setPrompt(taskDetail.prompt);setComposerOptions({permission:'default',selectedSkillIds:taskDetail.selectedSkillIds,employeeId:taskDetail.employeeId});setProjectId(taskDetail.projectId||'');setTaskDetail(null);navigate('home',taskDetail.projectId||'');}}>{t("继续此任务")}</Button><Button variant="outline" onClick={() => { setContinuingDraft(null); setRunId(null); setPrompt(taskDetail.prompt); setComposerOptions({permission:'default',selectedSkillIds:taskDetail.selectedSkillIds,employeeId:taskDetail.employeeId}); setProjectId(taskDetail.projectId || ''); setTaskDetail(null); navigate('home',taskDetail.projectId||''); }}>{t("复制到新任务")}</Button></div>}</Modal>}
+    {taskDetail && <Modal title={t(taskDetail.archivedAt?"已归档的任务草稿":"任务草稿")} close={() => { setTaskDetail(null); setModal(null); }} wide><span className="badge neutral"><FileText size={12} />{t("已保存到本地")}</span><h3 className="task-detail-title">{taskDetail.title}</h3><div className="task-prompt">{taskDetail.prompt}</div><div className="detail-row"><span>{t("模型偏好")}</span><strong>{taskDetail.modelId || t('发送时选择模型服务')}</strong></div><div className="detail-row"><span>{t("项目")}</span><strong>{workspace.projects.find(project => project.id === taskDetail.projectId)?.name || t('未关联项目')}</strong></div><div className="info-box">{t(taskDetail.archivedAt?"这份草稿已归档。还原后可继续，也可以复制为新聊天。":"草稿尚未执行。")}{provider?.configured ? t("可以继续此任务，或复制为新任务后发送。") : t("请先在设置中配置模型服务。")}</div>{modal === 'delete' ? <div className="delete-confirm"><p>{t("归档这条任务草稿？可在设置中还原。")}</p><Button variant="outline" onClick={() => setModal(null)}>{t("保留")}</Button><Button variant="destructive" disabled={saving} onClick={async () => { try { await persist(state => ({ ...state, tasks: state.tasks.map(task => task.id === taskDetail.id ? {...task,archivedAt:new Date().toISOString()} : task) })); const saved=workspaceRef.current.tasks.find(task=>task.id===taskDetail.id); if(saved)afterTaskArchived(saved,true); setTaskDetail(null); setModal(null); } catch { /* Shown by persist. */ } }}>{t("归档草稿")}</Button></div> : <div className="modal-actions"><Button variant="destructive" size="sm" onClick={() => setModal('delete')}><Trash2 size={14} />{t("归档草稿")}</Button>{taskDetail.archivedAt&&<Button variant="default" disabled={saving} onClick={async()=>{try{const id=taskDetail.id;await persist(state=>({...state,tasks:state.tasks.map(task=>task.id===id?{...task,archivedAt:null}:task)}));const restored=workspaceRef.current.tasks.find(task=>task.id===id);if(restored){setContinuingDraft(restored);setPrompt(restored.prompt);setComposerOptions({permission:'default',selectedSkillIds:restored.selectedSkillIds,employeeId:restored.employeeId});setProjectId(restored.projectId||'');setRunId(null);setTaskDetail(null);setError('');navigate('home',restored.projectId||'');}}catch{}}}>{t('还原并继续')}</Button>}<Button variant="default" disabled={!window.desktop?.patchWorkspace||!!taskDetail.archivedAt} onClick={()=>{setError('');setContinuingDraft(taskDetail);setRunId(null);setPrompt(taskDetail.prompt);setComposerOptions({permission:'default',selectedSkillIds:taskDetail.selectedSkillIds,employeeId:taskDetail.employeeId});setProjectId(taskDetail.projectId||'');setTaskDetail(null);navigate('home',taskDetail.projectId||'');}}>{t("继续此任务")}</Button><Button variant="outline" onClick={() => { setContinuingDraft(null); setRunId(null); setPrompt(taskDetail.prompt); setComposerOptions({permission:'default',selectedSkillIds:taskDetail.selectedSkillIds,employeeId:taskDetail.employeeId}); setProjectId(taskDetail.projectId || ''); setTaskDetail(null); navigate('home',taskDetail.projectId||''); }}>{t("复制到新任务")}</Button></div>}</Modal>}
   </div>{settingsOpen&&<SettingsWorkspace openLibrary={(kind,entityId)=>{setSettingsSection('general');openCenter({tab:'installed',kind,entityId,manage:true});}} windowsDesktop={windowsDesktop} initialSkillId={searchSkillId} section={settingsSection} setSection={setSettingsSection} workspace={workspace} save={update=>persist(state=>({...state,...update}))} back={()=>{setSettingsOpen(false);requestAnimationFrame(()=>settingsFocus.current?.focus({preventScroll:true}));}} archived={archived} restore={task=>changeArchive(task)} remove={task=>changeArchive(task,true)} catalog={catalog} refresh={refreshProviders} busy={saving||!ready}/>}<MessageDrawer windowsDesktop={windowsDesktop} open={messagesOpen} onOpenChange={setMessagesOpen} trigger={messageTrigger}/></GlobalActionsProvider>;
 }
 

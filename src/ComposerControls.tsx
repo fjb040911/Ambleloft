@@ -1,3 +1,5 @@
+import PermissionStatus from './PermissionStatus';
+import ModelStatus from './ModelStatus';
 import {InputGroupButton} from './components/ui/input-group';
 import {cn} from 'cn';
 import {useConfirm} from './Confirmation';
@@ -5,14 +7,14 @@ import {useEffect,useRef,useState} from 'react';
 import {Plus,X,ChevronDown,ShieldCheck,Folder,Sparkles,Check} from 'lucide-react';
 import {t} from './i18n';
 import {useSkills} from './skills';
-import type {ProviderCatalog} from './types';
+import type {ProviderCatalog,PermissionChange,ModelChange} from './types';
 import {Button} from './components/ui/button';
 import {ToggleGroup,ToggleGroupItem} from './components/ui/toggle-group';
 import {Popover,PopoverTrigger,PopoverContent,PopoverTitle,PopoverDescription} from './components/ui/popover';
 import {Command,CommandInput,CommandList,CommandEmpty,CommandGroup,CommandItem} from './components/ui/command';
 export interface ComposerOptions {employeeId?:string;selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean}
 const popupLayout='w-80 max-w-[calc(100vw-24px)] max-h-[min(380px,var(--available-height))] overflow-y-auto motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none';
-export default function ComposerControls({catalog,value,onChange,disabled,permissionDisabled=disabled,onPermissionChange,permissionScope,onModelChange,previousProviderIds,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;permissionDisabled?:boolean;onPermissionChange?(permission:'default'|'full'):Promise<void>;permissionScope?:string;onModelChange?(value:ComposerOptions):Promise<void>;previousProviderIds?:string[];modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
+export default function ComposerControls({permissionChange,modelChange,catalog,value,onChange,disabled,permissionDisabled=disabled,onPermissionChange,permissionScope,onModelChange,previousProviderIds,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{permissionChange?:PermissionChange;modelChange?:ModelChange;catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;permissionDisabled?:boolean;onPermissionChange?(permission:'default'|'full'):Promise<void>;permissionScope?:string;onModelChange?(value:ComposerOptions):Promise<void>;previousProviderIds?:string[];modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
  const confirm=useConfirm();
  const permissionTrigger=useRef<HTMLButtonElement>(null);
  const {skills,error:skillsError}=useSkills();
@@ -30,7 +32,7 @@ export default function ComposerControls({catalog,value,onChange,disabled,permis
      {menu==='skills'?<><Command><CommandInput autoFocus aria-label={t('搜索技能')} placeholder={t('搜索技能')} value={query} onValueChange={setQuery}/><CommandList aria-label={t('技能')}><CommandEmpty>{t('未找到匹配的技能')}</CommandEmpty><CommandGroup heading={t('仅对本次请求指定使用')}>{skills.filter(c=>c.enabled).map(c=><CommandItem key={c.id} value={c.id} keywords={[c.name,c.description]} data-checked={value.selectedSkillIds?.includes(c.id)||false} disabled={!value.selectedSkillIds?.includes(c.id)&&(value.selectedSkillIds?.length||0)>=20} onSelect={()=>{const selected=value.selectedSkillIds||[];onChange({...value,selectedSkillIds:selected.includes(c.id)?selected.filter(id=>id!==c.id):[...selected,c.id]});}}><span className="min-w-0 flex-1 break-words">{c.name}<span className="block text-xs text-muted-foreground line-clamp-2">{c.description}</span></span></CommandItem>)}</CommandGroup></CommandList></Command>{skillsError&&<p role="alert">{skillsError}</p>}{!skills.some(c=>c.enabled)&&<PopoverDescription>{t('暂无已启用的技能。请到“技能与扩展”安装或启用。')}</PopoverDescription>}</>:<><Button variant="ghost" className="justify-start" onClick={()=>void select()}><Folder/>{t('文件和文件夹')}</Button><Button variant="ghost" className="justify-start" onClick={()=>setMenu('skills')}><Sparkles/>{t('技能')}</Button></>}
     </PopoverContent>
    </Popover>
-   <Popover open={menu==='permission'} onOpenChange={open=>setMenu(open?'permission':'')}>
+   <div className="permission-feedback relative flex min-w-0 items-center"><Popover open={menu==='permission'} onOpenChange={open=>setMenu(open?'permission':'')}>
     <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="composer-permission @max-[480px]/composer:size-7 @max-[480px]/composer:px-0" disabled={permissionDisabled} ref={permissionTrigger} aria-label={t(value.permission==='full'?'完全访问':'默认权限')} title={t(value.permission==='full'?'完全访问':'默认权限')}/> }><ShieldCheck/><span className="@max-[480px]/composer:hidden">{t(value.permission==='full'?'完全访问':'默认权限')}</span><ChevronDown className="@max-[480px]/composer:hidden"/></PopoverTrigger>
     <PopoverContent className={popupLayout} side="top" align="start" sideOffset={8} aria-label={t('权限模式')}>
      <div className="flex flex-col gap-1 px-1"><PopoverTitle className="m-0 text-sm leading-snug">{t('权限模式')}</PopoverTitle><PopoverDescription className="m-0 text-xs leading-relaxed">{t('选择此任务的执行权限。')}</PopoverDescription></div>
@@ -39,9 +41,10 @@ export default function ComposerControls({catalog,value,onChange,disabled,permis
      </ToggleGroup>
     </PopoverContent>
    </Popover>
-   <div className="composer-model-anchor">
+   <PermissionStatus value={permissionChange} inline/></div>
+   <div className="composer-model-anchor relative flex min-w-0 items-center">
     <ModelPicker catalog={catalog} previousProviderIds={previousProviderIds} value={value} onChange={onModelChange||onChange} disabled={modelDisabled} pending={modelPending} openSettings={openSettings} previousProviderId={previousProviderId} previousBaseUrl={previousBaseUrl}/>
-
+    <ModelStatus value={modelChange} inline/>
    </div>
   </div>
  </div>;

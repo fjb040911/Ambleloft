@@ -1,3 +1,4 @@
+import {useLanguage} from './i18n';
 import {expertModelLabel} from './ExpertModelPreference';
 import {useState,type ReactNode} from 'react';
 import {ArrowRight,BookOpen,LoaderCircle} from 'lucide-react';
@@ -13,6 +14,7 @@ export function RoleDetails({definition,kind,metadata,catalog,installed=[],actio
  definition:RoleDefinition;catalog?:ProviderCatalog;kind:'template'|'employee';metadata:ReactNode;installed?:Skill[];
  examples?:string[];actionLabel:string;actionDisabled?:boolean;onAction():Promise<boolean>;onCustomize?():Promise<boolean>;onClose():void;returnFocus:HTMLElement|null;
 }){
+ const locale=useLanguage()==='en'?'en':'zh-CN';
  const L=useCopy(),[pending,setPending]=useState(false),[error,setError]=useState(''),enrich=useSkillMetadata(definition.templateRef?.id);
  const act=async(action=onAction)=>{if(pending||actionDisabled)return;setPending(true);setError('');try{if(await action())onClose();else setError(L('操作未完成，请重试。','Could not complete the action. Please retry.'));}catch(e){setError((e as Error).message);}finally{setPending(false);}};
  return <Dialog open onOpenChange={open=>{if(!open&&!pending)onClose();}}>
@@ -23,7 +25,7 @@ export function RoleDetails({definition,kind,metadata,catalog,installed=[],actio
     <DialogDescription>{kind==='template'?L('先了解职责、工作方法与推荐技能。添加后，可按你的业务调整专家配置。','Explore responsibilities, methods and recommended skills. Add an expert to adapt this template to your business.'):L('这是你保存的专家配置。编辑用于后续任务，已有任务保留当时的配置。','This is your saved expert profile. Edits apply to future tasks; existing tasks keep their original configuration.')}</DialogDescription>
    </DialogHeader>
    <Failure message={error}/>
-   <div className="wf-role-detail-body">
+   <div className="wf-role-detail-body">{!!definition.discovery?.tags.length&&<div className="wf-role-tags" aria-label={L('能力标签','Capability tags')}>{definition.discovery.tags.map(t=><Badge className="max-w-full whitespace-normal" key={t.id} variant="outline">{t.title[locale]}</Badge>)}</div>}
     <dl className="wf-role-definition">{kind==='employee'&&<div><dt>{L('默认模型','Default model')}</dt><dd>{expertModelLabel(definition.modelChoice,catalog,L)}{!definition.modelChoice&&<p className="wf-muted">{L('沿用任务选择的模型；任务未选择时使用上述系统默认模型。','Uses the task’s selected model, or the system default shown above when none is selected.')}</p>}</dd></div>}
      {[[L('专业方向','Specialization'),definition.domain||L('可按业务定制','Adapt to your business')],[L('主要职责','Responsibilities'),definition.responsibilities],[L('预期交付','Expected deliverables'),definition.deliverables||L('添加后可补充','You can add this later')],[L('工作方法与边界','Working methods and boundaries'),definition.methods||L('添加后可补充','You can add this later')]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
     </dl>

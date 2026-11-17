@@ -1,3 +1,4 @@
+import VirtualBlock from '../VirtualBlock';
 import {Maximize2,Workflow} from 'lucide-react';
 import PreviewDialog from '../PreviewDialog';
 import {t,useLanguage} from '../i18n';
@@ -14,7 +15,7 @@ function Mermaid({ source }: { source: string }) {
   const id = 'diagram-' + useId().replace(/[^a-zA-Z0-9]/g, '');
   const [svg, setSvg] = useState(''); const [error, setError] = useState('');
   useEffect(() => {
-    let cancelled = false; setSvg(''); setError('');
+    let cancelled = false; setError('');
     const timer = setTimeout(() => {
       mermaidQueue = mermaidQueue.catch(() => {}).then(async () => {
         if (cancelled) return;
@@ -51,9 +52,9 @@ export default function Artifact({ language, source }: { language: string; sourc
       <button type="button" aria-live="polite" onClick={()=>void copySource(source)}>{t(copy)}</button>
       <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([source], { type: 'text/plain' })); const a = document.createElement('a'); a.href = url; a.download = `diagram.${language === 'echarts' ? 'json' : language === 'mermaid' ? 'mmd' : language}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>{t('下载')}</button>
     </div></div>
-    {raw ? <pre>{source}</pre> : source.length > 50000 ? <p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p> : <div className="artifact-preview"><Suspense fallback={<p>{t('正在加载预览…')}</p>}>
+    {raw ? <pre>{source}</pre> : source.length > 50000 ? <p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p> : <div className="artifact-preview"><VirtualBlock enabled><Suspense fallback={<p>{t('正在加载预览…')}</p>}>
       {language === 'mermaid' ? <Mermaid source={source} /> : language === 'echarts' ? <Chart source={source} /> : language === 'drawio' ? <Drawio source={source} /> : <img className="diagram-svg" alt={t("SVG 图形")} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(cleanSvg(source))}`} />}
-    </Suspense></div>}
+    </Suspense></VirtualBlock></div>}
     {previewOpen&&<PreviewDialog name={t('Mermaid 图表')} icon={<Workflow size={18}/>} contentClass="is-diagram" maximizedOnly close={()=>setPreviewOpen(false)}>
       <div className="mermaid-dialog-canvas">{source.length>50000?<p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p>:<Mermaid source={source}/>}</div>
     </PreviewDialog>}

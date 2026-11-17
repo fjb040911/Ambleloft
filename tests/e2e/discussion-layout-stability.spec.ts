@@ -43,7 +43,15 @@ for(const platform of ['darwin','win32'])test(`discussion geometry stays stable 
    if(i===4){h.status='running';h.activity.phase='reasoning';h.steps=[];}
    (window as any).__emitLayout();
   },i);
-  await expect(page.locator('.wf-host-response')).toContainText(`阶段 ${i}`);
+  const host=page.locator('.wf-host-response');
+  await expect(host.locator('.wf-host-trace')).toHaveCount(i===2||i===3?1:0);
+  if(i===3)await expect(host).toContainText('本轮已完成');
+  // Details now mount on demand; exercise geometry with the actual disclosure open.
+  const history=host.locator('details.wf-host-trace:not([open]) > summary');
+  if(await history.count())await history.click();
+  const closed=host.locator('[data-slot=trace-collapsible-trigger][aria-expanded=false]');
+  if(await closed.count())await closed.click();
+  await expect(host).toContainText(`阶段 ${i}`);
   // Move to the live end, then exercise layout changes without moving the shell.
   const available=await page.locator('.wf-main').evaluate(el=>(el as HTMLElement).style.getPropertyValue('--wf-space-available'));
   await scroller.evaluate(el=>{el.scrollTop=el.scrollHeight;});

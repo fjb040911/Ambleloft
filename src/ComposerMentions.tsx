@@ -8,7 +8,7 @@ import {t} from './i18n';
 import type {ExtensionSnapshot} from './types';
 
 type Mention={start:number;end:number;query:string;trigger:'$'|'@'};
-export type ExpertMentionOptions={items:{id:string;name:string;description:string}[];selectedIds:string[];onSelect(id:string):void;limit?:number};
+export type ExpertMentionOptions={items:{id:string;name:string;description:string}[];selectedIds:string[];onSelect(id:string):void;limit?:number;label?:string};
 type Choice={key:string;id:string;kind:'skill'|'extension'|'expert';name:string;description:string;search:string;disabled:boolean};
 // Resolve at the caret, including Chinese text directly followed by @.
 // Email addresses, shell interpolation, escaped dollars and prices stay text.
@@ -85,7 +85,7 @@ export function useComposerMentions({value,onChange,inputRef,selectedSkillIds=[]
    <PopoverTitle className="sr-only">{menuLabel}</PopoverTitle>
    <Command shouldFilter={false} value={selected?.key||''} onValueChange={setSelection}>
     <CommandList ref={listRef} label={menuLabel}>
-     {(['expert','skill','extension'] as const).map(kind=>choices.some(choice=>choice.kind===kind)&&<CommandGroup key={kind} heading={t(kind==='expert'?'空间专家':kind==='skill'?'技能':'扩展')}>
+     {(['expert','skill','extension'] as const).map(kind=>choices.some(choice=>choice.kind===kind)&&<CommandGroup key={kind} heading={t(kind==='expert'?(experts?.label||'空间专家'):kind==='skill'?'技能':'扩展')}>
       {choices.filter(choice=>choice.kind===kind).map(choice=><CommandItem key={choice.key} value={choice.key} disabled={choice.disabled} data-checked={choice.kind==='expert'?experts?.selectedIds.includes(choice.id):choice.kind==='skill'&&selectedSkillIds.includes(choice.id)} onSelect={()=>choose(choice)}>
        {choice.kind==='expert'?<UserRound/>:choice.kind==='skill'?<BookOpen/>:<Puzzle/>}<span className="min-w-0 flex-1"><span className="block truncate">{choice.name}</span><span className="block truncate text-xs text-muted-foreground">{choice.description}</span></span>
       </CommandItem>)}

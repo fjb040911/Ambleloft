@@ -1,0 +1,31 @@
+import {test,expect} from '@playwright/test';
+test('switch feedback expires without moving composer, and restored success stays silent',async({page})=>{
+ await page.goto('/tests/fixtures/composer-feedback.html');
+ const input=page.getByRole('textbox',{name:'测试输入'});
+ await expect(input).toHaveValue('未发送的输入');
+ await expect(page.locator('.change-success')).toHaveCount(0);
+ await page.getByRole('button',{name:'switching',exact:true}).click();
+ await expect(page.getByRole('button',{name:/模型切换中/})).toBeVisible();
+ await page.getByRole('button',{name:'configured',exact:true}).click();
+ await expect(page.getByRole('button',{name:/等待排队任务开始执行/})).toBeVisible();
+ await page.getByRole('button',{name:'applied',exact:true}).click();
+ await expect(page.locator('.change-success')).toHaveCount(2);
+ const before=await input.boundingBox();
+ await expect(page.locator('.change-success')).toHaveCount(0,{timeout:5000});
+ expect(await input.boundingBox()).toEqual(before);
+ await expect(input).toHaveValue('未发送的输入');
+ await page.getByRole('button',{name:'mount',exact:true}).click();
+ await page.getByRole('button',{name:'mount',exact:true}).click();
+ await expect(page.locator('.change-success')).toHaveCount(0);
+ await page.getByRole('button',{name:'failed',exact:true}).click();
+ await expect(page.getByRole('button',{name:/模型切换失败/})).toBeVisible();
+ await page.getByRole('button',{name:/模型切换失败/}).click();
+ await expect(page.getByRole('dialog')).toContainText('模型切换失败');
+});
+for(const width of [1000,390])test(`compact activity fits at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:700});await page.goto('/tests/fixtures/composer-feedback.html');
+ await expect(page.getByRole('textbox')).toBeVisible();
+ const bounds=await page.locator('.run-activity').boundingBox();expect(bounds!.height).toBeLessThanOrEqual(32);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:`/tmp/composer-feedback-${width}.png`});
+});

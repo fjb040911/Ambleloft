@@ -25,6 +25,7 @@ function definition(value) {
   });
   if (new Set(skills.map(s=>s.name)).size !== skills.length) throw Error('同一角色不能重复声明同名技能');
   const metadata={};
+  if(value.discovery!==undefined)metadata.discovery=require('../catalog-store/role-discovery.cjs').validateDiscovery(value.discovery);
   if(value.modelChoice!=null){
     const choice=value.modelChoice;
     if(!choice||typeof choice!=='object'||Array.isArray(choice)||!id(choice.providerId))throw Error('专家模型服务无效');

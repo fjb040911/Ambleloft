@@ -5,11 +5,11 @@ const {createProviderStore}=require('../electron/provider.cjs');
 const {AgentRuntime}=require('../electron/agent-runtime.cjs');
 const {createSkills}=require('../electron/skills.cjs');
 const {createProjectFiles}=require('../electron/project-files.cjs');
-function createCoreServices({directory,database,encryption,publish,fileApplications}){
+function createCoreServices({directory,database,encryption,publish,projectRun,fileApplications}){
  const workspace=createStore(directory,database);
  const providers=createProviderStore(directory,encryption,database);
  const skills=createSkills(directory,database);
- const tasks=new AgentRuntime({directory,database,provider:providers,workspace,skills,publish});
+ const tasks=new AgentRuntime({directory,database,provider:providers,workspace,skills,publish,projectRun});
  const localFiles=createProjectFiles({applications:fileApplications,cacheDirectory:require('node:path').join(directory,'office-preview'),getWorkspace:()=>workspace.read(),getRuns:()=>tasks.runs,
  getApprovedApps:async()=>await database.call('readSetting',{key:'fileApplications'})||[],
  setApprovedApps:value=>database.call('writeSetting',{key:'fileApplications',value})});

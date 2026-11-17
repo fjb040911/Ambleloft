@@ -22,7 +22,7 @@ async function switchModel(input){
    if(queued.remoteProject)config.remoteOnly=true;
    const record={id:randomUUID(),requested:choice(config),previous,state:'configured',effective:null,startedAt:new Date().toISOString()};
    queued.pendingModelConfig=config;queued.pendingModelChange=record;this.conversation.stop(queued);delete queued.conversationAbort;queued.config=config;run.modelChange=record;
-   this.changed(run);await this.persist();return structuredClone(record);
+   this.changed(run);await this.persist(undefined,run);return structuredClone(record);
   }
  }
  return require('./permission-switch.cjs').switchPermission.call(this,{runId:run.id,permission:run.permission||'default'}, {
