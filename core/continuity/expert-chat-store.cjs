@@ -45,13 +45,13 @@ function createStore(db,transaction,resources,continuity){
     if(s.turns.length+definitions.length>500)throw Error('CHAT_CAPACITY');
     if(input.request.replyToContributionId&&!s.turns.some(t=>t.id===input.request.replyToContributionId&&t.status==='completed'))throw Error('REPLY_UNAVAILABLE');
     const historyCut=s.turns.map(t=>t.id),roundId=randomUUID(),createdAt=new Date().toISOString();
-    const rootQuestions=a.kind==='run'?db.prepare("SELECT data FROM run_items WHERE run_id=? AND collection='messages' ORDER BY position").all(a.recordId).map(r=>JSON.parse(r.data)).filter(m=>m.role==='user'&&!m.kind).slice(-6).map(m=>({id:m.id,text:(m.text||'').slice(0,3000)})):[];
+    const rootQuestions=a.kind==='run'?require('../../electron/run-text-store.cjs').readItems(db,a.recordId,'messages').filter(m=>m.role==='user'&&!m.kind).slice(-6).map(m=>({id:m.id,text:(m.text||'').slice(0,3000)})):[];
     const taskSnapshot=taskContext.capture(a,s.excludedSourceKeys,input.request.text);
     const turns=definitions.map((definition,ordinal)=>({...definition,id:randomUUID(),roundId,ordinal,attempt:1,historyCut,rootQuestions,replyToContributionId:input.request.replyToContributionId||null,createdAt,status:'preparing',text:input.request.text,projectId:a.projectId,guard:s.revision}));for(const t of turns)t.taskContextProjectionId=taskContext.project(taskSnapshot,t.employee,t.id,s.excludedSourceKeys);s.turns.push(...turns);put(s);
     db.prepare('INSERT INTO expert_chat_commands VALUES(?,?,?,?)').run(input.commandId,fingerprint,id,turns[0].id);return {state:s,turnId:turns[0].id,turnIds:turns.map(t=>t.id)};
    }
    const a=anchor(input.conversationId),s=get(a.id);
-   if(input.action==='read')return {...s,anchor:{id:a.id,kind:a.kind,recordId:a.recordId,projectId:a.projectId},rootMessages:a.kind==='run'?db.prepare("SELECT data FROM run_items WHERE run_id=? AND collection='messages' ORDER BY position").all(a.recordId).map(r=>JSON.parse(r.data)):[]};
+   if(input.action==='read')return {...s,anchor:{id:a.id,kind:a.kind,recordId:a.recordId,projectId:a.projectId},rootMessages:a.kind==='run'?require('../../electron/run-text-store.cjs').readItems(db,a.recordId,'messages'):[]};
    if(a.value.archivedAt&&['exclude','prepare','retry'].includes(input.action))throw Error('CHAT_ARCHIVED');
    if(input.action==='taskContext'){const t=s.turns.find(t=>t.id===input.turnId);if(!t)throw Error('TURN_UNAVAILABLE');return [t.taskContextProjectionId,...(t.inheritedTaskProjectionIds||[])].filter(Boolean).map(id=>taskContext.validate(id,{conversationId:s.id,employeeId:t.employee.id,excludedSourceKeys:s.excludedSourceKeys,requireCurrent:input.requireCurrent===true}));}
    if(input.action==='revokeTaskContext'){taskContext.revoke(input,s);for(const t of s.turns)if(active(t))try{for(const id of [t.taskContextProjectionId,...(t.inheritedTaskProjectionIds||[])].filter(Boolean))taskContext.validate(id,{conversationId:s.id,employeeId:t.employee.id,excludedSourceKeys:s.excludedSourceKeys});}catch{t.status='cancelled';t.error='任务内委托已撤回';}put(s);return s;}

@@ -32,12 +32,17 @@ class SpaceService {
     return state;
   }
   change(fn){const action=this.queue.then(async()=>{const state=await this.read(),result=await fn(state);await this.database.call('writeSetting',{key:KEY,value:state});this.publish();if(this.plans)this.plans.dirty=true;return structuredClone(result);});this.queue=action.catch(()=>{});return action;}
-  async snapshot(){
+  async snapshot(...args){const started=performance.now();try{return await this.projectSnapshot(...args);}finally{require('../../electron/performance-metrics.cjs').metrics.record('spaceSnapshotMs',performance.now()-started);}}
+  async projectSnapshot({output,requestIds}={}){
+    if(output!==undefined&&output!=='preview')throw Error('输出模式无效');
+    if(requestIds!==undefined&&(!Array.isArray(requestIds)||requestIds.some(id=>typeof id!=='string')))throw Error('讨论范围无效');
     await this.queue;const state=await this.read();
+    const runs=new Map();for(const run of this.runtime.runs){const key=JSON.stringify([run.collaboration?.requestId,run.employee?.id]);if(!runs.has(key))runs.set(key,run);}
+    if(requestIds)state.requests=state.requests.filter(r=>requestIds.includes(r.id));
     return {...state,requests:state.requests.map(request=>({...request,...(request.mode==='discussion'?{discussion:request.discussion||{schemaVersion:1,id:discussionRoot(state.requests,request),mode:'consultation',provenance:'legacy'}}:{}),staleReferences:request.mode==='work'?request.documentRefs.filter(ref=>state.documents.find(d=>d.id===ref.id)?.adoptedRevision!==ref.revision).map(ref=>({id:ref.id,revision:ref.revision,currentRevision:state.documents.find(d=>d.id===ref.id)?.adoptedRevision??null})):[],participants:request.participants.map(p=>{
-      const run=this.runtime.runs.find(r=>r.collaboration?.requestId===request.id&&r.employee?.id===p.employeeId);
+      const run=runs.get(JSON.stringify([request.id,p.employeeId]));
       const employee=run?.employee;
-      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?run.error:p.error,output:run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning').map(m=>m.text).join('\n\n')||'',updatedAt:run?.updatedAt,
+      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?run.error:p.error,...require('./output-preview.cjs').participantOutput(run,output==='preview'),updatedAt:run?.updatedAt,
         // Report the role and skills actually used, even after the employee is edited or removed.
         ...(employee?{role:{name:employee.name,revision:employee.revision,skills:(employee.skills||[]).map(({id,name,version})=>({id,name,version}))}}:{})};
     })}))};

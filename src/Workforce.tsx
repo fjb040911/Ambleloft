@@ -89,10 +89,22 @@ export default function Workforce({ref,target,view:controlledView,onViewChange,o
   if(view!=='spaces'||editor)node.scrollIntoView({block:'start'});
  },[view,!!editor]);
  const api=window.desktop?.workforce;
- const refreshVersion=useRef(0),refreshApplied=useRef(0);
- const refresh=useCallback(async()=>{if(!window.desktop?.workforce)return;const version=++refreshVersion.current;try{const [a,b]=await Promise.all([window.desktop.workforce.snapshot(),window.desktop.spaces!.snapshot()]);if(version<refreshApplied.current)return;refreshApplied.current=version;setData(a);setSpaces(b);setLoaded(true);}catch(e){setError((e as Error).message);}},[]);
+ const refreshVersion=useRef(0),refreshApplied=useRef(0),configurationApplied=useRef(0);
+ const refresh=useCallback(async()=>{if(!window.desktop?.workforce)return;const version=++refreshVersion.current;try{const [a,b]=await Promise.all([window.desktop.workforce.snapshot(),window.desktop.spaces!.snapshot({output:'preview'})]);if(version>=configurationApplied.current){configurationApplied.current=version;setData(a);setLoaded(true);}if(version>=refreshApplied.current){refreshApplied.current=version;setSpaces(b);}}catch(e){setError((e as Error).message);}},[]);
  useEffect(()=>{if(!active||!loaded||!target||handledTarget.current===target.serial)return;handledTarget.current=target.serial;void refresh().then(()=>{if(handledTarget.current===target.serial)return navigate(()=>{setSelectedSpace(target.spaceId);setDestination(target);setView('spaces');});});},[active,loaded,target,refresh]);
- useEffect(()=>{void refresh();let timer:ReturnType<typeof setTimeout>|null=null;const schedule=()=>{if(!timer)timer=setTimeout(()=>{timer=null;void refresh();},180);};const off=api?.onChanged(schedule),offRun=subscribeRuns(schedule),offSkills=window.desktop?.skills?.onChanged?.(schedule);return()=>{off?.();offRun?.();offSkills?.();if(timer)clearTimeout(timer);};},[api,refresh]);
+ useEffect(()=>{
+  if(!active)return;
+  void refresh();let timer:ReturnType<typeof setTimeout>|null=null,configuration=false,live=true;
+  const states=new Map<string,string>();
+  const schedule=(config=false)=>{configuration ||= config;if(!timer)timer=setTimeout(()=>{timer=null;const full=configuration;configuration=false;if(full){void refresh();return;}const version=++refreshVersion.current;void window.desktop?.spaces?.snapshot({output:'preview'}).then(value=>{if(live&&version>=refreshApplied.current){refreshApplied.current=version;setSpaces(value);}}).catch(e=>{if(live)setError(String(e.message||e));});},180);};
+  const off=api?.onChanged(()=>schedule(true)),offSkills=window.desktop?.skills?.onChanged?.(()=>schedule(true));
+  const offRun=subscribeRuns(run=>{
+   if(!run.collaboration)return;
+   const state=JSON.stringify([run.status,run.error,run.permissionChange,run.modelChange,run.approvals?.map(a=>a.id),run.questions?.map(q=>q.id)]);
+   if(states.get(run.id)===state)return;states.set(run.id,state);schedule();
+  });
+  return()=>{live=false;off?.();offRun();offSkills?.();if(timer)clearTimeout(timer);};
+ },[active,api,refresh]);
  const loadRoles=useCallback(async(refresh=false)=>{if(!api)return;setRolesLoading(true);try{setRoles(await api.roles({refresh}));}catch(e){setRoles(previous=>({...previous,items:previous?.items||[],stale:true,error:(e as Error).message}));}finally{setRolesLoading(false);}},[api]);useEffect(()=>{if((view==='store'||choosingRole)&&!roles)void loadRoles();},[view,choosingRole,roles,loadRoles]);
  const activate=async(employee:Employee,skillKey?:string)=>{setActivation(employee.id);setError('');try{if(employee.pendingJob)await api!.controlPreparation({jobId:employee.pendingJob.id,action:'retry'});else await api!.activate({id:employee.id,expectedRevision:employee.revision,skillKey});await refresh();}catch(e){setError((e as Error).message);}};
  const beginDraft=async(input:Omit<Parameters<NonNullable<typeof api>['createDraft']>[0],'commandId'>,reportError=true)=>{rememberExperts(input.copy?undefined:input.employeeId||(input.preparationId?data.employees.find(employee=>!employee.pending&&employee.pendingJob?.id===input.preparationId)?.id:undefined));setError('');setSavedNotice('');try{const draft=await api!.createDraft({commandId:crypto.randomUUID(),...input});setEditState({dirty:false,busy:false});setEditorNew(!input.employeeId&&!input.preparationId||!!input.copy);setEditor(draft);await refresh();return true;}catch(e){if(!reportError)throw e;setError((e as Error).message);return false;}};

@@ -39,6 +39,7 @@ export interface AgentRun {
   conversationId?:string;draftId?:string;
   fileChanges?:TurnFileChanges[];
   queued?:boolean;
+  storageBackpressure?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;

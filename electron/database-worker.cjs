@@ -20,7 +20,8 @@ try{
  db=new DatabaseSync(workerData.file,{timeout:5000});
  db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
  const version=db.prepare('PRAGMA user_version').get().user_version;
- if(version>15)throw new Error('数据库版本高于当前应用，请升级应用');
+ if(version>16)throw new Error('数据库版本高于当前应用，请升级应用');
+ if(version>0&&version<16){const backup=workerData.file+'.before-v16-'+Date.now()+'.sqlite';db.prepare('VACUUM INTO ?').run(backup);fs.chmodSync(backup,0o600);}
  db.exec(`BEGIN;
  CREATE TABLE IF NOT EXISTS skills(id TEXT PRIMARY KEY, data TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -47,13 +48,14 @@ try{
  ${expertChatModule.schema}
  ${taskContextModule.schema}
  ${investigationModule.schema}
- PRAGMA user_version=15;
+ ${require('./run-text-store.cjs').schema}
+ PRAGMA user_version=16;
  COMMIT;`);
  resources=createWorkspaceResources(db);
  db.exec('BEGIN IMMEDIATE');
  try {for(const [kind,table] of [['draft','drafts'],['run','runs']])for(const row of db.prepare(`SELECT id,data FROM ${table}`).all()){const item=JSON.parse(row.data);resources.identify(kind,row.id,item.projectId);}db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
 }catch(e){parentPort.postMessage({fatal:e.message});try{db?.close();}catch{};db=null;parentPort.close();process.exitCode=1;}
-const collections=['messages','tools','plans','fileChanges','artifacts','taskApps','approvals','questions'];
+const {collections}=require('./run-patches.cjs');
 function transaction(fn){if(db.isTransaction)return fn();db.exec('BEGIN IMMEDIATE');try{const value=fn();db.exec('COMMIT');return value;}catch(e){db.exec('ROLLBACK');throw e;}}
 function syncTable(table,values){
  const existing=new Map(db.prepare(`SELECT id,data FROM ${table}`).all().map(r=>[r.id,r.data]));
@@ -82,7 +84,7 @@ function saveRunRows(runs,{replace=true}={}){
    if(collection==='messages'&&item.role==='user'&&!item.turnKey)turnKey=item.id;
    const key=String(item.id||item.turnKey||index),lookup=collection+'\0'+key,json=JSON.stringify(item),prior=old.get(lookup);
    if(['messages','tools','fileChanges'].includes(collection)&&prior?.data!==json&&!['preparing','running','waiting','stopping'].includes(run.status))continuityDirty=true;
-   if(prior?.data!==json||prior?.position!==index)itemPut.run(run.id,collection,key,index,item.turnKey||(collection==='messages'?turnKey:null),json);
+   if(prior?.data!==json||prior?.position!==index){db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=?').run(run.id,collection,key);itemPut.run(run.id,collection,key,index,item.turnKey||(collection==='messages'?turnKey:null),json);}
    old.delete(lookup);
   }}
   if(run.terminalTurnId&&run.terminalTurnId!==previous?.terminalTurnId)automation.capture({...run,conversationId},run.terminalTurnId);
@@ -93,6 +95,46 @@ function saveRunRows(runs,{replace=true}={}){
  const del=db.prepare('DELETE FROM runs WHERE id=?');for(const id of existing.keys()){if(JSON.parse(existing.get(id)).originHandoff)continue;del.run(id);db.prepare('DELETE FROM task_context_heads WHERE run_id=?').run(id);db.prepare("DELETE FROM form_instances WHERE run_id=?").run(id);db.prepare("DELETE FROM chat_inputs WHERE run_id=?").run(id);db.prepare('DELETE FROM chat_input_policies WHERE run_id=?').run(id);db.prepare('DELETE FROM input_requests WHERE run_id=?').run(id);db.prepare('DELETE FROM input_mutations WHERE run_id=?').run(id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(id);}
  if(continuityDirty||existing.size)continuity.syncSources();
 }
+function saveRunPatches(input){return transaction(()=>{
+ const digest=require('node:crypto').createHash('sha256').update(JSON.stringify(input)).digest('hex');
+ const receipt=db.prepare('SELECT result FROM run_patch_receipts WHERE id=?').get(input.mutationId);
+ if(receipt){const saved=JSON.parse(receipt.result);if(saved.digest!==digest)throw Error('PATCH_ID_CONFLICT');return saved.result;}
+ const sourceMeta=r=>JSON.stringify(r&&[r.status,r.terminalTurnId,r.employee?.id,r.collaboration,r.projectId,r.title,r.workEvidence]);
+ const texts=require('./run-text-store.cjs');let continuityDirty=false;const identities=[];
+ if(input.start?.draftId){const row=db.prepare('SELECT data FROM drafts WHERE id=?').get(input.start.draftId);if(!row||resources.revision('draft',input.start.draftId)!==input.start.expectedRevision)throw Error('CONFLICT: Draft changed before execution');const draft=JSON.parse(row.data),run=JSON.parse(input.patches.find(p=>p.id===input.start.runId)?.meta||'null');if(!run||run.projectId!==draft.projectId||draft.archivedAt)throw Error('CONFLICT: Invalid draft transition');const id=resources.identify('draft',draft.id,draft.projectId);db.prepare("UPDATE conversation_identities SET kind='run',record_id=? WHERE id=?").run(run.id,id);db.prepare('DELETE FROM drafts WHERE id=?').run(draft.id);resources.bump('draft',draft.id);resources.bump('workspace','all');}
+ for(const patch of input.patches){
+  const previousRow=db.prepare('SELECT data FROM runs WHERE id=?').get(patch.id),previous=previousRow?JSON.parse(previousRow.data):null;
+  if(previous?.originHandoff)continue;
+  const meta=JSON.parse(patch.meta);if(meta.id!==patch.id||meta.originHandoff)throw Error('HOST_MANAGED_RUN');
+  if(input.start?.runId===patch.id&&meta.projectId&&!db.prepare('SELECT id FROM projects WHERE id=?').get(meta.projectId))throw Error('NOT_FOUND: Project was deleted');
+  const conversationId=resources.identify('run',patch.id,meta.projectId);meta.conversationId=conversationId;identities.push({id:patch.id,conversationId});
+  db.prepare('INSERT INTO runs(id,project_id,updated_at,archived_at,data) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,updated_at=excluded.updated_at,archived_at=excluded.archived_at,data=excluded.data').run(patch.id,meta.projectId||null,meta.updatedAt||meta.createdAt||'',meta.archivedAt||null,JSON.stringify(meta));
+  for(const item of patch.upserts){
+   if(!collections.includes(item.collection))throw Error('INVALID_COLLECTION');
+   JSON.parse(item.data);
+   db.prepare('INSERT INTO run_items(run_id,collection,item_key,position,turn_key,data) VALUES(?,?,?,?,?,?) ON CONFLICT(run_id,collection,item_key) DO UPDATE SET position=excluded.position,turn_key=excluded.turn_key,data=excluded.data').run(patch.id,item.collection,item.key,item.position,item.turnKey,item.data);
+   for(const field of item.removed)db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?').run(patch.id,item.collection,item.key,field);
+   // First reconciliation can replace legacy or externally modified rows. Fields
+   // not represented in the new skeleton must never survive as stale chunks.
+   if(item.resetTexts)db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,item.collection,item.key);
+   for(const change of item.texts)texts.writeText(db,patch.id,item.collection,item.key,change);
+  }
+  for(const [collection,key] of patch.deletes)db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,collection,key);
+  if(patch.keepItems){const wanted=new Set(patch.keepItems);for(const row of db.prepare('SELECT collection,item_key FROM run_items WHERE run_id=?').all(patch.id))if(!wanted.has(JSON.stringify([row.collection,row.item_key])))db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,row.collection,row.item_key);}
+  const contentChanged=patch.upserts.length||patch.deletes.length;
+  if(sourceMeta(previous)!==sourceMeta(meta)||contentChanged&&!['preparing','running','waiting','stopping'].includes(meta.status))continuityDirty=true;
+  const contextMeta=r=>JSON.stringify(r&&[r.projectId,r.cwd,r.remote,r.status,r.workEvidence]);
+  if(contentChanged||contextMeta(previous)!==contextMeta(meta)){
+   taskContextModule.recordRunPatch(db,meta,patch,digest);
+  }
+  if(meta.terminalTurnId&&meta.terminalTurnId!==previous?.terminalTurnId)automation.capture(texts.readRun(db,patch.id),meta.terminalTurnId);
+ }
+ if(input.keep){const keep=new Set(input.keep);for(const row of db.prepare('SELECT id,data FROM runs').all())if(!keep.has(row.id)&&!JSON.parse(row.data).originHandoff){db.prepare('DELETE FROM runs WHERE id=?').run(row.id);db.prepare('DELETE FROM task_context_heads WHERE run_id=?').run(row.id);for(const table of ['form_instances','chat_inputs','chat_input_policies','input_requests','input_mutations'])db.prepare('DELETE FROM '+table+' WHERE run_id=?').run(row.id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(row.id);continuityDirty=true;}}
+ if(input.terminal){const run=texts.readRun(db,input.terminal.runId);if(run)automation.capture(run,input.terminal.turnId);}
+ if(continuityDirty)continuity.syncSources();
+ const result=identities;db.prepare('INSERT INTO run_patch_receipts VALUES(?,?,?)').run(input.mutationId,new Date().toISOString(),JSON.stringify({digest,result}));
+ db.prepare('DELETE FROM run_patch_receipts WHERE rowid IN (SELECT rowid FROM run_patch_receipts ORDER BY rowid DESC LIMIT -1 OFFSET 4096)').run();return result;
+});}
 function saveRuns(runs){return transaction(()=>saveRunRows(runs));}
 const messages=db?createMessageStore(db,transaction):null;
 const chatInputs=chatInputHandlers(db,transaction);
@@ -106,6 +148,41 @@ function patchResources(input){const value=resources.patch(input);if(input.chang
 const expertChat=expertChatModule.createStore(db,transaction,resources,continuity);
 const investigation=investigationModule.createStore(db,transaction,expertChat,continuity,resources);
 const handlers={
+ saveRunPatches,
+ readRuntimeState(){
+  const texts=require('./run-text-store.cjs'),{splitItem}=require('./run-patches.cjs');
+  // Migrate legacy inline bodies one item at a time, without a full-history copy.
+  transaction(()=>{for(const row of db.prepare('SELECT run_id,collection,item_key,data FROM run_items WHERE length(CAST(data AS BLOB))>8192').iterate()){
+   const item=splitItem(JSON.parse(row.data));if(!item.texts.size)continue;
+   for(const [field,text] of item.texts)texts.writeText(db,row.run_id,row.collection,row.item_key,{field,mode:'set',text});
+   db.prepare('UPDATE run_items SET data=? WHERE run_id=? AND collection=? AND item_key=?').run(item.data,row.run_id,row.collection,row.item_key);
+  }});
+  const runs=[],textReferences=[];
+  for(const row of db.prepare('SELECT id,data FROM runs ORDER BY updated_at DESC,id').iterate()){
+   const run=JSON.parse(row.data);
+   for(const collection of collections){
+    const items=[];
+    for(const item of db.prepare('SELECT item_key,data FROM run_items WHERE run_id=? AND collection=? ORDER BY position').iterate(row.id,collection)){
+     const position=items.length;items.push(JSON.parse(item.data));
+     for(const field of db.prepare('SELECT field,length,revision FROM run_texts WHERE run_id=? AND collection=? AND item_key=?').all(row.id,collection,item.item_key)){
+      const start=Math.max(0,field.length-2048),tail=db.prepare('SELECT substr(text,max(1,(?-start)*2+1)) AS text FROM run_text_chunks WHERE run_id=? AND collection=? AND item_key=? AND field=? AND start+length(text)/2>? ORDER BY seq').all(start,row.id,collection,item.item_key,field.field,start).map(r=>Buffer.from(r.text).toString('utf16le')).join('');
+      textReferences.push({runId:row.id,collection,itemKey:item.item_key,position,...field,preview:tail});
+     }
+    }
+    if(items.length||!Array.isArray(run[collection]))run[collection]=items;
+   }
+   runs.push(run);
+  }
+  return {runs,textReferences};
+ },
+ readRun:input=>require('./run-text-store.cjs').readRun(db,input.id),
+ readRunState(){
+  const rows=db.prepare('SELECT id FROM runs ORDER BY updated_at DESC,id').all(),legacy=[];
+  const hasLong=value=>typeof value==='string'?value.length>8192:value&&typeof value==='object'?Object.values(value).some(hasLong):false;
+  for(const row of rows)if(db.prepare('SELECT data FROM run_items WHERE run_id=? AND length(CAST(data AS BLOB))>8192').all(row.id).some(item=>hasLong(JSON.parse(item.data))))legacy.push(row.id);
+  return {runs:rows.map(row=>require('./run-text-store.cjs').readRun(db,row.id)),legacy};
+ },
+ readToolText:input=>require('./run-text-store.cjs').readToolText(db,input),
  investigation,
  expertChat,
  continuity:input=>continuity.dispatch(input),
@@ -157,7 +234,7 @@ const handlers={
   saveRunRows(runs);
   return runs.map(run=>({id:run.id,conversationId:resources.identify('run',run.id,run.projectId)}));
  });},
- readRuns(){return db.prepare('SELECT id,data FROM runs ORDER BY updated_at DESC,id').all().map(row=>{const run={...JSON.parse(row.data),conversationId:resources.identify('run',row.id,JSON.parse(row.data).projectId)};for(const key of collections)run[key]=[];for(const item of db.prepare('SELECT collection,data FROM run_items WHERE run_id=? ORDER BY position').all(row.id))run[item.collection].push(JSON.parse(item.data));return run;});},
+ readRuns(){return db.prepare('SELECT id FROM runs ORDER BY updated_at DESC,id').all().map(row=>require('./run-text-store.cjs').readRun(db,row.id));},
  saveRunUpdates:runs=>transaction(()=>saveRunRows(runs,{replace:false})),
  saveRuns,
  close(){db.exec('PRAGMA wal_checkpoint(TRUNCATE)');db.close();return true;}

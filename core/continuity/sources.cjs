@@ -66,9 +66,9 @@ function reviewSources(state,runs=[]){
  }
  return result;
 }
-function expertChatSources(db){
+function expertChatSources(db,conversationId){
  const result=[];
- for(const row of db.prepare('SELECT data FROM expert_chats').all()){
+ for(const row of conversationId?db.prepare('SELECT data FROM expert_chats WHERE id=?').all(conversationId):db.prepare('SELECT data FROM expert_chats').iterate()){
   const chat=JSON.parse(row.data),anchor=db.prepare('SELECT * FROM conversation_identities WHERE id=?').get(chat.id);
   if(!anchor||!['draft','run'].includes(anchor.kind))continue;
   for(const turn of chat.turns){

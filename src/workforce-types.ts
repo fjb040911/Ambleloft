@@ -50,7 +50,7 @@ export type DiscussionContribution={
 export type DiscussionTaskContext={draftId?:string;draftRevision?:number;planId?:string;planRevision?:number;packageId?:string};
 export type DiscussionProgress={planId:string;revision:number;name:string;status:string;observedAt:string;nodes:{id:string;title:string;status:string;reason:string;accepted:boolean;approvalCount:number;inputCount:number;runId:string|null}[]};
 export type DiscussionHost={providerId?:string;task?:{restarted?:boolean;draftId:string;draftRevision:number;summary:string;changes:{added:string[];removed:string[];changed:string[];goalChanged:boolean}|null};progress?:DiscussionProgress|null;activity?:{id:string;phase:'waiting'|'reasoning'|'responding'|'experts'|'planning'|'complete';reasoning:string;reasoningFormat:'text'|'summary';startedAt:string;lastProgressAt?:string;finishedAt?:string};status:string;ruleVersion:string;revision:number;model?:string;error?:string;steps:{id:string;text:string;action:string;at:string}[];brief:{goal:string;items:{id:string;kind:'decision'|'proposal'|'question'|'verification';text:string;sourceIds:string[]}[]}|null;question?:{requestKey:string;reason:string;source:{definition:{title:string;fields:import('./FormFields').FormFieldDefinition[]}};prefill:Record<string,string>;answeredBy?:string}|null};
-export type SpaceParticipant={employeeId:string;runId?:string;status:string;error?:string;output:string;updatedAt?:string;instruction?:string;reason?:string;
+export type SpaceParticipant={employeeId:string;runId?:string;status:string;error?:string;output:string;outputTruncated?:boolean;outputChars?:number;updatedAt?:string;instruction?:string;reason?:string;
  contribution?:DiscussionContribution;role?:{name:string;revision:number;skills:Pick<SkillSnapshot,'id'|'name'|'version'>[]}};
 export type DiscussionFollowup={id:string;text:string;state:'queued'|'processing'|'handled'|'failed'|'interrupted';reply?:string;error?:string;action?:'reply'|'update'|'cancel';version?:number;deliveries:{id:string;employeeId:string;state:string;runId?:string}[]};
 export type SpaceRequest={modelChange?:import('./types').ModelChange;executionModel?:import('./types').ModelChoice;modelRevision?:number;permissionChange?:import('./types').PermissionChange;executionPermission?:'default'|'full';followups?:DiscussionFollowup[];requirementsRevision?:number;intent?:'explain-node'|'restart-guide';taskContext?:DiscussionTaskContext;replyTo?:string|null;round?:number;id:string;spaceId:string;prompt:string;mode:'discussion'|'work';projectId:string|null;
@@ -78,7 +78,7 @@ export interface SpaceAPI{
  cancelTaskGuide(input:{id:string;requestId:string}):Promise<unknown>;
  createGuidedPlan(input:{pauseBeforeApply?:boolean;id:string;expectedRevision:number;basisConfirmation?:{context:string;documents:{id:string;revision:number;hash:string;expectedRevision:number;expectedAdoptedRevision:number|null}[]}}):Promise<WorkPlan>;
  lifecycle(input:{id:string;expectedRevision:number;action:'archive'|'restore'|'delete'}):Promise<Space|{id:string;deleted:true}>;
- snapshot():Promise<SpaceSnapshot>;
+ snapshot(input?:{output?:'preview';requestIds?:string[]}):Promise<SpaceSnapshot>;
  submitDocumentReview(input:{id:string;revision:number;expectedRevision:number}):Promise<SpaceDocument>;
  discussionLifecycle(input:{requestId:string;expectedRevision:number;action:'close'|'reopen'|'delete'}):Promise<{status:'open'|'closed'|'deleted';revision:number;updatedAt:string}>;
  exportDocument?(input:{id:string;revision:number}):Promise<{path:string}|null>;

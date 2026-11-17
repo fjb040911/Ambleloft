@@ -56,6 +56,7 @@ async function switchPermission(input,change){
   // A child may have spawned another child while its parent was being paused.
   while([...context.nativeThreads?.keys()||[]].some(id=>!targets.has(id))){for(const tool of [...context.nativeThreads.values()])await suspend(tool.nativeThreadId,tool);}
   if(channelPause)await channelPause;check();
+  require('./stream-redactor.cjs').fields(context).finish(true);
   transition.phase='configuring';
   // Loaded threads ignore thread/resume configuration overrides in the bundled
   // engine. Unload and restore the same IDs after all work has quiesced.

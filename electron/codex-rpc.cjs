@@ -1,5 +1,7 @@
 const { spawn } = require('node:child_process');
-const { createInterface } = require('node:readline');
+const {ByteLineReader,ByteWriter}=require('./byte-stream.cjs');
+const {StreamRedactor}=require('./stream-redactor.cjs');
+const {StringDecoder}=require('node:string_decoder');
 const path = require('node:path');
 const { redact, isLocalHost } = require('./provider.cjs');
 
@@ -60,10 +62,18 @@ class CodexRPC {
     if(extensionMcp)env.AMBLE_EXTENSION_AUTH=extensionMcp.http_headers.Authorization;
     this.child = spawn(executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home, extensionMcp)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     this.stopped = new Promise(resolve => this.child.once('close', resolve));
-    this.child.stdin.on('error', () => {});
-    this.child.stderr.on('data', data => { this.tail = redact((this.tail + data.toString()).slice(-5000), config.apiKey); });
-    this.reader = createInterface({ input: this.child.stdout, crlfDelay: Infinity });
-    this.reader.on('line', line => {
+    const failed = error => {
+      if (this.closed) return;
+      this.closed = true;this.reader?.close();this.writer?.close();this.child.kill('SIGTERM');
+      for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
+      this.pending.clear();const timer=setTimeout(()=>{if(this.child.exitCode===null&&this.child.signalCode===null)this.child.kill('SIGKILL');},2000);timer.unref();exit(error);
+    };
+    this.child.stdin.on('error',failed);
+    const decoder=new StringDecoder('utf8'),redactor=new StreamRedactor(config.apiKey);
+    this.child.stderr.on('data',data=>{this.tail=(this.tail+redactor.write(decoder.write(data))).slice(-5000);});
+    this.child.stderr.on('end',()=>{this.tail=(this.tail+redactor.write(decoder.end())+redactor.end(true)).slice(-5000);});
+    this.writer=new ByteWriter(this.child.stdin,failed);
+    this.reader=new ByteLineReader(this.child.stdout,line=>{
       let message; try { message = JSON.parse(line); } catch { return; }
       if (message.method) {
         if (message.id !== undefined) request(message);
@@ -73,31 +83,27 @@ class CodexRPC {
         if (message.error) pending.reject(Object.assign(new Error(redact(message.error.message || 'Codex 请求失败', config.apiKey)),{code:message.error.code,rpcRejected:true}));
         else pending.resolve(message.result);
       }
-    });
-    const failed = error => {
-      if (this.closed) return;
-      this.closed = true;
-      for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
-      this.pending.clear(); exit(error);
-    };
+
+    },failed);
     this.child.once('error', error => failed(new Error(`Codex 启动失败：${error.code || 'unknown'}`)));
-    this.child.once('exit', (code, signal) => failed(new Error(`Codex 进程退出（${signal || code}）${this.tail ? '\n' + this.tail : ''}`)));
+    this.child.once('close', async(code,signal)=>{await this.reader.finished;failed(new Error(`Codex 进程退出（${signal || code}）${this.tail ? '\n' + this.tail : ''}`));});
   }
-  send(message) { if (this.closed) throw new Error('Codex 已断开'); this.child.stdin.write(`${JSON.stringify(message)}\n`); }
+  send(message) { if (this.closed) throw new Error('Codex 已断开'); return this.writer.send(`${JSON.stringify(message)}\n`,message.id!==undefined&&!message.method||['turn/interrupt','thread/archive'].includes(message.method)); }
+  setBackpressure(value){this.reader?.setBackpressure(value);}
   call(method, params, timeout = 30000) {
     if (this.closed) return Promise.reject(new Error('Codex 已断开'));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`Codex 请求超时：${method}`)); }, timeout);
+      const timer = setTimeout(() => { this.writer.cancel(this.pending.get(id)?.ticket);this.pending.delete(id); reject(new Error(`Codex 请求超时：${method}`)); }, timeout);
       this.pending.set(id, { resolve, reject, timer });
-      try { this.send({ id, method, params }); } catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
+      try { const ticket=this.send({ id, method, params });if(this.pending.has(id))this.pending.get(id).ticket=ticket; } catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
   close() {
     if (this.closed) return this.stopped;
     this.closed = true;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('执行已停止')); }
-    this.pending.clear(); this.reader.close(); this.child.kill('SIGTERM');
+    this.pending.clear(); this.reader.close();this.writer.close(); this.child.kill('SIGTERM');
     const child = this.child;
     const timer = setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 2000); timer.unref();
     return this.stopped;

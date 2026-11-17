@@ -1,3 +1,4 @@
+const {writeChunk}=require('./byte-stream.cjs');
 const {applyImageInputPolicy}=require('./model-capabilities.cjs');
 const {resolveBudget,recoverBudget,estimateInput,thinking,limitErrorKind}=require('../core/models/budget.cjs');
 const {discoverCapacity}=require('../core/models/capacity.cjs');
@@ -156,9 +157,10 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
     const usageBegin=async(attempt)=>{usageAttempt={id:diagnostic.requestId+':'+attempt,hostRequestId:diagnostic.requestId,attempt,startedAt:new Date().toISOString(),usage:null};await usageNotify('running');};
     const started=performance.now();
     const report=()=>{diagnostic.durationMs=Math.round(performance.now()-started);try{onDiagnostic({...diagnostic});}catch{}};
-    let seq=0;const emit=(type,fields)=>{if(!res.destroyed)res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:seq++,...fields})}\n\n`);};
+    const forward=chunk=>writeChunk(res,chunk,controller.signal,waiting=>waiting?deadline.pause():deadline.resume());
+    let seq=0;const emit=(type,fields)=>forward(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:seq++,...fields})}\n\n`);
     try {
-      let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>32*1024*1024)throw new Error('请求过大');}
+      const parts=[];let requestBytes=0;for await(const chunk of req){requestBytes+=chunk.length;if(requestBytes>32*1024*1024)throw new Error('请求过大');parts.push(chunk);}const raw=Buffer.concat(parts,requestBytes).toString('utf8');parts.length=0;
       let data=applyImageInputPolicy(JSON.parse(raw),config);
       diagnostic.diagnosticVersion=1;
       const fingerprint=value=>loopGuard.fingerprint(value);
@@ -196,14 +198,14 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       if(passthrough){
         res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'application/json','Cache-Control':'no-cache'});
         const observe=responseObserver(diagnostic,fingerprint,(usage,id)=>{usageAttempt.usage=usage;usageAttempt.providerRequestId=id;});
-        for await(const chunk of upstream.body){if(res.destroyed)break;const before=diagnostic.progressEvents||0;observe(chunk);if(diagnostic.progressEvents>before)deadline.touch();res.write(chunk);}
+        for await(const chunk of upstream.body){if(res.destroyed)break;const before=diagnostic.progressEvents||0;observe(chunk);if(diagnostic.progressEvents>before)deadline.touch();await forward(chunk);}
         await usageNotify(diagnostic.done&&diagnostic.finishReason==='completed'?'succeeded':'unknown');usageAttempt=null;
         diagnostic.stage='forwarded';res.end();return;
       }
       res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
       const response={id:'resp_'+randomUUID(),object:'response',created_at:Math.floor(Date.now()/1000),model:data.model,status:'in_progress',output:[]};
-      emit('response.created',{response});let reasoningItem,textItem;let usage;
-      const add=item=>{item.index=response.output.length;response.output.push(item);emit('response.output_item.added',{output_index:item.index,item:{...item,index:undefined}});return item;};
+      await emit('response.created',{response});let reasoningItem,textItem;let usage;
+      const add=async item=>{item.index=response.output.length;response.output.push(item);await emit('response.output_item.added',{output_index:item.index,item:{...item,index:undefined}});return item;};
       let calls,finish,outputRetried=false,correctionUsed=false;
       for(let attempt=0;attempt<3;attempt++){
         calls=new Map();finish=undefined;let done=false,attemptUsage;
@@ -217,14 +219,14 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           if(choice.finish_reason||delta.content||delta.reasoning_content||delta.reasoning||delta.reasoning_text||delta.tool_calls?.some(call=>call.function?.name||call.function?.arguments))deadline.touch();
           const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
           if(thought){
-            if(!reasoningItem)reasoningItem=add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
+            if(!reasoningItem)reasoningItem=await add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
             reasoningItem.content[0]||={type:'reasoning_text',text:''};reasoningItem.content[0].text+=thought;
-            emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
+            await emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
           }
           if(delta.content){
-            if(!textItem){textItem=add({id:'msg_'+randomUUID(),type:'message',role:'assistant',status:'in_progress',content:[]});emit('response.content_part.added',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});}
+            if(!textItem){textItem=await add({id:'msg_'+randomUUID(),type:'message',role:'assistant',status:'in_progress',content:[]});await emit('response.content_part.added',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});}
             textItem.content[0]||={type:'output_text',text:'',annotations:[]};textItem.content[0].text+=delta.content;
-            emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
+            await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
           }
           for(const call of delta.tool_calls||[]){
             const acc=calls.get(call.index)||{name:'',nameParts:[],args:'',id:''};
@@ -266,7 +268,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. This is a FUNCTION NAME error, not an argument error. The complete list of callable function names and their required argument keys for THIS request is: '+JSON.stringify(catalog)+'. Copy the exact name from this list, including its namespace prefix. Argument keys (such as cmd or command) are not function names. Do not combine a namespace from one tool with the name of another, or reuse tools from earlier sessions. Use the matching schema in tools for the arguments. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
           body.messages=correction.messages;
           // Separate any streamed narration from the corrected response.
-          if(textItem){textItem.content[0].text+='\n\n';emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
+          if(textItem){textItem.content[0].text+='\n\n';await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
           await usageBegin(attempt+1);
           upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:deadline.signal});
@@ -276,8 +278,8 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         }
         break;
       }
-      if(reasoningItem)emit('response.reasoning_text.done',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,text:reasoningItem.content[0].text});
-      if(textItem){textItem.phase=calls.size?'commentary':'final_answer';textItem.status='completed';emit('response.output_text.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,text:textItem.content[0].text});emit('response.content_part.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:textItem.content[0]});}
+      if(reasoningItem)await emit('response.reasoning_text.done',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,text:reasoningItem.content[0].text});
+      if(textItem){textItem.phase=calls.size?'commentary':'final_answer';textItem.status='completed';await emit('response.output_text.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,text:textItem.content[0].text});await emit('response.content_part.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:textItem.content[0]});}
       diagnostic.stage='translate_tools';
       const translatedCalls=[];
       for(const call of calls.values()){
@@ -297,13 +299,13 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         translatedCalls.push(item);
       }
       // Validate the whole batch before exposing any executable calls.
-      for(const item of translatedCalls)add(item);
-      for(const item of response.output){delete item.index;emit('response.output_item.done',{output_index:response.output.indexOf(item),item});}
+      for(const item of translatedCalls)await add(item);
+      for(const item of response.output){delete item.index;await emit('response.output_item.done',{output_index:response.output.indexOf(item),item});}
       response.status=finish==='length'?'incomplete':'completed';
       if(finish==='length')response.incomplete_details={reason:'max_output_tokens'};
       response.usage={input_tokens:usage?.prompt_tokens||0,output_tokens:usage?.completion_tokens||0,total_tokens:usage?.total_tokens||0};
       diagnostic.usage=response.usage;
-      emit(finish==='length'?'response.incomplete':'response.completed',{response});diagnostic.stage='completed';res.end();
+      await emit(finish==='length'?'response.incomplete':'response.completed',{response});diagnostic.stage='completed';res.end();
     }catch(error){
       diagnostic.failed=true;diagnostic.cancelled=controller.signal.aborted;
       diagnostic.timedOut=deadline.signal.reason?.code==='MODEL_RESPONSE_TIMEOUT';
@@ -313,7 +315,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       // Error details are bounded and sanitized before they reach diagnostics.
       diagnostic.reason=error.message==='CONTEXT_LIMIT'?'模型上下文容量不足，请减少参考内容或压缩对话':error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
       report();
-      if(!res.destroyed){if(res.headersSent){emit('error',{message:error.message,code:'bridge_error'});res.end();}else{res.writeHead(error.httpStatus||502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:diagnostic.reason,code:error.code||'bridge_error'}}));}}}
+      if(!res.destroyed){if(res.headersSent){await emit('error',{message:sanitizeError(error.message,config.apiKey),code:'bridge_error'}).catch(()=>{});res.end();}else{res.writeHead(error.httpStatus||502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{message:diagnostic.reason,code:error.code||'bridge_error'}}));}}}
     finally{deadline.dispose();await usageNotify(controller.signal.aborted?'unknown':diagnostic.failed?'failed':'unknown');if(!diagnostic.failed)report();controller.abort();active.delete(controller);}
   });
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});

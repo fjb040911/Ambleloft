@@ -269,3 +269,14 @@ test('discussion deletion blocks active experts, a running host and pending star
  await service.discussionLifecycle({requestId:'active-delete',action:'delete',expectedRevision:1});
  assert.equal((await service.snapshot()).requests.length,0);
 });
+test('preview snapshots bound response text while scoped explicit reads preserve complete document sources',async t=>{
+ const {service,runtime,space}=await fixture(t);
+ await service.change(s=>s.requests.push({id:'preview',spaceId:space.id,mode:'discussion',participants:[{employeeId:'product',status:'completed'}]},{id:'other',spaceId:space.id,mode:'discussion',participants:[]}));
+ const text='HEAD '+('内容'.repeat(40000))+' TAIL';
+ runtime.runs.push({id:'preview-run',employee:{id:'product'},collaboration:{requestId:'preview'},status:'completed',messages:[{role:'assistant',text:'FIRST'},{role:'assistant',kind:'reasoning',text:'PRIVATE THINKING'},{role:'assistant',text}]});
+ const preview=(await service.snapshot({output:'preview'})).requests.find(r=>r.id==='preview').participants[0];
+ assert.equal(preview.output.length,2048);assert.equal(preview.outputTruncated,true);assert.equal(preview.outputChars,text.length+7);assert.ok(preview.output.endsWith('TAIL'));
+ const full=await service.snapshot({requestIds:['preview']});assert.equal(full.requests.length,1);assert.equal(full.requests[0].participants[0].output,'FIRST\n\n'+text);
+ assert.equal((await service.snapshot()).requests.length,2);assert.equal(runtime.runs[0].messages[2].text,text);
+ await assert.rejects(service.snapshot({requestIds:'preview'}),/范围/);
+});

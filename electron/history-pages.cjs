@@ -3,7 +3,7 @@ function summary(run) {
  const {messages,tools,plans,fileChanges,artifacts,taskApps,approvals,questions,modelRequests,...meta}=run;
  return {...meta,lastTurnStartedAt:messages?.findLast(message=>message.role==='user'&&!message.turnKey)?.timing?.startedAt||run.createdAt,messages:[],tools:[],approvals:[],summaryOnly:true};
 }
-function pageRun(run,before,limit=30) {
+function projectPage(run,before,limit=30) {
  if(!run)throw new Error('会话不存在');
  if(!Number.isInteger(limit)||limit<1||limit>100)throw new Error('分页大小无效');
  const users=run.messages.filter(m=>m.role==='user'&&!m.turnKey);
@@ -15,4 +15,5 @@ function pageRun(run,before,limit=30) {
  const {modelRequests,...publicRun}=run;
  return {...publicRun,messages,taskApps:run.taskApps?.filter(p=>keys.has(p.turnKey)),fileChanges:run.fileChanges?.filter(p=>keys.has(p.turnKey)),tools:run.tools.filter(t=>keys.has(t.turnKey)||(!t.turnKey&&users.length===1)).map(previewTool),plans:run.plans?.filter(p=>keys.has(p.turnKey)),artifacts:run.artifacts?.filter(p=>keys.has(p.turnKey)),summaryOnly:false,historyBefore:start?first.id:null,turnOffset:start,totalTurns:users.length};
 }
+function pageRun(...args){const started=performance.now();try{return projectPage(...args);}finally{require('./performance-metrics.cjs').metrics.record('pageRunMs',performance.now()-started);}}
 module.exports={summary,pageRun};

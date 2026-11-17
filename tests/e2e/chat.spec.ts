@@ -1183,3 +1183,14 @@ test('visited history is actually unmounted and disclosure state survives remoun
  expect(await page.locator('[data-turn-id] [data-message-role=user]').count()).toBeLessThan(25);
  await first.scrollIntoViewIfNeeded();await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
 });
+
+test('storage backpressure is visible without hiding approvals or losing the composer draft',async({page})=>{
+ await prepare(page,'已有结果');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='running';w.__demoRun.approvals=[];w.__demoRun.storageBackpressure=true;w.__emit();});
+ await expect(page.getByText('正在保存输出 · 暂缓接收，保存后自动继续')).toBeVisible();
+ const composer=page.getByRole('textbox',{name:'继续对话'});await composer.fill('补充要求仍然保留');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__demoRun.approvals=[{id:'new',method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo review',cwd:'/fixture'})}];w.__emit();});
+ await expect(page.getByRole('region',{name:'执行授权'})).toBeVisible();await expect(composer).toHaveValue('补充要求仍然保留');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.storageBackpressure=false;w.__emit();});
+ await expect(page.getByText('正在保存输出 · 暂缓接收，保存后自动继续')).toHaveCount(0);await expect(composer).toHaveValue('补充要求仍然保留');
+});

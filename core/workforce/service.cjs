@@ -42,7 +42,8 @@ class WorkforceService {
     }
     return item?.name===entry.name?item:null;
   }
-  async snapshot() {
+  async snapshot(...args){const started=performance.now();try{return await this.projectSnapshot(...args);}finally{require('../../electron/performance-metrics.cjs').metrics.record('workforceSnapshotMs',performance.now()-started);}}
+  async projectSnapshot() {
     await this.queue;const state=await this.read(),installed=await this.skills.list(),mappings=await this.catalog.mappings();
     const employees=[];
     for(const employee of state.employees){
