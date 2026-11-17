@@ -1194,3 +1194,24 @@ test('storage backpressure is visible without hiding approvals or losing the com
  await page.evaluate(()=>{const w=window as any;w.__demoRun.storageBackpressure=false;w.__emit();});
  await expect(page.getByText('正在保存输出 · 暂缓接收，保存后自动继续')).toHaveCount(0);await expect(composer).toHaveValue('补充要求仍然保留');
 });
+
+test('long message previews page from the beginning, copy the full message and preserve supplements during updates',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.tools=[];r.messages=[r.messages[0],{id:'long-answer',role:'assistant',phase:'final_answer',text:'ENDING preview',textPreview:true,textVersion:'v1',textChars:100010}];w.__messageReads=[];w.desktop.getMessageText=async(input:any)=>{w.__messageReads.push(input);const text='BEGIN '+('x'.repeat(100000))+' END',offset=input.offset??0;return {text:text.slice(offset,offset+64000),offset,total:text.length,version:'v1'};};w.desktop.copyRunMessages=async(input:any)=>{w.__fullCopy=input;};w.__emit();});
+ await expect(page.getByText('正文较长，当前显示末尾片段')).toBeVisible();expect(await page.evaluate(()=>(window as any).__messageReads.length)).toBe(0);
+ const composer=page.getByRole('textbox',{name:'继续对话'});await composer.fill('补充：保留原有验收要求');
+ await page.getByRole('button',{name:'分段查看全文',exact:true}).click();await expect(page.locator('.markdown')).toContainText('BEGIN');
+ await page.getByRole('button',{name:'下一页',exact:true}).click();await expect(page.locator('.markdown')).toContainText('END');
+ await page.getByRole('button',{name:'拷贝',exact:true}).click();expect(await page.evaluate(()=>(window as any).__fullCopy)).toEqual({id:'demo',messageIds:['long-answer']});
+ await page.getByRole('button',{name:'收起全文',exact:true}).click();await expect(page.locator('.markdown')).toHaveText('ENDING preview');await expect(composer).toHaveValue('补充：保留原有验收要求');
+});
+
+test('paged reasoning stays lazy and authoritative pending input survives a refreshed body',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.tools=[];r.messages=[r.messages[0],{id:'reason',role:'assistant',kind:'reasoning',text:'reason tail',textPreview:true,textVersion:'v1',status:'running'}];w.__messageReads=[];w.desktop.getMessageText=async(input:any)=>{w.__messageReads.push(input);return {text:'Reasoning first page',offset:0,total:100000,version:'v1'};};w.__emit();});
+ expect(await page.evaluate(()=>(window as any).__messageReads.length)).toBe(0);
+ const reasoning=page.locator('.process-entry.reasoning');await reasoning.locator('[data-slot=trace-collapsible-trigger]').click();await expect(reasoning.getByRole('region',{name:'思考过程'})).toHaveText('Reasoning first page');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__demoRun.approvals=[{id:'read-later',method:'item/commandExecution/requestApproval',detail:JSON.stringify({command:'echo preserved'})}];w.__emit();});
+ await expect(page.getByLabel('待执行命令')).toHaveText('echo preserved');
+ await reasoning.locator('[data-slot=trace-collapsible-trigger]').click();await expect(reasoning.getByRole('region',{name:'思考过程'})).toHaveCount(0);
+});

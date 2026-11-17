@@ -112,6 +112,9 @@ app.whenReady().then(async () => {
     projectRun:run=>runPublisher.encode(pageRun(run)),publish:value=>windows.broadcast(profileId,'agent:event',value.kind?.startsWith('run-')?value:runPublisher.encode(pageRun(value)))
   });
   store=services.workspace;runtime=services.tasks;ssh=services.ssh;
+  const runSnapshot=id=>{const source=runtime.runs.find(r=>r.id===id);if(!source)return;return runPublisher.snapshot(id)||runPublisher.encode(pageRun(source));};
+  windows.configureRunDelivery(runSnapshot);
+  for(const action of ['ack','ready'])ipcMain.on('agent:'+action,(event,value)=>{try{const owner=windows.authorize(event);if(action==='ack')owner.delivery?.ack(value);else owner.delivery?.reset();}catch{/* Untrusted/stale frames cannot grant delivery credit. */}});
   ssh.publish=()=>windows.broadcast(profileId,'ssh:event');
   ssh.confirmHost=async info=>{const owner=windows.focused();if(!owner)return false;const result=await hostDialog('showMessageBox',owner,{type:'question',title:'信任 SSH 服务器',message:`首次连接 ${info.username}@${info.host}:${info.port}`,detail:'请核对服务器指纹：\n'+info.fingerprint,buttons:['取消','信任并连接'],defaultId:0,cancelId:0});return result.response===1;};
   ipcMain.handle('ssh:list',event=>{authorize(event);return ssh.list();});
@@ -397,7 +400,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:export-diagnostics', async (event, input) => {
     const owner=authorize(event);checkRuntime();
     const run=runtime.runs.find(r=>r.id===input?.id);if(!run)throw new Error('任务不存在');
-    const report={...require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion()),performance:{...metrics.snapshot(),runtimeTextCache:database.textCache?.stats()}};
+    const report={...require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion()),performance:{...metrics.snapshot(),runtimeTextCache:database.textCache?.stats(),activeTextSpool:database.textSpool?.stats(),runPublisher:runPublisher.stats(),runDelivery:owner.delivery?.stats()}};
     const result=await hostDialog('showSaveDialog',owner.window,{title:input?.language==='en'?'Export diagnostic data':'导出诊断数据',defaultPath:'ambleloft-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json',filters:[{name:'JSON',extensions:['json']}]});
     if(result.canceled||!result.filePath)return null;
     await require('node:fs/promises').writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
@@ -405,7 +408,9 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('project:open', async (event, id) => { authorize(event); const project = (await store.read()).projects.find(item => item.id === id); if (!project) throw new Error('项目不存在');if(project.type==='ssh')throw Error('请通过项目文件面板浏览远端目录'); const error = await shell.openPath(project.path); if (error) throw new Error(error); });
   ipcMain.handle('agent:tool-text',(event,input)=>{authorize(event);checkRuntime();const run=runtime.runs.find(r=>r.id===input?.id);if(run&&!['preparing','running','waiting','stopping'].includes(run.status)&&!runtime.dirtyRuns.has(run.id))return database.call('readToolText',input);return require('./tool-previews.cjs').toolText(run,input);});
-  ipcMain.handle('agent:snapshot',(event,input)=>{authorize(event);checkRuntime();const source=runtime.runs.find(r=>r.id===input?.id);if(!source)throw Error('会话不存在');const cached=runPublisher.snapshot(input?.id);if(cached)return cached;const run=pageRun(source);runPublisher.encode(structuredClone(run));return runPublisher.snapshot(run.id);});
+  ipcMain.handle('agent:snapshot',(event,input)=>{authorize(event);checkRuntime();const snapshot=runSnapshot(input?.id);if(!snapshot)throw Error('会话不存在');return snapshot;});
+  ipcMain.handle('agent:message-text',(event,input)=>{authorize(event);checkRuntime();const message=runtime.runs.find(r=>r.id===input?.id)?.messages.find(m=>m.id===input?.messageId);if(!message)throw Error('消息不存在');return require('./runtime-text-cache.cjs').range(message,'text',input.offset,input.limit);});
+  ipcMain.handle('agent:copy-messages',(event,input)=>{authorize(event);checkRuntime();const run=runtime.runs.find(r=>r.id===input?.id);if(!run||!Array.isArray(input.messageIds)||!input.messageIds.length||input.messageIds.length>1000)throw Error('消息不存在');const texts=input.messageIds.map(id=>{const message=run.messages.find(m=>m.id===id);if(!message)throw Error('消息不存在');return message.text;});clipboard.writeText(texts.join('\n\n'));});
   ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
   const searchSnapshots=new Map();
   const recentSearchUse=await database.call('readSetting',{key:'workspace.searchRecent'})||{};

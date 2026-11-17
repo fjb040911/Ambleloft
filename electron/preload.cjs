@@ -1,5 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// The main process waits for each 64 KiB frame; slow rendering cannot queue
+// repeated snapshots. Only one serialized event is assembled at a time.
+if(process.isMainFrame){
+ let incoming;
+ ipcRenderer.on('agent:frame',(event,frame)=>{
+  if(frame.seq===0)incoming={id:frame.id,seq:0,decoder:new TextDecoder(),parts:[]};
+  if(!incoming||incoming.id!==frame.id||incoming.seq!==frame.seq)return;
+  const state=incoming;state.parts.push(state.decoder.decode(frame.data,{stream:!frame.done}));state.seq++;
+  if(frame.done){incoming=undefined;let value;try{value=JSON.parse(state.parts.join(''));}catch(error){console.error('Run delivery failed',error);ipcRenderer.send('agent:ready');return;}finally{state.parts.length=0;}try{ipcRenderer.emit('agent:event',event,value);}catch(error){console.error('Run subscriber failed',error);}}
+  ipcRenderer.send('agent:ack',{id:frame.id,seq:frame.seq});
+ });
+ ipcRenderer.send?.('agent:ready');
+}
+
 // Keep the existing snapshot API for integrations. The app consumes raw deltas
 // through onRunEvent, avoiding full contextBridge copies on its hot path.
 const legacyRunListeners=new Set(),legacyVersions=new Map();
@@ -53,6 +67,8 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   editRun: input => ipcRenderer.invoke('agent:edit', input),
   exportRunDiagnostics: input => ipcRenderer.invoke('agent:export-diagnostics', input),
   openProject: id => ipcRenderer.invoke('project:open', id),
+  getMessageText: input => ipcRenderer.invoke('agent:message-text',input),
+  copyRunMessages: input => ipcRenderer.invoke('agent:copy-messages',input),
   getToolText: input => ipcRenderer.invoke('agent:tool-text',input),
   getRunSnapshot: input => ipcRenderer.invoke('agent:snapshot',input),
   getRunPage: input => ipcRenderer.invoke('agent:history',input),

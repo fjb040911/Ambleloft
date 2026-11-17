@@ -1,0 +1,21 @@
+const {app,BrowserWindow,ipcMain}=require('electron'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{pathToFileURL}=require('node:url');
+const {WindowRegistry}=require('../../electron/window-registry.cjs'),{createRunPublisher}=require('../../electron/run-events.mjs'),{pageRun}=require('../../electron/history-pages.cjs'),{TextSpool,append}=require('../../electron/text-spool.cjs');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'amble-delivery-probe-')),file=path.join(root,'index.html');fs.writeFileSync(file,'<!doctype html><title>Delivery probe</title>');
+let window,store;const timeout=setTimeout(()=>{console.error('FAIL delivery probe timed out');app.exit(1);},20000);
+app.whenReady().then(async()=>{
+ const registry=new WindowRegistry(pathToFileURL(file).href),publisher=createRunPublisher('electron-probe');store=new TextSpool(root);
+ const run={id:'probe',messages:[{id:'u',role:'user',text:'task'},{id:'a',role:'assistant',text:''}],tools:[],questions:[],approvals:[],status:'running'};append(run.messages[1],'text','start '+('中文😀'.repeat(40000))+' END',store);
+ registry.configureRunDelivery(id=>publisher.snapshot(id));let blocked=false,frames=0;
+ ipcMain.on('agent:ready',event=>registry.authorize(event).delivery.reset());ipcMain.on('agent:ack',(event,input)=>{frames++;if(!blocked)registry.authorize(event).delivery.ack(input);});
+ ipcMain.handle('agent:message-text',(event,input)=>{registry.authorize(event);return require('../../electron/runtime-text-cache.cjs').range(run.messages.find(m=>m.id===input.messageId),'text',input.offset);});
+ window=new BrowserWindow({show:false,webPreferences:{preload:path.resolve(__dirname,'../../electron/preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false}});const record=registry.add(window,'profile');await window.loadFile(file);
+ const setup=()=>window.webContents.executeJavaScript("window.received=[];window.desktop.onRunEvent(value=>window.received.push(value));true");await setup();
+ const publish=()=>registry.broadcast('profile','agent:event',publisher.encode(pageRun(run)));
+ const waitFor=async expression=>{for(let i=0;i<100;i++){if(await window.webContents.executeJavaScript(expression))return;await new Promise(r=>setTimeout(r,20));}throw Error('Assertion timed out: '+expression);};
+ publish();await waitFor('window.received.length===1');assert.equal((await window.webContents.executeJavaScript('window.received[0].run.messages[1]')).textPreview,true);
+ const page=await window.webContents.executeJavaScript("window.desktop.getMessageText({id:'probe',messageId:'a',offset:0})");assert.ok(page.text.startsWith('start '));assert.equal(page.text.length,64000);
+ blocked=true;for(let i=0;i<100;i++){append(run.messages[1],'text',' '+i,store);publish();}run.questions=[{id:'supplement'}];run.permissionChange={state:'applied'};run.modelChange={state:'applied'};run.tools=[{id:'child',type:'analysis',status:'completed',detail:'done',nativeLifecycle:[{status:'running'},{status:'completed'}]}];publish();await new Promise(r=>setTimeout(r,50));assert.equal(record.delivery.pending.size,1);assert.ok(record.delivery.current);
+ blocked=false;record.delivery.reset();await waitFor("window.received.at(-1)?.run?.modelChange?.state==='applied'");const latest=await window.webContents.executeJavaScript('window.received.at(-1).run');assert.deepEqual(latest.questions,run.questions);assert.deepEqual(latest.permissionChange,run.permissionChange);assert.deepEqual(latest.tools[0].nativeLifecycle,run.tools[0].nativeLifecycle);
+ blocked=true;run.status='waiting';publish();await new Promise(r=>setTimeout(r,50));await window.loadFile(file);await setup();blocked=false;record.delivery.reset();await waitFor("window.received.at(-1)?.run?.status==='waiting'");
+ window.destroy();assert.equal(registry.records.size,0);assert.equal(record.delivery.current,null);console.log(JSON.stringify({passed:true,sandbox:true,frames,checks:['preload framing','message pagination','frozen renderer coalescing','child lifecycle','supplements','permission/model state','reload recovery','window cleanup']}));
+}).catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{clearTimeout(timeout);window?.destroy();store?.close();fs.rmSync(root,{recursive:true,force:true});app.exit(process.exitCode||0);});
