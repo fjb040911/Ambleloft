@@ -60,10 +60,10 @@ class NativeSubagents {
   else if(params.turnId&&child.nativeTurnId&&params.turnId!==child.nativeTurnId)return true;
   else if(method==='item/agentMessage/delta'){
    if(child.status==='pending')child.status='running';
-   child.nativeMessages??={};streamFields(context).append(child.nativeMessages,params.itemId,params.delta,streamSecrets(context),{scope:params.threadId});streamFields(context).join(child,'detail',()=>Object.values(child.nativeMessages).join('\n\n'),params.threadId);
+   child.nativeMessages??={};streamFields(context).append(child.nativeMessages,params.itemId,params.delta,streamSecrets(context),{scope:params.threadId});streamFields(context).join(child,'detail',()=>Object.values(child.nativeMessages).join('\n\n'),params.threadId,()=>Object.keys(child.nativeMessages).map(key=>require('./text-spool.cjs').part(child.nativeMessages,key)));
   }else if(method==='item/completed'&&item?.type==='agentMessage'){
    if(child.status==='pending')child.status='running';
-   child.nativeMessages??={};streamFields(context).reset(child.nativeMessages,item.id);child.nativeMessages[item.id]=clean(item.text);child.detail=Object.values(child.nativeMessages).join('\n\n');
+   child.nativeMessages??={};streamFields(context).reset(child.nativeMessages,item.id);child.nativeMessages[item.id]=clean(item.text);require('./text-spool.cjs').spoolObject(child.nativeMessages,context.textSpool);streamFields(context).join(child,'detail',()=>Object.values(child.nativeMessages).join('\n\n'),params.threadId,()=>Object.keys(child.nativeMessages).map(key=>require('./text-spool.cjs').part(child.nativeMessages,key)));
   }else if(['item/started','item/completed'].includes(method)&&item&&!['agentMessage','reasoning'].includes(item.type)){
    child.nativeActivity ||= [];let activity=child.nativeActivity.find(a=>a.id===item.id);
    if(!activity){activity={id:item.id,title:clean(item.command||item.tool||item.type).slice(0,1000),text:'',status:'running'};child.nativeActivity.push(activity);child.nativeActivity=child.nativeActivity.slice(-100);}

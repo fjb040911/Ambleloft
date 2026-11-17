@@ -1,4 +1,9 @@
 const {previewTool}=require('./tool-previews.cjs');
+function previewMessage(message){
+ const result={};for(const key of Object.keys(message))if(!['text','summary','content'].includes(key))result[key]=message[key];
+ const body=require('./runtime-text-cache.cjs').preview(message,'text',8192);
+ return {...result,text:body.text,...(body.length>body.text.length?{textPreview:true,textVersion:body.version,textChars:body.length}:{})};
+}
 function summary(run) {
  const {messages,tools,plans,fileChanges,artifacts,taskApps,approvals,questions,modelRequests,...meta}=run;
  return {...meta,lastTurnStartedAt:messages?.findLast(message=>message.role==='user'&&!message.turnKey)?.timing?.startedAt||run.createdAt,messages:[],tools:[],approvals:[],summaryOnly:true};
@@ -13,7 +18,7 @@ function projectPage(run,before,limit=30) {
  const messages=run.messages.slice(first?run.messages.indexOf(first):0,last?run.messages.indexOf(last):run.messages.length);
  const keys=new Set(users.slice(start,end).map(m=>m.id));
  const {modelRequests,...publicRun}=run;
- return {...publicRun,messages,taskApps:run.taskApps?.filter(p=>keys.has(p.turnKey)),fileChanges:run.fileChanges?.filter(p=>keys.has(p.turnKey)),tools:run.tools.filter(t=>keys.has(t.turnKey)||(!t.turnKey&&users.length===1)).map(previewTool),plans:run.plans?.filter(p=>keys.has(p.turnKey)),artifacts:run.artifacts?.filter(p=>keys.has(p.turnKey)),summaryOnly:false,historyBefore:start?first.id:null,turnOffset:start,totalTurns:users.length};
+ return {...publicRun,messages:messages.map(previewMessage),taskApps:run.taskApps?.filter(p=>keys.has(p.turnKey)),fileChanges:run.fileChanges?.filter(p=>keys.has(p.turnKey)),tools:run.tools.filter(t=>keys.has(t.turnKey)||(!t.turnKey&&users.length===1)).map(previewTool),plans:run.plans?.filter(p=>keys.has(p.turnKey)),artifacts:run.artifacts?.filter(p=>keys.has(p.turnKey)),summaryOnly:false,historyBefore:start?first.id:null,turnOffset:start,totalTurns:users.length};
 }
 function pageRun(...args){const started=performance.now();try{return projectPage(...args);}finally{require('./performance-metrics.cjs').metrics.record('pageRunMs',performance.now()-started);}}
-module.exports={summary,pageRun};
+module.exports={summary,pageRun,previewMessage};

@@ -20,7 +20,7 @@ class AgentRuntime {
     this.native = new (require('./native-subagents.cjs').NativeSubagents)(this);
     this.conversation = new (require('./conversation-agent.cjs').ConversationAgent)(this,conversationOptions);
     this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;this.dirtyItems=new Map();
-    this.streamBytes=new Map();this.storagePressure=false;this.unsubscribePressure=this.database?.subscribePressure?.(()=>this.updateStoragePressure());
+    this.textSpool=this.database?.getSpool?.();this.streamBytes=new Map();this.storagePressure=false;this.unsubscribePressure=this.database?.subscribePressure?.(()=>this.updateStoragePressure());
     this.file = path.join(directory, 'conversations.json');
   }
   get active() { return this.contexts.values().next().value || null; }
@@ -143,6 +143,7 @@ class AgentRuntime {
     return operation;
   }
   publishRun(run) {
+    if(this.database?.closed)return;
     const {modelRequests,...view}=run;
     const projected=this.projectRun(view);
     // The versioned publisher already owns an immutable snapshot/delta. Plain
@@ -150,6 +151,7 @@ class AgentRuntime {
     this.publish(['run-snapshot','run-delta'].includes(projected.kind)?projected:structuredClone(projected));
   }
   changed(run, {stream=false,items,bytes=0}={}) {
+    if(this.textSpool){const targets=items?items.map(([collection,id])=>run[collection]?.find(item=>item.id===id)).filter(Boolean):[...(run.messages||[]),...(run.tools||[])];for(const item of targets)require('./text-spool.cjs').spoolObject(item,this.textSpool);}
     if(!stream||!items)this.dirtyItems.set(run.id,null);
     else if(this.dirtyItems.get(run.id)!==null){const dirty=this.dirtyItems.get(run.id)||new Set();for(const item of items)dirty.add(JSON.stringify(item));this.dirtyItems.set(run.id,dirty);}
     if(bytes)this.streamBytes.set(run.id,(this.streamBytes.get(run.id)||0)+bytes);
@@ -471,6 +473,7 @@ class AgentRuntime {
     this.changed(run);
   }
   notification(context, { method, params = {} }) {
+    context.textSpool=this.textSpool;
     if(require('./permission-switch.cjs').permissionNotification(context,{method,params}))return;
     if(this.native.notification(context,{method,params}))return;
     if (context.done || !context.run || (params.threadId && context.run.threadId && params.threadId !== context.run.threadId)) return;
@@ -504,8 +507,8 @@ class AgentRuntime {
       const index = field === 'content' ? params.contentIndex : params.summaryIndex;
       if (Number.isInteger(index) && index >= 0 && index < 1000) {
         item[field] ||= [];streamFields(context).append(item[field],index,params.delta,streamSecrets(context),{scope:params.threadId});
-        streamFields(context).join(item,'text',()=> (item.summary?.some(Boolean)?item.summary:item.content||[]).join('\n\n'),params.threadId);
-        item.reasoningFormat=item.summary?.some(Boolean)?'summary':'text';
+        streamFields(context).join(item,'text',()=> (require('./text-spool.cjs').nonempty(item.summary)?item.summary:item.content||[]).join('\n\n'),params.threadId,()=>{const parts=require('./text-spool.cjs').nonempty(item.summary)?item.summary:item.content||[];return Object.keys(parts).map(i=>require('./text-spool.cjs').part(parts,String(i)));});
+        item.reasoningFormat=require('./text-spool.cjs').nonempty(item.summary)?'summary':'text';
       }
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = params.item;
@@ -516,8 +519,8 @@ class AgentRuntime {
         for(const parts of [existing.summary,existing.content])for(let i=0;i<(parts?.length||0);i++)streamFields(context).flush(parts,i);
         if (item.summary?.length) existing.summary = item.summary.map(clean);
         if (item.content?.length) existing.content = item.content.map(clean);
-        existing.text = (existing.summary?.some(Boolean) ? existing.summary : existing.content || []).join('\n\n');
-        existing.reasoningFormat=existing.summary?.some(Boolean)?'summary':'text';
+        require('./text-spool.cjs').spoolObject(existing,this.textSpool);streamFields(context).join(existing,'text',()=> (require('./text-spool.cjs').nonempty(existing.summary)?existing.summary:existing.content||[]).join('\n\n'),params.threadId,()=>{const parts=require('./text-spool.cjs').nonempty(existing.summary)?existing.summary:existing.content||[];return Object.keys(parts).map(key=>require('./text-spool.cjs').part(parts,key));});
+        existing.reasoningFormat=require('./text-spool.cjs').nonempty(existing.summary)?'summary':'text';
         existing.status = method === 'item/completed' ? 'completed' : 'running';
       } else if (item.type === 'agentMessage') {
         let existing = run.messages.find(message => message.id === item.id);
@@ -548,8 +551,9 @@ class AgentRuntime {
         const previous = run.tools.find(tool => tool.id === item.id);
         if(previous)streamFields(context).flush(previous,'detail');
         if(previous)streamFields(context).reset(previous,'detail');
-        const tool = { ...(previous || stamp()), id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
-          detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : previous?.detail || '')) };
+        const tool = Object.defineProperties({},Object.getOwnPropertyDescriptors(previous||stamp()));Object.assign(tool,{ id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
+          detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : '')) });
+        if(!item.aggregatedOutput&&!item.text&&!['webSearch','mcpToolCall'].includes(item.type)&&!item.changes&&previous&&Object.hasOwn(previous,'detail'))Object.defineProperty(tool,'detail',Object.getOwnPropertyDescriptor(previous,'detail'));
         if(item.type==='commandExecution'&&Number.isInteger(item.exitCode))tool.exitCode=item.exitCode;
         if(item.type==='commandExecution'&&Array.isArray(item.commandActions))tool.commandActions=item.commandActions.filter(action=>['read','listFiles','search','unknown'].includes(action.type)).map(action=>({type:action.type,...Object.fromEntries(['name','path','query'].filter(key=>typeof action[key]==='string').map(key=>[key,clean(action[key])]))}));
         if(item.type==='contextCompaction'){tool.label='上下文压缩';tool.detail='';}

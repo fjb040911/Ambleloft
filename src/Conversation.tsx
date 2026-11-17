@@ -1,3 +1,4 @@
+import MessageBody from './MessageBody';
 import {ProcessDisclosureScope} from './process-disclosure';
 import {RunDetailsContext} from './ToolText';
 import {InvestigationDetails} from './Investigation';
@@ -353,10 +354,10 @@ type TurnTranscriptProps={turn:ConversationTurn;run:AgentRun;requests:import('./
 const TurnTranscript=memo(function TurnTranscript({turn,run,requests,allRequests,deliveries,nativePending,onOpenInput,onToggle,paused,status,hidePrompt,openFile,openReference,openChanges}:TurnTranscriptProps){
  return <>
   {turn.user.modelChange&&<div className="turn-duration">{t('已切换模型：')}{turn.user.modelChange}</div>}
-  {!hidePrompt&&<UserMessage context={<SkillTags snapshots={turn.user.skills}/>} text={allRequests.some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
-  {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><Markdown text={message.text}/></MessageContent></Message>)}
+  {!hidePrompt&&<UserMessage message={turn.user.formSubmissionId?undefined:turn.user} context={<SkillTags snapshots={turn.user.skills}/>} text={allRequests.some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
+  {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} message={message} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={message}/></MessageContent></Message>)}
   <TurnProgress allRequests={allRequests} requests={requests} deliveries={deliveries} nativePending={nativePending} onOpenInput={onOpenInput} paused={paused} onToggle={onToggle} turn={turn} status={status} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
-  {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><Markdown text={turn.final.text||'…'} onFileLink={openReference}/></MessageContent></Message>}
+  {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={turn.final} onFileLink={openReference}/></MessageContent></Message>}
   <TurnFiles run={run} turnKey={turn.user.id} openFile={openFile} openReference={openReference} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}
  </>;
 },(a,b)=>a.turn===b.turn&&a.paused===b.paused&&a.status===b.status&&a.hidePrompt===b.hidePrompt&&a.language===b.language&&a.run.id===b.run.id&&a.run.cwd===b.run.cwd&&a.run.archivedAt===b.run.archivedAt&&sameItems(a.run.fileChanges,b.run.fileChanges)&&sameItems(a.requests,b.requests)&&sameItems(a.allRequests,b.allRequests)&&sameItems(a.deliveries,b.deliveries)&&sameItems(a.nativePending,b.nativePending)&&a.onOpenInput===b.onOpenInput&&a.onToggle===b.onToggle&&a.openFile===b.openFile&&a.openReference===b.openReference&&a.openChanges===b.openChanges);
