@@ -39,8 +39,9 @@ export function ProcessIndicator({title,live=true}:{title:string;live?:boolean})
  return <TraceLine className="process-entry-title" status={live?'running':undefined} role={live?'status':undefined}><TraceIcon>{live?<Spinner aria-hidden="true" role="presentation" className="motion-reduce:animate-none"/>:<Brain/>}</TraceIcon><TraceTitle>{title}</TraceTitle></TraceLine>;
 
 }
-export function ThinkingWindow({text,title,live,disclosureKey}:{text:string;title:string;live:boolean;disclosureKey?:string}) {
- const [open,setOpen]=useProcessDisclosure(disclosureKey);
+export function ThinkingWindow({text,title,live,disclosureKey,collapsible=true}:{text:string;title:string;live:boolean;disclosureKey?:string;collapsible?:boolean}) {
+ const [expanded,setOpen]=useProcessDisclosure(disclosureKey);
+ const open=!collapsible||expanded;
  const viewport=useRef<HTMLDivElement>(null);
  const content=useRef<HTMLPreElement>(null);
  const follow=useRef(true);
@@ -69,8 +70,9 @@ export function ThinkingWindow({text,title,live,disclosureKey}:{text:string;titl
   else if(el.scrollTop<lastTop.current)follow.current=false;
   lastTop.current=el.scrollTop;
  };
- return <TraceCollapsible open={open} onOpenChange={setOpen}><TraceCollapsibleTrigger><ProcessIndicator title={t(title)} live={live}/></TraceCollapsibleTrigger><TraceCollapsibleContent>
- {open&&<div className="thinking-window max-h-[180px] overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-ring" ref={viewport} tabIndex={0} role="region" aria-label={t('思考过程')} onScroll={trackScroll} onWheel={event=>{if(event.deltaY<0)follow.current=false;}} onKeyDown={event=>{if(['ArrowUp','PageUp','Home'].includes(event.key))follow.current=false;}}><pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm" ref={content}>{text||t('等待输出…')}</pre></div>}</TraceCollapsibleContent></TraceCollapsible>;
+ const body=open&&<div className="thinking-window max-h-[180px] overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-ring" ref={viewport} tabIndex={0} role="region" aria-label={t('思考过程')} onScroll={trackScroll} onWheel={event=>{if(event.deltaY<0)follow.current=false;}} onKeyDown={event=>{if(['ArrowUp','PageUp','Home'].includes(event.key))follow.current=false;}}><pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm" ref={content}>{text||t('等待输出…')}</pre></div>;
+ if(!collapsible)return <><ProcessIndicator title={t(title)} live={live}/>{body}</>;
+ return <TraceCollapsible open={open} onOpenChange={setOpen}><TraceCollapsibleTrigger><ProcessIndicator title={t(title)} live={live}/></TraceCollapsibleTrigger><TraceCollapsibleContent>{body}</TraceCollapsibleContent></TraceCollapsible>;
 }
 export default function ProcessPanel({ turn, showAnalysis=true, paused=false,requests=[],allRequests=requests,deliveries=[],onOpenInput=()=>{},nativePending=[] }: { turn: ConversationTurn; paused?:boolean; showAnalysis?:boolean }&InputProps) {
  const hasPendingInput=!!nativePending.length||allRequests.some(request=>request.state==='pending');
