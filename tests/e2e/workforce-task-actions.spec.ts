@@ -120,6 +120,6 @@ for(const kind of ['question','form'] as const)test(`existing async ${kind} is i
  if(kind==='question'){
   await detail.screenshot({path:'/tmp/task-async-input-status.png'});
   await page.getByLabel('使用哪个测试环境？').fill('隔离测试环境');await page.getByRole('button',{name:'提交回答'}).click();
-  await expect(activity).not.toContainText('有待补充信息');await expect(activity).toContainText('本轮历时');
+  await expect(activity).not.toContainText('有待补充信息');await expect(activity.locator('.activity-clock')).toBeVisible();await expect(activity.locator('.activity-clock')).toHaveAttribute('title','包含等待与工具执行时间，不代表模型调用时长');
  }
 });
