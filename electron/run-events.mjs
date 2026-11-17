@@ -20,9 +20,13 @@ function applyFields(before,patch){
  }
  return next;
 }
-export function createRunPublisher(epoch){
- const records=new Map(),revisions=new Map();
- const remember=(id,snapshot)=>{records.delete(id);records.set(id,snapshot);if(records.size>64)records.delete(records.keys().next().value);};
+const sizes=new WeakMap();
+// Immutable snapshots share unchanged objects, so sizing also shares cached work.
+export function retainedBytes(value){if(typeof value==='string')return value.length*2+16;if(!value||typeof value!=='object')return 8;const known=sizes.get(value);if(known!==undefined)return known;let size=64;for(const key of Object.keys(value))size+=key.length*2+retainedBytes(value[key]);sizes.set(value,size);return size;}
+export function createRunPublisher(epoch,{maxBytes=16*1024*1024,maxEntries=64}={}){
+ const records=new Map(),revisions=new Map();let bytes=0;
+ const forget=id=>{const old=records.get(id);if(old)bytes-=retainedBytes(old);records.delete(id);};
+ const remember=(id,snapshot)=>{forget(id);const size=retainedBytes(snapshot);if(size>maxBytes)return;while(records.size&&(bytes+size>maxBytes||records.size>=maxEntries))forget(records.keys().next().value);records.set(id,snapshot);bytes+=size;};
  return {
   encode(run){
    const old=records.get(run.id),revision=(revisions.get(run.id)||0)+1;revisions.set(run.id,revision);
@@ -43,7 +47,8 @@ export function createRunPublisher(epoch){
    remember(run.id,applyRunEvent(old,event));return event;
   },
   snapshot(id){return records.get(id);},
-  forget(id){records.delete(id);}
+  forget,
+  stats(){return {bytes,entries:records.size,maxBytes};}
  };
 }
 export function applyRunEvent(current,event){

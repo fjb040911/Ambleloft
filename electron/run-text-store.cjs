@@ -6,6 +6,7 @@ CREATE INDEX IF NOT EXISTS task_context_active_run ON task_context_projections(j
 CREATE TABLE IF NOT EXISTS run_patch_receipts(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,result TEXT NOT NULL);
 `;
 function writeText(db,runId,collection,key,change){
+ if(change.source){let at=change.start||0,first=true;for(const text of require('./text-spool.cjs').chunks(change.source,at)){writeText(db,runId,collection,key,{field:change.field,mode:first?change.mode:'append',baseLength:first?change.baseLength:at,text});at+=text.length;first=false;}if(first)writeText(db,runId,collection,key,{...change,source:undefined,text:''});return;}
  const args=[runId,collection,key,change.field];
  if(change.mode==='set')db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?').run(...args);
  else if(change.mode!=='append')throw Error('INVALID_TEXT_PATCH');

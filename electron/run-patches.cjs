@@ -5,10 +5,11 @@ const {reference,digest}=require('./runtime-text-cache.cjs');
 // Keep strings by reference, not a second serialized copy of the complete run.
 function splitItem(item){
  const texts=new Map();
+ const keep=(path,ref)=>{if(ref.kind==='joined'&&!ref.hash){const hash=require('node:crypto').createHash('sha256');for(const chunk of require('./text-spool.cjs').chunks(ref))hash.update(chunk,'utf16le');ref.hash=hash.digest('hex');}texts.set(JSON.stringify(path),ref);};
  function visit(value,path){
   if(typeof value==='string'&&path.length&&value.length>threshold){texts.set(JSON.stringify(path),value);return '';}
-  if(Array.isArray(value))return Array.from({length:value.length},(_,i)=>{const ref=reference(value,String(i));if(ref){texts.set(JSON.stringify([...path,i]),ref);return '';}return visit(value[i],[...path,i]);});
-  if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).map(k=>{const ref=reference(value,k);if(ref){texts.set(JSON.stringify([...path,k]),ref);return [k,''];}return [k,visit(value[k],[...path,k])];}));
+  if(Array.isArray(value))return Array.from({length:value.length},(_,i)=>{const ref=reference(value,String(i));if(ref){keep([...path,i],ref);return '';}return visit(value[i],[...path,i]);});
+  if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).map(k=>{const ref=reference(value,k);if(ref){keep([...path,k],ref);return [k,''];}return [k,visit(value[k],[...path,k])];}));
   return value;
  }
  return {data:JSON.stringify(visit(item,[])),texts};
@@ -42,6 +43,12 @@ function createRunPatches(){
      const signatures=new Map();
      for(const [field,text] of value.texts){
       const old=before?.texts.get(field);
+      if(typeof text!=='string'&&['spool','joined'].includes(text.kind)){
+       const signature={length:text.length,hash:text.hash,generation:text.generation,revision:text.revision,source:text};signatures.set(field,signature);
+       if(old?.hash&&old.hash===text.hash||old?.revision===text.revision)continue;
+       const append=old?.source?require('./text-spool.cjs').prefix(old.source,text):!!text.generation&&old?.generation===text.generation&&old.length<=text.length;
+       texts.push({field,mode:append?'append':'set',baseLength:append?old.length:0,source:text,start:append?old.length:0});continue;
+      }
       if(typeof text!=='string'){
        if(!old||old.revision!==text.revision&&(!old.hash||old.hash!==text.hash))throw Error('TEXT_BASELINE_CHANGED');
        signatures.set(field,old);continue;
