@@ -211,7 +211,9 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const renderTurn=(turn:ConversationTurn)=>{
    const requests=(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1));
    const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
-   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+   // Keep the end anchor measured: a placeholder for the latest turn makes
+   // composer resizing mount history and shift the scroll target while typing.
+   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
