@@ -44,13 +44,13 @@ for(const [english,dark,reduced] of [[false,false,false],[true,true,true]] as co
  const host=page.getByRole('region',{name:english?'Host response':'主持人回复'});await expect(host.getByRole('status')).toContainText(english?'Waiting for the model':'等待模型响应');
  expect(await host.locator('[data-slot=spinner]').evaluate(el=>getComputedStyle(el).animationName)).toBe(reduced?'none':'spin');
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.phase='reasoning';h.activity.reasoning=Array.from({length:30},(_,i)=>'Provider reasoning '+i).join('\n');h.revision++;q.emit();});
- const thought=host.getByRole('region',{name:english?'Thinking':'思考过程'});await expect(thought).toContainText('Provider reasoning 29');await expect(thought).toBeVisible();await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const thought=host.getByRole('region',{name:english?'Thinking':'思考过程'});await expect(thought).toHaveCount(0);await host.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:english?'Thinking':'思考过程'}).click();await expect(thought).toContainText('Provider reasoning 29');await expect(thought).toBeVisible();await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;});
  await expect.poll(()=>thought.evaluate(el=>el.scrollTop)).toBeGreaterThan(100);
  await thought.evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel',{deltaY:-50,bubbles:true}));el.scrollTop=0;});
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.reasoning+='\nNew provider text';h.revision++;q.emit();});await expect(thought).toContainText('New provider text');expect(await thought.evaluate(el=>el.scrollTop)).toBe(0);
  await page.screenshot({path:`/tmp/discussion-thinking-${english}.png`,animations:'disabled'});
  await page.getByRole('button',{name:english?'Stop':'停止',exact:true}).click();await expect(host.getByRole('status')).toHaveCount(0);await expect(host.getByText(english?'Stopped':'已停止',{exact:true})).toBeVisible();
- await host.locator('summary').filter({hasText:english?'View model reasoning':'查看模型思考'}).click();await expect(thought).toContainText('New provider text');await expect(host.locator('[data-slot=spinner]')).toHaveCount(0);
+ await host.locator('summary').filter({hasText:english?'View model reasoning':'查看模型思考'}).click();await host.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:english?'Thinking':'思考过程'}).click();await expect(thought).toContainText('New provider text');await expect(host.locator('[data-slot=spinner]')).toHaveCount(0);
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.reasoning='VeryLongUnbrokenProviderText'.repeat(100);h.revision++;q.emit();});
  await expect(thought).toContainText('VeryLongUnbrokenProviderText');expect(await thought.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
@@ -61,9 +61,9 @@ test('host closes previously opened reasoning when the round completes',async({p
  await enter(page);
  await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'running',revision:1,ruleVersion:'fixture',steps:[],brief:null,activity:{id:'model-pass',phase:'responding',reasoning:'保留这段思考记录',reasoningFormat:'text',startedAt:new Date().toISOString()}};q.emit();});
  const trace=page.locator('.wf-host-trace'),thought=trace.getByRole('region',{name:'思考过程'});
- await trace.locator('summary').click();await expect(thought).toBeVisible();
+ await trace.locator('summary').click();await trace.locator('[data-slot=trace-collapsible-trigger]').click();await expect(thought).toBeVisible();
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.status='completed';h.revision++;q.emit();});
  await expect(thought).toBeHidden();
- await trace.locator('summary').click();await expect(thought).toBeVisible();await expect(thought).toContainText('保留这段思考记录');
+ await trace.locator('summary').click();await trace.locator('[data-slot=trace-collapsible-trigger]').click();await expect(thought).toBeVisible();await expect(thought).toContainText('保留这段思考记录');
  await page.evaluate(()=>{(window as any).spaceQA.emit();});await expect(thought).toBeVisible();
 });

@@ -26,3 +26,6 @@ jobs:
         run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/docker.test.cjs tests/creation.test.cjs
       - name: Plan acceptance and recovery regressions
         run: node --test --test-concurrency=2 tests/workforce-acceptance.test.cjs tests/workforce-complex-acceptance.test.cjs tests/workforce-plans.test.cjs tests/workforce-task-guide.test.cjs tests/native-subagents.test.cjs tests/conversation-data.test.cjs
+
+      - name: Host continuity and guarded file regressions
+        run: node --test --test-concurrency=2 tests/continuity.test.cjs tests/continuity-growth.test.cjs tests/expert-chat.test.cjs tests/task-files.test.cjs tests/task-write.test.cjs tests/incremental-run-save.test.cjs tests/run-events.test.cjs tests/stream-publication.test.cjs tests/role-discovery.test.cjs
