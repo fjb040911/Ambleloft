@@ -471,6 +471,8 @@ app.whenReady().then(async () => {
     for(const change of input?.changes||[]){const before=projects.find(p=>p.id===change.id);if(change.kind==='project'&&change.action==='put'&&before&&!sameTarget(before,change.value)&&[...terminals.sessions.values()].some(s=>s.projectId===change.id&&!s.exited))throw Error('请先关闭此项目的终端，再修改工作环境');}
     return publishWorkspace(await runtime.patchWorkspace(input));
   });
+  ipcMain.handle('attachments:import',async(event,items)=>{authorize(event);return require('./pasted-attachments.cjs').importPastedAttachments(items,path.join(app.getPath('userData'),'attachments','pasted'));});
+  ipcMain.handle('attachments:image',async(event,input)=>{authorize(event);return require('./attachment-images.cjs').readAttachmentImage(input,require('electron').nativeImage);});
   ipcMain.handle('attachments:select', async event => {
     const window=authorize(event).window;
     const result = await hostDialog('showOpenDialog',window, { title: '添加文件和文件夹', properties: ['openFile', 'openDirectory', 'multiSelections'] });

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // The main process waits for each 64 KiB frame; slow rendering cannot queue
 // repeated snapshots. Only one serialized event is assembled at a time.
@@ -55,6 +55,18 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   skills: {onChanged:listener=>{const handler=()=>listener();ipcRenderer.on('skills:event',handler);return()=>ipcRenderer.removeListener('skills:event',handler);},...Object.fromEntries(['list','listSystem','detail','readFile','update','remove','import'].map(action=>[action,input=>ipcRenderer.invoke('skills:'+action,input)]))},
   projectFiles: Object.fromEntries(['context','list','search','read','office','apps','open'].map(action=>[action,input=>ipcRenderer.invoke('files:'+action,input)])),
   selectAttachments: () => ipcRenderer.invoke('attachments:select'),
+  readAttachmentImage: input => ipcRenderer.invoke('attachments:image',input),
+  importAttachments: async files => {
+    if(!Array.isArray(files)||!files.length||files.length>50)throw Error('最多添加 50 个文件或文件夹');
+    let total=0;const items=[];
+    for(const file of files){
+      const path=webUtils.getPathForFile(file);
+      if(path){items.push({path});continue;}
+      if((total+=file.size)>25*1024*1024)throw Error('单次粘贴内容不能超过 25 MB');
+      items.push({name:file.name,bytes:new Uint8Array(await file.arrayBuffer())});
+    }
+    return ipcRenderer.invoke('attachments:import',items);
+  },
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   copyText: text => ipcRenderer.invoke('clipboard:write-text', text),
   openLink: url => ipcRenderer.invoke('link:open', url),

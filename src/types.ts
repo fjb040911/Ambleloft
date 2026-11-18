@@ -44,7 +44,7 @@ export interface AgentRun {
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
-  messages: { textPreview?:boolean;textVersion?:string;textChars?:number; userInputId?:string; inputSource?:'user'; inputDeliveryState?:'queued'|'delivered'; agentRole?:'conversation'; inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
+  messages: { attachments?:{name:string;path:string}[]; textPreview?:boolean;textVersion?:string;textChars?:number; userInputId?:string; inputSource?:'user'; inputDeliveryState?:'queued'|'delivered'; agentRole?:'conversation'; inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { analysisTitle?:string; nativeLifecycle?:{status:string;at:string}[]; detailPreview?:boolean;detailVersion?:string;nativeActivity?:{textPreview?:boolean;textVersion?:string;id:string;title:string;text:string;status:string}[]; nativeThreadId?:string; nativeIdentityError?:string; analysisAgent?:{id:string;name:string;avatar:number}; analysisTask?:string; analysisReads?:string[]; commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
@@ -113,6 +113,8 @@ declare global {
       ssh?:import('./SshProjectFields').SshAPI;
       terminal?: import('./TerminalPanel').TerminalAPI;
       projectFiles?: ProjectFilesAPI;
+      readAttachmentImage?(input:{path:string;thumbnail?:boolean}):Promise<{dataUrl:string}>;
+      importAttachments?(files:File[]): Promise<{name:string;path:string}[]>;
       selectAttachments(): Promise<{name:string;path:string}[]>;
       getAppInfo?(): Promise<AppInfo>;
       copyText(text: string): Promise<void>;

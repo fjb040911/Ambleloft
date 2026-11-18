@@ -165,8 +165,10 @@ test('discussion lifecycle protects active runs and keeps conclusion versions in
 
 test('discussion forwards explicit composer settings to every expert without expanding project scope',async t=>{
  const {service,runtime,space}=await fixture(t),calls=[];const start=runtime.start.bind(runtime);runtime.start=async(input,context)=>{calls.push(structuredClone(input));return start(input,context);};
- const input={clientRequestId:'composer-full',spaceId:space.id,prompt:'Discuss the attached brief',mode:'discussion',employeeIds:['product','architect'],permission:'full',attachments:[{name:'brief.md',path:'/tmp/brief.md'}],selectedSkillIds:['review'],providerId:'provider-b',model:'model-b'};
+ await fs.mkdir(service.root,{recursive:true});const file=path.join(service.root,'brief.md');await fs.writeFile(file,'brief');
+ const input={clientRequestId:'composer-full',spaceId:space.id,prompt:'Discuss the attached brief',mode:'discussion',employeeIds:['product','architect'],permission:'full',attachments:[{name:'brief.md',path:file}],selectedSkillIds:['review'],providerId:'provider-b',model:'model-b'};
  await service.start(input,{});
+ assert.deepEqual((await service.snapshot()).requests.find(r=>r.id==='composer-full').composer.attachments,input.attachments);
  assert.equal(calls.length,2);for(const call of calls){assert.equal(call.permission,'full');assert.deepEqual(call.attachments,input.attachments);assert.deepEqual(call.selectedSkillIds,['review']);assert.equal(call.providerId,'provider-b');assert.equal(call.projectId,null);}
  await service.start({...input,clientRequestId:'composer-default',permission:undefined,attachments:undefined,selectedSkillIds:undefined},{});assert.equal(calls[2].permission,'default');
  await assert.rejects(service.start({...input,clientRequestId:'composer-invalid',permission:'invalid'},{}),/权限模式无效/);assert.equal(calls.length,4);
