@@ -1215,3 +1215,90 @@ test('paged reasoning stays lazy and authoritative pending input survives a refr
  await expect(page.getByLabel('待执行命令')).toHaveText('echo preserved');
  await reasoning.locator('[data-slot=trace-collapsible-trigger]').click();await expect(reasoning.getByRole('region',{name:'思考过程'})).toHaveCount(0);
 });
+
+for(const height of [650,1100])test(`short last-turn navigation leaves no trailing spacer ${height}`,async({page})=>{
+ await page.setViewportSize({width:1240,height});await prepare(page,'初始回答');
+ await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='running';r.approvals=[];r.messages=[{id:'u1',role:'user',text:'第一轮'},{id:'a1',role:'assistant',phase:'final_answer',text:'历史内容\n\n'.repeat(50)},{id:'u2',role:'user',text:'第二轮'},{id:'r2',role:'assistant',kind:'reasoning',status:'completed',text:'执行记录\n\n'.repeat(40)},{id:'a2',role:'assistant',phase:'final_answer',text:'简短的最终回答。'}];(window as any).__emit();});
+ const viewport=page.locator('.conversation-scroll'),spacer=page.locator('[data-message-scroller-spacer]');
+ const nav=page.getByRole('navigation',{name:'对话轮次导航'});
+ await nav.getByRole('button').last().click();
+ await expect.poll(()=>spacer.evaluate(el=>el.getBoundingClientRect().height)).toBe(0);
+ await page.evaluate(()=>{(window as any).__demoRun.status='completed';(window as any).__emit();});
+ await nav.getByRole('button').first().click();await nav.getByRole('button').last().click();
+ await expect.poll(()=>viewport.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(2);
+ const endGap=()=>page.locator('[data-turn-id="u2"]').evaluate(el=>el.closest('.conversation-scroll')!.getBoundingClientRect().bottom-el.getBoundingClientRect().bottom);
+ await expect.poll(endGap).toBeLessThan(65);
+ // Reflow and process collapse must not recreate blank anchoring space.
+ const processToggle=page.locator('[data-turn-id="u2"] .turn-progress-toggle');
+ await processToggle.click();await processToggle.click();
+ await expect.poll(()=>spacer.evaluate(el=>el.getBoundingClientRect().height)).toBe(0);
+ await expect.poll(endGap).toBeLessThan(65);
+ await page.setViewportSize({width:1240,height:height+200});
+ await expect.poll(()=>spacer.evaluate(el=>el.getBoundingClientRect().height)).toBe(0);
+ await expect.poll(endGap).toBeLessThan(65);
+ await nav.getByRole('button').first().click();
+ await expect(page.getByRole('button',{name:'回到最新消息'})).toBeVisible();
+ await page.getByRole('button',{name:'回到最新消息'}).click();
+ await expect.poll(endGap).toBeLessThan(65);
+});
+
+test('clipboard images and files become removable attachments without changing the text draft',async({page})=>{
+ await prepare(page,'完成');await page.getByRole('button',{name:'批准本次',exact:true}).click();
+ await page.evaluate(()=>{window.desktop!.importAttachments=async files=>{(window as any).__pasted=await Promise.all(files.map(async f=>({name:f.name,type:f.type,bytes:Array.from(new Uint8Array(await f.arrayBuffer()))})));return new Promise(resolve=>{(window as any).__finishPaste=()=>resolve(files.map(f=>({name:f.name,path:'/pasted/'+f.name})));});};});
+ const input=page.getByRole('textbox',{name:'继续对话'});await input.fill('请分析这些文件');
+ const paste=()=>input.evaluate(el=>{const data=new DataTransfer();data.items.add(new File([new Uint8Array([137,80,78,71])],'截图.png',{type:'image/png'}));data.items.add(new File(['document'],'报告.txt',{type:'text/plain'}));el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
+ await paste();await expect(page.getByText('正在添加附件…')).toBeVisible();
+ await expect(page.getByRole('button',{name:'发送后续消息',exact:true})).toBeDisabled();
+ await input.press('Enter');await expect(input).toHaveValue('请分析这些文件');
+ await page.evaluate(()=>(window as any).__finishPaste());
+ const attachments=page.getByLabel('附件',{exact:true});await expect(attachments.getByText('截图.png')).toBeVisible();await expect(attachments.getByText('报告.txt')).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).__pasted[0].bytes)).toEqual([137,80,78,71]);
+ await paste();await page.evaluate(()=>(window as any).__finishPaste());await expect(attachments.locator('[data-slot=attachment]')).toHaveCount(2);
+ await page.getByRole('button',{name:'移除附件 截图.png'}).click();await expect(attachments.getByText('截图.png')).toHaveCount(0);await expect(input).toHaveValue('请分析这些文件');
+ await page.evaluate(()=>{window.desktop!.importAttachments=async()=>{throw Error('单次粘贴内容不能超过 25 MB');};});await paste();await expect(page.getByRole('alert')).toContainText('25 MB');await expect(attachments.getByText('报告.txt')).toBeVisible();
+ // Text-only paste is left to the browser, without cancellation or IPC import.
+ expect(await input.evaluate(el=>{const data=new DataTransfer();data.setData('text/plain','普通文本');return el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));})).toBe(true);
+ await page.evaluate(()=>{window.desktop!.startRun=async payload=>{(window as any).__attachmentInput=payload;return structuredClone((window as any).__demoRun);};});
+ await input.fill('');await page.getByRole('button',{name:'发送后续消息',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__attachmentInput)).toMatchObject({prompt:'请查看所附文件。',attachments:[{name:'报告.txt',path:'/pasted/报告.txt'}]});
+});
+
+test('pasted image thumbnails preview, remove and persist in sent messages',async({page})=>{
+ await prepare(page,'完成');await page.getByRole('button',{name:'批准本次',exact:true}).click();
+ await page.evaluate(()=>{
+  window.desktop!.importAttachments=async files=>files.map(f=>({name:f.name,path:'/pasted/'+f.name}));
+  window.desktop!.readAttachmentImage=async input=>{
+   const canvas=document.createElement('canvas');canvas.width=input.thumbnail?192:1400;canvas.height=input.thumbnail?120:900;
+   const ctx=canvas.getContext('2d')!;ctx.fillStyle='#d7e9f5';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#24495b';ctx.font=`${input.thumbnail?16:80}px sans-serif`;ctx.fillText('Image preview',20,canvas.height/2);
+   return {dataUrl:canvas.toDataURL()};
+  };
+  window.desktop!.startRun=async payload=>{const w=window as any;w.__imageSend=payload;w.__demoRun.messages.push({id:'image-user',role:'user',text:payload.prompt+'\n\n附件：\n'+payload.attachments!.map(f=>f.path).join('\n'),attachments:payload.attachments});w.__emit();return structuredClone(w.__demoRun);};
+ });
+ const input=page.getByRole('textbox',{name:'继续对话'}),composer=page.locator('form.composer:visible');await input.fill('分析这张截图');
+ const paste=()=>input.evaluate(el=>{const data=new DataTransfer();data.items.add(new File(['image'],'截图.png',{type:'image/png'}));el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
+ await paste();const thumb=composer.getByAltText('截图.png');await expect(thumb).toBeVisible();
+ await expect.poll(()=>thumb.evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(192);
+ const trigger=composer.getByRole('button',{name:'预览图片 截图.png'});await trigger.click();
+ const dialog=page.getByRole('dialog');await expect(dialog.getByRole('heading',{name:'截图.png'})).toBeVisible();await expect(dialog.getByAltText('截图.png')).toBeVisible();
+ await expect.poll(()=>dialog.getByAltText('截图.png').evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBe(1400);
+ expect((await dialog.getByAltText('截图.png').boundingBox())!.width).toBeGreaterThan((await thumb.boundingBox())!.width*3);
+ await dialog.getByRole('button',{name:'原始尺寸',exact:true}).click();await expect(dialog.getByRole('button',{name:'适应窗口',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
+ await composer.getByRole('button',{name:'移除附件 截图.png'}).click();await expect(composer.locator('[data-slot=attachment]')).toHaveCount(0);await expect(dialog).toHaveCount(0);await expect(input).toHaveValue('分析这张截图');
+ await paste();await expect(thumb).toBeVisible();await composer.getByRole('button',{name:'发送后续消息',exact:true}).click();
+ const message=page.locator('[data-turn-id="image-user"] [data-message-role="user"]');await expect(message.getByAltText('截图.png')).toBeVisible();await expect(message.locator('[data-slot=bubble-content]')).toHaveText('分析这张截图');
+ await message.getByRole('button',{name:'预览图片 截图.png'}).click();await expect(dialog.getByAltText('截图.png')).toBeVisible();await page.keyboard.press('Escape');
+ await expect(dialog).toHaveCount(0);await page.screenshot({path:'/tmp/amble-image-attachments-light.png'});
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
+ await message.getByRole('button',{name:'预览图片 截图.png'}).click();await expect(dialog.getByAltText('截图.png')).toBeVisible();await expect(dialog).toHaveCSS('opacity','1');await page.screenshot({path:'/tmp/amble-image-preview-dark.png'});
+ await page.keyboard.press('Escape');await page.setViewportSize({width:560,height:840});await message.getByRole('button',{name:'预览图片 截图.png'}).click();
+ const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(561);
+});
+
+test('legacy image messages support previews and missing files show a useful error',async({page})=>{
+ await prepare(page,'完成');await page.getByRole('button',{name:'批准本次',exact:true}).click();
+ await page.evaluate(()=>{window.desktop!.readAttachmentImage=async()=>{throw Error('图片文件不可访问，可能已移动或删除');};const w=window as any;w.__demoRun.messages[0].text='旧的图片消息\n\n附件：\n/pasted/old.png';w.__emit();});
+ const message=page.locator('[data-message-role="user"]');await expect(message.locator('[data-slot=bubble-content]')).toHaveText('旧的图片消息');await expect(message.getByText('图片不可用')).toBeVisible();
+ await message.getByRole('button',{name:'预览图片 old.png'}).click();await expect(page.getByRole('dialog').getByRole('alert')).toContainText('图片文件不可访问，可能已移动或删除');
+ await page.keyboard.press('Escape');await expect(page.getByRole('textbox',{name:'继续对话'})).toBeEditable();
+});

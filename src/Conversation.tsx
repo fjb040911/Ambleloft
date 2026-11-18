@@ -155,7 +155,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     setSelectedInputs([]);await deliveries.refresh();
   };
   const sending=useRef(false);
-  const [pendingMessage,setPendingMessage]=useState<{text:string;ids:Set<string>}|null>(null);
+  const [pendingMessage,setPendingMessage]=useState<{text:string;attachments?:ComposerOptions["attachments"];ids:Set<string>}|null>(null);
   useLayoutEffect(()=>{
     if(!pendingMessage||!visibleRef.current)return;
     // Explicit sending resumes following after the pending bubble is in the DOM.
@@ -166,13 +166,13 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const submit = async () => {
     if(expertChat.busy)return;
     if(expertChat.selected){if(active||run.archivedAt)return;if(options.attachments?.length||options.selectedSkillIds?.length){setSendError('专家讨论暂只支持文字，请移除附件和技能');return;}const sentText=prompt;const result=await expertChat.submit(sentText);if(result)setPrompt(current=>current===sentText?'':current);return;}
-    if((!prompt.trim()&&!options.selectedSkillIds?.length)||submitting||sending.current||run.status==='stopping'||run.archivedAt)return;
+    if((!prompt.trim()&&!options.selectedSkillIds?.length&&!options.attachments?.length)||submitting||sending.current||run.status==='stopping'||run.archivedAt)return;
     if(active&&!inputAPI)return;
     const supplemental=!!inputAPI&&(active||mutation.current?.text===prompt);
     if(supplemental&&(options.attachments?.length||options.selectedSkillIds?.length)){setSendError(t('补充消息暂只支持文字，请移除附件和技能后发送'));return;}
     if(inputAPI&&(!deliveries.snapshot||deliveries.error)){setSendError(t('暂时无法读取补充消息，请重试'));return;}
-    sending.current=true;setInputSending(true);const text=prompt,version=draftVersion.current;
-    setPendingMessage({text,ids:new Set(run.messages.map(message=>message.id))});setPrompt('');
+    sending.current=true;setInputSending(true);const text=prompt.trim()||(!options.selectedSkillIds?.length&&options.attachments?.length?t('请查看所附文件。'):prompt),version=draftVersion.current;
+    setPendingMessage({text,attachments:options.attachments,ids:new Set(run.messages.map(message=>message.id))});setPrompt('');
     try{
       setSendError('');
       if(supplemental){
@@ -197,7 +197,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   // makes the scroller rediscover a historical anchor and jump backwards.
   const statusContent=<>
           {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><div key={r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={openInput}/></div>)}
-          {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage text={pendingMessage.text}/>}
+          {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage attachments={pendingMessage.attachments} text={pendingMessage.text}/>}
           {referenceError&&<div role="alert" className="error-banner">{referenceError}</div>}
           {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</div>}
   </>;
@@ -211,7 +211,9 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const renderTurn=(turn:ConversationTurn)=>{
    const requests=(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1));
    const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
-   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+   // Keep the end anchor measured: a placeholder for the latest turn makes
+   // composer resizing mount history and shift the scroll target while typing.
+   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
@@ -289,7 +291,9 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
           {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<p role="alert">{historyError}</p>}
         </div>}
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
-        <MessageScrollerContent className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
+        {/* Bound anchor jumps to real content. The primitive's optional spacer would
+            otherwise keep short/folded final turns pinned above a blank viewport. */}
+        <MessageScrollerContent spacerClassName="hidden" className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
           {(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
@@ -310,10 +314,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
       <ExpertRecipient chat={expertChat}/>
-      <ChatComposer expertMentions={expertChat.mentions} attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending||expertChat.busy} sending={submitting||inputSending||expertChat.busy}
+      <ChatComposer expertMentions={expertChat.mentions} onPasteAttachments={files=>setOptions(current=>({...current,attachments:[...(current.attachments||[]),...files].filter((file,index,all)=>all.findIndex(other=>other.path===file.path)===index)}))} attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending||expertChat.busy} sending={submitting||inputSending||expertChat.busy}
         label={reworkMode?t('修改要求'):t('继续对话')} placeholder={reworkMode?t('说明需要修改的内容，提交后重新执行并验收'):run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
-        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
+        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length||!!options.attachments?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
         skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
         controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls permissionChange={run.permissionChange} modelChange={run.modelChange} catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 
