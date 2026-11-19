@@ -1,10 +1,11 @@
 import {createContext,useContext,useEffect,useState,useRef} from 'react';
+import {useDraftState} from './useDraftState';
 import {Button} from './components/ui/button';
 import {t} from './i18n';
 export const RunDetailsContext=createContext('');
 type Source={toolId?:string;messageId?:string;activityId?:string;preview?:boolean;version?:string;text:string};
 export function useToolText(source:Source,open:boolean){
- const id=useContext(RunDetailsContext),[offset,setOffset]=useState<number>(),[page,setPage]=useState<{text:string;offset:number;total:number;version:string}>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+ const id=useContext(RunDetailsContext),[offset,setOffset]=useDraftState<number|undefined>('text-page:'+JSON.stringify([id,source.messageId,source.toolId,source.activityId]),undefined,value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:undefined),[page,setPage]=useState<{text:string;offset:number;total:number;version:string}>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  const latest=useRef(source);latest.current=source;
  useEffect(()=>{
   if(!open){setPage(undefined);setOffset(undefined);setError('');return;}

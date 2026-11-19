@@ -68,3 +68,12 @@ coverage/
 /build/input-definition.cjs
 
 /.impeccable/
+
+# Generated Windows engine lifecycle helper
+/build/windows-process-host.exe
+/build/windows-process-host.exe.json
+
+# Rebuilt by prebuild; do not commit generated dependency bundles.
+/build/updater.cjs
+/build/workforce-graph.cjs
+/build/workforce-graph-LICENSES.txt

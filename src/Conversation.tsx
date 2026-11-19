@@ -1,3 +1,6 @@
+import {readReading,saveReading} from './conversation-view-state';
+import {useComposerReceipt} from './useComposerReceipt';
+import {useDraftState,restoreComposerOptions} from './useDraftState';
 import MessageBody from './MessageBody';
 import {ProcessDisclosureScope} from './process-disclosure';
 import {RunDetailsContext} from './ToolText';
@@ -73,9 +76,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   approve(id: string, decision: 'accept' | 'decline'): Promise<void>; submitting: boolean;
 }) {
   const language=useLanguage();
-  const [options,setOptions]=useState<ComposerOptions>({providerId:run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id,model:run.model,permission:run.permission||'default'});
+  const [options,setOptions,optionsStorageError]=useDraftState<ComposerOptions>('run:'+run.id+':options',{providerId:run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id,model:run.model,permission:run.permission||'default'},restoreComposerOptions);
   useEffect(()=>{onOptionsChange?.(options);},[options,onOptionsChange]);
-  const [prompt, setPrompt] = useState(''); const [pending,setPending]=useState<{id:string;decision:'accept'|'decline'}|null>(null);
+  const [prompt, setPrompt, draftStorageError] = useDraftState('run:'+run.id+':text',''); const [pending,setPending]=useState<{id:string;decision:'accept'|'decline'}|null>(null);
+  const receipt=useComposerReceipt('run:'+run.id,r=>{setPrompt(current=>current===r.text?current:[r.text,current].filter(Boolean).join('\n\n'));setOptions(current=>({...current,attachments:[...(r.options.attachments||[]),...(current.attachments||[])].filter((f,i,a)=>a.findIndex(x=>x.path===f.path)===i),selectedSkillIds:[...new Set([...(r.options.selectedSkillIds||[]),...(current.selectedSkillIds||[])])]}));},(_,r)=>{if(r)setOptions(current=>({...current,attachments:current.attachments?.filter(f=>!r.options.attachments?.some(sent=>sent.path===f.path)),selectedSkillIds:current.selectedSkillIds?.filter(id=>!r.options.selectedSkillIds?.includes(id))}));});
   const approvalLock=useRef(false);const [approvalError,setApprovalError]=useState<{id:string;message:string}|null>(null);
   const [recentOpen,setRecentOpen]=useState(false),[pendingOpen,setPendingOpen]=useState(false);
   const [modelBusy,setModelBusy]=useState(false);
@@ -94,9 +98,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   },[openReference,run.id]);
   const scroll = useRef<HTMLDivElement>(null);
   const {scrollToEnd,scrollToMessage}=useMessageScroller();
-  const following=useRef(true);
+  const readingRecovery=useRef(readReading(run.id));
+  const following=useRef(readingRecovery.current?.following!==false);
   const visibleRef=useRef(visible);visibleRef.current=visible;
-  const savedTop=useRef(0);
+  const savedTop=useRef(readingRecovery.current?.top||0);
   const active = isRunning(run);
   const currentProviderId=run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id;
   const modelPending=active&&!window.desktop?.switchRunModel&&(options.model!==run.model||options.providerId!==currentProviderId);
@@ -128,12 +133,14 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   };
   const trackScroll = () => {
     const el=scroll.current;
-    if(!visibleRef.current||!el?.clientHeight)return;
+    if(!visibleRef.current||!el?.clientHeight||readingRecovery.current)return;
     // A delayed scroll event after content growth must not cancel following.
     if(el.scrollHeight-el.scrollTop-el.clientHeight<60)following.current=true;
     else if(el.scrollTop<savedTop.current)following.current=false;
     savedTop.current=el.scrollTop;
     onFollowingChange(following.current);
+    const top=el.getBoundingClientRect().top,anchor=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.getBoundingClientRect().bottom>top);
+    if(anchor)saveReading(run.id,{turnId:anchor.dataset.turnId!,offset:anchor.getBoundingClientRect().top-top,top:el.scrollTop,following:following.current});
   };
   const jumpTurn=(id:string)=>{scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});};
   const jump=()=>{if(visibleRef.current)scrollToEnd({behavior:'instant'});};
@@ -142,6 +149,19 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     if(following.current)scrollToEnd({behavior:'instant'});
     else if(scroll.current)scroll.current.scrollTop=savedTop.current;
   },[visible,floatingHost,recentOpen,scrollToEnd]);
+  useLayoutEffect(()=>{
+    const saved=readingRecovery.current;if(!visible||!saved)return;
+    if(saved.following){readingRecovery.current=null;return;}
+    following.current=false;onFollowingChange(false);
+    const element=scroll.current;if(!element)return;
+    const anchor=[...element.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.dataset.turnId===saved.turnId);
+    if(!anchor&&before&&!historyError){if(!loadingHistory)void loadOlder();return;}
+    let frame=0,cancelled=false,attempts=0;
+    const restore=()=>{if(cancelled)return;if(element.hasAttribute('data-pending-scroll')&&attempts++<60){frame=requestAnimationFrame(restore);return;}
+      element.scrollTop=anchor?element.scrollTop+anchor.getBoundingClientRect().top-element.getBoundingClientRect().top-saved.offset:saved.top;
+      savedTop.current=element.scrollTop;frame=requestAnimationFrame(()=>{if(!cancelled)readingRecovery.current=null;});
+    };frame=requestAnimationFrame(restore);return()=>{cancelled=true;cancelAnimationFrame(frame);};
+  },[visible,turns,before,loadingHistory,historyError,onFollowingChange]);
   const deliveries=useInputDeliveries(run.id);
   const [inputSelection,setInputSelection]=useState<{id:string;key:number}>();
   const openInput=useCallback((id:string)=>{setInputSelection({id,key:Date.now()});onOpenInput?.(id);},[onOpenInput]);
@@ -166,29 +186,30 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const submit = async () => {
     if(expertChat.busy)return;
     if(expertChat.selected){if(active||run.archivedAt)return;if(options.attachments?.length||options.selectedSkillIds?.length){setSendError('专家讨论暂只支持文字，请移除附件和技能');return;}const sentText=prompt;const result=await expertChat.submit(sentText);if(result)setPrompt(current=>current===sentText?'':current);return;}
-    if((!prompt.trim()&&!options.selectedSkillIds?.length&&!options.attachments?.length)||submitting||sending.current||run.status==='stopping'||run.archivedAt)return;
+    if((!prompt.trim()&&!options.selectedSkillIds?.length&&!options.attachments?.length)||submitting||sending.current||receipt.pending||run.status==='stopping'||run.archivedAt)return;
     if(active&&!inputAPI)return;
     const supplemental=!!inputAPI&&(active||mutation.current?.text===prompt);
     if(supplemental&&(options.attachments?.length||options.selectedSkillIds?.length)){setSendError(t('补充消息暂只支持文字，请移除附件和技能后发送'));return;}
     if(inputAPI&&(!deliveries.snapshot||deliveries.error)){setSendError(t('暂时无法读取补充消息，请重试'));return;}
-    sending.current=true;setInputSending(true);const text=prompt.trim()||(!options.selectedSkillIds?.length&&options.attachments?.length?t('请查看所附文件。'):prompt),version=draftVersion.current;
+    const text=prompt.trim()?prompt:(!options.selectedSkillIds?.length&&options.attachments?.length?t('请查看所附文件。'):prompt);let requestId:string;try{requestId=receipt.begin(text,options,supplemental?'append':'start',run.id);}catch{setSendError(t('草稿暂时无法保存，刷新前请先复制输入内容。'));return;}sending.current=true;setInputSending(true);
     setPendingMessage({text,attachments:options.attachments,ids:new Set(run.messages.map(message=>message.id))});setPrompt('');
     try{
       setSendError('');
       if(supplemental){
         if(deliveries.snapshot?.policy.paused)await resumeInputs();
-        if(!mutation.current||mutation.current.text!==text)mutation.current={text,id:crypto.randomUUID()};
+        mutation.current={text,id:requestId};
         await inputAPI!.append({runId:run.id,clientMutationId:mutation.current.id,text});mutation.current=null;
       }else {
         // Stop ends the old turn. A new prompt must carry the selected model and
         // provider through startRun, not restart the old model via the input outbox.
         if(deliveries.snapshot?.policy.paused)await resumeInputs([]);
-        await send(text,options);
+        await send(text,{...options,clientMutationId:requestId});
       }
+      receipt.accepted();
       // The submitted draft was cleared immediately; preserve any new typing.
       if(!supplemental)setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false}));
       jump();
-    }catch(error){setPrompt(current=>draftVersion.current===version?text:[text,current].filter(Boolean).join('\n\n'));setSendError((error as Error).message);}finally{setPendingMessage(null);sending.current=false;setInputSending(false);void deliveries.refresh();}
+    }catch(error){await receipt.uncertain();setSendError((error as Error).message);}finally{setPendingMessage(null);sending.current=false;setInputSending(false);void deliveries.refresh();}
   };
   const [requestOutcome,setRequestOutcome]=useState<{key:string;label:string}|null>(null);
   const decide = async (id:string,decision:'accept'|'decline')=>{if(approvalLock.current||!visibleRef.current||run.archivedAt||!isRunning(run)||run.status==='stopping'||!run.approvals.some(a=>a.id===id))return;approvalLock.current=true;setPending({id,decision});setApprovalError(null);try{await approve(id,decision);const fileChange=run.approvals.find(a=>a.id===id)?.method.includes('fileChange');setRequestOutcome({key:'approval:'+id,label:decision==='decline'?'已拒绝本次请求':fileChange?'已批准本次文件修改':'已批准本次命令'});}catch(e){setApprovalError({id,message:(e as Error).message});}finally{approvalLock.current=false;setPending(null);}};
@@ -213,7 +234,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
    const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
    // Keep the end anchor measured: a placeholder for the latest turn makes
    // composer resizing mount history and shift the scroll target while typing.
-   return <ProcessDisclosureScope><VirtualBlock enabled={turns.length>30&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+   return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={turns.length>30&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
@@ -269,6 +290,8 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     return <section className="wf-run-actions" aria-label={t('需要你处理')}>
       {hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
       {inlineInputs}{outboxPanel}{pendingSurface}
+      {(draftStorageError||optionsStorageError)&&<p className="error-banner" role="alert">{t(draftStorageError||optionsStorageError)}</p>}
+      {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {run.status==='waiting'&&!hasRequest&&!deliveries.error&&<div role="status"><p>{t('正在等待操作，但尚未读取到具体请求。可以刷新或打开完整任务查看。')}</p><div className="settings-actions"><Button variant="outline" onClick={()=>{void deliveries.refresh();refreshRun?.();}}>{t('刷新待处理请求')}</Button><Button variant="ghost" onClick={()=>openSettings('task')}>{t('打开完整任务')}</Button></div></div>}
     </section>;
@@ -308,8 +331,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       }}/></MessageScroller>
     </div>
     <div className="conversation-dock">
+      {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {inlineInputs}{outboxPanel}{pendingSurface}
+      {(draftStorageError||optionsStorageError)&&<p className="error-banner" role="alert">{t(draftStorageError||optionsStorageError)}</p>}
       {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
       {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
@@ -338,14 +363,14 @@ function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnN
  return <TurnNavigation turns={turns} offset={offset} selected={currentAnchorId||turns[0]?.user.id||''} jump={jump}/>;
 }
 function RetainedConversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
- const [following,setFollowing]=useState(true);
+ const [following,setFollowing]=useState(()=>readReading(props.run.id)?.following!==false);
  const [history,setHistory]=useState({input:props.run,value:props.run});
  let run=history.value;
  // Adjust before committing children so a rolling page never removes mounted
  // history for one frame. All transcript hosts share this boundary.
  if(history.input!==props.run){run=props.actionsOnly?props.run:retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
  if(run.originHandoff)return <InvestigationDetails id={run.originHandoff.id}/>;
- return <RunDetailsContext.Provider value={props.run.id}><RenderErrorBoundary key={props.run.id} runId={props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><FrozenConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></RenderErrorBoundary></RunDetailsContext.Provider>;
+ return <RunDetailsContext.Provider value={props.run.id}><RenderErrorBoundary key={props.run.id} runId={props.run.id}><ProcessDisclosureScope storageKey={'run:'+props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><FrozenConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></ProcessDisclosureScope></RenderErrorBoundary></RunDetailsContext.Provider>;
 }
 
 // Keep history accumulation outside this boundary so background pagination cannot

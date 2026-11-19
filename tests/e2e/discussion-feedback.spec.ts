@@ -7,7 +7,7 @@ async function enter(page:Page,{empty=false,english=false,dark=false}={}){
 }
 for(const width of [390,800,1280])test(`empty discussion has no artificial scrolling at ${width}`,async({page})=>{
  await page.setViewportSize({width,height:950});await enter(page,{empty:true});
- await page.screenshot({path:`/tmp/discussion-empty-${width}.png`,animations:'disabled'});
+ await page.screenshot({path:test.info().outputPath(`discussion-empty-${width}.png`),animations:'disabled'});
  const geometry=await page.locator('.qa-scroll').evaluate(el=>({client:el.clientHeight,height:el.scrollHeight}));
  expect(geometry.height-geometry.client).toBeLessThanOrEqual(1);
  await expect(page.getByRole('button',{name:'回到最新消息'})).toHaveCount(0);
@@ -48,7 +48,7 @@ for(const [english,dark,reduced] of [[false,false,false],[true,true,true]] as co
  await expect.poll(()=>thought.evaluate(el=>el.scrollTop)).toBeGreaterThan(100);
  await thought.evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel',{deltaY:-50,bubbles:true}));el.scrollTop=0;});
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.reasoning+='\nNew provider text';h.revision++;q.emit();});await expect(thought).toContainText('New provider text');expect(await thought.evaluate(el=>el.scrollTop)).toBe(0);
- await page.screenshot({path:`/tmp/discussion-thinking-${english}.png`,animations:'disabled'});
+ await page.screenshot({path:test.info().outputPath(`discussion-thinking-${english}.png`),animations:'disabled'});
  await page.getByRole('button',{name:english?'Stop':'停止',exact:true}).click();await expect(host.getByRole('status')).toHaveCount(0);await expect(host.getByText(english?'Stopped':'已停止',{exact:true})).toBeVisible();
  await host.locator('summary').filter({hasText:english?'View model reasoning':'查看模型思考'}).click();await expect(thought).toContainText('New provider text');await expect(host.locator('[data-slot=spinner]')).toHaveCount(0);
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.reasoning='VeryLongUnbrokenProviderText'.repeat(100);h.revision++;q.emit();});

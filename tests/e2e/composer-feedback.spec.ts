@@ -27,5 +27,5 @@ for(const width of [1000,390])test(`compact activity fits at ${width}px`,async({
  await expect(page.getByRole('textbox')).toBeVisible();
  const bounds=await page.locator('.run-activity').boundingBox();expect(bounds!.height).toBeLessThanOrEqual(32);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:`/tmp/composer-feedback-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`composer-feedback-${width}.png`)});
 });

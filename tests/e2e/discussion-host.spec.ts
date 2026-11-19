@@ -34,7 +34,7 @@ test('live discussion keeps follow-ups visible, experts running and unsubmitted 
  const calls=await page.evaluate(()=>(window as any).spaceQA.calls);expect(calls.filter((c:any)=>c.action==='host')).toHaveLength(1);expect(calls.filter((c:any)=>c.action==='direct')).toHaveLength(0);expect(calls.filter((c:any)=>c.action==='followup')[1].input.employeeIds).toEqual(['writer']);
  await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.host);Object.assign(r.followups[1],{state:'handled',action:'update',reply:'已接收补充要求。',deliveries:[{id:'d',employeeId:'writer',state:'delivered'}]});q.emit();});
  await expect(followup.nth(1)).toContainText('已送达，等待应用确认');await expect(question).toHaveValue('customers');
- await page.screenshot({path:'/tmp/discussion-live-followups.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('discussion-live-followups.png'),fullPage:true});
  await page.getByRole('button',{name:'停止',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='stopHost').length)).toBe(1);
 });
 
@@ -55,9 +55,9 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,tr
  await page.setViewportSize({width,height:1000});await prepare(page,english,dark);const input=page.getByLabel(english?'What should we discuss?':'这次想推进什么？');await input.fill(english?'Plan a repair-ticket system for internal teams.':'规划一个内部使用的设备维修工单系统。');await input.press('Enter');
  const composer=page.locator('.wf-discussion-composer');await expect(composer.getByRole('button',{name:english?'Add content':'添加内容',exact:true})).toBeVisible();await expect(composer.getByRole('button',{name:english?'Default permissions':'默认权限',exact:true})).toBeVisible();
  const field=page.getByRole('combobox',{name:english?'Who will use it?':'谁来使用？'});await expect(field).toBeVisible();await expect(field).toHaveValue('staff');await field.focus();await expect(field).toBeFocused();
- await page.screenshot({path:`/tmp/discussion-host-${width}-${english}-${dark}.png`,fullPage:true});
+ await page.screenshot({path:test.info().outputPath(`discussion-host-${width}-${english}-${dark}.png`),fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- if(width<1000){await page.getByRole('button',{name:english?'Show discussion context':'查看讨论与相关内容'}).click();await page.getByText(english?'Goal and decision sources':'目标与决定的来源',{exact:true}).click();await expect(page.locator('.wf-host-brief')).toBeVisible();await page.screenshot({path:`/tmp/discussion-host-context-${width}.png`,fullPage:true});}
+ if(width<1000){await page.getByRole('button',{name:english?'Show discussion context':'查看讨论与相关内容'}).click();await page.getByText(english?'Goal and decision sources':'目标与决定的来源',{exact:true}).click();await expect(page.locator('.wf-host-brief')).toBeVisible();await page.screenshot({path:test.info().outputPath(`discussion-host-context-${width}.png`),fullPage:true});}
  if(await page.getByRole('button',{name:english?'Back to discussion':'返回讨论',exact:true}).isVisible())await page.getByRole('button',{name:english?'Back to discussion':'返回讨论',exact:true}).click();
  await page.evaluate(()=>{const q=(window as any).spaceQA;q.snapshot.requests.find((r:any)=>r.host).host.status='running';q.emit();});await page.getByRole('button',{name:english?'Stop':'停止',exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='stopHost').length)).toBe(1);
 });
@@ -67,7 +67,7 @@ test('host evidence expands from a source citation; question drafts survive navi
  await page.evaluate(()=>{const qa=(window as any).spaceQA;window.desktop!.spaces!.coordinateDiscussion=async()=>{throw Error('暂时离线');};});await page.getByRole('button',{name:'确认并继续'}).click();await expect(page.getByText('暂时离线', {exact:true})).toBeVisible();await expect(field).toHaveValue('customers');await expect(field).toBeEnabled();
  await page.evaluate(()=>{const qa=(window as any).spaceQA,r=qa.snapshot.requests.find((r:any)=>r.host);r.host.question=null;r.host.status='completed';r.participants=[{employeeId:'writer',status:'completed',output:'真实记录：'.repeat(300),contribution:{id:'expert-source',author:{name:'文案员工',id:'writer',kind:'expert'},stage:'analysis',context:null,provenance:'recorded'}}];r.host.brief.items[0].sourceIds=['expert-source'];qa.emit();});
  const details=page.locator('.wf-host-experts');await expect(details.locator('[data-slot=trace-collapsible-trigger]').first()).toHaveAttribute('aria-expanded','false');await expect(details.locator('[data-expert-id]')).toHaveCount(0);await page.getByText('目标与决定的来源',{exact:true}).click();await page.locator('.wf-host-brief').getByRole('button',{name:'来源 1'}).click();await expect(details.locator('[data-slot=trace-collapsible-trigger]').first()).toHaveAttribute('aria-expanded','true');await expect(page.locator('[data-expert-id="writer"]')).toBeFocused();
- await page.screenshot({path:'/tmp/discussion-host-long-evidence.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+ await page.screenshot({path:test.info().outputPath('discussion-host-long-evidence.png'),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 test('same-name experts require an explicit choice and never broadcast accidentally',async({page})=>{
  await prepare(page);await page.evaluate(async()=>{const qa=(window as any).spaceQA,old=await window.desktop!.workforce!.snapshot();const twin={...old.employees[0],id:'writer-two',responsibilities:'二号职责'};window.desktop!.workforce!.snapshot=async()=>({...old,employees:[...old.employees,twin]});qa.snapshot.spaces[0].members.push({employeeId:twin.id,assignment:'二号职责',projectIds:[]});qa.emit();});
@@ -109,7 +109,7 @@ for(const output of ['专家回复内容',''])test(`execution record lives in th
  await response.getByRole('button',{name:'回复操作'}).click();
  await expect(page.getByRole('menuitem',{name:'保存为文档草稿'})).toHaveCount(output?1:0);
  await expect(page.getByRole('menuitem',{name:'查看执行记录'})).toBeVisible();
- await page.screenshot({path:`/tmp/discussion-response-menu-${!!output}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-response-menu-${!!output}.png`)});
  await page.getByRole('menuitem',{name:'查看执行记录'}).click();
  await expect(page.getByRole('heading',{name:'原始任务证据（测试数据）'})).toBeVisible();
  await page.getByRole('button',{name:'返回项目空间'}).click();

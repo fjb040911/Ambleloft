@@ -33,7 +33,7 @@ for(const width of [1280,390])test(`node messages scroll while composer stays vi
  const clipped=await group.evaluate(el=>{const box=el.getBoundingClientRect();const failures:string[]=[];for(let parent=el.parentElement;parent;parent=parent.parentElement){const style=getComputedStyle(parent);if(!['hidden','auto','scroll','clip'].includes(style.overflowX))continue;const rect=parent.getBoundingClientRect();if(box.left-3<rect.left+parent.clientLeft-0.5||box.right+3>rect.left+parent.clientLeft+parent.clientWidth+0.5)failures.push(parent.className);}return failures;});
  expect(clipped).toEqual([]);
 
- await page.screenshot({path:`/tmp/node-scroll-fixed-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`node-scroll-fixed-${width}.png`)});
  await page.getByRole('tab',{name:'交付验收',exact:true}).click();
  const detail=page.locator('.wf-task-detail');await expect.poll(()=>detail.evaluate(el=>el.scrollHeight>el.clientHeight)).toBeTruthy();
  await detail.evaluate(el=>{el.scrollTop=200;});await expect.poll(()=>detail.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
@@ -62,5 +62,5 @@ for(const width of [1280,390])test(`old host permission error does not displace 
  await expect(page.getByText(/当前桌面主进程尚不支持更改授权模式/)).toHaveCount(1);
  await expect(page.getByRole('combobox',{name:'节点授权模式'})).toHaveValue('inherit');await expect(page.getByRole('combobox',{name:'节点授权模式'})).toBeDisabled();
  const after=await input.boundingBox();expect(after!.y+after!.height).toBeLessThanOrEqual(900);expect(Math.abs(after!.y-before!.y)).toBeLessThan(2);
- await page.screenshot({path:`/tmp/node-error-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`node-error-${width}.png`)});
 });

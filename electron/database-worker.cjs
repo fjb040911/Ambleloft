@@ -56,7 +56,7 @@ try{
  try {for(const [kind,table] of [['draft','drafts'],['run','runs']])for(const row of db.prepare(`SELECT id,data FROM ${table}`).all()){const item=JSON.parse(row.data);resources.identify(kind,row.id,item.projectId);}db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
 }catch(e){parentPort.postMessage({fatal:e.message});try{db?.close();}catch{};db=null;parentPort.close();process.exitCode=1;}
 const {collections}=require('./run-patches.cjs');
-function transaction(fn){if(db.isTransaction)return fn();db.exec('BEGIN IMMEDIATE');try{const value=fn();db.exec('COMMIT');return value;}catch(e){db.exec('ROLLBACK');throw e;}}
+function transaction(fn){if(db.isTransaction)return fn();require('./storage-timing.cjs').measure('databaseLockMs',()=>db.exec('BEGIN IMMEDIATE'));try{const value=fn();require('./storage-timing.cjs').measure('databaseCommitMs',()=>db.exec('COMMIT'));return value;}catch(e){db.exec('ROLLBACK');throw e;}}
 function syncTable(table,values){
  const existing=new Map(db.prepare(`SELECT id,data FROM ${table}`).all().map(r=>[r.id,r.data]));
  const put=db.prepare(`INSERT INTO ${table}(id,data) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`);
@@ -111,13 +111,14 @@ function saveRunPatches(input){return transaction(()=>{
   db.prepare('INSERT INTO runs(id,project_id,updated_at,archived_at,data) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET project_id=excluded.project_id,updated_at=excluded.updated_at,archived_at=excluded.archived_at,data=excluded.data').run(patch.id,meta.projectId||null,meta.updatedAt||meta.createdAt||'',meta.archivedAt||null,JSON.stringify(meta));
   for(const item of patch.upserts){
    if(!collections.includes(item.collection))throw Error('INVALID_COLLECTION');
-   JSON.parse(item.data);
+   const itemValue=JSON.parse(item.data);
+   if(item.collection==='messages'&&itemValue.role==='user'&&itemValue.composerRequest){const {id,digest}=itemValue.composerRequest;const old=db.prepare('SELECT digest,run_id FROM composer_start_receipts WHERE id=?').get(id);if(old&&(old.digest!==digest||old.run_id!==patch.id))throw Error('IDEMPOTENCY_CONFLICT');db.prepare('INSERT OR IGNORE INTO composer_start_receipts VALUES(?,?,?)').run(id,digest,patch.id);}
    db.prepare('INSERT INTO run_items(run_id,collection,item_key,position,turn_key,data) VALUES(?,?,?,?,?,?) ON CONFLICT(run_id,collection,item_key) DO UPDATE SET position=excluded.position,turn_key=excluded.turn_key,data=excluded.data').run(patch.id,item.collection,item.key,item.position,item.turnKey,item.data);
    for(const field of item.removed)db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?').run(patch.id,item.collection,item.key,field);
    // First reconciliation can replace legacy or externally modified rows. Fields
    // not represented in the new skeleton must never survive as stale chunks.
    if(item.resetTexts)db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,item.collection,item.key);
-   for(const change of item.texts)texts.writeText(db,patch.id,item.collection,item.key,change);
+   for(const change of item.texts)require('./storage-timing.cjs').measure('databaseTextWriteMs',()=>texts.writeText(db,patch.id,item.collection,item.key,change));
   }
   for(const [collection,key] of patch.deletes)db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,collection,key);
   if(patch.keepItems){const wanted=new Set(patch.keepItems);for(const row of db.prepare('SELECT collection,item_key FROM run_items WHERE run_id=?').all(patch.id))if(!wanted.has(JSON.stringify([row.collection,row.item_key])))db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?').run(patch.id,row.collection,row.item_key);}
@@ -127,10 +128,10 @@ function saveRunPatches(input){return transaction(()=>{
   if(contentChanged||contextMeta(previous)!==contextMeta(meta)){
    taskContextModule.recordRunPatch(db,meta,patch,digest);
   }
-  if(meta.terminalTurnId&&meta.terminalTurnId!==previous?.terminalTurnId)automation.capture(texts.readRun(db,patch.id),meta.terminalTurnId);
+  if(meta.terminalTurnId&&meta.terminalTurnId!==previous?.terminalTurnId)automation.capture(texts.readRunReferences(db,patch.id),meta.terminalTurnId);
  }
  if(input.keep){const keep=new Set(input.keep);for(const row of db.prepare('SELECT id,data FROM runs').all())if(!keep.has(row.id)&&!JSON.parse(row.data).originHandoff){db.prepare('DELETE FROM runs WHERE id=?').run(row.id);db.prepare('DELETE FROM task_context_heads WHERE run_id=?').run(row.id);for(const table of ['form_instances','chat_inputs','chat_input_policies','input_requests','input_mutations'])db.prepare('DELETE FROM '+table+' WHERE run_id=?').run(row.id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(row.id);continuityDirty=true;}}
- if(input.terminal){const run=texts.readRun(db,input.terminal.runId);if(run)automation.capture(run,input.terminal.turnId);}
+ if(input.terminal){const run=texts.readRunReferences(db,input.terminal.runId);if(run)automation.capture(run,input.terminal.turnId);}
  if(continuityDirty)continuity.syncSources();
  const result=identities;db.prepare('INSERT INTO run_patch_receipts VALUES(?,?,?)').run(input.mutationId,new Date().toISOString(),JSON.stringify({digest,result}));
  db.prepare('DELETE FROM run_patch_receipts WHERE rowid IN (SELECT rowid FROM run_patch_receipts ORDER BY rowid DESC LIMIT -1 OFFSET 4096)').run();return result;
@@ -203,6 +204,7 @@ const handlers={
  listSkills(){return db.prepare("SELECT data FROM skills ORDER BY rowid DESC").all().map(row=>JSON.parse(row.data));},
  putSkill(record){db.prepare("INSERT INTO skills(id,data) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data").run(record.id,JSON.stringify(record));},
  deleteSkill({id}){db.prepare("DELETE FROM skills WHERE id=?").run(id);},
+ composerReceipt({id}){return db.prepare('SELECT digest,run_id FROM composer_start_receipts WHERE id=?').get(id)||null;},
  ready(){return {version:4};},
  readSetting({key}){const row=db.prepare('SELECT data FROM settings WHERE key=?').get(key);return row?JSON.parse(row.data):null;},
  writeSetting({key,value}){return transaction(()=>{const row=db.prepare('SELECT data FROM settings WHERE key=?').get(key);const before=row?JSON.parse(row.data):null;db.prepare('INSERT INTO settings(key,data) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET data=excluded.data').run(key,JSON.stringify(value));continuity.onSetting(key,before,value);});},
@@ -239,4 +241,4 @@ const handlers={
  saveRuns,
  close(){db.exec('PRAGMA wal_checkpoint(TRUNCATE)');db.close();return true;}
 };
-if(db)parentPort.on('message',({id,method,args})=>{try{if(!Object.hasOwn(handlers,method))throw new Error('未知数据库操作');parentPort.postMessage({id,value:handlers[method](args)});if(method==='close')parentPort.close();}catch(e){parentPort.postMessage({id,error:e.message,code:e.code});}});
+if(db)parentPort.on('message',({id,method,args})=>{const timing=require('./storage-timing.cjs');timing.begin();try{if(!Object.hasOwn(handlers,method))throw new Error('未知数据库操作');const value=handlers[method](args);parentPort.postMessage({id,value,timings:timing.take()});if(method==='close')parentPort.close();}catch(e){parentPort.postMessage({id,error:e.message,code:e.code,timings:timing.take()});}});

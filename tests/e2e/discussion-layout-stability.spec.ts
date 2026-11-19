@@ -63,5 +63,5 @@ for(const platform of ['darwin','win32'])test(`discussion geometry stays stable 
  await page.getByRole('tab',{name:'文档与产物',exact:true}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();
  await expect(footer).toBeInViewport();await expect(nav).toBeInViewport();
  await expect.poll(async()=>Math.abs((await geometry()).bottomGap)).toBeLessThan(2);
- await page.screenshot({path:`/tmp/discussion-stable-${platform}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-stable-${platform}.png`)});
 });

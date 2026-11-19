@@ -10,7 +10,7 @@ test('settings exposes pause and daily extraction cap without adding a growth ho
  await page.getByRole('button',{name:'暂停自动沉淀',exact:true}).click();await expect(page.getByRole('button',{name:'开启自动沉淀',exact:true})).toBeVisible();
  await page.getByRole('combobox',{name:'每日提炼上限',exact:true}).selectOption('5');expect(await page.evaluate(()=>(window as any).__growthChanges.at(-1))).toEqual({enabled:false,dailyLimit:5});
  await page.getByRole('button',{name:'开启自动沉淀',exact:true}).click();await expect(page.getByRole('button',{name:'暂停自动沉淀',exact:true})).toBeVisible();
- await page.screenshot({path:'/tmp/growth-settings.png'});
+ await page.screenshot({path:test.info().outputPath('growth-settings.png')});
 });
 test('failed policy update keeps the current state and displays a recoverable error',async({page})=>{
  await prepare(page);await page.evaluate(()=>{(window as any).__rejectGrowth=true;});await page.getByRole('button',{name:'暂停自动沉淀',exact:true}).click();await expect(page.getByRole('alert')).toContainText('保存失败');await expect(page.getByRole('button',{name:'暂停自动沉淀',exact:true})).toBeVisible();

@@ -27,7 +27,7 @@ for(const [width,theme] of [[1280,'light'],[390,'dark']] as const)test(`discussi
  await expect(jump).toHaveCSS('width','28px');await expect(jump).toHaveCSS('height','28px');
  await expect(jump).toHaveCSS('border-radius','6px');
  expect((await jump.boundingBox())!.y+28).toBeLessThan((await composer.boundingBox())!.y);
- await page.screenshot({path:`/tmp/discussion-shared-controls-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-shared-controls-${width}.png`)});
  await jump.focus();await page.keyboard.press('Enter');
  await expect.poll(()=>scroll.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(5);
  await expect(jump).toHaveCount(0);await expect(input).toHaveValue('尚未发送的讨论内容');

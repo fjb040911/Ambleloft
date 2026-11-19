@@ -23,7 +23,7 @@ for(const width of [1280,390])test(`acceptance shows live downstream scheduling 
  await expect(result).toContainText('1 项执行中，0 项准备中');
  await expect(result.locator('[data-successor-id="bundle"]')).toContainText('文案员工');
  expect(await result.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/review-outcome-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`review-outcome-${width}.png`)});
  await detail.evaluate(el=>el.scrollTop=100);const position=await detail.evaluate(el=>el.scrollTop);
  await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.plans[0].packages[1].status='waiting';qa.emit();});
  await expect(result.locator('[data-successor-id="bundle"]')).toContainText('等待输入或授权');

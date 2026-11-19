@@ -53,7 +53,11 @@ test('archive leaves main navigation, restores, and permanent deletion requires 
  await expect(page.locator('.tree-task')).toHaveCount(0);
  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'任务',exact:true}).click();
  await expect(page.locator('.archive-row')).toContainText('保留原任务');await page.getByRole('button',{name:'还原',exact:true}).click();await expect(page.locator('.archive-row')).toHaveCount(0);
- await page.getByRole('button',{name:'返回应用'}).click();await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();await page.getByRole('button',{name:'管理任务：保留原任务'}).click();await page.getByRole('button',{name:'归档任务',exact:true}).click();await page.getByRole('button',{name:'确认归档任务'}).click();
+ await page.getByRole('button',{name:'返回应用'}).click();await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'项目',exact:true}).click();
+ // Selecting an already active category toggles its sidebar. Open it before
+ // exercising the restored task's menu, regardless of the return route.
+ const showSidebar=page.getByRole('button',{name:'显示侧栏',exact:true});if(await showSidebar.isVisible())await showSidebar.click();
+ await page.getByRole('button',{name:'管理任务：保留原任务'}).click();await page.getByRole('button',{name:'归档任务',exact:true}).click();await page.getByRole('button',{name:'确认归档任务'}).click();
  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'永久删除',exact:true}).click();await expect(page.locator('.archive-row')).toHaveCount(1);
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.locator('.archive-row')).toHaveCount(1);
  await page.getByRole('button',{name:'永久删除',exact:true}).click();await page.getByRole('button',{name:'确认永久删除'}).click();await expect(page.locator('.archive-row')).toHaveCount(0);

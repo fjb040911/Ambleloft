@@ -1,5 +1,6 @@
+import {useDraftState} from './useDraftState';
 import {TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent,TraceLine,TraceTitle,TraceDescription} from './components/ui/trace';
-import {useState,useEffect,useRef} from 'react';
+import {useState,useEffect,useLayoutEffect,useRef} from 'react';
 import {MessageCircle} from 'lucide-react';
 import {Avatar,AvatarFallback} from './components/ui/avatar';
 import {Badge} from './components/ui/badge';
@@ -29,8 +30,9 @@ export function DiscussionFollowups({request}:{request:SpaceRequest}){
  </div>)}</>;
 }
 
-export function ExpertContributions({request,children,actions}:{request:SpaceRequest;children:React.ReactNode;actions?:React.ReactNode}){
- const L=useCopy(),[open,setOpen]=useState(false),ref=useRef<HTMLDivElement>(null);
+export function ExpertContributions({request,children,actions,onVisibility}:{request:SpaceRequest;children:React.ReactNode;actions?:React.ReactNode;onVisibility?:(id:string,open:boolean)=>void}){
+ const L=useCopy(),[open,setOpen]=useDraftState('discussion-experts:'+request.id,false),ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{onVisibility?.(request.id,!request.host||open);},[request.id,!!request.host,open,onVisibility]);
  useEffect(()=>{const el=ref.current;if(!el)return;const reveal=()=>setOpen(true);el.addEventListener('reveal-expert',reveal);return()=>el.removeEventListener('reveal-expert',reveal);},[!!request.host,!!request.participants.length]);
  if(!request.host)return <>{children}</>;
  if(!request.participants.length)return null;
@@ -43,16 +45,19 @@ export function ExpertContributions({request,children,actions}:{request:SpaceReq
  </div>;
 }
 
-export function DiscussionHostReply({host,children}:{host:DiscussionHost;children?:React.ReactNode}){
+export function DiscussionHostReply({requestId,host,children}:{requestId:string;host:DiscussionHost;children?:React.ReactNode}){
  const L=useCopy(),live=['preparing','running','stopping'].includes(host.status),activity=host.activity;
+ const [reasoningOpen,setReasoningOpen]=useDraftState('discussion-host-reasoning:'+requestId,false),[stepsOpen,setStepsOpen]=useDraftState('discussion-host-steps:'+requestId,false);
+ const previousActivity=useRef({live,id:activity?.id});
+ useLayoutEffect(()=>{const previous=previousActivity.current;if(previous.live&&(!live||previous.id!==activity?.id))setReasoningOpen(false);previousActivity.current={live,id:activity?.id};},[live,activity?.id]);
  const labels:Record<string,string>={preparing:L('准备中','Preparing'),running:L('协调中','Coordinating'),'needs-input':L('待你确认','Your input needed'),ready:L('可整理为任务','Ready to shape into tasks'),completed:L('本轮已完成','Round complete'),failed:L('协调未完成','Coordination incomplete'),interrupted:L('已停止','Stopped')};
  return <section className="wf-response wf-host-response" aria-label={L('主持人回复','Host response')}>
   <header className="wf-speaker-header"><Avatar aria-hidden="true"><AvatarFallback><MessageCircle className="size-4"/></AvatarFallback></Avatar><div className="wf-speaker-name"><strong>{L('主持人','Host')}</strong><span>{host.model||(live?L('正在准备模型','Preparing model'):L('模型信息未记录','Model not recorded'))}</span></div><Badge variant={host.status==='failed'?'destructive':'secondary'}>{host.task?.restarted&&host.status==='completed'?L('新引导已开始','New guide started'):labels[host.status]||host.status}</Badge></header>
   {live&&<div className="wf-host-activity" aria-label={L('主持人运行状态','Host activity')}>
    {activity?.reasoning&&activity.phase==='reasoning'?<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live/>:<ProcessIndicator title={host.status==='preparing'?L('正在准备','Preparing'):host.status==='stopping'?L('正在停止','Stopping'):activity?.phase==='planning'?L('正在规划任务与检查项目关系','Planning tasks and checking project relationships'):activity?.phase==='experts'?L('等待专家完成分析','Waiting for expert analysis'):activity?.phase==='responding'?L('正在整理回复','Preparing a response'):L('等待模型响应','Waiting for the model')}/>}
   </div>}
-  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<details key={`${activity.id}:${live}`} className="wf-host-trace"><summary>{L('查看模型思考','View model reasoning')}</summary><ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/></details>}
-  {host.steps.length>1&&<details className="wf-host-trace"><summary>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</summary>{host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</details>}
+  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<details key={`${activity.id}:${live}`} className="wf-host-trace" open={reasoningOpen} onToggle={event=>setReasoningOpen(event.currentTarget.open)}><summary>{L('查看模型思考','View model reasoning')}</summary>{reasoningOpen&&<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/>}</details>}
+  {host.steps.length>1&&<details className="wf-host-trace" open={stepsOpen} onToggle={event=>setStepsOpen(event.currentTarget.open)}><summary>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</summary>{stepsOpen&&host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</details>}
   {host.steps.at(-1)&&<Markdown text={host.steps.at(-1)!.text}/>}
   {host.error&&<Alert variant="destructive"><AlertDescription>{host.error}</AlertDescription></Alert>}
   {['failed','interrupted'].includes(host.status)&&<p className="wf-muted">{L('已保留本轮结果。在输入框补充或发送“继续”，主持人会重新评估下一步。','Results are preserved. Add a message or send “continue” to reassess the next step.')}</p>}

@@ -20,6 +20,13 @@ async function fixture(t,{hook}={}){
  return {runtime,run,context,calls,transports,child};
 }
 const next={runId:'run',providerId:'a',model:'new'};
+test('a stalled old transport close reaches the switch deadline and cannot reconnect later',async t=>{
+ const f=await fixture(t),gate=deferred(),entered=deferred();f.runtime.permissionTimeoutMs=100;
+ f.context.rpc.close=()=>{f.context.rpc.closed=true;entered.resolve();return gate.promise;};
+ const switching=f.runtime.switchModel(next);await entered.promise;
+ const result=await switching;assert.equal(result.state,'failed');assert.match(result.error,/超时/);assert.equal(f.transports.length,1);
+ gate.resolve();await new Promise(r=>setImmediate(r));assert.equal(f.transports.length,1);assert.equal(f.calls.some(c=>c.method==='turn/start'),false);
+});
 test('model replacement waits for the previous engine to release its database',async t=>{
  const f=await fixture(t),gate=deferred(),entered=deferred();
  f.context.rpc.close=()=>{f.context.rpc.closed=true;entered.resolve();return gate.promise;};

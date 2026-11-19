@@ -36,6 +36,14 @@ test('events retain eventId across crash recovery, retry six attempts then enter
  for(let n=2;n<=6;n++){row=await f.db.call('automationNextEvent',{now:Date.now()+n*1000000});assert.equal(row.event.eventId,eventId);await f.db.call('automationAck',{id:row.id,ok:false,now:Date.now(),jitter:0});}
  assert.equal((await f.state()).events[0].status,'dead');await f.automation.manage({id,action:'retry',eventId:row.id});row=await f.db.call('automationNextEvent');assert.equal(row.event.eventId,eventId);await f.db.call('automationAck',{id:row.id,ok:true});assert.equal((await f.state()).events.length,0);
 });
+
+test('oversized terminal snapshot preserves explicit quota failure across restart and later source edits',async t=>{
+ const f=await fixture(t);f.run.messages[1].text='中文😀'.repeat(100000);await f.commit();
+ await assert.rejects(f.automation.forExtension(f.context,'getTurn',f.ref),/QUOTA_EXCEEDED/);
+ f.run.messages[1].text='short later edit';await f.commit();await f.restart();
+ await assert.rejects(f.automation.forExtension(f.context,'getTurn',f.ref),/QUOTA_EXCEEDED/);
+ assert.equal((await f.state()).events.length,1);
+});
 test('jobs require opt-in, deduplicate durable keys, validate output, isolate source chat and respect budget',async t=>{
  const f=await fixture(t);await f.commit();await assert.rejects(f.submit(),/INTERACTION_REQUIRED/);await f.policy({dailyLimit:1});
  const first=await f.submit();assert.equal((await f.submit()).id,first.id);

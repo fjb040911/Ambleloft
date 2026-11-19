@@ -27,7 +27,8 @@ async function switchModel(input){
  }
  return require('./permission-switch.cjs').switchPermission.call(this,{runId:run.id,permission:run.permission||'default'}, {
   requested:choice(config),previous,
-  reconnect:async(context,check)=>{
+  reconnect:async(context,check,timeoutMs)=>{
+   const deadline=Date.now()+timeoutMs;
    if(context.remoteProject)config.remoteOnly=true;
    const executable=await findCodex(config.executable);check();
    const home=context.rpcLocation?.home||await prepareEngineHome(this.directory),cwd=context.rpcLocation?.cwd||run.cwd;
@@ -48,7 +49,7 @@ async function switchModel(input){
     notification:m=>{if(context.rpc===rpc)this.notification(context,m);},request:m=>{if(context.rpc===rpc)this.request(context,m);},
     exit:e=>{if(context.rpc===rpc&&!context.done&&!context.permissionTransition)void this.finish(context,'failed',redact(e.message,config.apiKey));}});
    context.rpc=rpc;rpc.setBackpressure?.(this.storagePressure);context.rpcLocation={home,cwd};run.modelSessionId=nextSession;
-   await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}});check();rpc.send({method:'initialized',params:{}});
+   await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}},Math.max(1,deadline-Date.now()));check();rpc.send({method:'initialized',params:{}});
   },
   parameters:()=>({model:config.model,modelProvider:'atelier'}),
   matches:applied=>applied.model===config.model&&applied.modelProvider==='atelier',

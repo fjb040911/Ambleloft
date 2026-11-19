@@ -23,7 +23,7 @@ const methods={
    });
    const done=new Set();const deadline=Date.now()+60000;
    while(true){
-    const r=(await this.snapshot()).requests.find(r=>r.id===input.requestId);if(this.closing||!r||r.liveStopped)throw Error('讨论权限切换已停止');
+    const r=(await this.snapshot({output:'status',requestIds:[input.requestId]})).requests.find(r=>r.id===input.requestId);if(this.closing||!r||r.liveStopped)throw Error('讨论权限切换已停止');
     const targets=r.participants.filter(p=>p.runId&&live.has(p.status)&&!done.has(p.runId));
     for(const p of targets){done.add(p.runId);const result=await this.runtime.switchPermission({runId:p.runId,permission:input.permission,confirmed:input.confirmed});results.push(result);if(result.state!=='applied')throw Error(result.error||'专家权限未确认生效');}
     if(targets.length)continue;
@@ -34,7 +34,7 @@ const methods={
    if(record){await this.change(s=>{const r=s.requests.find(r=>r.id===input.requestId);if(r?.permissionChange?.id===record.id)Object.assign(r.permissionChange,{state:'failed',effective:null,error:(results.some(result=>result.state==='applied')?'部分专家已切换，本轮已停止 / Some experts changed permissions; this round was stopped: ':'')+e.message});});await this.stopDiscussionHost({requestId:input.requestId,skipPermissionWait:true});}
    else throw e;
   }finally{this.discussionPermissionJobs.delete(input.requestId);release();}
-  return this.snapshot();
+  return this.snapshot({output:'preview'});
  }
 };
 module.exports={discussionPermissionMethods:methods};

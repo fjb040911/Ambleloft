@@ -33,19 +33,30 @@ class SpaceService {
   }
   change(fn){const action=this.queue.then(async()=>{const state=await this.read(),result=await fn(state);await this.database.call('writeSetting',{key:KEY,value:state});this.publish();if(this.plans)this.plans.dirty=true;return structuredClone(result);});this.queue=action.catch(()=>{});return action;}
   async snapshot(...args){const started=performance.now();try{return await this.projectSnapshot(...args);}finally{require('../../electron/performance-metrics.cjs').metrics.record('spaceSnapshotMs',performance.now()-started);}}
-  async projectSnapshot({output,requestIds}={}){
-    if(output!==undefined&&output!=='preview')throw Error('输出模式无效');
+  async projectSnapshot({output,requestIds,employeeIds,topicRequestId,previewLimit=2048}={}){
+    if(output!==undefined&&!['preview','status'].includes(output))throw Error('输出模式无效');
     if(requestIds!==undefined&&(!Array.isArray(requestIds)||requestIds.some(id=>typeof id!=='string')))throw Error('讨论范围无效');
+    if(employeeIds!==undefined&&(!Array.isArray(employeeIds)||employeeIds.some(id=>typeof id!=='string')))throw Error('专家范围无效');
+    if(!Number.isInteger(previewLimit)||previewLimit<1||previewLimit>8192)throw Error('预览大小无效');
+    require('../../electron/performance-metrics.cjs').metrics.record(output==='status'?'spaceStatusQueries':output==='preview'?'spacePreviewQueries':'spaceFullQueries',1);
+    if(topicRequestId!==undefined&&typeof topicRequestId!=='string')throw Error('讨论范围无效');
     await this.queue;const state=await this.read();
     const runs=new Map();for(const run of this.runtime.runs){const key=JSON.stringify([run.collaboration?.requestId,run.employee?.id]);if(!runs.has(key))runs.set(key,run);}
+    // Resolve ancestry before narrowing the projection to a selected round.
+    const roots=new Map(state.requests.map(r=>[r.id,r.discussion?.id||(r.mode==='discussion'?discussionRoot(state.requests,r):r.id)]));
+    if(topicRequestId!==undefined)state.requests=state.requests.filter(r=>roots.has(topicRequestId)&&roots.get(r.id)===roots.get(topicRequestId));
     if(requestIds)state.requests=state.requests.filter(r=>requestIds.includes(r.id));
-    return {...state,requests:state.requests.map(request=>({...request,...(request.mode==='discussion'?{discussion:request.discussion||{schemaVersion:1,id:discussionRoot(state.requests,request),mode:'consultation',provenance:'legacy'}}:{}),staleReferences:request.mode==='work'?request.documentRefs.filter(ref=>state.documents.find(d=>d.id===ref.id)?.adoptedRevision!==ref.revision).map(ref=>({id:ref.id,revision:ref.revision,currentRevision:state.documents.find(d=>d.id===ref.id)?.adoptedRevision??null})):[],participants:request.participants.map(p=>{
+    return {...state,requests:state.requests.map(request=>({...request,...(request.mode==='discussion'?{discussion:request.discussion||{schemaVersion:1,id:roots.get(request.id),mode:'consultation',provenance:'legacy'}}:{}),staleReferences:request.mode==='work'?request.documentRefs.filter(ref=>state.documents.find(d=>d.id===ref.id)?.adoptedRevision!==ref.revision).map(ref=>({id:ref.id,revision:ref.revision,currentRevision:state.documents.find(d=>d.id===ref.id)?.adoptedRevision??null})):[],participants:request.participants.map(p=>{
       const run=runs.get(JSON.stringify([request.id,p.employeeId]));
       const employee=run?.employee;
-      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?run.error:p.error,...require('./output-preview.cjs').participantOutput(run,output==='preview'),updatedAt:run?.updatedAt,
+      return {...p,...(request.mode==='discussion'?{contribution:projectContribution(request,p,run)}:{}),runId:run?.id||p.runId,status:run?.status||p.status,error:run?run.error:p.error,...(output==='status'?{output:''}:require('./output-preview.cjs').participantOutput(run,output==='preview'||!!employeeIds&&!employeeIds.includes(p.employeeId),previewLimit)),updatedAt:run?.updatedAt,
         // Report the role and skills actually used, even after the employee is edited or removed.
         ...(employee?{role:{name:employee.name,revision:employee.revision,skills:(employee.skills||[]).map(({id,name,version})=>({id,name,version}))}}:{})};
     })}))};
+  }
+  async outputs({requestIds,employeeIds}={}){
+    if(!Array.isArray(requestIds)||!requestIds.length||requestIds.length>100||requestIds.some(v=>typeof v!=='string'))throw Error('讨论范围无效');
+    return this.snapshot({requestIds,employeeIds});
   }
   writable(state,spaceId){
     const space=state.spaces.find(s=>s.id===spaceId);
@@ -195,7 +206,7 @@ class SpaceService {
   async startOne(input,hostContext){
     const state=await this.read(),existing=state.requests.find(r=>r.id===input.clientRequestId);
     this.assertDiscussionAvailable(state,input.clientRequestId,input.replyTo);
-    if(existing)return this.snapshot(); // A repeated IPC cannot launch duplicate model calls.
+    if(existing)return this.snapshot({output:'preview'}); // A repeated IPC cannot launch duplicate model calls.
     const space=this.writable(state,input.spaceId);
     const prompt=text(input.prompt,'任务内容',20000),mode=input.mode;
     if(input.permission!==undefined&&!['default','full'].includes(input.permission))throw Error('权限模式无效');
@@ -225,7 +236,7 @@ class SpaceService {
     if(historySpaceIds.length>20||historySpaceIds.some(sid=>!state.spaces.some(s=>s.id===sid&&members.every(m=>s.members.some(v=>v.employeeId===m.employeeId)))))throw Error('历史资料范围未授权给全部参与成员');
     let priorDiscussion=null;
     if(input.replyTo){
-      const snapshot=await this.snapshot(),prior=snapshot.requests.find(r=>r.id===input.replyTo&&r.spaceId===space.id&&r.mode==='discussion');
+      const snapshot=await this.snapshot({topicRequestId:input.replyTo}),prior=snapshot.requests.find(r=>r.id===input.replyTo&&r.spaceId===space.id&&r.mode==='discussion');
       if(prior?.host&&['preparing','running','stopping'].includes(prior.host.status))throw Error('上一轮尚未结束');
       if(!prior||prior.participants.some(p=>busy.has(p.status)||p.status==='started'))throw Error('上一轮尚未结束');
       const root=discussionRoot(state.requests,prior);if(state.discussionStates[root]?.status==='closed')throw Error('讨论已关闭，请先重新打开');
@@ -233,7 +244,7 @@ class SpaceService {
       while(item&&!seen.has(item.id)){seen.add(item.id);chain.unshift(item);item=snapshot.requests.find(r=>r.id===item.replyTo&&r.spaceId===space.id&&r.mode==='discussion');}
       const recent=chain.slice(-8);priorDiscussion={requestId:prior.id,prompt:prior.prompt,responses:prior.participants.map(p=>({employeeId:p.employeeId,name:p.role?.name,output:p.output.slice(-3000)})),historyTruncated:chain.length>recent.length,earlierRounds:recent.slice(0,-1).map(r=>({requestId:r.id,prompt:r.prompt.slice(0,2000),responses:r.participants.map(p=>({employeeId:p.employeeId,name:p.role?.name,output:p.output.slice(-1000)}))}))};
     }
-    if(mode==='discussion'&&input.replyTo){const snap=await this.snapshot();const root=require('./discussion-host.cjs').rootOf(snap.requests,snap.requests.find(r=>r.id===input.replyTo));const sources=require('./discussion-host.cjs').sourcesFor(snap,space.id,root);if(JSON.stringify(sources).length>240000)throw Error('讨论超过上下文上限，请缩小范围');priorDiscussion={...priorDiscussion,sources,brief:snap.requests.filter(r=>require('./discussion-host.cjs').rootOf(snap.requests,r)===root&&r.host?.brief).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).at(-1)?.host.brief,historyTruncated:false};}
+    if(mode==='discussion'&&input.replyTo){const snap=await this.snapshot({topicRequestId:input.replyTo});const root=require('./discussion-host.cjs').rootOf(snap.requests,snap.requests.find(r=>r.id===input.replyTo));const sources=require('./discussion-host.cjs').sourcesFor(snap,space.id,root);if(JSON.stringify(sources).length>240000)throw Error('讨论超过上下文上限，请缩小范围');priorDiscussion={...priorDiscussion,sources,brief:snap.requests.filter(r=>require('./discussion-host.cjs').rootOf(snap.requests,r)===root&&r.host?.brief).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).at(-1)?.host.brief,historyTruncated:false};}
     const attachments=input.attachments||[];
     if(!Array.isArray(attachments)||attachments.length>50)throw Error('最多添加 50 个文件或文件夹');
     for(const file of attachments){if(!file||typeof file.path!=='string'||!path.isAbsolute(file.path)||file.path.length>4096)throw Error('附件路径无效');await fs.stat(file.path);}
@@ -261,7 +272,7 @@ class SpaceService {
         });
       }catch(error){await this.change(s=>{const participant=s.requests.find(r=>r.id===request.id).participants.find(p=>p.employeeId===member.employeeId);participant.status='failed';participant.error=error.message;});}
     }
-    return this.snapshot();
+    return this.snapshot({output:'preview'});
   }
   suggestPlan(input){if(this.closing)return Promise.reject(Error('应用正在关闭'));this.suggestionJobs ||= new Set();const action=require('./plan-suggestions.cjs').suggestPlan.call(this,input);this.suggestionJobs.add(action);action.finally(()=>this.suggestionJobs.delete(action)).catch(()=>{});return action;}
   savePlan(input){return this.plans.save(input);}

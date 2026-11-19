@@ -14,7 +14,7 @@ for(const width of [1280,390])test(`approval float preserves layout and navigati
  const approve=surface.getByRole('button',{name:'批准本次',exact:true});await approve.scrollIntoViewIfNeeded();
  expect(await approve.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBeTruthy();
  await approve.click();await expect(approve).toHaveCount(0);await expect(surface).toContainText('已批准本次命令');await expect(surface.getByRole('region',{name:'下一项请求'})).toContainText('pwd');
- await page.screenshot({path:`/tmp/request-preview-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`request-preview-${width}.png`)});
  await surface.getByRole('button',{name:'审核此项',exact:true}).click();await expect(approve).toBeVisible();await expect(surface).toContainText('检查项目 2');
  await surface.getByRole('button',{name:'收起请求',exact:true}).click();await expect(approve).toBeHidden();
  expect(await input.boundingBox()).toEqual(initial);expect(await page.locator('.wf-node-conversation').boundingBox()).toEqual(chat);
@@ -29,7 +29,7 @@ for(const width of [1280,390])test(`approval float preserves layout and navigati
  await input.fill('可以继续编辑草稿');
  await expect.poll(()=>page.locator('.conversation-scroll').evaluate(el=>el.clientHeight)).toBe(messageHeight);
  await surface.getByRole('button',{name:'查看并处理',exact:true}).click();
- await page.screenshot({path:`/tmp/approval-float-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`approval-float-${width}.png`)});
  await page.getByRole('button',{name:'返回流程图',exact:true}).click();await expect(page.locator('.wf-graph-node[data-package-id="copy"]')).toBeVisible();
  await expect(page.locator('.wf-request-surface.is-floating')).toHaveCount(0);
 });

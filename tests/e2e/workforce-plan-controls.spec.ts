@@ -6,7 +6,7 @@ test('plan surface handles two approval requests without opening nodes',async({p
  const panel=page.getByRole('region',{name:'计划控制与待处理'});await expect(panel.getByRole('button',{name:'查看并处理',exact:true})).toHaveCount(2);
  await panel.getByRole('button',{name:'查看并处理',exact:true}).first().click();await panel.getByRole('region',{name:'处理任务请求',exact:true}).filter({has:page.getByRole('button',{name:'批准本次',exact:true})}).getByRole('button',{name:'批准本次',exact:true}).click();await panel.getByRole('button',{name:'收起请求',exact:true}).click();await panel.getByRole('button',{name:'查看并处理',exact:true}).last().click();await panel.getByRole('region',{name:'处理任务请求',exact:true}).filter({has:page.getByRole('button',{name:'批准本次',exact:true})}).getByRole('button',{name:'批准本次',exact:true}).click();await panel.getByRole('button',{name:'收起请求',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='approve').map((c:any)=>c.input.runId))).toEqual(['wait0','wait1']);
- await expect(page.locator('.wf-task-review')).toHaveCount(0);await page.screenshot({path:'/tmp/plan-control-center.png'});
+ await expect(page.locator('.wf-task-review')).toHaveCount(0);await page.screenshot({path:test.info().outputPath('plan-control-center.png')});
 });
 test('plan permission changes have explicit scope and pause-interrupted node can continue plan',async({page})=>{
  await page.goto('/tests/manual/project-space-qa.html');await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.plans[0].status='paused';qa.snapshot.plans[0].packages[0].status='interrupted';qa.snapshot.plans[0].packages[0].stopReason='plan-pause';qa.emit();});

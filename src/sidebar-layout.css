@@ -82,7 +82,7 @@
 }
 .workspace-navigation .tree-task small { color:var(--secondary); }
 .workspace-navigation :is(.project-tree-row,.tree-task):has(> [data-slot="sidebar-menu-button"]:active, > .tree-toggle:active) { background:var(--nav-pressed); }
-.workspace-navigation .tree-toggle { background:transparent; }
+.workspace-navigation .tree-toggle, .workspace-navigation .tree-toggle:hover { background:transparent; }
 .workspace-navigation .tree-toggle { color:var(--secondary); }
 .workspace-navigation .project-tree-row.selected .tree-toggle { color:var(--accent); }
 .workspace-navigation .nav-group-toggle { font-size:.75rem; font-weight:600; color:var(--secondary); }

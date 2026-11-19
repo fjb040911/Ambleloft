@@ -127,6 +127,7 @@ declare global {
       testProvider(id?:string): Promise<{ message: string;capability?:{model:string;protocol:'chat'|'responses';mode:'schema'|'json'|'prompt';streaming:boolean;verifiedAt:number} }>;
       editRun(input: {id: string; title?: string; projectId?: string | null; remove?: boolean; archived?:boolean}): Promise<AgentRun[]>;
       openProject(id: string): Promise<void>;
+      getRunRequestState?(input:{id:string}):Promise<{id:string;status:string;approval:boolean;input:boolean}>;
       getMessageText?(input:{id:string;messageId:string;offset?:number;limit?:number}):Promise<{text:string;offset:number;total:number;version:string}>;
       copyRunMessages?(input:{id:string;messageIds:string[]}):Promise<void>;
       getToolText?(input:{id:string;toolId:string;activityId?:string;offset?:number;limit?:number}):Promise<{text:string;offset:number;total:number;version:string}>;
@@ -136,7 +137,8 @@ declare global {
       touchSearchItem?(input:{kind:string;id:string}):Promise<void>;
       searchWorkspace?(input:{query:string;kind:string;cursor?:string}):Promise<{items:SearchResult[];total:number;next:string|null}>;
       listRuns(): Promise<AgentRun[]>;
-      startRun(input: { employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
+      composerSendStatus?(input:{clientMutationId:string;runId?:string;kind:'start'|'append'|'discussion'}):Promise<{state:'pending'|'accepted'|'absent';runId?:string;discussionId?:string;deliveryState?:string}>;
+      startRun(input: { clientMutationId?:string; employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
       accessArtifact(input:{runId:string;id:string;preview?:boolean}):Promise<(DeliveredFile&{text:string})|null>;
       switchRunModel?(input:{runId:string;providerId:string;model:string;confirmProviderChange?:boolean}):Promise<ModelChange>;
       switchRunPermission?(input:{runId:string;permission:'default'|'full';confirmed?:boolean}):Promise<PermissionChange>;

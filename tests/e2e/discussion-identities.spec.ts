@@ -23,12 +23,12 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,tr
  await expect(first.locator('.wf-speaker-name')).toContainText('Same model');await expect(second.locator('.wf-speaker-name')).toContainText('Same model');
  await expect(page.getByRole('article',{name:english?'Your message':'你的消息',exact:true})).toHaveCount(1);
  const composer=page.locator('.wf-discussion-composer'),original=(await composer.boundingBox())!;
- await page.screenshot({path:`/tmp/discussion-identities-top-${width}-${english}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-identities-top-${width}-${english}.png`)});
  await first.evaluate(el=>{const scroller=el.closest('.qa-scroll')!;scroller.scrollTop+=el.getBoundingClientRect().top+320;});
  const tabs=(await page.locator('.wf-space-navigation').boundingBox())!,header=(await first.locator('.wf-speaker-header').boundingBox())!;
  expect(header.y).toBeGreaterThanOrEqual(tabs.y+tabs.height-2);expect(header.y).toBeLessThan(tabs.y+tabs.height+5);
  expect(Math.abs((await composer.boundingBox())!.y-original.y)).toBeLessThan(2);
- await page.screenshot({path:`/tmp/discussion-identities-sticky-${width}-${english}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-identities-sticky-${width}-${english}.png`)});
  await first.getByRole('button',{name:english?'View context for Product manager':'查看产品经理的发言依据'}).click();
  const context=page.getByRole('dialog',{name:english?'Context for this contribution':'本次发言依据'});await expect(context).toContainText('Requirements');await expect(context).toContainText('abcdef123456');await page.keyboard.press('Escape');
  await page.locator('.wf-discussion-roster button').nth(1).click();await expect(second).toBeFocused();

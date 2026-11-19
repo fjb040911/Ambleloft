@@ -282,3 +282,29 @@ test('preview snapshots bound response text while scoped explicit reads preserve
  assert.equal((await service.snapshot()).requests.length,2);assert.equal(runtime.runs[0].messages[2].text,text);
  await assert.rejects(service.snapshot({requestIds:'preview'}),/范围/);
 });
+
+test('status polling never touches expert text and retains complete control state',async t=>{
+ const {service,runtime,space}=await fixture(t);
+ await service.start({clientRequestId:'status-only',spaceId:space.id,prompt:'Review',mode:'discussion',employeeIds:['product']},{});
+ const run=runtime.runs[0];run.status='waiting';run.messages=[{role:'assistant',get text(){throw Error('FULL_TEXT_READ');}}];
+ const r=(await service.snapshot({output:'status',requestIds:['status-only']})).requests[0];assert.equal(r.participants[0].status,'waiting');assert.equal(r.participants[0].runId,run.id);assert.equal(r.participants[0].output,'');
+ await service.pumpDiscussionUpdates();
+ const settled=await service.settleDiscussionFollowups('status-only',new AbortController().signal);assert.equal(settled.participants[0].status,'waiting');
+});
+test('explicit output reads require a scope and hydrate only selected experts',async t=>{
+ const {service,runtime,space}=await fixture(t);
+ await service.start({clientRequestId:'root',spaceId:space.id,prompt:'Review',mode:'discussion',employeeIds:['product','architect']},{});
+ for(const r of runtime.runs)r.messages=[{role:'assistant',text:(r.employee.id+' 中文😀').repeat(8000)}];
+ const s=await service.outputs({requestIds:['root'],employeeIds:['product']});assert.equal(s.requests.length,1);
+ const [a,b]=s.requests[0].participants;assert.equal(a.output,runtime.runs[0].messages[0].text);assert.equal(b.output.length,2048);assert.equal(b.outputTruncated,true);
+ await assert.rejects(service.outputs(),/范围/);await assert.rejects(service.outputs({requestIds:[]}),/范围/);await assert.rejects(service.outputs({requestIds:['root'],employeeIds:'architect'}),/范围/);
+ await service.change(s=>s.requests.push({id:'reply',replyTo:'root',spaceId:space.id,mode:'discussion',participants:[]}));
+ assert.equal((await service.snapshot({output:'status',requestIds:['reply']})).requests[0].discussion.id,'root');
+});
+
+test('topic snapshots do not hydrate unrelated discussions',async t=>{
+ const {service,runtime,space}=await fixture(t);
+ for(const id of ['topic-a','topic-b'])await service.start({clientRequestId:id,spaceId:space.id,prompt:'Review',mode:'discussion',employeeIds:['product']},{});
+ runtime.runs.find(r=>r.collaboration.requestId==='topic-b').messages=[{role:'assistant',get text(){throw Error('UNRELATED_BODY_READ');}}];
+ const s=await service.snapshot({topicRequestId:'topic-a'});assert.deepEqual(s.requests.map(r=>r.id),['topic-a']);assert.equal(s.requests[0].participants[0].output,'Evidence from the selected inputs');
+});

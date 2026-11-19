@@ -320,3 +320,9 @@ test('new unassociated tasks use isolated scratch storage even after an SSH Dock
   await runtime.finish(runtime.active,'completed');
  }finally{await runtime?.shutdown();await fs.rm(directory,{recursive:true,force:true});}
 });
+
+test('terminal save wait does not retain engine pipes or delay the published terminal state',async()=>{
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});let release,closed=0;const states=[];runtime.changed=run=>states.push(run.status);runtime.persist=()=>new Promise(resolve=>release=resolve);
+ const context={key:'pending-save',config:{},run:{id:'r',status:'running',messages:[],tools:[],approvals:[]},rpc:{close(){closed++;}},bridge:{close(){closed++;}}};runtime.contexts.set(context.key,context);
+ const ending=runtime.finish(context,'interrupted');await new Promise(r=>setImmediate(r));assert.equal(closed,2);assert.equal(states.at(-1),'interrupted');assert.equal(context.done,true);assert.equal(runtime.contexts.has(context.key),true);release();await ending;assert.equal(runtime.contexts.has(context.key),false);
+});

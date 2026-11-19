@@ -51,12 +51,13 @@ async function writeChunk(stream,chunk,signal,onWait){
  if(signal?.aborted)throw signal.reason||Error('已取消');if(stream.destroyed)throw Error('输出连接已关闭');
  if(stream.write(chunk))return;
  metrics.record('bridgeWritePauses',1);
+ const waitingAt=performance.now();
  onWait?.(true);
  try{await new Promise((resolve,reject)=>{
   const done=error=>{stream.off('drain',drain);stream.off('close',close);stream.off('error',errorHandler);signal?.removeEventListener('abort',abort);error?reject(error):resolve();};
   const drain=()=>done(),close=()=>done(Error('输出连接已关闭')),errorHandler=error=>done(error),abort=()=>done(signal.reason||Error('已取消'));
   stream.once('drain',drain);stream.once('close',close);stream.once('error',errorHandler);signal?.addEventListener('abort',abort,{once:true});
   if(stream.destroyed)close();else if(signal?.aborted)abort();else if(!stream.writableNeedDrain)drain();
- });}finally{onWait?.(false);}
+ });}finally{metrics.record('bridgeWriteWaitMs',performance.now()-waitingAt);onWait?.(false);}
 }
 module.exports={ByteLineReader,ByteWriter,writeChunk};

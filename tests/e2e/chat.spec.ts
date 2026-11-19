@@ -40,6 +40,9 @@ test('rolling history snapshots preserve the reader and mounted turns after the 
  });
  await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 21 轮：/}).click();
  const anchor=page.locator('[data-turn-id="u20"]'),viewport=page.getByRole('region',{name:'任务消息'});
+ // Navigation is scheduled by the scroller. Establish the reader position
+ // before measuring whether the next snapshot preserves it.
+ await expect.poll(()=>anchor.evaluate(el=>Math.abs(el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top-parseFloat(getComputedStyle(el.parentElement!).paddingTop)))).toBeLessThan(2);
  const top=await anchor.evaluate(el=>el.getBoundingClientRect().top);
  await page.evaluate(()=>{
   const w=window as any,r=w.__demoRun;w.__readerNode=document.querySelector('[data-turn-id="u20"]');w.__readerViewport=document.querySelector('.conversation-scroll');
@@ -607,7 +610,7 @@ test('archive confirmation stays usable while another task waits for approval',a
 test('standalone Office delivery previews use a scoped artifact and keep controls outside zoom',async({page})=>{
  await prepare(page,'表格已生成');
  await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__demoRun.artifacts=[{id:'sheet',turnKey:'u',kind:'delivery',path:'/fixture/book.xlsx',name:'book.xlsx',size:2048,modifiedAt:'2026-09-24'}];w.desktop.projectFiles={context:async(input:any)=>{w.__officeContext=input;return {root:'/fixture',baseUrl:'atelier-preview://fixture/'};},read:async()=>({path:'book.xlsx',name:'book.xlsx',kind:'spreadsheet',size:2048,version:'v1',truncated:false}),office:async()=>({version:'v1',asset:'fixture',kind:'spreadsheet',truncated:false,sheets:[{name:'Overview',columns:2,rows:[['Name','Value'],['Alpha','42']],truncated:false}]})};w.__emit();});
- await page.getByRole('button',{name:'预览 book.xlsx',exact:true}).click();const dialog=page.getByRole('dialog',{name:'book.xlsx',exact:true});await expect(dialog.getByRole('table',{name:'Overview'})).toContainText('Alpha');
+ const previewStarted=Date.now();await page.getByRole('button',{name:'预览 book.xlsx',exact:true}).click();const dialog=page.getByRole('dialog',{name:'book.xlsx',exact:true});await expect(dialog.getByRole('table',{name:'Overview'})).toContainText('Alpha',{timeout:15000});await test.info().attach('office-preview-timing',{body:JSON.stringify({readyMs:Date.now()-previewStarted}),contentType:'application/json'});
  expect(await page.evaluate(()=>(window as any).__officeContext)).toEqual({runId:'demo',artifactId:'sheet'});
  await dialog.getByRole('button',{name:'最大化',exact:true}).click();await expect(dialog.getByRole('button',{name:'放大',exact:true})).toHaveCount(0);await expect(dialog.getByRole('button',{name:'刷新文件',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(dialog).toHaveCount(0);
 });
@@ -1028,7 +1031,7 @@ for (const language of ['zh-CN','en'] as const) test(`loop pause offers diagnost
   await page.evaluate(()=>{(window as any).desktop.exportRunDiagnostics=async()=>{throw Error('private filesystem path');};});
   await dialog.getByRole('button',{name:exportLabel,exact:true}).click();
   await expect(dialog.getByRole('alert')).toHaveText(language==='en'?'Could not export diagnostic data. Please try again.':'诊断数据导出失败，请重试');
-  await page.screenshot({path:`/tmp/ambleloft-diagnostics-${language}.png`});
+  await page.screenshot({path:test.info().outputPath(`ambleloft-diagnostics-${language}.png`)});
 });
 
 for(const width of [1240,600])test(`chat composer keeps bottom space for messages ${width}`,async({page})=>{
@@ -1288,9 +1291,9 @@ test('pasted image thumbnails preview, remove and persist in sent messages',asyn
  await paste();await expect(thumb).toBeVisible();await composer.getByRole('button',{name:'发送后续消息',exact:true}).click();
  const message=page.locator('[data-turn-id="image-user"] [data-message-role="user"]');await expect(message.getByAltText('截图.png')).toBeVisible();await expect(message.locator('[data-slot=bubble-content]')).toHaveText('分析这张截图');
  await message.getByRole('button',{name:'预览图片 截图.png'}).click();await expect(dialog.getByAltText('截图.png')).toBeVisible();await page.keyboard.press('Escape');
- await expect(dialog).toHaveCount(0);await page.screenshot({path:'/tmp/amble-image-attachments-light.png'});
+ await expect(dialog).toHaveCount(0);await page.screenshot({path:test.info().outputPath('amble-image-attachments-light.png')});
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
- await message.getByRole('button',{name:'预览图片 截图.png'}).click();await expect(dialog.getByAltText('截图.png')).toBeVisible();await expect(dialog).toHaveCSS('opacity','1');await page.screenshot({path:'/tmp/amble-image-preview-dark.png'});
+ await message.getByRole('button',{name:'预览图片 截图.png'}).click();await expect(dialog.getByAltText('截图.png')).toBeVisible();await expect(dialog).toHaveCSS('opacity','1');await page.screenshot({path:test.info().outputPath('amble-image-preview-dark.png')});
  await page.keyboard.press('Escape');await page.setViewportSize({width:560,height:840});await message.getByRole('button',{name:'预览图片 截图.png'}).click();
  const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(561);
 });

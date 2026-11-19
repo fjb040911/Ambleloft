@@ -30,7 +30,7 @@ test('editing confirmed configuration invalidates confirmation; validation remai
  await expect(planner.getByRole('alert')).toContainText('补全');await expect(page.getByRole('dialog')).toHaveCount(0);
  await planner.getByRole('textbox',{name:'交接约定',exact:true}).fill('Verify /v2');await planner.getByRole('button',{name:'确认此项目配置',exact:true}).click();
  await expect(planner.locator('[data-package-id="client"]')).toContainText('项目配置已确认');
- await planner.getByRole('region',{name:'节点项目配置',exact:true}).screenshot({path:'/tmp/project-relations-ui.png'});
+ await planner.getByRole('region',{name:'节点项目配置',exact:true}).screenshot({path:test.info().outputPath('project-relations-ui.png')});
 });
 
 test('space project responsibilities are editable and persist after reopening',async({page})=>{
@@ -86,5 +86,5 @@ test('relation refinement keeps chat input and uses targeted API; form fits narr
  await expect.poll(()=>page.evaluate(()=>(window as any).relationQA.calls.find((c:any)=>c.action==='refine')?.input.phase)).toBe('relations');
  await expect(page.getByRole('textbox',{name:'Additional task requirements',exact:true})).toHaveValue('Keep this unsent requirement');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await guide.screenshot({path:'/tmp/project-relation-guide-dark.png'});
+ await guide.screenshot({path:test.info().outputPath('project-relation-guide-dark.png')});
 });

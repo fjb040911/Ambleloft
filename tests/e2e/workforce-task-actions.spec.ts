@@ -51,7 +51,7 @@ test('missing request offers recovery and a working full-task destination',async
 for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,true,true],[390,true,false]] as const)test(`waiting task visual ${width} ${english} ${dark}`,async({page})=>{
  await page.setViewportSize({width,height:900});const detail=await setup(page,'approval',`?lang=${english?'en':'zh'}&theme=${dark?'dark':'light'}`);
  const approve=page.getByRole('button',{name:english?'Approve once':'批准本次'});await approve.scrollIntoViewIfNeeded();await approve.focus();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await expect(approve).toBeFocused();expect(await approve.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBeTruthy();await page.screenshot({path:`/tmp/workforce-waiting-${width}-${english}-${dark}.png`});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await expect(approve).toBeFocused();expect(await approve.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBeTruthy();await page.screenshot({path:test.info().outputPath(`workforce-waiting-${width}-${english}-${dark}.png`)});
  await page.getByRole('button',{name:english?'Decline':'拒绝',exact:true}).click();await expect(page.getByRole('region',{name:english?'Execution approval':'执行授权',exact:true})).toHaveCount(0);
 });
 test('dismissed requests stay collapsed even when new requests arrive',async({page})=>{
@@ -74,7 +74,7 @@ for(const width of [1280,390])test(`question surface has one frame and no repeat
  await expect(surface.getByRole('button',{name:'稍后填写'})).toHaveCount(0);
  expect(await surface.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBeTruthy();
  await page.getByRole('textbox',{name:'继续对话',exact:true}).hover();
- await page.screenshot({path:`/tmp/question-flat-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`question-flat-${width}.png`)});
  await surface.getByLabel('远端写入超时，请确认连接是否已恢复？').fill('恢复了，请先检查文件');
  await surface.getByRole('button',{name:'提交回答',exact:true}).click();
  await expect(surface).toHaveCount(0);
@@ -118,8 +118,10 @@ for(const kind of ['question','form'] as const)test(`existing async ${kind} is i
  await expect(detail.getByText('等待模型响应',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>['start','control','answer','input','approve'].includes(c.action)))).toEqual([]);
  if(kind==='question'){
-  await detail.screenshot({path:'/tmp/task-async-input-status.png'});
+  await detail.screenshot({path:test.info().outputPath('task-async-input-status.png')});
   await page.getByLabel('使用哪个测试环境？').fill('隔离测试环境');await page.getByRole('button',{name:'提交回答'}).click();
-  await expect(activity).not.toContainText('有待补充信息');await expect(activity).toContainText('本轮历时');
+  await expect(activity).not.toContainText('有待补充信息');
+  await expect(activity.locator('.activity-clock')).toBeVisible();
+  await expect(activity.locator('.activity-clock')).toHaveAttribute('title','包含等待与工具执行时间，不代表模型调用时长');
  }
 });

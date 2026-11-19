@@ -46,7 +46,7 @@ for(const width of [1280,390])test('task review layout remains usable at '+width
  await page.setViewportSize({width,height:900});await enter(page,width===390?'?theme=dark':'');await page.locator('.wf-action-row').filter({hasText:'发布文案'}).click();
  const detail=page.getByRole('region',{name:'任务详情与验收'});await expect(detail).toContainText('实际交付：');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await detail.getByRole('button',{name:'验收通过',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/task-review-'+width+'.png'});
+ await detail.getByRole('button',{name:'验收通过',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('task-review-')+width+'.png'});
  const back=detail.getByRole('button',{name:'返回流程图',exact:true});
  await back.click();const node=page.locator('.wf-graph-node[data-package-id="copy"]');
  await expect(node).toBeVisible();await expect(node).toBeFocused();
@@ -84,6 +84,6 @@ test('missing execution evidence cannot be accepted; loading can retry in place'
 test('task guide form and footer fit a narrow window and preserve unsent input',async({page})=>{
  await page.setViewportSize({width:390,height:840});await enter(page,'?theme=dark');await openGuide(page);
  let guide=page.getByRole('region',{name:'整理为任务'});await expect(guide.getByLabel('需要检查哪些链接？')).toBeVisible();
- await page.getByLabel('这次想推进什么？',{exact:true}).fill('还没发送的约束');expect(await guide.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();await page.screenshot({path:'/tmp/task-guide-390-dark.png'});
+ await page.getByLabel('这次想推进什么？',{exact:true}).fill('还没发送的约束');expect(await guide.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();await page.screenshot({path:test.info().outputPath('task-guide-390-dark.png')});
  await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await openGuide(page);guide=page.getByRole('region',{name:'整理为任务'});await expect(page.getByLabel('这次想推进什么？',{exact:true})).toHaveValue('还没发送的约束');
 });

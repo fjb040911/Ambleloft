@@ -35,7 +35,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  await basis.scrollIntoViewIfNeeded();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  expect(await basis.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/task-dependencies-${width}-${english}-${dark}.png`});
+ await page.screenshot({path:test.info().outputPath(`task-dependencies-${width}-${english}-${dark}.png`)});
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>['control','review','approve','savePlan'].includes(c.action)))).toEqual([]);
 });
 

@@ -10,7 +10,7 @@ for (const config of [
  const dialog=page.getByRole('dialog',{name:config.name==='zh-light'?'添加 AI 专家':'Add an AI expert'});
  await expect(dialog).toBeVisible();
  await dialog.evaluate(async el=>{await Promise.all(el.getAnimations().map(animation=>animation.finished.catch(()=>{})));});
- await dialog.screenshot({path:`/tmp/expert-choice-check-${config.name}.png`});
+ await dialog.screenshot({path:test.info().outputPath(`expert-choice-check-${config.name}.png`)});
  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  const options=dialog.locator('.wf-add-option');await expect(options).toHaveCount(2);
  const boxes=await options.evaluateAll(els=>els.map(el=>{const rect=el.getBoundingClientRect();const children=[...el.querySelectorAll('strong,small,svg')].map(c=>c.getBoundingClientRect());return {top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right,children:children.map(r=>({top:r.top,bottom:r.bottom,left:r.left,right:r.right}))};}));
@@ -18,7 +18,7 @@ for (const config of [
  for(const box of boxes)for(const child of box.children){expect(child.top).toBeGreaterThanOrEqual(box.top-1);expect(child.bottom).toBeLessThanOrEqual(box.bottom+1);expect(child.left).toBeGreaterThanOrEqual(box.left-1);expect(child.right).toBeLessThanOrEqual(box.right+1);}
  expect(boxes[0].bottom).toBeLessThan(boxes[1].top);
  await dialog.evaluate(async el=>{await Promise.all(el.getAnimations().map(animation=>animation.finished.catch(()=>{})));});
- await page.screenshot({path:`/tmp/expert-choice-${config.name}.png`});
+ await page.screenshot({path:test.info().outputPath(`expert-choice-${config.name}.png`)});
  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(trigger).toBeFocused();
 });
 
@@ -112,7 +112,7 @@ test('role details keep the heading clear and space example tasks',async({page})
  const gap=await section.evaluate(el=>el.querySelector('ul')!.getBoundingClientRect().top-el.querySelector('h3')!.getBoundingClientRect().bottom);
  expect(gap).toBeGreaterThanOrEqual(10);
  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await dialog.screenshot({path:'/tmp/expert-role-details-narrow.png'});
+ await dialog.screenshot({path:test.info().outputPath('expert-role-details-narrow.png')});
 });
 
 test('configuration exposes skill function and details',async({page})=>{
@@ -128,7 +128,7 @@ test('configuration exposes skill function and details',async({page})=>{
  await expect(page.getByRole('link',{name:'在 GitHub 打开'})).toHaveAttribute('href','https://github.com/example/skills');
  await page.getByRole('link',{name:'在 GitHub 打开'}).click();
  expect(await page.evaluate(()=>(window as any).__openedSkillUrl)).toBe('https://github.com/example/skills');
- await page.screenshot({path:'/tmp/expert-skills-after.png'});
+ await page.screenshot({path:test.info().outputPath('expert-skills-after.png')});
  await page.getByText('查看技能详情').click();
  await expect(page.getByText('固定版本')).toBeVisible();
 });
@@ -147,7 +147,7 @@ test('role actions remain usable in a narrow window',async({page})=>{
  const layout=await banner.evaluate(el=>{const text=el.querySelector('h3')!.getBoundingClientRect(),badge=el.querySelector('[data-slot=badge]')!.getBoundingClientRect(),box=el.getBoundingClientRect();return {right:text.right,badgeLeft:badge.left,bottom:text.bottom,boxBottom:box.bottom};});
  expect(layout.right).toBeLessThanOrEqual(layout.badgeLeft);expect(layout.bottom).toBeLessThanOrEqual(layout.boxBottom);
  expect(await page.locator('body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await card.screenshot({path:'/tmp/expert-role-card-narrow.png'});
+ await card.screenshot({path:test.info().outputPath('expert-role-card-narrow.png')});
 });
 
 test('expert cards show live preparation and current skill readiness',async({page})=>{
@@ -170,12 +170,12 @@ test('expert cards show live preparation and current skill readiness',async({pag
  await expect(page.locator('.wf-expert-card').filter({hasText:'已有配置专家'}).getByText(/当前配置可用 · 新配置/)).toBeVisible();
  const disabled=page.locator('.wf-expert-card').filter({hasText:'技能停用专家'});
  await expect(disabled.getByText('0 / 1 项技能就绪')).toBeVisible();
- await page.screenshot({path:'/tmp/expert-cards-status.png'});
+ await page.screenshot({path:test.info().outputPath('expert-cards-status.png')});
  await disabled.getByRole('button',{name:/0 \/ 1 项技能就绪/}).click();
  const dialog=page.getByRole('dialog',{name:/技能停用专家/});
  await expect(dialog.getByText('已停用',{exact:true})).toBeVisible();
  await expect(dialog.getByText('已安装到全局库')).toHaveCount(0);
- await page.screenshot({path:'/tmp/expert-preparation-status.png'});
+ await page.screenshot({path:test.info().outputPath('expert-preparation-status.png')});
 });
 
 test('custom expert opens directly at the first of three steps',async({page})=>{
@@ -189,7 +189,7 @@ test('custom expert opens directly at the first of three steps',async({page})=>{
  await expect(page.getByRole('button',{name:'AI 帮我梳理'})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'建议职责与交付'})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'上一步'})).toBeDisabled();
- await page.screenshot({path:'/tmp/expert-simple-first-step.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('expert-simple-first-step.png'),fullPage:true});
  await page.getByRole('button',{name:'确认配置'}).click();
  await expect(page.getByText('请先填写专家名称和主要职责，再提交配置。')).toBeVisible();
  await expect(page.getByRole('button',{name:'添加专家并准备技能',exact:true})).toBeDisabled();
@@ -247,7 +247,7 @@ for(const c of [{name:'zh-narrow',width:390,query:'view=experts'}, {name:'en-dar
  expect(await page.locator('body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  const steps=await page.locator('.wf-step-button').evaluateAll(elements=>elements.map(el=>{const b=el.getBoundingClientRect(),label=el.querySelector('.wf-step-label')!.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,labelLeft:label.left,labelRight:label.right,labelTop:label.top,labelBottom:label.bottom,overflow:el.scrollWidth>el.clientWidth};}));
  for(const step of steps){expect(step.overflow).toBeFalsy();expect(step.labelLeft).toBeGreaterThanOrEqual(step.left-1);expect(step.labelRight).toBeLessThanOrEqual(step.right+1);expect(step.labelTop).toBeGreaterThanOrEqual(step.top-1);expect(step.labelBottom).toBeLessThanOrEqual(step.bottom+1);}
- await page.screenshot({path:`/tmp/expert-editor-${c.name}.png`,fullPage:true});
+ await page.screenshot({path:test.info().outputPath(`expert-editor-${c.name}.png`),fullPage:true});
 });
 
 for(const en of [false,true])test(`expert model preference can be selected, reviewed and reset (${en?'en':'zh'})`,async({page})=>{

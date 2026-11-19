@@ -1,5 +1,5 @@
 const {monitorEventLoopDelay}=require('node:perf_hooks');
-const allowed=new Set(['rpcReadBytes','rpcReadPauses','rpcWriteBytes','bridgeWritePauses','databasePendingBytes','databaseBackpressure','databaseMs','databaseQueueWaitMs','databasePending','pageRunMs','spaceSnapshotMs','workforceSnapshotMs']);
+const allowed=new Set(['rpcReadBytes','rpcReadPauses','rpcWriteBytes','rpcFrameBytes','rpcJsonMetadataBytes','rpcSpoolWrittenBytes','bridgeWritePauses','bridgeWriteWaitMs','databasePendingBytes','databaseBackpressure','databaseMs','databaseLockMs','databaseCommitMs','databaseTextWriteMs','databaseFingerprintMs','databaseIndexMs','databaseSnapshotMs','databaseQueueWaitMs','databasePending','pageRunMs','spaceSnapshotMs','spaceStatusQueries','spacePreviewQueries','spaceFullQueries','workforceSnapshotMs']);
 function createMetrics(limit=360){
  const samples=[],exits=[];let counters={};
  return {

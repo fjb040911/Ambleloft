@@ -23,7 +23,7 @@ test('legacy tools without labels preserve references, deliveries and changes',a
  await page.getByRole('button',{name:'隐藏侧边面板',exact:true}).click();
  await page.getByRole('button',{name:'查看本轮变更',exact:true}).click();
  await expect(page.getByRole('complementary',{name:'本轮文件变更'})).toBeVisible();
- await page.screenshot({path:'/tmp/file-output-roles.png'});
+ await page.screenshot({path:test.info().outputPath('file-output-roles.png')});
 });
 
 

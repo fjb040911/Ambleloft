@@ -15,7 +15,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,false],[1280,tr
  const dialog=await openDelete(page,english);await expect(dialog).toContainText(english?'source snapshots':'来源快照');
  const cancel=dialog.getByRole('button',{name:english?'Cancel':'取消',exact:true});await expect(cancel).toBeFocused();await expect.poll(()=>dialog.evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/discussion-delete-${width}-${english}-${dark}.png`,animations:'disabled'});
+ await page.screenshot({path:test.info().outputPath(`discussion-delete-${width}-${english}-${dark}.png`),animations:'disabled'});
  await cancel.click();await expect(page.getByRole('heading',{name:'明确发布目标',exact:true})).toBeVisible();await expect(input).toHaveValue('尚未发送的目标');
  await openDelete(page,english);await dialog.getByRole('button',{name:english?'Delete discussion':'删除讨论',exact:true}).click();
  await expect(page.getByRole('heading',{name:english?'New topic':'新话题',exact:true})).toBeVisible();await expect(input).toHaveValue('尚未发送的目标');await expect(input).toBeFocused();

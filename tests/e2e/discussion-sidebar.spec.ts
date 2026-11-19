@@ -23,7 +23,7 @@ for(const theme of ['light','dark'])test(`whole topic navigator stays below pinn
  await search.fill('没有匹配的话题');await expect(browser.getByText('没有匹配的话题',{exact:true})).toBeInViewport();await search.fill('');
  await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await expect(browser).toBeHidden();
  await page.getByRole('button',{name:'展开讨论侧栏',exact:true}).click();await expect(search).toBeInViewport();
- await page.screenshot({path:`/tmp/discussion-sidebar-sticky-fixed-${theme}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-sidebar-sticky-fixed-${theme}.png`)});
 });
 test('long topic list scrolls inside the pinned sidebar without moving the discussion',async({page})=>{
  await page.setViewportSize({width:1280,height:720});await enter(page);await longDiscussion(page,40);
@@ -53,7 +53,7 @@ for(const theme of ['light','dark'])test(`discussion sidebar resizes, collapses 
  await separator.focus();await page.keyboard.press('ArrowLeft');
  await expect.poll(async()=>(await sidebar.boundingBox())!.width).toBeGreaterThan(resized+5);
  const keyboardWidth=(await sidebar.boundingBox())!.width;
- await page.screenshot({path:`/tmp/discussion-sidebar-${theme}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-sidebar-${theme}.png`)});
  await page.getByRole('button',{name:'收起讨论侧栏',exact:true}).click();await page.reload();
  await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:'讨论',exact:true}).click();
  await expect(page.getByRole('button',{name:'展开讨论侧栏',exact:true})).toBeVisible();await expect(sidebar).toBeHidden();await expect(input).toHaveValue('保留未发送内容');
@@ -92,7 +92,7 @@ for(const theme of ['light','dark'])test(`drag-collapse can reopen from the stic
  await expect(sidebar).toBeHidden();await expect(open).toBeInViewport();await expect(open).toHaveText('展开侧栏');
  const top=await scroller.evaluate(el=>el.scrollTop),button=(await open.boundingBox())!,nav=(await navigation.boundingBox())!;
  expect(button.x+button.width).toBeCloseTo(nav.x+nav.width,0);expect(button.y).toBeGreaterThanOrEqual(nav.y);expect(button.y+button.height).toBeLessThanOrEqual(nav.y+nav.height);
- await page.screenshot({path:`/tmp/discussion-sticky-expand-${theme}.png`});
+ await page.screenshot({path:test.info().outputPath(`discussion-sticky-expand-${theme}.png`)});
  // Click its visible position so the driver does not auto-scroll the sticky button.
  const openBounds=(await open.boundingBox())!;await page.mouse.click(openBounds.x+openBounds.width/2,openBounds.y+openBounds.height/2);await expect(sidebar).toBeVisible();await expect.poll(async()=>Math.abs((await sidebar.boundingBox())!.width-initialWidth)).toBeLessThan(1);
  await expect(sidebar.getByRole('list',{name:'话题列表',exact:true})).toBeVisible();await expect(page.getByLabel('这次想推进什么？')).toHaveValue('未发送的讨论内容');

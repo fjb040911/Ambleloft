@@ -1,4 +1,3 @@
-const {createHash}=require('node:crypto');
 const fs=require('node:fs');
 const path=require('node:path');
 function canonical(value){
@@ -6,10 +5,10 @@ function canonical(value){
  if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().filter(k=>value[k]!==undefined).map(k=>[k,canonical(value[k])]));
  return value;
 }
-const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(canonical(value))).digest('hex');
+const {hash,isText}=require('../../electron/stored-json.cjs');
 const key=(kind,...ids)=>JSON.stringify([kind,...ids]);
-function source(kind,identity,revisionKey,body,semantic,scope,state,locator){
- const sourceKey=key(kind,...identity),contentHash=hash(body),semanticHash=hash({body,...semantic});
+function source(kind,identity,revisionKey,body,semantic,scope,state,locator,fingerprints){
+ const sourceKey=key(kind,...identity),contentHash=fingerprints?.contentHash??hash(body),semanticHash=fingerprints?.semanticHash??hash({body,...semantic});
  return {id:hash([sourceKey,String(revisionKey)]),sourceKey,kind,revisionKey:String(revisionKey),fingerprintVersion:1,contentHash,semanticHash,body,locator,scope,
   evidenceKey:kind==='discussion-statement'?key('run-message',locator.runId,locator.messageId):sourceKey,
   provenance:'recorded',...semantic,...state,stateFingerprint:hash({semanticHash,scope,...state})};
@@ -41,13 +40,15 @@ function runSources(run,state){
   const availability=spaceId&&!(state.spaces||[]).some(s=>s.id===spaceId)||deletedDiscussion(state,requestId)?'deleted':run.collaboration?.sourceRevoked?'withdrawn':'available';
   const final=items.filter(m=>m.role==='assistant'&&!m.kind).findLast(m=>m.phase==='final_answer')||items.filter(m=>m.role==='assistant'&&!m.kind&&!m.phase).at(-1);
   for(const m of [...items.filter(m=>m.role==='user'&&!m.kind),final].filter(Boolean)){
-   if(!m.id||typeof m.text!=='string'||m.kind||m.role==='user'&&m.inputDeliveryState&&m.inputDeliveryState!=='delivered')continue;
+   if(!m.id||!(typeof m.text==='string'||isText(m.text))||m.kind||m.role==='user'&&m.inputDeliveryState&&m.inputDeliveryState!=='delivered')continue;
    const locator={runId:run.id,messageId:m.id,hostTurnKey};
    const scope={...(spaceId?{spaceId}:{}),historySpaceIds:run.collaboration?.historySpaceIds||[],projectId:run.projectId||null,employeeId:run.employee?.id||null};
-   result.push(source('run-message',[run.id,m.id],hash({text:m.text,role:m.role}),m.text,{role:m.role,title:run.title||'',sourceRefs:[...(run.collaboration?.documents||[]),...(run.collaboration?.retrievedRefs||[])].map(({id,revision,hash})=>({id,revision,hash}))},scope,{availability,authority:'reference'},locator));
-   if(m===final&&p?.contribution?.provenance==='recorded'&&p.contribution.author?.id===run.employee?.id){
-    result.push(source('discussion-statement',[spaceId,requestId,p.contribution.id,m.id],hash(m.text),m.text,{role:'assistant',title:request.prompt||'',sourceRefs:[...(run.collaboration?.documents||[]),...(run.collaboration?.retrievedRefs||[])].map(({id,revision,hash})=>({id,revision,hash}))},scope,{availability,authority:'reference'}, {...locator,spaceId,requestId,contributionId:p.contribution.id}));
-   }
+   const refs=[...(run.collaboration?.documents||[]),...(run.collaboration?.retrievedRefs||[])].map(({id,revision,hash})=>({id,revision,hash}));
+   const semantic={role:m.role,title:run.title||'',sourceRefs:refs},discussion=m===final&&p?.contribution?.provenance==='recorded'&&p.contribution.author?.id===run.employee?.id;
+   const discussionSemantic={role:'assistant',title:request?.prompt||'',sourceRefs:refs};
+   const fingerprints=require('../../electron/stored-json.cjs').textFingerprints(m.text,[{key:'text',value:{role:m.role}},{key:'body',value:semantic},...(discussion?[{key:'body',value:discussionSemantic}]:[])]);
+   result.push(source('run-message',[run.id,m.id],fingerprints.forms[0],m.text,semantic,scope,{availability,authority:'reference'},locator,{contentHash:fingerprints.contentHash,semanticHash:fingerprints.forms[1]}));
+   if(discussion)result.push(source('discussion-statement',[spaceId,requestId,p.contribution.id,m.id],fingerprints.contentHash,m.text,discussionSemantic,scope,{availability,authority:'reference'},{...locator,spaceId,requestId,contributionId:p.contribution.id},{contentHash:fingerprints.contentHash,semanticHash:fingerprints.forms[2]}));
   }
  }
  return result;

@@ -47,6 +47,14 @@ test('switching topics preserves separate drafts and source selection',async({pa
  await expect(page.getByRole('button',{name:/参考资料/})).toContainText('1');
  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('workforce-discussion:space:topics')!).drafts['topic-0'].prompt)).toBe('话题二的草稿');
 });
+test('discussion text and pasted attachment selection survive a full page reload',async({page})=>{
+ await setup(page);const input=page.getByLabel('这次想推进什么？');await input.fill('保留讨论草稿 中文 😀');
+ await page.evaluate(()=>{window.desktop!.importAttachments=async files=>files.map(f=>({name:f.name,path:'C:/discussion-fixture/'+f.name}));});
+ await input.evaluate(el=>{const data=new DataTransfer();data.items.add(new File(['reference'],'discussion.txt',{type:'text/plain'}));el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));});
+ await expect(page.locator('.wf-discussion-composer').getByText('discussion.txt')).toBeVisible();await page.reload({waitUntil:'domcontentloaded'});
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:/^(讨论|Discussion)$/}).click();
+ await expect(input).toHaveValue('保留讨论草稿 中文 😀');await expect(page.locator('.wf-discussion-composer').getByText('discussion.txt')).toBeVisible();
+});
 for(const width of [1280,390])test(`topic plan reuses delivery review and shows scheduling in place ${width}`,async({page})=>{
  await page.setViewportSize({width,height:900});const sidebar=await setup(page,width===390?'?theme=dark':'');
  const footer=page.locator('.wf-discussion-footer');
@@ -60,7 +68,7 @@ for(const width of [1280,390])test(`topic plan reuses delivery review and shows 
  await page.evaluate(()=>{const q=(window as any).spaceQA;q.snapshot.plans[0].packages[1].status='running';q.emit();});
  await expect(result).toContainText('1 项执行中，0 项准备中');await expect(result).toContainText('发布包整理');
  await expect(sidebar.getByRole('listitem')).toHaveCount(15);
- await page.screenshot({path:`/tmp/topic-review-in-place-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`topic-review-in-place-${width}.png`)});
  await page.getByRole('button',{name:'返回讨论',exact:true}).click();await expect(page.getByLabel('这次想推进什么？')).toBeVisible();
  await expect(page.locator('.wf-discussion-toolbar .wf-current-task-primary')).toBeFocused();
  // A separate failed node still needs attention despite the successor running.
@@ -87,7 +95,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,true,true]] as const)
  await last.getByRole('button').focus();await page.keyboard.press('Enter');await expect(last).toHaveAttribute('data-selected','true');
  const summary=page.getByRole('region',{name:english?'Current task':'本次任务',exact:true});await expect(summary).toContainText(english?'Not created':'未生成');
  await sidebar.getByRole('textbox',{name:english?'Search topics':'搜索话题'}).fill('架构话题 13');await expect(sidebar.getByRole('listitem')).toHaveCount(1);
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:`/tmp/topic-serial-${width}.png`});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:test.info().outputPath(`topic-serial-${width}.png`)});
 });
 
 test('task statuses cover readiness, pause, blockers and completion without treating shared references as ownership',async({page})=>{
@@ -212,7 +220,7 @@ for(const width of [1280,390])test(`conflicts stay compact and resolve explicitl
  if((await page.locator('.wf-discussion-footer').boundingBox())!.width<=760)await expect(name).toBeHidden();
  else{const title=await name.boundingBox(),bar=await summary.boundingBox();expect(title!.x+title!.width).toBeLessThanOrEqual(bar!.x+bar!.width+1);}
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/topic-status-compact-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`topic-status-compact-${width}.png`)});
 });
 
 test('paused plan prioritizes delivery review and never resumes implicitly',async({page})=>{
@@ -257,6 +265,51 @@ for(const [width,lang,theme] of [[1280,'zh','light'],[390,'en','dark']] as const
  const geometry=await topic.evaluate(el=>{const parent=el.getBoundingClientRect(),content=el.querySelector('[data-slot=item-content]')!.getBoundingClientRect();return{overflow:el.scrollWidth>el.clientWidth+1,contentRight:content.right,parentRight:parent.right,entries:[...el.querySelectorAll('.wf-topic-record-link,.wf-topic-record-name')].map(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return{x:r.x,right:r.right,align:s.textAlign,justify:s.justifyContent,overflow:e.scrollWidth>e.clientWidth+1};})};});
  expect(geometry.overflow).toBe(false);expect(geometry.contentRight).toBeLessThanOrEqual(geometry.parentRight);for(const e of geometry.entries){expect(e.overflow).toBe(false);expect(e.right).toBeLessThanOrEqual(geometry.parentRight);expect(Math.abs(e.x-geometry.entries[0].x)).toBeLessThan(1);}
  expect(geometry.entries[0].justify).toBe('flex-start');expect(geometry.entries[1].align).toBe('left');
- await page.screenshot({path:`/tmp/topic-badge-history-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`topic-badge-history-${width}.png`)});
  await history.getByRole('button',{name:'短任务',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.getByRole('region',{name:/^(本次任务详情|Current task details)$/})).toContainText('短任务');
+});
+
+for(const state of ['accepted','absent'] as const)test('reload reconciles discussion send '+state+' without resubmission',async({page})=>{
+ await setup(page);await page.getByLabel('这次想推进什么？').fill('new typing');
+ await page.evaluate(()=>sessionStorage.setItem('amble.composer-draft.v1:discussion:space:discussion:receipt',JSON.stringify({id:'lost-reply',text:'submitted once',options:{},kind:'discussion',runId:'space',state:'sending'})));
+ await page.reload({waitUntil:'domcontentloaded'});
+ await page.evaluate(state=>{window.desktop!.composerSendStatus=async()=>({state,discussionId:'discussion'});},state);
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:/^(讨论|Discussion)$/}).click();
+ await expect(page.getByLabel('这次想推进什么？')).toHaveValue('new typing');if(state==='absent'){await page.getByRole('button',{name:'恢复未发送内容'}).click();await expect(page.getByLabel('这次想推进什么？')).toHaveValue('submitted once\n\nnew typing');}
+ await expect(page.getByText('正在确认发送结果…',{exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>['coordinateDiscussion','followupDiscussion','start'].includes(c.action)))).toEqual([]);
+});
+
+test('discussion reload retains expert disclosure and reading anchor',async({page})=>{
+ await setup(page);const trigger=page.getByText('专家分析与执行记录',{exact:true});await trigger.click();
+ await page.getByLabel('这次想推进什么？').fill('reading draft');
+ await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=220;});
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('amble.reading.v1:discussion:space:discussion')||'null')?.top)).toBeGreaterThan(0);
+ const before=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('amble.reading.v1:discussion:space:discussion')!));
+ await page.reload({waitUntil:'domcontentloaded'});
+ console.log('stored-after-reload',await page.evaluate(()=>sessionStorage.getItem('amble.reading.v1:discussion:space:discussion')));
+ // Match the same fixture content before mounting the discussion.
+ await page.evaluate(()=>{const q=(window as any).spaceQA,base=q.snapshot.requests.find((r:any)=>r.id==='discussion');base.host={status:'completed',revision:1,steps:[],brief:{goal:'形成发布目标与方案',items:[{id:'q',kind:'question',text:'确认验收范围',sourceIds:[]}]}};q.emit();});
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:/^(讨论|Discussion)$/}).click();
+ await expect(page.getByLabel('这次想推进什么？')).toHaveValue('reading draft');
+ await expect(trigger.locator('xpath=ancestor::button[1]')).toHaveAttribute('aria-expanded','true');
+ console.log('reading-geometry',JSON.stringify(await page.locator('.qa-scroll').evaluate((el,b)=>({before:b,top:el.scrollTop,maxTop:el.scrollHeight-el.clientHeight,anchorTop:document.getElementById(b.turnId)?.getBoundingClientRect().top,origin:el.getBoundingClientRect().top}),before)));
+ await expect.poll(()=>page.locator('.qa-scroll').evaluate((el,b)=>{const anchor=document.getElementById(b.turnId);return Math.abs((anchor?anchor.getBoundingClientRect().top-el.getBoundingClientRect().top:0)-b.offset);},before)).toBeLessThan(4);
+ await page.locator('.qa-scroll').evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel',{deltaY:-120,bubbles:true}));el.scrollTop=100;});
+ await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('amble.reading.v1:discussion:space:discussion')!).top)).toBe(100);
+ await page.evaluate(()=>{const q=(window as any).spaceQA;q.snapshot.requests.find((r:any)=>r.id==='discussion').host.steps.push({id:'after-scroll',action:'reply',text:'New content after reader interaction'});q.emit();});
+ await expect.poll(()=>page.locator('.qa-scroll').evaluate(el=>el.scrollTop)).toBe(100);
+
+});
+
+test('host trace reload preserves disclosure while collapsed bodies stay unmounted',async({page})=>{
+ await setup(page);
+ const configure=()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'completed',revision:1,activity:{id:'trace',phase:'responding',reasoning:'Synthetic hidden reasoning',reasoningFormat:'text'},steps:[{id:'old',action:'reply',text:'Synthetic old coordination'},{id:'last',action:'reply',text:'Synthetic last reply'}]};q.emit();};
+ await page.evaluate(configure);
+ await expect(page.getByText('Synthetic hidden reasoning',{exact:true})).toHaveCount(0);await expect(page.getByText('Synthetic old coordination',{exact:true})).toHaveCount(0);
+ await page.getByText('查看模型思考',{exact:true}).click();await page.getByText(/查看协调过程/).click();
+ await expect(page.getByText('Synthetic hidden reasoning',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic old coordination',{exact:true})).toBeVisible();
+ await page.reload({waitUntil:'domcontentloaded'});await page.evaluate(configure);
+ await page.getByRole('button',{name:/产品发布 准备新版/}).click();await page.getByRole('tab',{name:/^(讨论|Discussion)$/}).click();
+ await expect(page.getByText('Synthetic hidden reasoning',{exact:true})).toBeVisible();await expect(page.getByText('Synthetic old coordination',{exact:true})).toBeVisible();
 });

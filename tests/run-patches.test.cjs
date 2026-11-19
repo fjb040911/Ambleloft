@@ -50,6 +50,9 @@ test('diagnostic records sharing a turn retain distinct identities outside frequ
 });
 test('runtime streaming saves exclude unrelated history and retain updates arriving during a write',async t=>{
  const {db}=await fixture(t),{AgentRuntime}=require('../electron/agent-runtime.cjs');const runtime=new AgentRuntime({directory:'/unused',database:db,publish:()=>{}}),r=run();runtime.runs=[r];t.after(()=>clearTimeout(runtime.saveTimer));runtime.changed(r);await runtime.persistChanged();
+ // Measure storage traversal only. The independently throttled UI publisher
+ // legitimately clones tools and can fire during this write on a busy host.
+ runtime.publishRun=()=>{};
  let reads=0;Object.defineProperty(r.tools[0],'audit',{enumerable:true,get(){reads++;return 'unchanged';}});
  let release;const send=db.request.bind(db);let held=true;db.request=async(method,args)=>{if(method==='saveRunPatches'&&held){held=false;await new Promise(resolve=>release=resolve);}return send(method,args);};
  r.messages[1].text+=' first';runtime.changed(r,{stream:true,items:[['messages','a']]});const first=runtime.persistChanged();await new Promise(resolve=>setImmediate(resolve));

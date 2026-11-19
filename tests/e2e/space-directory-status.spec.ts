@@ -21,7 +21,7 @@ for(const [width,theme] of [[1280,'light'],[800,'dark'],[390,'light']] as const)
  await expect(entry.locator('.wf-space-plan-summary')).toContainText('已验收 2/4 · 执行中 1');
  await expect(entry.locator('.wf-space-latest')).toContainText('确认发布目标');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/space-status-${width}-${theme}.png`,fullPage:true});
+ await page.screenshot({path:test.info().outputPath(`space-status-${width}-${theme}.png`),fullPage:true});
  await entry.getByRole('button',{name:'待授权 1',exact:true}).click();
  await expect(page.getByRole('heading',{name:'部署授权',exact:true})).toBeVisible();
  await expect(page.getByRole('tab',{name:'任务',exact:true})).toHaveAttribute('aria-selected','true');

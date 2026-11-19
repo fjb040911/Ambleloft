@@ -160,9 +160,11 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
     const started=performance.now();
     const report=()=>{diagnostic.durationMs=Math.round(performance.now()-started);try{onDiagnostic({...diagnostic});}catch{}};
     const forward=chunk=>writeChunk(res,chunk,controller.signal,waiting=>waiting?deadline.pause():deadline.resume());
-    let seq=0;const emit=async(type,fields)=>{await forward(`event: ${type}\ndata: `);for(const part of packets(Object.defineProperties({type,sequence_number:seq++},Object.getOwnPropertyDescriptors(fields))))await forward(part);await forward('\n\n');};
+    // Include SSE framing in the bounded packet. Tiny events otherwise require
+    // three HTTP writes each; large final responses still await drain per 64 KiB.
+    let seq=0;const emit=async(type,fields)=>{for(const part of packets(Object.defineProperties({type,sequence_number:seq++},Object.getOwnPropertyDescriptors(fields)),65536,{prefix:`event: ${type}\ndata: `,suffix:'\n\n'}))await forward(part);};
     try {
-      const parts=[];let requestBytes=0;for await(const chunk of req){requestBytes+=chunk.length;if(requestBytes>32*1024*1024)throw new Error('请求过大');parts.push(chunk);}const raw=Buffer.concat(parts,requestBytes).toString('utf8');parts.length=0;
+      const parts=[];let requestBytes=0;for await(const chunk of req){requestBytes+=chunk.length;if(requestBytes>32*1024*1024)throw Object.assign(new Error('请求过大：会话请求超过 32 MiB 传输预算；历史未截断，请缩小上下文或新建任务'),{code:'request_body_limit',httpStatus:413});parts.push(chunk);}const raw=Buffer.concat(parts,requestBytes).toString('utf8');parts.length=0;
       let data=applyImageInputPolicy(JSON.parse(raw),config);
       diagnostic.diagnosticVersion=1;
       const fingerprint=value=>loopGuard.fingerprint(value);
@@ -206,8 +208,29 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       textSpool=new TextSpool();res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
       const response={id:'resp_'+randomUUID(),object:'response',created_at:Math.floor(Date.now()/1000),model:data.model,status:'in_progress',output:[]};
-      await emit('response.created',{response});let reasoningItem,textItem;let usage;
+      await emit('response.created',{response});let reasoningItem,textItem,activeItem;const closedItems=new Set();let usage;
       const add=async item=>{item.index=response.output.length;response.output.push(item);await emit('response.output_item.added',{output_index:item.index,item:Object.defineProperty(Object.defineProperties({},Object.getOwnPropertyDescriptors(item)),'index',{value:undefined,enumerable:true,configurable:true})});return item;};
+      // The engine consumes one active Responses item at a time.
+      const closeItem=async item=>{
+        if(!item||closedItems.has(item))return;
+        const done={item_id:item.id,output_index:item.index,content_index:0};
+        Object.defineProperty(done,'text',Object.getOwnPropertyDescriptor(item.content[0],'text'));
+        if(item.type==='reasoning')await emit('response.reasoning_text.done',done);
+        else {item.status='completed';await emit('response.output_text.done',done);await emit('response.content_part.done',{item_id:item.id,output_index:item.index,content_index:0,part:item.content[0]});}
+        await emit('response.output_item.done',{output_index:item.index,item:Object.defineProperty(Object.defineProperties({},Object.getOwnPropertyDescriptors(item)),'index',{value:undefined,enumerable:true,configurable:true})});closedItems.add(item);
+      };
+      const segment=async kind=>{
+        if(activeItem?.type===kind)return activeItem;
+        await closeItem(activeItem);
+        const id=(kind==='reasoning'?'rs_':'msg_')+response.id+'_part_'+response.output.length;
+        const item=kind==='reasoning'?{id,type:kind,summary:[],content:[{type:'reasoning_text',text:''}]}:{id,type:kind,role:'assistant',status:'in_progress',content:[{type:'output_text',text:'',annotations:[]}]};
+        // Short alternating segments must not retain the entire final response
+        // in RAM or create thousands of tiny files. Share one append-only file.
+        require('./text-spool.cjs').install(item.content[0],'text',textSpool.createSegment());
+        activeItem=await add(item);
+        if(kind==='message')await emit('response.content_part.added',{item_id:id,output_index:activeItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});
+        return activeItem;
+      };
       let calls,finish,outputRetried=false,correctionUsed=false;
       for(let attempt=0;attempt<3;attempt++){
         calls=new Map();finish=undefined;let done=false,attemptUsage;
@@ -221,12 +244,12 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           if(choice.finish_reason||delta.content||delta.reasoning_content||delta.reasoning||delta.reasoning_text||delta.tool_calls?.some(call=>call.function?.name||call.function?.arguments))deadline.touch();
           const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
           if(thought){
-            if(!reasoningItem)reasoningItem=await add({id:'rs_'+randomUUID(),type:'reasoning',summary:[],content:[]});
+            reasoningItem=await segment('reasoning');
             reasoningItem.content[0]||={type:'reasoning_text',text:''};appendText(reasoningItem.content[0],'text',thought,textSpool);
             await emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
           }
           if(delta.content){
-            if(!textItem){textItem=await add({id:'msg_'+randomUUID(),type:'message',role:'assistant',status:'in_progress',content:[]});await emit('response.content_part.added',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:{type:'output_text',text:'',annotations:[]}});}
+            textItem=await segment('message');
             textItem.content[0]||={type:'output_text',text:'',annotations:[]};appendText(textItem.content[0],'text',delta.content,textSpool);
             await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
           }
@@ -270,7 +293,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           const correction={...body,messages:[...body.messages,{role:'system',content:'Your previous response requested unavailable or ambiguous tools: '+JSON.stringify(names.slice(0,20))+'. No tool calls from that response were executed. This is a FUNCTION NAME error, not an argument error. The complete list of callable function names and their required argument keys for THIS request is: '+JSON.stringify(catalog)+'. Copy the exact name from this list, including its namespace prefix. Argument keys (such as cmd or command) are not function names. Do not combine a namespace from one tool with the name of another, or reuse tools from earlier sessions. Use the matching schema in tools for the arguments. Retry the original request using only exact function names from the tools provided in this request. Do not invent tools. If no suitable tool exists, explain the limitation without calling it.'}]};
           body.messages=correction.messages;
           // Separate any streamed narration from the corrected response.
-          if(textItem){appendText(textItem.content[0],'text','\n\n',textSpool);await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
+          if(textItem){textItem=await segment('message');appendText(textItem.content[0],'text','\n\n',textSpool);await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
           await usageBegin(attempt+1);
           upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:deadline.signal});
@@ -280,8 +303,8 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         }
         break;
       }
-      if(reasoningItem){const done={item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0};Object.defineProperty(done,'text',Object.getOwnPropertyDescriptor(reasoningItem.content[0],'text'));await emit('response.reasoning_text.done',done);}
-      if(textItem){textItem.phase=calls.size?'commentary':'final_answer';textItem.status='completed';const done={item_id:textItem.id,output_index:textItem.index,content_index:0};Object.defineProperty(done,'text',Object.getOwnPropertyDescriptor(textItem.content[0],'text'));await emit('response.output_text.done',done);await emit('response.content_part.done',{item_id:textItem.id,output_index:textItem.index,content_index:0,part:textItem.content[0]});}
+      if(textItem)textItem.phase=calls.size?'commentary':'final_answer';
+      await closeItem(activeItem);
       diagnostic.stage='translate_tools';
       const translatedCalls=[];
       for(const call of calls.values()){
@@ -302,7 +325,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       }
       // Validate the whole batch before exposing any executable calls.
       for(const item of translatedCalls)await add(item);
-      for(const item of response.output){delete item.index;await emit('response.output_item.done',{output_index:response.output.indexOf(item),item});}
+      for(const item of response.output){const index=item.index;delete item.index;if(!closedItems.has(item))await emit('response.output_item.done',{output_index:index,item});}
       response.status=finish==='length'?'incomplete':'completed';
       if(finish==='length')response.incomplete_details={reason:'max_output_tokens'};
       response.usage={input_tokens:usage?.prompt_tokens||0,output_tokens:usage?.completion_tokens||0,total_tokens:usage?.total_tokens||0};
