@@ -21,10 +21,12 @@ import ApprovalCard from './ApprovalCard';
 import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal,flushSync} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
+import {turnGap,useTurnWindow} from './useTurnWindow';
+import {captureTurnScrollAnchor,restoreTurnScrollAnchor} from './turn-scroll-anchor';
 import SupplementalInputDock from './SupplementalInputDock';
 import {PersistentInputRecord} from './InputProcessRecord';
 import { t, useLanguage } from './i18n';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { Component, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode, type RefObject } from 'react';
 import { ChevronUp, Clock3 } from 'lucide-react';
 import SkillTags from './SkillTags';
 import ModelStatus from './ModelStatus';
@@ -97,7 +99,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     if(window.desktop?.projectFiles)void window.desktop.projectFiles.open({runId:run.id,path}).catch(error=>setReferenceError((error as Error).message));
   },[openReference,run.id]);
   const scroll = useRef<HTMLDivElement>(null);
-  const {scrollToEnd,scrollToMessage}=useMessageScroller();
+  const {scrollToEnd,scrollToMessage,scrollToStart}=useMessageScroller();
   const readingRecovery=useRef(readReading(run.id));
   const following=useRef(readingRecovery.current?.following!==false);
   const visibleRef=useRef(visible);visibleRef.current=visible;
@@ -122,6 +124,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
    const retained=next.map(turn=>{const previous=previousTurns.current.get(turn.user.id);return previous&&sameTurn(previous,turn)?previous:turn;});
    previousTurns.current=new Map(retained.map(turn=>[turn.user.id,turn]));return retained;
   },[merged,actionsOnly]);
+  const turnIds=useMemo(()=>turns.map(turn=>turn.user.id),[turns]);
+  const windowed=!floatingHost&&turns.length>24;
+  const windowRef=useRef<TurnWindowHandle|null>(null);
+  const [selection]=useState(createTurnSelection);
   const forms=useTaskForms(run.id);
   const formsByTurn=useMemo(()=>groupByTurn(forms),[forms]);
   const appsByTurn=useMemo(()=>groupByTurn(merged.taskApps),[merged.taskApps]);
@@ -129,20 +135,45 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const loadOlder=async()=>{
    if(!before||!window.desktop?.getRunPage||loadingHistory)return;
    setLoadingHistory(true);setHistoryError('');
-   try{const page=await window.desktop.getRunPage({id:run.id,before});setOlder(previous=>previous?{...page,taskApps:[...(page.taskApps||[]),...(previous.taskApps||[])],fileChanges:[...(page.fileChanges||[]),...(previous.fileChanges||[])],messages:[...page.messages,...previous.messages],tools:[...page.tools,...previous.tools],plans:[...(page.plans||[]),...(previous.plans||[])],artifacts:[...(page.artifacts||[]),...(previous.artifacts||[])]}:page);}catch(e){setHistoryError((e as Error).message);}finally{setLoadingHistory(false);}
+   try{const page=await window.desktop.getRunPage({id:run.id,before});
+    if(!following.current&&!readingRecovery.current){
+     const anchor=windowed?windowRef.current?.read():undefined;
+     readingRecovery.current=anchor?{...anchor,top:scroll.current?.scrollTop||0,following:false}:readReading(run.id);
+    }
+    setOlder(previous=>previous?{...page,taskApps:[...(page.taskApps||[]),...(previous.taskApps||[])],fileChanges:[...(page.fileChanges||[]),...(previous.fileChanges||[])],messages:[...page.messages,...previous.messages],tools:[...page.tools,...previous.tools],plans:[...(page.plans||[]),...(previous.plans||[])],artifacts:[...(page.artifacts||[]),...(previous.artifacts||[])]}:page);}catch(e){setHistoryError((e as Error).message);}finally{setLoadingHistory(false);}
   };
   const trackScroll = () => {
     const el=scroll.current;
-    if(!visibleRef.current||!el?.clientHeight||readingRecovery.current)return;
+    if(!visibleRef.current||!el?.clientHeight)return;
+    if(windowed)windowRef.current?.sync();
+    if(readingRecovery.current)return;
     // A delayed scroll event after content growth must not cancel following.
     if(el.scrollHeight-el.scrollTop-el.clientHeight<60)following.current=true;
     else if(el.scrollTop<savedTop.current)following.current=false;
     savedTop.current=el.scrollTop;
     onFollowingChange(following.current);
+    if(following.current){
+      const turnId=turns.at(-1)?.user.id;
+      if(turnId)saveReading(run.id,{turnId,offset:0,top:el.scrollTop,following:true});
+      return;
+    }
+    if(windowed){
+      const anchor=windowRef.current?.read();
+      if(anchor)saveReading(run.id,{...anchor,top:el.scrollTop,following:false});
+      return;
+    }
     const top=el.getBoundingClientRect().top,anchor=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.getBoundingClientRect().bottom>top);
-    if(anchor)saveReading(run.id,{turnId:anchor.dataset.turnId!,offset:anchor.getBoundingClientRect().top-top,top:el.scrollTop,following:following.current});
+    if(anchor)saveReading(run.id,{turnId:anchor.dataset.turnId!,offset:anchor.getBoundingClientRect().top-top,top:el.scrollTop,following:false});
   };
-  const jumpTurn=(id:string)=>{readingRecovery.current=null;following.current=false;onFollowingChange(false);scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});};
+  const trackScrollRef=useRef(trackScroll);trackScrollRef.current=trackScroll;
+  const windowChanged=useCallback(()=>trackScrollRef.current(),[]);
+  const jumpTurn=(id:string)=>{
+    readingRecovery.current=null;following.current=false;onFollowingChange(false);
+    if(windowed){
+      scrollToStart({behavior:'instant'});
+      windowRef.current?.goTo(id,14);
+    }else scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});
+  };
   const jump=()=>{if(visibleRef.current)scrollToEnd({behavior:'instant'});};
   useLayoutEffect(()=>{
     if(!visible)return;
@@ -154,14 +185,19 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     if(saved.following){readingRecovery.current=null;return;}
     following.current=false;onFollowingChange(false);
     const element=scroll.current;if(!element)return;
-    const anchor=[...element.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.dataset.turnId===saved.turnId);
-    if(!anchor&&before&&!historyError){if(!loadingHistory)void loadOlder();return;}
+    const anchor=windowed?null:[...element.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.dataset.turnId===saved.turnId);
+    const hasTurn=windowed?turnIds.includes(saved.turnId):!!anchor;
+    if(!hasTurn&&before&&!historyError){if(!loadingHistory)void loadOlder();return;}
     let frame=0,cancelled=false,attempts=0;
     const restore=()=>{if(cancelled)return;if(element.hasAttribute('data-pending-scroll')&&attempts++<60){frame=requestAnimationFrame(restore);return;}
-      element.scrollTop=anchor?element.scrollTop+anchor.getBoundingClientRect().top-element.getBoundingClientRect().top-saved.offset:saved.top;
-      savedTop.current=element.scrollTop;frame=requestAnimationFrame(()=>{if(!cancelled)readingRecovery.current=null;});
+      if(!windowed||!windowRef.current?.goTo(saved.turnId,saved.offset)){
+        element.scrollTop=anchor?element.scrollTop+anchor.getBoundingClientRect().top-element.getBoundingClientRect().top-saved.offset:saved.top;
+      }
+      savedTop.current=element.scrollTop;frame=requestAnimationFrame(()=>{
+        if(!cancelled){readingRecovery.current=null;savedTop.current=element.scrollTop;}
+      });
     };frame=requestAnimationFrame(restore);return()=>{cancelled=true;cancelAnimationFrame(frame);};
-  },[visible,turns,before,loadingHistory,historyError,onFollowingChange]);
+  },[visible,turnIds,before,loadingHistory,historyError,onFollowingChange,windowed]);
   const deliveries=useInputDeliveries(run.id);
   const [inputSelection,setInputSelection]=useState<{id:string;key:number}>();
   const openInput=useCallback((id:string)=>{setInputSelection({id,key:Date.now()});onOpenInput?.(id);},[onOpenInput]);
@@ -232,9 +268,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const renderTurn=(turn:ConversationTurn)=>{
    const requests=(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1));
    const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
-   // Keep the end anchor measured: a placeholder for the latest turn makes
-   // composer resizing mount history and shift the scroll target while typing.
-   return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={turns.length>8&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+   // Overscan keeps row geometry available for scrolling. Rich historical
+   // content can wait until it nears the viewport, including inside that window.
+   // The latest/live and actionable turns stay measured.
+   return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={windowed&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
@@ -307,17 +344,17 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<button className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp size={16} aria-hidden="true"/></button>}
     <div className="conversation-body" inert={!!floatingHost&&!recentOpen} aria-hidden={floatingHost&&!recentOpen?true:undefined}>
-      <ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>
+      {windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
       <MessageScroller className="min-w-0 flex-1">
         {/* Keep utility controls outside the message list so prepend anchoring tracks turns. */}
         {(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
           {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<p role="alert">{historyError}</p>}
         </div>}
-        <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll}>
+        <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll} preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}>
         {/* Bound anchor jumps to real content. The primitive's optional spacer would
             otherwise keep short/folded final turns pinned above a blank viewport. */}
         <MessageScrollerContent spacerClassName="hidden" className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
-          {(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
+          {windowed?<WindowedTurns handle={windowRef} viewport={scroll} ids={turnIds} turns={turns} visible={visible} selection={selection} onRangeChange={windowChanged} renderTurn={renderTurn} status={statusContent}/>:(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
           </ConversationScrollItem>)}
@@ -351,6 +388,56 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   return floatingHost?createPortal(view,floatingHost):view;
 }
 
+type TurnWindowHandle=Pick<ReturnType<typeof useTurnWindow>,'sync'|'read'|'goTo'>;
+function createTurnSelection(){
+ let selected='';
+ const listeners=new Set<()=>void>();
+ return {
+  get:()=>selected,
+  set(id:string){if(id!==selected){selected=id;for(const listener of listeners)listener();}},
+  subscribe(listener:()=>void){listeners.add(listener);return()=>listeners.delete(listener);},
+ };
+}
+type TurnSelection=ReturnType<typeof createTurnSelection>;
+function WindowedNavigation({selection,...props}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>&{selection:TurnSelection}){
+ const selected=useSyncExternalStore(selection.subscribe,selection.get);
+ return <TurnNavigation {...props} selected={selected||props.turns[0]?.user.id||''}/>;
+}
+function WindowedTurns({handle,viewport,ids,turns,visible,selection,onRangeChange,renderTurn,status}:{
+ handle:RefObject<TurnWindowHandle|null>;viewport:RefObject<HTMLDivElement|null>;
+ ids:string[];turns:ConversationTurn[];visible:boolean;selection:TurnSelection;onRangeChange():void;
+ renderTurn(turn:ConversationTurn):ReactNode;status:ReactNode;
+}){
+ const window=useTurnWindow(ids,viewport,true,visible);
+ useImperativeHandle(handle,()=>window,[window]);
+ useLayoutEffect(()=>{
+  if(visible){selection.set(window.selected);onRangeChange();}
+ },[visible,window.start,window.end,window.selected,selection,onRangeChange]);
+ return <AnchoredTurnRange viewport={viewport} firstId={ids[window.start]} lastId={ids[window.end-1]} before={window.before}>
+  <div aria-hidden="true" style={{height:window.before,overflowAnchor:'none'}}/>
+  {turns.slice(window.start,window.end).map(turn=><WindowTurn key={turn.user.id} id={turn.user.id} prompt={turn.user.text} observe={window.observe}>
+   {renderTurn(turn)}
+   {turn===turns.at(-1)&&status}
+  </WindowTurn>)}
+  <div aria-hidden="true" style={{height:window.after,overflowAnchor:'none'}}/>
+ </AnchoredTurnRange>;
+}
+type AnchoredRangeProps={viewport:RefObject<HTMLDivElement|null>;firstId?:string;lastId?:string;before:number;children:ReactNode};
+class AnchoredTurnRange extends Component<AnchoredRangeProps>{
+ getSnapshotBeforeUpdate(previous:AnchoredRangeProps){
+  const {viewport,firstId,lastId,before}=this.props;
+  if(previous.firstId===firstId&&previous.lastId===lastId&&previous.before===before)return null;
+  return captureTurnScrollAnchor(viewport.current);
+ }
+ componentDidUpdate(_previous:AnchoredRangeProps,_state:unknown,anchor:ReturnType<typeof captureTurnScrollAnchor>){
+  restoreTurnScrollAnchor(anchor);
+ }
+ render(){return <div className="flex flex-col">{this.props.children}</div>;}
+}
+function WindowTurn({id,prompt,observe,children}:{id:string;prompt:string;observe(id:string,node:HTMLElement|null):void;children:React.ReactNode}){
+ const ref=useCallback((node:HTMLDivElement|null)=>observe(id,node),[id,observe]);
+ return <MessageScrollerItem ref={ref} messageId={id} data-turn-id={id} className="conversation-turn [content-visibility:visible]" style={{marginBottom:turnGap}} aria-label={`对话：${prompt.slice(0,60)}`}>{children}</MessageScrollerItem>;
+}
 function ConversationScrollItem({following,...props}:ComponentProps<typeof MessageScrollerItem>&{following:boolean}){
  // The primitive anchors newly appended items even when autoScroll is false.
  // Defer that anchor while reading history; keep existing anchors for navigation.

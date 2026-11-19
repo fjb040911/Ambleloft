@@ -1,5 +1,6 @@
 const {createHash}=require('node:crypto');
-const references=new WeakMap(),previews=new WeakMap();
+const references=new WeakMap(),previews=new WeakMap(),projectionVersions=new WeakMap();
+const projectionVersion=run=>projectionVersions.get(run)||0;
 // V8 substring views can retain the entire original buffer. Copy bounded tails.
 const tail=(text,limit)=>Buffer.from(text.slice(-limit),'utf16le').toString('utf16le');
 const digest=text=>createHash('sha256').update(text,'utf16le').digest('hex');
@@ -40,6 +41,7 @@ class RuntimeTextCache {
    for(const [field,text] of entry.value.texts){if(typeof text!=='string'&&!['spool','joined'].includes(text.kind))continue;const target=locate(entry.source,field);if(!target)continue;const property=Object.getOwnPropertyDescriptor(target.owner,target.key);if(typeof text==='string'?(!('value'in property)||property.value!==text):reference(target.owner,target.key)?.revision!==text.revision)continue;
     const row=this.database().prepare('SELECT length,revision FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?').get(run.id,entry.collection,entry.key,field);if(!row)continue;
     install(entry.source,{runId:run.id,collection:entry.collection,itemKey:entry.key,field,...row,preview:typeof text==='string'?tail(text,2048):text.preview,hash:typeof text==='string'?digest(text):text.hash},this);
+    if(run.source)projectionVersions.set(run.source,projectionVersion(run.source)+1);
    }
   }
  }
@@ -60,4 +62,4 @@ function preview(owner,key,limit){
  // install() removes this source reference as soon as the body becomes disk backed.
  previews.set(owner,{source:text,limit,value});return value;
 }
-module.exports={RuntimeTextCache,reference,install,locate,digest,preview,range};
+module.exports={RuntimeTextCache,reference,install,locate,digest,preview,range,projectionVersion};

@@ -69,6 +69,53 @@ test('paused renderer holds one frame and coalesces updates without dropping fin
  const documents=[];let buffers=[];for(let i=0;i<sent.length;i++){const frame=sent[i];buffers.push(frame.data);if(frame.done){documents.push(JSON.parse(Buffer.concat(buffers)));buffers=[];}delivery.ack(frame);}
  assert.equal(documents.length,2);assert.deepEqual(documents[1].run,r);assert.equal(delivery.current,null);assert.equal(delivery.pending.size,0);
 });
+test('queued deltas use the final acknowledged revision of each run in this renderer',()=>{
+ const publisher=createRunPublisher('s'),first=run(),second={...run(),id:'second'},sent=[];
+ const delivery=new RunDelivery(frame=>sent.push(frame),id=>publisher.snapshot(id));
+ let offset=0;
+ function receive(){
+  const chunks=[];
+  while(offset<sent.length){
+   const frame=sent[offset++];chunks.push(frame.data);delivery.ack(frame);
+   if(frame.done)return JSON.parse(Buffer.concat(chunks));
+  }
+  assert.fail('missing complete event');
+ }
+ delivery.reset();
+ delivery.push(publisher.encode(first));
+ const baseline=receive();
+ delivery.push(publisher.encode(second));
+ first.messages[1].text='first delta';
+ delivery.push(publisher.encode(first));
+ second.status='waiting';
+ delivery.push(publisher.encode(second));
+ assert.equal(delivery.pending.size,2);
+ assert.equal(sent.length,offset+1);
+ const secondBaseline=receive();
+ const delta=receive(),secondDelta=receive();
+ assert.equal(delta.kind,'run-delta');
+ assert.equal(secondDelta.kind,'run-delta');
+ assert.deepEqual(applyRunEvent(baseline,delta).run,first);
+ assert.deepEqual(applyRunEvent(secondBaseline,secondDelta).run,second);
+ assert.equal(delivery.pendingDeltaBytes,0);
+});
+test('missing baselines and oversize queued deltas recover with snapshots',()=>{
+ const publisher=createRunPublisher('s'),r=run(),other={...run(),id:'other'},sent=[];
+ const delivery=new RunDelivery(frame=>sent.push(frame),id=>publisher.snapshot(id));
+ publisher.encode(r);
+ delivery.reset();
+ r.status='waiting';
+ delivery.push(publisher.encode(r));
+ assert.equal(JSON.parse(sent[0].data).kind,'run-snapshot');
+ for(let index=0;index<sent.length;index++)delivery.ack(sent[index]);
+ delivery.push(publisher.encode(other));
+ r.messages[1].text='x'.repeat(600000);
+ delivery.push(publisher.encode(r));
+ assert.equal(delivery.pendingDeltaBytes,0);
+ const snapshotStart=sent.length+1;
+ delivery.ack(sent.at(-1));delivery.ack(sent.at(-1));
+ assert.match(sent[snapshotStart].data.toString().slice(0,100),/"kind":"run-snapshot"/);
+});
 test('reload replaces in-flight transfer, stale acknowledgments cannot release new credit, and close releases snapshots',()=>{
  const pub=createRunPublisher('s'),r=run(),sent=[],delivery=new RunDelivery(frame=>sent.push(frame),id=>pub.snapshot(id));delivery.push(pub.encode(r));assert.equal(sent.length,0);delivery.reset();const old=sent[0];r.status='waiting';delivery.push(pub.encode(r));delivery.reset();assert.notEqual(sent[1].id,old.id);delivery.ack(old);assert.equal(sent.length,2);delivery.close();assert.equal(delivery.current,null);assert.equal(delivery.pending.size,0);delivery.ack(sent[1]);assert.equal(sent.length,2);
 });

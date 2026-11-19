@@ -16,8 +16,8 @@ const rpcText=require('./rpc-text.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 
 class AgentRuntime {
-  constructor({ directory, provider, workspace, publish, projectRun = run => run, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
-    this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.projectRun=projectRun;this.publications=new WeakMap();
+  constructor({ directory, provider, workspace, publish, publishChanges, projectRun = run => run, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
+    this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.publishChanges=publishChanges;this.projectRun=projectRun;this.publications=new WeakMap();
     this.native = new (require('./native-subagents.cjs').NativeSubagents)(this);
     this.conversation = new (require('./conversation-agent.cjs').ConversationAgent)(this,conversationOptions);
     this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;this.dirtyItems=new Map();
@@ -143,8 +143,9 @@ class AgentRuntime {
     this.pendingSave=operation;this.writes=operation.catch(()=>{});
     return operation;
   }
-  publishRun(run) {
+  publishRun(run, changedItems) {
     if(this.database?.closed)return;
+    if(this.publishChanges)return this.publishChanges(run,changedItems);
     const {modelRequests,...view}=run;
     const projected=this.projectRun(view);
     // The versioned publisher already owns an immutable snapshot/delta. Plain
@@ -160,7 +161,19 @@ class AgentRuntime {
     this.dirtyRuns.set(run.id,(this.dirtyRuns.get(run.id)||0)+1);
     let publication=this.publications.get(run);
     if(!publication){publication={at:-Infinity,timer:null};this.publications.set(run,publication);}
-    const flush=()=>{clearTimeout(publication.timer);publication.timer=null;publication.at=performance.now();this.publishRun(run);};
+    if(this.publishChanges){
+      if(!stream||!items)publication.items=null;
+      else if(publication.items!==null){
+        publication.items??=new Set();
+        for(const item of items)publication.items.add(JSON.stringify(item));
+      }
+    }
+    const flush=()=>{
+      clearTimeout(publication.timer);publication.timer=null;publication.at=performance.now();
+      const changedItems=publication.items;
+      publication.items=undefined;
+      this.publishRun(run,changedItems);
+    };
     const remaining=50-(performance.now()-publication.at);
     // Only content deltas may wait. Every control/state update flushes immediately.
     if(!stream||remaining<=0)flush();

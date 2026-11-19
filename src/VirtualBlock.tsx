@@ -1,4 +1,5 @@
-import {useEffect,useRef,useState,type ReactNode} from 'react';
+import {Component,useEffect,useRef,useState,type ReactNode,type RefObject} from 'react';
+import {captureTurnScrollAnchor,restoreTurnScrollAnchor} from './turn-scroll-anchor';
 
 // Keep a measured placeholder so browser scroll position and anchor targets survive.
 export default function VirtualBlock({children,enabled=false,preserveState=false,estimatedHeight=200}:{children:ReactNode;enabled?:boolean;preserveState?:boolean;estimatedHeight?:number}) {
@@ -29,5 +30,21 @@ function UnmountingBlock({children,enabled,estimatedHeight}:{children:ReactNode;
   const observer=new ResizeObserver(()=>{if(el.offsetHeight)height.current=el.offsetHeight;});
   observer.observe(el);return()=>observer.disconnect();
  },[visible]);
- return <div ref={ref} data-virtualized={enabled&&!visible?'placeholder':undefined} style={!visible&&enabled?{height:height.current,overflowAnchor:'none'}:undefined}>{visible||!enabled?children:null}</div>;
+ return <MeasuredBlock element={ref} placeholder={enabled&&!visible} height={height.current}>{children}</MeasuredBlock>;
+}
+
+type MeasuredBlockProps={element:RefObject<HTMLDivElement|null>;placeholder:boolean;height:number;children:ReactNode};
+class MeasuredBlock extends Component<MeasuredBlockProps>{
+ getSnapshotBeforeUpdate(previous:MeasuredBlockProps){
+  if(previous.placeholder===this.props.placeholder)return null;
+  const viewport=this.props.element.current?.closest<HTMLElement>('[data-turn-window]')??null;
+  return captureTurnScrollAnchor(viewport);
+ }
+ componentDidUpdate(_previous:MeasuredBlockProps,_state:unknown,anchor:ReturnType<typeof captureTurnScrollAnchor>){
+  restoreTurnScrollAnchor(anchor);
+ }
+ render(){
+  const {element,placeholder,height,children}=this.props;
+  return <div ref={element} data-virtualized={placeholder?'placeholder':undefined} style={placeholder?{height,overflowAnchor:'none'}:undefined}>{placeholder?null:children}</div>;
+ }
 }

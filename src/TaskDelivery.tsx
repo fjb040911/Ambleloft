@@ -1,4 +1,4 @@
-import {subscribeRuns} from './run-events';
+import {subscribeRuns,watchRunDetails} from './run-events';
 import {useEffect,useState,useRef,type ComponentProps} from 'react';
 import Conversation from './Conversation';
 import type {ComposerOptions} from './ComposerControls';
@@ -12,10 +12,13 @@ import type {AgentRun,ProviderCatalog,TurnFileChanges} from './types';
 export default function TaskDelivery({onOptionsChange,runId,catalog,onOpenTask,onReady,awaitingRun=false,readOnly=false,active=true,mode='delivery',hidden=false,onRework}:{awaitingRun?:boolean;onOptionsChange?(options:ComposerOptions):void;onRework?(text:string,options:ComposerOptions):Promise<void>;active?:boolean;mode?:'chat'|'delivery'|'actions';hidden?:boolean;readOnly?:boolean;onReady?(ready:boolean):void;runId?:string;catalog:ProviderCatalog;onOpenTask(id:string):void}){
  const L=useCopy(),[run,setRun]=useState<AgentRun|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[changes,setChanges]=useState<TurnFileChanges|null>(null),[file,setFile]=useState<{name:string;text:string}|null>(null),[reload,setReload]=useState(0);
  const [selectedInput,setSelectedInput]=useState<{id:string;key:number}>(),actionRoot=useRef<HTMLDivElement>(null);
- useEffect(()=>{let live=true,receivedUpdate=false;setSelectedInput(undefined);onReady?.(false);setFile(null);setChanges(null);setError('');if(!runId){if(!awaitingRun)setRun(null);setLoading(false);return;}
+ const needsDetails=active&&!hidden;
+ useEffect(()=>{let live=true,receivedUpdate=false;
+ if(!needsDetails)return;setSelectedInput(undefined);onReady?.(false);setFile(null);setChanges(null);setError('');if(!runId){if(!awaitingRun)setRun(null);setLoading(false);return;}
  setLoading(true);void (window.desktop?.getRunPage?window.desktop.getRunPage({id:runId}):Promise.reject(Error(L('执行记录接口暂不可用','Execution history is unavailable')))).then(r=>{if(live&&!receivedUpdate){setRun(r);onReady?.(r.status==='completed');}}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});
- const unsubscribe=subscribeRuns(r=>{if(live&&r.id===runId){receivedUpdate=true;setError('');setLoading(false);setRun(r);onReady?.(r.status==='completed');}});return()=>{live=false;unsubscribe?.();};
- },[runId,reload,awaitingRun]);
+ const unwatch=watchRunDetails([runId]);
+ const unsubscribe=subscribeRuns(r=>{if(live&&r.id===runId&&!r.summaryOnly){receivedUpdate=true;setError('');setLoading(false);setRun(r);onReady?.(r.status==='completed');}});return()=>{live=false;unwatch();unsubscribe?.();};
+ },[runId,reload,awaitingRun,needsDetails]);
  const switching=!!run&&run.id!==runId;
  const output=run?.messages.filter(m=>m.role==='assistant'&&m.kind!=='reasoning');
  const finals=output?.filter(m=>m.phase==='final_answer');

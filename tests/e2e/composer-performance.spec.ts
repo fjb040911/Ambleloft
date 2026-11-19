@@ -29,5 +29,6 @@ test('typing and deleting in long history avoids transcript renders and synchron
  expect(counts.historyTextReads).toBe(0);expect(counts.textareaMeasurements).toBe(0);
  await expect(page.locator('[data-turn-id="u39"] [data-virtualized="placeholder"]')).toHaveCount(0);
  await expect(page.locator('[data-turn-id="u39"] .markdown')).toContainText("Result 39");
- await expect(page.locator('[data-turn-id="u0"] [data-virtualized="placeholder"]')).toHaveCount(1);
+ await expect(page.locator('[data-turn-id="u0"]')).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button')).toHaveCount(40);
 });

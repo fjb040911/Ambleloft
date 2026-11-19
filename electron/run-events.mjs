@@ -1,6 +1,36 @@
 const collections=['messages','tools','plans','artifacts','fileChanges','taskApps','approvals','questions'];
 const equal=(a,b)=>a===b||JSON.stringify(a)===JSON.stringify(b);
 const key=(item,index)=>String(item.id??item.turnKey??index);
+function equalItem(before,after){
+ if(before===after)return true;
+ if(!before)return false;
+ const fields=Object.keys(before),nextFields=Object.keys(after);
+ if(fields.length===nextFields.length&&fields.every((field,index)=>field===nextFields[index]&&before[field]===after[field]))return true;
+ return equal(before,after);
+}
+function collectionChanges(before,after){
+ if(before===after)return;
+ if(!Array.isArray(after))return equal(before,after)?undefined:{value:after??null};
+ // Stable pages dominate streaming. Compare records in order without first
+ // serializing the page or indexing all of its unchanged records.
+ if(Array.isArray(before)&&before.length===after.length){
+  const items=[];
+  let index=0;
+  for(;index<after.length;index++){
+   const previous=before[index],item=after[index],id=key(item,index);
+   if(key(previous,index)!==id)break;
+   if(!equalItem(previous,item))items.push({id,patch:changes(previous,item)});
+  }
+  if(index===after.length)return items.length?{order:after.map(key),items}:undefined;
+ }
+ // Page shifts, additions and reordering still use the authoritative ID order.
+ const prior=new Map((before||[]).map((item,index)=>[key(item,index),item]));
+ const items=after.flatMap((item,index)=>{
+  const id=key(item,index),previous=prior.get(id);
+  return equalItem(previous,item)?[]:[{id,...(previous?{patch:changes(previous,item)}:{value:item})}];
+ });
+ return {order:after.map(key),items};
+}
 function changes(before,after){
  const set={},append={},remove=[];
  for(const name of Object.keys(before))if(!(name in after))remove.push(name);
@@ -35,13 +65,8 @@ export function createRunPublisher(epoch,{maxBytes=16*1024*1024,maxEntries=64}={
    const before={...old.run},after={...run},arrays={};
    for(const name of collections){
     delete before[name];delete after[name];
-    if(equal(old.run[name],run[name]))continue;
-    if(!Array.isArray(run[name])){arrays[name]={value:run[name]??null};continue;}
-    const prior=new Map((old.run[name]||[]).map((item,index)=>[key(item,index),item]));
-    arrays[name]={order:run[name].map(key),items:run[name].flatMap((item,index)=>{
-     const id=key(item,index),previous=prior.get(id);
-     return equal(previous,item)?[]:[{id,...(previous?{patch:changes(previous,item)}:{value:item})}];
-    })};
+    const change=collectionChanges(old.run[name],run[name]);
+    if(change)arrays[name]=change;
    }
    const event=structuredClone({kind:'run-delta',id:run.id,epoch,baseRevision:old.revision,revision,fields:changes(before,after),arrays});
    remember(run.id,applyRunEvent(old,event));return event;
