@@ -61,6 +61,7 @@ export interface Capability { id: string; name: string; category: string; descri
 declare global {
   interface Window {
     desktop?: {
+      readonly platform?: string;
       updates?: {update():Promise<import('./Updates').UpdateState>;schedule(version:string):Promise<import('./Updates').UpdateState>;cancelSchedule():Promise<import('./Updates').UpdateState>;snapshot():Promise<import('./Updates').UpdateState>;check():Promise<import('./Updates').UpdateState>;download():Promise<import('./Updates').UpdateState>;cancel():Promise<import('./Updates').UpdateState>;restart(version:string):Promise<import('./Updates').UpdateState>;preferences(input:{autoCheck?:boolean;autoDownload?:boolean}):Promise<import('./Updates').UpdateState>;onChanged(listener:(state:import('./Updates').UpdateState)=>void):()=>void};
       workforce?:import('./workforce-types').WorkforceAPI;
       growth?:{status():Promise<{policy:{enabled:number;dailyLimit:number};counts:{state:string;count:number}[]}>;jobs():Promise<{id:string;state:string;employeeId:string;domainId:string;error?:string}[]>;policy(input:{enabled:boolean;dailyLimit:number}):Promise<unknown>;dismiss(input:{id:string}):Promise<void>};

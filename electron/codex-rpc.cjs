@@ -8,8 +8,9 @@ const { redact, isLocalHost } = require('./provider.cjs');
 
 const SHELL_ENV_ALLOWLIST = ['PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy'];
 // Rust-launched Windows shells need the OS/profile environment explicitly.
+// Windows OpenSSH needs ProgramData even for ssh -V; without it it exits 255 silently.
 // Keep this scoped to Windows; never inherit arbitrary application secrets.
-const shellEnvironmentKeys = platform => [...SHELL_ENV_ALLOWLIST, ...(platform === 'win32' ? ['SystemRoot', 'WINDIR', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'PATHEXT', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432'] : [])];
+const shellEnvironmentKeys = platform => [...SHELL_ENV_ALLOWLIST, ...(platform === 'win32' ? ['SystemRoot', 'WINDIR', 'COMSPEC', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'PATHEXT', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'ProgramData'] : [])];
 
 const { findCodex, engineRuntime } = require('./engine.cjs');
 

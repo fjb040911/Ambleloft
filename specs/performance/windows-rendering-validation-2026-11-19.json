@@ -1,0 +1,120 @@
+{
+  "date": "2026-11-19",
+  "timezone": "Asia/Shanghai",
+  "version": "0.9.13",
+  "baseCommit": "9b1e041",
+  "releasePaused": true,
+  "scope": [
+    "Preserve shimmer using bounded static text-gradient layers and opacity animation.",
+    "Coalesce renderer presentation updates without dropping versioned data or control notifications.",
+    "Lazy-load heavyweight pages and Markdown; mount only visited conversations/navigation groups.",
+    "Avoid late Windows platform layout changes and forced native-titlebar style reads.",
+    "Pass ProgramData to Windows shells so system OpenSSH can start.",
+    "Add bounded responsiveness diagnostics and reproducible Windows/native-stack probes."
+  ],
+  "validation": {
+    "prChecks": {
+      "relatedNodeTests": {
+        "passed": 35,
+        "failed": 0,
+        "skipped": 0
+      },
+      "typeScriptExit": 0,
+      "productionBuildExit": 0,
+      "commands": [
+        "node --test tests/after-paint.test.cjs tests/run-notifications.test.cjs tests/run-events.test.cjs tests/frame-sampler.test.cjs tests/soak-load.test.cjs tests/probe-heartbeat.test.cjs tests/native-wait-analysis.test.cjs tests/performance-metrics.test.cjs tests/execution-policy.test.cjs",
+        "node node_modules/typescript/bin/tsc --noEmit",
+        "node node_modules/vite/bin/vite.js build"
+      ]
+    },
+    "priorPageRun": {
+      "at": "2026-11-19T09:53:59.473Z",
+      "passed": 155,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "note": "Executed earlier in this session against the same product changes; not rerun for PR preparation."
+    },
+    "nativeWindowsSsh": [
+      {
+        "kind": "ssh-stacks",
+        "passed": true,
+        "minutes": 4.0023,
+        "deterministicLines": 356,
+        "actualEngineRequests": 19,
+        "reloads": 2,
+        "processExits": [
+          {
+            "code": 0,
+            "signal": null
+          },
+          {
+            "code": 0,
+            "signal": null
+          }
+        ],
+        "note": "Isolated localhost SSH; task terminal state, complete retained sequences, text hashes, restart restoration and no duplicate model request asserted."
+      },
+      {
+        "kind": "ssh-control",
+        "passed": true,
+        "minutes": 6.001966666666666,
+        "deterministicLines": 590,
+        "actualEngineRequests": 31,
+        "reloads": 2,
+        "processExits": [
+          {
+            "code": 0,
+            "signal": null
+          },
+          {
+            "code": 0,
+            "signal": null
+          }
+        ],
+        "note": "Isolated localhost SSH; task terminal state, complete retained sequences, text hashes, restart restoration and no duplicate model request asserted."
+      },
+      {
+        "kind": "ssh-runtime",
+        "passed": true,
+        "minutes": 15.008366666666667,
+        "deterministicLines": 1657,
+        "actualEngineRequests": 85,
+        "reloads": 2,
+        "processExits": [
+          {
+            "code": 0,
+            "signal": null
+          },
+          {
+            "code": 0,
+            "signal": null
+          }
+        ],
+        "note": "Isolated localhost SSH; task terminal state, complete retained sequences, text hashes, restart restoration and no duplicate model request asserted."
+      }
+    ],
+    "nativeStackEvidence": {
+      "etwLostEvents": 0,
+      "gpuLinkWaitMs": 517,
+      "functions": [
+        "gl::Program::resolveLinkImpl",
+        "gl::Program::MainLinkLoadEvent::wait",
+        "angle::AsyncWaitableEvent::wait"
+      ],
+      "interpretation": "Confirmed first-render ANGLE compilation/linking wait; not proof of the earlier mid-run main-process stall."
+    }
+  },
+  "limitations": [
+    "Half-second startup/runtime stalls are not claimed fixed. Further shader-trigger investigation was paused at user request.",
+    "Ordinary native titlebar dragging remains unverified. Programmatic window moves are not equivalent.",
+    "The final product tree has not rerun the complete repository suite, 120-minute soak or installer validation in this PR preparation. Earlier results on different builds do not substitute.",
+    "Native SSH evidence uses isolated localhost fixtures and does not reproduce the original remote network/model deployment.",
+    "Raw ETW, profiles, screenshots, credentials, model configuration and machine-local reports are not committed."
+  ],
+  "reproduction": {
+    "ssh": "SSH_NATIVE_DEFAULTS=1 SSH_CHAT_MINUTES=6 SSH_CORRELATED=light node scripts/probes/windows-chat-ssh.cjs <fresh-output> (set/restore variables with PowerShell try/finally)",
+    "calibration": "node scripts/probes/correlated-performance-electron.cjs <fresh-output>",
+    "nativeStacks": "scripts/probes/native-wait-stacks.wprp + NativeWaitTrace.cs; Microsoft TraceEvent 2.0.77 and matching Microsoft/Electron symbols are external analysis tools."
+  }
+}

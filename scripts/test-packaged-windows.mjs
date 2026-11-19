@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const {CodexRPC} = require('../electron/codex-rpc.cjs');
 const root = path.resolve(import.meta.dirname, '..');
 const directory = path.resolve(process.env.AMBLELOFT_TEST_WINDOWS_DIR || path.join(root, 'release/win-unpacked'));
+const executablePath = process.env.AMBLELOFT_TEST_WINDOWS_EXECUTABLE || path.join(directory,'Ambleloft.exe');
 const engineDirectory = path.join(directory, 'resources/engine');
 const profile = await mkdtemp(path.join(tmpdir(), 'amble-packaged-windows-'));
 const engineHome = await mkdtemp(path.join(tmpdir(), 'amble-packaged-engine-'));
@@ -27,7 +28,7 @@ try {
   const initialized = await rpc.call('initialize', {clientInfo:{name:'ambleloft_package_test',version:'1.0.0'}});
   assert.ok(initialized);
   rpc.send({method:'initialized',params:{}});
-  application = await _electron.launch({executablePath:path.join(directory,'Ambleloft.exe'),
+  application = await _electron.launch({executablePath,
     args:[`--user-data-dir=${profile}`],env:{...process.env,PATH:process.env.SystemRoot || 'C:\\Windows',ATELIER_DEV:'1'},timeout:30000});
   const page = await application.firstWindow();
   await page.getByRole('textbox',{name:'任务内容'}).waitFor();

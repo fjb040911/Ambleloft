@@ -1,4 +1,28 @@
 import { test, expect } from '@playwright/test';
+
+test('native titlebar colors follow the latest theme after deferred layout reads',async({page})=>{
+ await page.addInitScript(()=>{const w=window as any;w.__nativeColors=[];w.desktop={platform:'win32',getDevice:async()=>({platform:'win32',mode:'desktop'}),getProvider:async()=>({configured:false}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{},setWindowChrome:async(value:any)=>{w.__nativeColors.push(value);}};});
+ await page.goto('/');await expect.poll(()=>page.evaluate(()=>(window as any).__nativeColors.length)).toBeGreaterThan(0);
+ await page.evaluate(()=>{(window as any).__nativeColors=[];for(const theme of ['dark','light','dark'])document.documentElement.dataset.theme=theme;});
+ await expect.poll(()=>page.evaluate(()=>(window as any).__nativeColors.length)).toBe(1);
+ expect(await page.evaluate(()=>(window as any).__nativeColors[0])).toEqual(await page.evaluate(()=>{const style=getComputedStyle(document.documentElement);return{color:style.getPropertyValue('--activity-rail').trim(),symbolColor:style.getPropertyValue('--text').trim()};}));
+});
+
+for(const platform of ['win32','darwin'])for(const failure of [false,true])test(`initial native chrome survives ${platform} device ${failure?'failure':'delay'} without moving the draft`,async({page})=>{
+ await page.addInitScript(({platform})=>{
+  const w=window as any;w.__chromeStates=[];let previous:boolean|undefined;
+  new MutationObserver(()=>{const el=document.querySelector('.app-shell');if(!el)return;const current=el.classList.contains('windows-desktop');if(current!==previous){w.__chromeStates.push(current);previous=current;}}).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+  w.desktop={platform,getProvider:async()=>({configured:false}),getDevice:()=>new Promise((resolve,reject)=>{w.__finishDevice=()=>resolve({platform,mode:'desktop'});w.__failDevice=()=>reject(Error('Synthetic device lookup failure'));}),readWorkspace:async()=>({tasks:[],projects:[],theme:'light',layoutMode:'activity'}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{}};
+ },{platform});
+ await page.goto('/');const input=page.locator('.chat-composer-input').first();await input.fill('Keep this unsent draft');
+ await expect(page.locator('.windows-chrome')).toHaveCount(platform==='win32'?1:0);
+ const before=await input.boundingBox();await page.evaluate(failure=>(window as any)[failure?'__failDevice':'__finishDevice'](),failure);
+ if(failure)await expect(page.getByText('无法读取设备信息，请重新打开设备页面或重启应用。',{exact:true})).toBeVisible();
+ await expect(input).toHaveValue('Keep this unsent draft');await expect(input).toBeFocused();
+ expect(await page.evaluate(()=>(window as any).__chromeStates)).toEqual([platform==='win32']);
+ // A device response must not add/remove the 38px Windows titlebar.
+ if(!failure)expect(Math.abs((await input.boundingBox())!.y-before!.y)).toBeLessThan(2);
+});
 // Seed the current category layout on the test's actual origin; preserve it on reload.
 test.beforeEach(async({page})=>{
  await page.addInitScript(()=>{
@@ -7,6 +31,28 @@ test.beforeEach(async({page})=>{
  });
 });
 const category=(page:import('@playwright/test').Page,name:string)=>page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name,exact:true});
+
+test('unvisited categories stay unmounted while visited project state survives switching',async({page})=>{
+ await page.addInitScript(()=>{
+  const createdAt='2026-11-19T00:00:00Z';
+  const workspace={theme:'light',layoutMode:'activity',projects:[{id:'p',name:'保留导航状态',path:'/fixture',createdAt}],tasks:Array.from({length:12},(_,i)=>({id:'t'+i,title:'草稿 '+i,prompt:'正文 '+i,projectId:'p',createdAt}))};
+  (window as any).desktop={getProvider:async()=>({configured:false}),getDevice:async()=>({mode:'desktop'}),readWorkspace:async()=>workspace,listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{}};
+ });
+ await page.goto('/');
+ await expect(page.locator('.workspace-navigation > [data-slot="sidebar-group"]')).toHaveCount(1);
+ await page.getByRole('button',{name:'展开显示：保留导航状态'}).click();
+ await expect(page.locator('.project-children .tree-task')).toHaveCount(10);
+ await page.getByRole('button',{name:'折叠项目：保留导航状态'}).click();
+ await category(page,'任务').click();
+ await expect(page.locator('#nav-projects')).toBeHidden();
+ await expect(page.locator('#nav-workforce')).toHaveCount(0);
+ await expect(page.locator('#nav-extensions')).toHaveCount(0);
+ await category(page,'项目').click();
+ await expect(page.getByRole('button',{name:'展开项目：保留导航状态'})).toHaveAttribute('aria-expanded','false');
+ await page.getByRole('button',{name:'展开项目：保留导航状态'}).click();
+ await expect(page.locator('.project-children .tree-task')).toHaveCount(10);
+ await expect(page.locator('.project-children .tree-task').first()).toBeVisible();
+});
 
 test('projects organize drafts, preview details, edit and detach safely',async({page})=>{
  await page.goto('/');
@@ -82,11 +128,14 @@ test('sidebar component preserves project and task pagination and keyboard acces
  // Offscreen project rows are virtualized; verify pagination through its user-facing control.
  await expect(projects.getByRole('button',{name:'加载更多项目'})).toBeAttached();
  await projects.getByRole('button',{name:'加载更多项目'}).click();await expect(projects.getByRole('button',{name:'加载更多项目'})).toHaveCount(0);await projects.locator('#nav-projects [data-slot=sidebar-group-content] > div').nth(31).scrollIntoViewIfNeeded();await expect(projects.getByRole('button',{name:'管理项目：项目 31',exact:true})).toBeAttached();
+ const projectScroll=await page.locator('.workspace-navigation').evaluate(e=>e.scrollTop);
  await category(page,'任务').click();
  await expect(tasks.locator('.tree-task')).toHaveCount(30);
  await tasks.getByRole('button',{name:/加载更多/}).click();await expect(tasks.locator('#nav-task-list-chats > [data-slot=sidebar-menu-item]')).toHaveCount(35);await expect(tasks.getByRole('button',{name:/加载更多/})).toHaveCount(0);
  const toggle=category(page,'任务');await toggle.focus();await page.keyboard.press('Enter');await expect(toggle).toHaveAttribute('aria-expanded','false');
  await page.keyboard.press('Space');await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await category(page,'项目').click();
+ await expect.poll(()=>page.locator('.workspace-navigation').evaluate((e,target)=>Math.abs(e.scrollTop-target),projectScroll)).toBeLessThan(2);
 });
 
 test('project task and extension selection is mutually exclusive',async({page})=>{
