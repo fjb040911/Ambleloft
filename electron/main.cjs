@@ -1,5 +1,5 @@
 const {metrics,startMetrics}=require('./performance-metrics.cjs');
-const {createRunPublisher}=require('./run-events.mjs');
+const {createRunPublication}=require('./run-publication.cjs');
 const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
 const { app, BrowserWindow, ipcMain, Menu, dialog, session, safeStorage, shell, clipboard, protocol, nativeTheme, Notification, powerMonitor } = require('electron');
@@ -25,6 +25,7 @@ let pageHost;let taskApps;let profileId;let terminals;let ssh;
 let store;
 let database;
 let runtime;
+let runPublication;
 let extensionServiceForShutdown;
 let messageServiceForShutdown;
 let authenticationForShutdown;
@@ -72,7 +73,7 @@ function createWindow() {
     // Preserve shell control keys (interrupt, suspend, readline) on Windows/Linux.
     window.webContents.setIgnoreMenuShortcuts(!!record.terminalFocused&&input.control&&!input.meta&&['a','c','x','z','y'].includes(input.key.toLowerCase()));
   });
-  window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
+  window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){runPublication?.subscribe(record,[]);pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
   window.once('closed',()=>{terminals?.closeOwner(record);pageHost?.resetOwner(record);taskApps?.closeOwner(record);});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-frame-navigate', event => {
@@ -108,15 +109,24 @@ app.whenReady().then(async () => {
     dialog.showErrorBox('无法打开数据库', error.message);
     await database.close().catch(() => {}); app.quit(); return;
   }
-  const runPublisher=createRunPublisher(require('node:crypto').randomUUID());
+  runPublication=createRunPublication({
+    epoch:require('node:crypto').randomUUID(),findRun:id=>runtime.runs.find(run=>run.id===id),
+    windows:()=>windows.forProfile(profileId),project:run=>pageRun(run)
+  });
   const services=require('../core/services.cjs').createCoreServices({
     directory:app.getPath('userData'),database,encryption:createSecureStorage(app,safeStorage),
     fileApplications:require('./file-applications.cjs').createFileApplications({getIcon:async file=>(await app.getFileIcon(file,{size:'small'})).toDataURL()}),
-    projectRun:run=>runPublisher.encode(pageRun(run)),publish:value=>windows.broadcast(profileId,'agent:event',value.kind?.startsWith('run-')?value:runPublisher.encode(pageRun(value)))
+    publish:run=>runPublication.publish(run),publishChanges:(run,items)=>runPublication.publish(run,items)
   });
   store=services.workspace;runtime=services.tasks;ssh=services.ssh;
-  const runSnapshot=id=>{const source=runtime.runs.find(r=>r.id===id);if(!source)return;return runPublisher.snapshot(id)||runPublisher.encode(pageRun(source));};
+  const runSnapshot=runPublication.snapshot;
   windows.configureRunDelivery(runSnapshot);
+  ipcMain.on('agent:subscribe',(event,ids)=>{
+    let owner;
+    try{owner=windows.authorize(event);}catch{return;}
+    if(owner.profileId!==profileId||!Array.isArray(ids)||ids.length>256||!ids.every(id=>typeof id==='string'&&id.length<=200))return;
+    try{runPublication.subscribe(owner,ids);}catch(error){console.error('Could not subscribe to run details',error);}
+  });
   for(const action of ['ack','ready'])ipcMain.on('agent:'+action,(event,value)=>{try{const owner=windows.authorize(event);if(action==='ack')owner.delivery?.ack(value);else owner.delivery?.reset();}catch{/* Untrusted/stale frames cannot grant delivery credit. */}});
   ssh.publish=()=>windows.broadcast(profileId,'ssh:event');
   ssh.confirmHost=async info=>{const owner=windows.focused();if(!owner)return false;const result=await hostDialog('showMessageBox',owner,{type:'question',title:'信任 SSH 服务器',message:`首次连接 ${info.username}@${info.host}:${info.port}`,detail:'请核对服务器指纹：\n'+info.fingerprint,buttons:['取消','信任并连接'],defaultId:0,cancelId:0});return result.response===1;};
@@ -404,7 +414,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:export-diagnostics', async (event, input) => {
     const owner=authorize(event);checkRuntime();
     const run=runtime.runs.find(r=>r.id===input?.id);if(!run)throw new Error('任务不存在');
-    const report={...require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion()),performance:{...metrics.snapshot(),runtimeTextCache:database.textCache?.stats(),activeTextSpool:database.textSpool?.stats(),runPublisher:runPublisher.stats(),runDelivery:owner.delivery?.stats()}};
+    const report={...require('./run-diagnostics.cjs').diagnosticReport(run,app.getVersion()),performance:{...metrics.snapshot(),runtimeTextCache:database.textCache?.stats(),activeTextSpool:database.textSpool?.stats(),runPublisher:runPublication.stats(),runDelivery:owner.delivery?.stats()}};
     const result=await hostDialog('showSaveDialog',owner.window,{title:input?.language==='en'?'Export diagnostic data':'导出诊断数据',defaultPath:'ambleloft-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json',filters:[{name:'JSON',extensions:['json']}]});
     if(result.canceled||!result.filePath)return null;
     await require('node:fs/promises').writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
@@ -416,7 +426,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:message-text',(event,input)=>{authorize(event);checkRuntime();const message=runtime.runs.find(r=>r.id===input?.id)?.messages.find(m=>m.id===input?.messageId);if(!message)throw Error('消息不存在');return require('./runtime-text-cache.cjs').range(message,'text',input.offset,input.limit);});
   ipcMain.handle('agent:copy-messages',(event,input)=>{authorize(event);checkRuntime();const run=runtime.runs.find(r=>r.id===input?.id);if(!run||!Array.isArray(input.messageIds)||!input.messageIds.length||input.messageIds.length>1000)throw Error('消息不存在');const texts=input.messageIds.map(id=>{const message=run.messages.find(m=>m.id===id);if(!message)throw Error('消息不存在');return message.text;});clipboard.writeText(texts.join('\n\n'));});
   ipcMain.handle('agent:request-state',(event,input)=>{authorize(event);checkRuntime();return require('./history-pages.cjs').requestState(runtime.runs.find(r=>r.id===input?.id));});
-  ipcMain.handle('agent:history', (event,input)=>{authorize(event);checkRuntime();return pageRun(runtime.runs.find(r=>r.id===input?.id),input.before,input.limit);});
+  ipcMain.handle('agent:history', (event,input)=>{
+   authorize(event);checkRuntime();
+   if(input?.before===undefined&&input?.limit===undefined){
+    const snapshot=runSnapshot(input?.id);
+    if(!snapshot)throw Error('会话不存在');
+    return snapshot.run;
+   }
+   return pageRun(runtime.runs.find(run=>run.id===input.id),input.before,input.limit);
+  });
   const searchSnapshots=new Map();
   const recentSearchUse=await database.call('readSetting',{key:'workspace.searchRecent'})||{};
   ipcMain.handle('workspace:search-touch',async(event,input)=>{

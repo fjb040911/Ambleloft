@@ -1,6 +1,6 @@
 import {useComposerReceipt} from './useComposerReceipt';
 import {useDraftState,restoreComposerOptions,restoreTaskDraft} from './useDraftState';
-import {subscribeRuns} from './run-events';
+import {subscribeRuns,watchRunDetails} from './run-events';
 import {useExpertChat,ExpertRecipient,ExpertTranscript} from './ExpertChat';
 import {UpdateButton} from './Updates';
 import {collaborationDestination,type CollaborationTarget} from './collaboration-navigation';
@@ -39,7 +39,7 @@ import {workspaceGroups,workforcePages,WorkforceNavigation,type WorkspaceGroup,t
 import ExtensionWorkbench,{ExtensionNavigation,businessEntries,businessTitle} from './ExtensionWorkbench';
 import ExtensionInteraction from './ExtensionInteraction';
 import { t, setLanguage, useLanguage } from './i18n';
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 const SkillExtensionCenter=lazy(()=>import('./SkillExtensionCenter'));
 const Workforce=lazy(()=>import('./Workforce'));
 const SettingsWorkspace=lazy(()=>import('./SettingsWorkspace'));
@@ -58,6 +58,13 @@ import type { AgentRun, ProviderConfig, ProviderCatalog, Device, Page, Project, 
 
 const pages = [{ id: 'plugins', label: '技能与扩展', icon: Puzzle }] as const;
 
+
+function runSummary(run:AgentRun):AgentRun{
+ if(run.summaryOnly)return run;
+ const {messages,tools,plans,artifacts,taskApps,fileChanges,historyBefore,turnOffset,totalTurns,...status}=run;
+ const lastTurnStartedAt=run.lastTurnStartedAt||messages.findLast(message=>message.role==='user'&&!message.turnKey)?.timing?.startedAt||run.createdAt;
+ return {...status,lastTurnStartedAt,messages:[],tools:[],summaryOnly:true};
+}
 
 export default function App() { return <SidebarProvider className="contents" keyboardShortcut={false}><Suspense fallback={<p role="status">{t('正在加载…')}</p>}><WorkspaceApp/></Suspense></SidebarProvider>; }
 
@@ -92,8 +99,9 @@ function WorkspaceApp() {
   const [provider, setProvider] = useState<ProviderConfig | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [runId, setRunId] = useState<string | null>(typeof resumeView.runId==='string'?resumeView.runId:null);
-  const [visitedRuns,setVisitedRuns]=useState(()=>new Set<string>(typeof resumeView.runId==='string'?[resumeView.runId]:[]));
-  useEffect(()=>{if(runId)setVisitedRuns(previous=>previous.has(runId)?previous:new Set([...previous,runId]));},[runId]);
+  const [recentRunIds,setRecentRunIds]=useState<string[]>([]);
+  const residentRunsRef=useRef(new Set<string>());
+  const canReloadRun=!!window.desktop?.setRunDetails&&!!window.desktop.getRunPage;
   const [workforceConversation,setWorkforceConversation]=useState<string|null>(null);
   const [workforceTarget,setWorkforceTarget]=useState<CollaborationTarget>();
   const [submitting, setSubmitting] = useState(false);
@@ -118,15 +126,34 @@ function WorkspaceApp() {
   const selectedRunRef=useRef(runId);selectedRunRef.current=runId;
   const [unread,setUnread]=useState<Set<string>>(new Set());
   useEffect(()=>{if(runId)setUnread(old=>{const next=new Set(old);next.delete(runId);return next;});},[runId]);
-  const acceptRun = (run: AgentRun) => {
+  const acceptRun = (incoming: AgentRun) => {
+    const run=canReloadRun&&!residentRunsRef.current.has(incoming.id)?runSummary(incoming):incoming;
     if(run.id!==selectedRunRef.current&&['completed','failed'].includes(run.status))setUnread(old=>new Set([...old,run.id]));
-    setRuns(current => current.some(item=>item.id===run.id)?current.map(item=>item.id===run.id?run:item):[run,...current]);
+    setRuns(current => current.some(item=>item.id===run.id)?current.map(item=>{
+      if(item.id!==run.id)return item;
+      if(!run.summaryOnly||item.summaryOnly)return run;
+      const {messages,tools,plans,artifacts,fileChanges,taskApps,historyBefore,turnOffset,totalTurns}=item;
+      return {...run,messages,tools,plans,artifacts,fileChanges,taskApps,historyBefore,turnOffset,totalTurns,summaryOnly:false};
+    }):[run,...current]);
   };
   const [selectedEmployeeName,setSelectedEmployeeName]=useState('');
   const [employeeModel,setEmployeeModel]=useState<{id:string;choice?:{providerId:string;model:string}}|null>(null);
   const expertChoice=employeeModel?.id===composerOptions.employeeId?employeeModel?.choice:undefined;
   useEffect(()=>{let live=true;const id=composerOptions.employeeId;if(id)void window.desktop?.workforce?.snapshot().then(s=>{if(!live)return;const employee=s.employees.find(e=>e.id===id);setSelectedEmployeeName(employee?.name||t('AI 专家'));setEmployeeModel({id,choice:employee?.modelChoice});}).catch(()=>{});return()=>{live=false;};},[composerOptions.employeeId]);
   const [page, setPage] = useState<Page>(['home','projects','plugins','devices','extension-view','workforce'].includes(resumeView.page)?resumeView.page:'home');
+  const visibleRunId=page==='home'?runId:page==='workforce'?workforceConversation:null;
+  const residentRunIds=useMemo(()=>new Set([...(visibleRunId?[visibleRunId]:[]),...recentRunIds.filter(id=>id!==visibleRunId)].slice(0,3)),[visibleRunId,recentRunIds]);
+  residentRunsRef.current=residentRunIds;
+  useEffect(()=>{
+    if(!canReloadRun)return;
+    setRuns(previous=>previous.some(run=>!run.summaryOnly&&!residentRunIds.has(run.id))
+      ?previous.map(run=>residentRunIds.has(run.id)?run:runSummary(run)):previous);
+  },[canReloadRun,residentRunIds]);
+  useEffect(()=>{
+    if(visibleRunId)setRecentRunIds(previous=>previous[0]===visibleRunId?previous:[visibleRunId,...previous.filter(id=>id!==visibleRunId)].slice(0,3));
+  },[visibleRunId]);
+  const detailRunId=settingsOpen?null:visibleRunId;
+  useEffect(()=>{if(detailRunId)return watchRunDetails([detailRunId]);},[detailRunId]);
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
   const [ready, setReady] = useState(false);
   const [device, setDevice] = useState<Device | null>(null);
@@ -329,7 +356,7 @@ function WorkspaceApp() {
       finally {launchLock.current=false;setPendingLaunch(null);}return;
     }
     const taskPrompt=prompt.trim()||(composerOptions.selectedSkillIds?.length?'请执行所选技能的工作流程。':t('请查看所附文件。'));
-    const task: Task = { ...continuingDraft, selectedSkillIds:composerOptions.selectedSkillIds, employeeId:composerOptions.employeeId, employeeName:selectedEmployeeName, id: continuingDraft?.id||crypto.randomUUID(), title: taskPrompt.slice(0,34), prompt: taskPrompt+(composerOptions.attachments?.length?'\n\n附件：\n'+composerOptions.attachments.map(file=>file.path).join('\n'):''), modelId: choice?.model||expertChoice?.model||provider?.model||'', projectId: projectId || null, status: 'draft', createdAt: new Date().toISOString() };
+    const task: Task = { ...continuingDraft, selectedSkillIds:composerOptions.selectedSkillIds, employeeId:composerOptions.employeeId, employeeName:composerOptions.employeeId?selectedEmployeeName||undefined:undefined, id: continuingDraft?.id||crypto.randomUUID(), title: taskPrompt.slice(0,34), prompt: taskPrompt+(composerOptions.attachments?.length?'\n\n附件：\n'+composerOptions.attachments.map(file=>file.path).join('\n'):''), modelId: choice?.model||expertChoice?.model||provider?.model||'', projectId: projectId || null, status: 'draft', createdAt: new Date().toISOString() };
     try { await persist(state => {if(continuingDraft&&state.tasks.find(t=>t.id===task.id)?.revision!==continuingDraft.revision)throw new Error('CONFLICT: 草稿已更新');return { ...state, tasks: [task, ...state.tasks.filter(t=>t.id!==task.id)] };}); const saved=workspaceRef.current.tasks.find(t=>t.id===task.id)||task;setContinuingDraft(saved);setPrompt(saved.prompt);setComposerOptions({permission:'default',selectedSkillIds:saved.selectedSkillIds,employeeId:saved.employeeId});setNotice(t('草稿已保存'));setTaskDetail(null); } catch { /* Persistent error is visible. */ }
   };
   const pageLabel = page==='workforce'?t('协作工作平台'):page==='messages' ? t('消息中心') : page==='extension-view' ? (nativeExtension?businessTitle(nativeExtension):extensionView?.title||t('扩展')) : page === 'settings' ? t("设置") : page==='home' ? (currentRun?currentRun.title:continuingDraft?.title||t("新建任务")) : page==='projects'?t("我的项目"):page==='devices'?t("我的设备"):pages.find(item => item.id === page)?.label;
@@ -384,7 +411,7 @@ function WorkspaceApp() {
       {error && <div className="error-banner" role="alert">{error}</div>}
       <main id="main-content" className={(page === 'home' && (currentRun||pendingLaunch!==null)||page==='workforce'&&!!workforceConversation) ? 'chat-main' : undefined}>
         {((page==='home'&&currentRun?.employee)||(page==='workforce'&&workforceConversation))&&<div className="wf-conversation-context">{page==='workforce'&&<Button variant="ghost" size="sm" onClick={()=>setWorkforceConversation(null)}><ArrowLeft data-icon="inline-start"/>{t('返回协作工作')}</Button>}{currentRun?.collaboration&&<span>{t('协作工作')} / {currentRun.collaboration.spaceName} / {t(currentRun.collaboration.mode==='work'?'协作任务':'空间讨论')}</span>}{currentRun?.employee&&<span><BriefcaseBusiness size={15}/>{currentRun.employee.name}</span>}{currentRun?.collaboration?.mode==='work'&&<span>{workspace.projects.find(p=>p.id===currentRun.projectId)?.name||t('项目不可用')}</span>}{page==='home'&&currentRun?.collaboration&&<Button variant="ghost" size="sm" onClick={()=>void openExecution(currentRun.id)}>{t('返回协作工作平台')}</Button>}</div>}
-        {runs.filter(run=>(run.id===runId||run.id===workforceConversation||visitedRuns.has(run.id))&&!run.summaryOnly&&(!run.archivedAt||!!run.collaboration&&workforceConversation===run.id)).map(viewRun=><div key={viewRun.id} style={{display:(page==='home'&&runId===viewRun.id||page==='workforce'&&workforceConversation===viewRun.id)?'contents':'none'}}><Suspense fallback={<p role="status">{t('正在加载任务…')}</p>}><Conversation openReference={fileProject?(path=>{let decoded=path.split('#')[0];try{decoded=decodeURIComponent(decoded);}catch{}setFileRequest(previous=>({scope:fileScope,path:decoded,id:(previous?.id||0)+1}));setChangeView(null);setFilesOpen(true);}):undefined} openChanges={changes=>{setFilesOpen(false);setChangeView({scope:fileScope,changes});}} floatingHost={page==='home'&&runId===viewRun.id&&filesOpen&&expandedFileScope===fileScope&&!settingsOpen?fileChatHost:null} visible={(page==='home'&&runId===viewRun.id||page==='workforce'&&workforceConversation===viewRun.id)&&!settingsOpen} openFile={fileProject?openDeliveredFile:undefined} key={viewRun.id} run={viewRun} catalog={catalog} openSettings={section=>{setSettingsSection(section);navigate('settings');}} send={(text,options) => startAgent(text, viewRun.id,options)} stop={() => void stopAgent(viewRun.id)} approve={(id, decision) => approveAgent(viewRun.id, id, decision)} submitting={submitting} /></Suspense></div>)}
+        {runs.filter(run=>residentRunIds.has(run.id)&&!run.summaryOnly&&(!run.archivedAt||!!run.collaboration&&workforceConversation===run.id)).map(viewRun=><div key={viewRun.id} style={{display:(page==='home'&&runId===viewRun.id||page==='workforce'&&workforceConversation===viewRun.id)?'contents':'none'}}><Suspense fallback={<p role="status">{t('正在加载任务…')}</p>}><Conversation openReference={fileProject?(path=>{let decoded=path.split('#')[0];try{decoded=decodeURIComponent(decoded);}catch{}setFileRequest(previous=>({scope:fileScope,path:decoded,id:(previous?.id||0)+1}));setChangeView(null);setFilesOpen(true);}):undefined} openChanges={changes=>{setFilesOpen(false);setChangeView({scope:fileScope,changes});}} floatingHost={page==='home'&&runId===viewRun.id&&filesOpen&&expandedFileScope===fileScope&&!settingsOpen?fileChatHost:null} visible={(page==='home'&&runId===viewRun.id||page==='workforce'&&workforceConversation===viewRun.id)&&!settingsOpen} openFile={fileProject?openDeliveredFile:undefined} key={viewRun.id} run={viewRun} catalog={catalog} openSettings={section=>{setSettingsSection(section);navigate('settings');}} send={(text,options) => startAgent(text, viewRun.id,options)} stop={() => void stopAgent(viewRun.id)} approve={(id, decision) => approveAgent(viewRun.id, id, decision)} submitting={submitting} /></Suspense></div>)}
         {(page === 'home'||page==='workforce'&&!!workforceConversation) && (currentRun?.summaryOnly||page==='workforce'&&!!workforceConversation&&!currentRun&&!error) && <p role="status">{t('正在加载任务…')}</p>}
         {page === 'home' && !currentRun && <div className={`home-page home-start${pendingLaunch!==null?' is-sending':''}`}>
           {pendingLaunch!==null?<PendingMessage attachments={composerOptions.attachments} text={pendingLaunch}/>:<header className="home-start-heading"><img className="home-start-mark" src="./brand/icon-128.png" alt="" aria-hidden="true"/><h1>{t(continuingDraft?"继续你的任务":"今天，想完成什么？")}</h1></header>}

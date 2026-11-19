@@ -36,13 +36,22 @@ export default function WorkspaceNavigation({sshConnections=[],sshLoading=false,
  const mountedGroup=(key:WorkspaceGroup)=>!activeGroup||activeGroup===key||visitedGroups.has(key);
  const scrollPositions=useRef<Record<string,number>>({});
  const contentRef=useRef<HTMLDivElement>(null);
+ const restoringScroll=useRef(false);
  const restoredGroup=useRef<string|undefined>(undefined);
  useLayoutEffect(()=>{
   const key=activeGroup||'all',el=contentRef.current;
-  // A newly mounted scroll container is already at zero. Writing scrollTop
-  // on that first commit forces layout before the browser's initial paint.
-  if(el&&restoredGroup.current!==undefined)el.scrollTop=scrollPositions.current[key]||0;
-  restoredGroup.current=key;
+  if(!el)return;
+  const previous=restoredGroup.current;restoredGroup.current=key;
+  if(previous===undefined)return;
+  const target=scrollPositions.current[key]||0;restoringScroll.current=true;
+  let frame=0;const restore=()=>{el.scrollTop=target;};
+  const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(restore);});
+  for(const child of el.children)observer.observe(child);
+  restore();
+  const finish=()=>{restoringScroll.current=false;observer.disconnect();cancelAnimationFrame(frame);};
+  for(const event of ['wheel','touchmove','pointerdown','keydown'])el.addEventListener(event,finish,{passive:true});
+  return()=>{finish();for(const event of ['wheel','touchmove','pointerdown','keydown'])el.removeEventListener(event,finish);};
+
  },[activeGroup]);
  const [limits,setLimits]=useState<Record<string,number>>({});
  const [projectLimit,setProjectLimit]=useState(30);
@@ -84,9 +93,9 @@ export default function WorkspaceNavigation({sshConnections=[],sshLoading=false,
   return <div className="nav-caption caption-action"><CollapsibleTrigger render={<SidebarGroupLabel render={<button/>} className="nav-group-toggle"/>} aria-controls={`nav-${key}`} title={t(label)} onClick={hide}><Icon aria-hidden="true"/><span>{t(label)}</span><ChevronRight aria-hidden="true" className="nav-group-chevron"/></CollapsibleTrigger>{action?<SidebarGroupAction className="icon-button nav-group-add static shrink-0 size-8 after:inset-0" title={t(action)} aria-label={t(action)} onClick={add}>{key==='projects'?<Plus/>:<SquarePen/>}</SidebarGroupAction>:<span aria-hidden="true" className="size-8 shrink-0"/>}</div>;
  };
  const changeGroup=(key:WorkspaceGroup,open:boolean)=>{if(!activeGroup)setGroups(old=>({...old,[key]:!open}));};
- return <SidebarContent ref={contentRef} className="workspace-navigation" onScroll={event=>{hide();scrollPositions.current[activeGroup||'all']=event.currentTarget.scrollTop;}} onKeyDown={e=>{if(e.key==='Escape')hide();}}>
+ return <SidebarContent ref={contentRef} className="workspace-navigation" onScroll={event=>{hide();if(!restoringScroll.current)scrollPositions.current[activeGroup||'all']=event.currentTarget.scrollTop;}} onKeyDown={e=>{if(e.key==='Escape')hide();}}>
   {mountedGroup('projects')&&<SidebarGroup className={activeGroup&&activeGroup!=='projects'?'p-0 hidden':'p-0'} role="region" aria-label={t("我的项目")}><Collapsible open={!!activeGroup||!groups.projects} onOpenChange={open=>changeGroup('projects',open)}>{heading('projects','添加项目',addProject)}<NavigationContent static={!!activeGroup} id="nav-projects" inert={!activeGroup&&groups.projects} aria-hidden={!activeGroup&&groups.projects}><SidebarGroupContent>
-  {projects.slice(0,projectLimit).map(project=>{const connection=sshConnections.find(c=>c.id===project.connectionId);const state=sshProjectState(project,connection,sshLoading,sshError);const StateIcon=state==='connected'?Check:['loading','connecting','reconnecting','disconnecting'].includes(state)?LoaderCircle:state==='disconnected'?Circle:TriangleAlert;return <VirtualBlock key={project.id} enabled={projects.length>30}><SidebarMenu><SidebarMenuItem className="project-tree"><div className={`project-tree-row ${projectId===project.id?'selected':''}`} onMouseEnter={e=>show(e.currentTarget,project)} onMouseLeave={leave} onContextMenu={e=>{e.preventDefault();hide();editProject(project);}}>
+  {projects.slice(0,projectLimit).map(project=>{const connection=sshConnections.find(c=>c.id===project.connectionId);const state=sshProjectState(project,connection,sshLoading,sshError);const StateIcon=state==='connected'?Check:['loading','connecting','reconnecting','disconnecting'].includes(state)?LoaderCircle:state==='disconnected'?Circle:TriangleAlert;return <VirtualBlock estimatedHeight={44} key={project.id} enabled={projects.length>30}><SidebarMenu><SidebarMenuItem className="project-tree"><div className={`project-tree-row ${projectId===project.id?'selected':''}`} onMouseEnter={e=>show(e.currentTarget,project)} onMouseLeave={leave} onContextMenu={e=>{e.preventDefault();hide();editProject(project);}}>
    <button className="icon-button tree-toggle" aria-label={`${t(collapsed.has(project.id)?"展开项目：":"折叠项目：")}${project.name}`} aria-expanded={!collapsed.has(project.id)} aria-controls={`project-tasks-${project.id}`} onClick={()=>toggleProject(project.id)}>{project.type==='ssh'?<Server size={18} strokeWidth={1.6}/>:collapsed.has(project.id)?<Folder size={18} strokeWidth={1.6}/>:<FolderOpen size={18} strokeWidth={1.6}/>}</button>
    <SidebarMenuButton variant="row" isActive={projectId===project.id} aria-current={projectId===project.id?'page':undefined} className="project-tree-name min-w-0 flex-1 pr-0 group-has-data-[sidebar=menu-action]/menu-item:pr-0 data-active:text-inherit" onClick={()=>openProject(project.id)} onFocus={e=>show(e.currentTarget,project)} onBlur={leave} onKeyDown={e=>{if(e.key==='ArrowRight'&&preview){e.preventDefault();previewRef.current?.querySelector('button')?.focus();}}}><span className="project-tree-title">{project.name}</span>{project.type==='ssh'&&<small className="ssh-nav-state" data-state={state} aria-label={t(sshLabels[state]||sshLabels.error)}><StateIcon aria-hidden="true"/><span>{t(sshLabels[state]||sshLabels.error)}</span></small>}</SidebarMenuButton>
    <span className="tree-row-actions"><SidebarMenuAction className="icon-button row-menu shrink-0 static h-8 w-7 after:inset-0" aria-label={`${t("管理项目：")}${project.name}`} onClick={event=>{event.stopPropagation();hide();editProject(project);}}><MoreHorizontal size={15}/></SidebarMenuAction>

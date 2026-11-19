@@ -55,14 +55,81 @@ test('background SSH execution does not mount unseen transcripts and visited dra
  await expect(page.locator('.conversation-page')).toHaveCount(2);
 });
 
-test('medium history defers offscreen Markdown but remains navigable',async({page})=>{
+test('medium history keeps measured Markdown and remains navigable',async({page})=>{
  await prepare(page,'Initial answer');
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:12},(_,i)=>[{id:'medium-u'+i,role:'user',text:'Question '+i},{id:'medium-a'+i,role:'assistant',phase:'final_answer',text:('**Answer '+i+'**\n\n'+('Long historical paragraph 中文. '.repeat(20))+'\n\n').repeat(12)}]).flat();w.__emit();});
  await expect(page.locator('[data-turn-id="medium-u11"] .markdown strong').first()).toHaveText('Answer 11');
- await expect(page.locator('[data-turn-id="medium-u0"] .markdown')).toHaveCount(0);
+ await expect(page.locator('[data-turn-id="medium-u0"] .markdown strong').first()).toHaveText('Answer 0');
  await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 1 轮：/}).click();
  await expect(page.locator('[data-turn-id="medium-u0"] .markdown strong').first()).toHaveText('Answer 0');
  await expect(page.getByRole('textbox',{name:'继续对话',exact:true})).toBeVisible();
+});
+
+test('upward scrolling stays stable through a medium-length rich transcript',async({page})=>{
+ await prepare(page,'Initial answer');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.tools=[];
+  r.messages=Array.from({length:12},(_,i)=>[
+   {id:'wheel-u'+i,role:'user',text:'Question '+i},
+   {id:'wheel-a'+i,role:'assistant',phase:'final_answer',text:Array.from({length:32},(_,j)=>`Paragraph ${i}.${j} with historical content.\n\n`).join('')},
+  ]).flat();w.__emit();
+ });
+ const viewport=page.locator('.conversation-scroll:visible');
+ await expect(page.locator('[data-turn-id="wheel-u11"] .markdown')).toBeVisible();
+ await expect(page.locator('[data-turn-id="wheel-u0"] .markdown p')).toHaveCount(32);
+ const result=await viewport.evaluate(async el=>{
+  const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+  let maximum=0;
+  for(let step=0;step<48;step++){
+   el.scrollTop-=85;
+   const top=el.getBoundingClientRect().top;
+   const anchor=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.getBoundingClientRect().bottom>top&& !node.querySelector('[data-virtualized=placeholder]'));
+   const offset=anchor?.getBoundingClientRect().top;
+   await frame();await frame();await frame();
+   if(anchor?.isConnected&&offset!==undefined)maximum=Math.max(maximum,Math.abs(anchor.getBoundingClientRect().top-offset));
+  }
+  return maximum;
+ });
+ expect(result).toBeLessThan(4);
+});
+
+test('long history preserves the visible turn across window changes and deferred rendering',async({page})=>{
+ await prepare(page,'Initial answer');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.tools=[];
+  r.messages=Array.from({length:60},(_,i)=>[
+   {id:'edge-u'+i,role:'user',text:'Question '+i},
+   {id:'edge-a'+i,role:'assistant',phase:'final_answer',text:Array.from({length:[8,40,17,30,6][i%5]},(_,j)=>`**历史记录 ${i}.${j}** ${'逐项检查并汇总 Markdown 内容。'.repeat(8)}\n\n`).join('')},
+  ]).flat();w.__emit();
+ });
+ const viewport=page.locator('.conversation-scroll:visible');
+ await expect(viewport.locator('[data-turn-id="edge-u59"] .markdown')).toBeVisible();
+ const result=await viewport.evaluate(async el=>{
+  const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));
+  const rows=()=>[...el.querySelectorAll<HTMLElement>('[data-turn-id]')];
+  const ready=()=>new Set(rows().filter(row=>!row.querySelector('[data-virtualized=placeholder]')));
+  let maximum=0,boundaries=0,expansions=0;
+  const seen=new Set<string>();
+  for(let step=0;step<110&&el.scrollTop>0;step++){
+   const before=rows(),rendered=ready();el.scrollTop-=85;
+   const bounds=el.getBoundingClientRect();
+   const anchor=before.find(row=>{const r=row.getBoundingClientRect();return rendered.has(row)&&r.bottom>bounds.top&&r.top<bounds.bottom;});
+   const offset=anchor?.getBoundingClientRect().top;
+   if(anchor?.dataset.turnId)seen.add(anchor.dataset.turnId);
+   for(let i=0;i<3;i++){
+    await frame();
+    if(anchor?.isConnected&&offset!==undefined)maximum=Math.max(maximum,Math.abs(anchor.getBoundingClientRect().top-offset));
+   }
+   const after=rows();
+   if(before[0]!==after[0]||before.at(-1)!==after.at(-1))boundaries++;
+   if([...ready()].some(row=>before.includes(row)&&!rendered.has(row)))expansions++;
+  }
+  return {maximum,boundaries,expansions,visibleTurns:seen.size};
+ });
+ expect(result.boundaries).toBeGreaterThan(0);
+ expect(result.expansions).toBeGreaterThan(0);
+ expect(result.visibleTurns).toBeGreaterThan(2);
+ expect(result.maximum).toBeLessThan(4);
 });
 
 test('delayed Markdown loading keeps escaped content and composer focus',async({page})=>{
@@ -96,7 +163,7 @@ test('rolling history snapshots preserve the reader and mounted turns after the 
  const anchor=page.locator('[data-turn-id="u20"]'),viewport=page.getByRole('region',{name:'任务消息'});
  // Navigation is scheduled by the scroller. Establish the reader position
  // before measuring whether the next snapshot preserves it.
- await expect.poll(()=>anchor.evaluate(el=>Math.abs(el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top-parseFloat(getComputedStyle(el.parentElement!).paddingTop)))).toBeLessThan(2);
+ await expect.poll(()=>anchor.evaluate(el=>Math.abs(el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top-14))).toBeLessThan(2);
  const top=await anchor.evaluate(el=>el.getBoundingClientRect().top);
  await page.evaluate(()=>{
   const w=window as any,r=w.__demoRun;w.__readerNode=document.querySelector('[data-turn-id="u20"]');w.__readerViewport=document.querySelector('.conversation-scroll');
@@ -105,12 +172,14 @@ test('rolling history snapshots preserve the reader and mounted turns after the 
   r.messages=[...r.messages.slice(2),{id:'u30',role:'user',text:'后台新增一轮'},{id:'a30',role:'assistant',phase:'final_answer',text:'继续输出'}];
   r.turnOffset=1;r.historyBefore='u1';r.totalTurns=31;r.status='running';w.__emit();
  });
- await expect(page.locator('[data-turn-id]')).toHaveCount(31);
+ await expect(page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button')).toHaveCount(31);
+ await expect.poll(()=>page.locator('[data-turn-id]').count()).toBeLessThan(24);
  await expect.poll(async()=>Math.abs((await anchor.boundingBox())!.y-top)).toBeLessThan(2);
  expect(await viewport.evaluate(el=>el===(window as any).__readerViewport)).toBeTruthy();
  expect(await anchor.evaluate(el=>el===(window as any).__readerNode)).toBeTruthy();
  await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+='，第二次推送';w.__emit();});
- await expect(page.locator('[data-turn-id]')).toHaveCount(31);
+ await expect(page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button')).toHaveCount(31);
+ await expect.poll(()=>page.locator('[data-turn-id]').count()).toBeLessThan(24);
  await expect.poll(async()=>Math.abs((await anchor.boundingBox())!.y-top)).toBeLessThan(2);
  await page.getByRole('button',{name:'回到最新消息'}).click();
  await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+=('\n\n继续流式输出').repeat(40);w.__emit();});
@@ -345,7 +414,7 @@ test('clarification collects explicit answers and retry state offers recovery wi
 });
 
 
-test('older turns load by cursor and long history unmounts offscreen content with measured placeholders',async({page})=>{
+test('older turns load by cursor and long history mounts only the visible window',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
@@ -361,9 +430,8 @@ test('older turns load by cursor and long history unmounts offscreen content wit
  await page.getByRole('button',{name:'加载更早的对话'}).click();
  await expect.poll(async()=>Math.abs(await anchorTop()-14)).toBeLessThan(1);
  expect(await page.evaluate(()=>(window as any).__historyInput.before)).toBe('u30');
- await expect(page.locator('.conversation-turn')).toHaveCount(60);
- expect(await page.locator('[data-slot=message][data-align=start]').count()).toBeLessThan(30);
- await expect(page.locator('[data-turn-id="u0"] [data-virtualized=placeholder]')).toHaveCount(1);
+ await expect.poll(()=>page.locator('.conversation-turn').count()).toBeLessThan(20);
+ await expect(page.locator('[data-turn-id="u0"]')).toHaveCount(0);
  await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first().click();
  await expect(page.locator('[data-turn-id="u0"] [data-slot=message][data-align=start]')).toBeVisible();
  await page.getByRole('button',{name:'回到最新消息'}).click();
@@ -867,15 +935,18 @@ test('long history shares one forms subscription and preserves expanded state of
   const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];
   r.messages=Array.from({length:60},(_,i)=>[{id:`u${i}`,role:'user',text:`历史问题 ${i}`},{id:`r${i}`,role:'assistant',kind:'reasoning',status:'completed',text:'保留展开内容'},{id:`a${i}`,role:'assistant',phase:'final_answer',text:'回答内容。'.repeat(50)}]).flat();w.__emit();
  });
- await expect(page.locator('[data-turn-id]')).toHaveCount(60);
+ const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
+ await expect(navigation.getByRole('button')).toHaveCount(60);
+ await expect.poll(()=>page.locator('[data-turn-id]').count()).toBeLessThan(24);
  const first=page.locator('[data-turn-id="u0"]'),toggle=first.locator('.turn-progress-toggle');
- await first.scrollIntoViewIfNeeded();await toggle.click();await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await navigation.getByRole('button',{name:/^第 1 轮：/}).click();await toggle.click();await expect(toggle).toHaveAttribute('aria-expanded','true');
  const before=await page.evaluate(()=>(window as any).__formReads);
- await page.locator('[data-turn-id="u59"]').scrollIntoViewIfNeeded();
+ await navigation.getByRole('button',{name:/^第 60 轮：/}).click();
+ await expect(first).toHaveCount(0);
  await page.evaluate(()=>(window as any).__formsChanged());
  await expect.poll(()=>page.evaluate(()=>(window as any).__formReads)).toBe(before+1);
  expect(await page.evaluate(()=>(window as any).__formSubscriptions)).toBe(1);
- await toggle.scrollIntoViewIfNeeded();await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await navigation.getByRole('button',{name:/^第 1 轮：/}).click();await expect(toggle).toHaveAttribute('aria-expanded','true');
 });
 
 test('terminal approval copies exact commands and retains failed decisions for retry',async({page})=>{
@@ -1210,11 +1281,44 @@ test('visited history is actually unmounted and disclosure state survives remoun
  await prepare(page,'');
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:120},(_,i)=>[{id:'u'+i,role:'user',text:'Question '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(20)}]).flat();w.__emit();});
  const first=page.locator('[data-turn-id=u0]'),last=page.locator('[data-turn-id=u119]');
- await first.scrollIntoViewIfNeeded();await first.locator('.turn-progress-toggle').click();
- await page.getByRole('textbox',{name:'继续对话'}).focus();await last.scrollIntoViewIfNeeded();
+ const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
+ await navigation.getByRole('button').first().click();await first.locator('.turn-progress-toggle').click();
+ await page.getByRole('textbox',{name:'继续对话'}).focus();
+ await page.getByRole('button',{name:'回到最新消息'}).click();await expect(last).toBeVisible();
  await expect(first.locator('.turn-progress-toggle')).toHaveCount(0);
  expect(await page.locator('[data-turn-id] [data-message-role=user]').count()).toBeLessThan(25);
- await first.scrollIntoViewIfNeeded();await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+ await navigation.getByRole('button').first().click();await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+});
+
+test('evicted conversations restore the same reading turn and draft',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];
+  r.messages=Array.from({length:60},(_,i)=>[
+   {id:'read-u'+i,role:'user',text:'Question '+i},
+   {id:'read-a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(20)},
+  ]).flat();
+  w.__emit();
+  for(let i=0;i<4;i++)w.__emitEvent({...r,id:'recent-'+i,title:'Recent '+i,messages:[{id:'recent-turn-'+i,role:'user',text:'Other session'}]});
+ });
+ const viewport=page.locator('.conversation-scroll:visible');
+ const reading=()=>viewport.evaluate(el=>{
+  const top=el.getBoundingClientRect().top;
+  const row=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(item=>item.getBoundingClientRect().bottom>top);
+  return {id:row?.dataset.turnId,offset:row?row.getBoundingClientRect().top-top:0};
+ });
+ await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 25 轮：/}).click();
+ await viewport.evaluate(el=>{el.scrollTop+=55;});
+ await expect.poll(async()=>(await reading()).id).toBe('read-u24');
+ await page.getByRole('textbox',{name:'继续对话'}).fill('Keep this draft');
+ const anchor=await reading();
+ for(let i=0;i<4;i++)await page.locator('.tree-task > button:first-child').filter({hasText:'Recent '+i}).click();
+ await expect(page.locator('.conversation-page')).toHaveCount(3);
+ await expect(page.locator('[data-turn-id^="read-u"]')).toHaveCount(0);
+ await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
+ await expect.poll(async()=>(await reading()).id).toBe(anchor.id);
+ await expect.poll(async()=>Math.abs((await reading()).offset-anchor.offset)).toBeLessThan(3);
+ await expect(page.getByRole('textbox',{name:'继续对话'})).toHaveValue('Keep this draft');
 });
 
 test('storage backpressure is visible without hiding approvals or losing the composer draft',async({page})=>{

@@ -132,6 +132,7 @@ declare global {
       getMessageText?(input:{id:string;messageId:string;offset?:number;limit?:number}):Promise<{text:string;offset:number;total:number;version:string}>;
       copyRunMessages?(input:{id:string;messageIds:string[]}):Promise<void>;
       getToolText?(input:{id:string;toolId:string;activityId?:string;offset?:number;limit?:number}):Promise<{text:string;offset:number;total:number;version:string}>;
+      setRunDetails?(ids:string[]):void;
       getRunSnapshot?(input:{id:string}):Promise<unknown>;
       getRunPage?(input:{id:string;before?:string;limit?:number}):Promise<AgentRun>;
       exportRunDiagnostics?(input:{id:string;language:string}):Promise<{saved:boolean}|null>;

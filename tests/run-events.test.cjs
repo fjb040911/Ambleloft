@@ -18,6 +18,24 @@ test('deletion, reordering and metadata removal remain authoritative',()=>{
  const pub=createRunPublisher('s'),run=base();run.error='old';let state=applyRunEvent(null,pub.encode(structuredClone(run)));delete run.error;run.messages.reverse();run.tools=[];run.status='completed';
  state=applyRunEvent(state,pub.encode(structuredClone(run)));assert.deepEqual(state.run,run);
 });
+test('stable stream pages emit only changed records, including preview and nested metadata changes',()=>{
+ const publisher=createRunPublisher('stream'),run=base();
+ run.tools.push({id:'other',detail:'unchanged',actions:[{type:'read'}]});
+ const initial=publisher.encode(run);
+ run.messages[1].text+=' streamed';
+ const delta=publisher.encode(run);
+ assert.deepEqual(Object.keys(delta.arrays),['messages']);
+ assert.deepEqual(delta.arrays.messages.items.map(item=>item.id),['a']);
+ const current=applyRunEvent(initial,delta);
+ assert.equal(current.run.tools,initial.run.tools);
+ run.tools[0].detailVersion='persisted';
+ run.tools[1].actions[0].type='listFiles';
+ const next=publisher.encode(run);
+ assert.deepEqual(Object.keys(next.arrays),['tools']);
+ assert.deepEqual(applyRunEvent(current,next).run,run);
+ assert.deepEqual(publisher.snapshot(run.id).run,run);
+ assert.equal(initial.run.tools[1].actions[0].type,'read');
+});
 test('tool previews are bounded without altering original records, output pages cover every character',()=>{
  const tool={id:'t',type:'analysis',detail:'abc'.repeat(100000),nativeMessages:{private:'duplicate'},nativeActivity:[{id:'step',text:'z'.repeat(10000)}]};const preview=previewTool(tool);
  assert.equal(preview.detail.length,2048);assert.equal(preview.nativeActivity[0].text.length,512);assert.equal(preview.nativeMessages,undefined);assert.equal(tool.detail.length,300000);

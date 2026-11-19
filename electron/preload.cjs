@@ -85,6 +85,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   getMessageText: input => ipcRenderer.invoke('agent:message-text',input),
   copyRunMessages: input => ipcRenderer.invoke('agent:copy-messages',input),
   getToolText: input => ipcRenderer.invoke('agent:tool-text',input),
+  setRunDetails: ids => ipcRenderer.send('agent:subscribe',ids),
   getRunSnapshot: input => ipcRenderer.invoke('agent:snapshot',input),
   getRunPage: input => ipcRenderer.invoke('agent:history',input),
   touchSearchItem: input => ipcRenderer.invoke('workspace:search-touch',input),
