@@ -44,7 +44,23 @@ async function main() {
     } catch (error) { res.destroy(error); }
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  async function verifyNoCredential(directory,credential){for(const entry of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,entry.name);if(entry.isDirectory())await verifyNoCredential(target,credential);else if(entry.isFile())assert.equal((await fs.readFile(target)).includes(Buffer.from(credential)),false,'MCP credential persisted: '+path.relative(root,target));}}
+  async function readProbeFile(file) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fs.readFile(file);
+      } catch (error) {
+        if (error.code !== 'EBUSY' || attempt === 7) throw error;
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+  }
+  async function verifyNoCredential(directory, credential) {
+    for (const entry of await fs.readdir(directory, {withFileTypes: true})) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) await verifyNoCredential(target, credential);
+      else if (entry.isFile()) assert.ok(!(await readProbeFile(target)).includes(Buffer.from(credential)), 'MCP credential persisted: ' + path.relative(root, target));
+    }
+  }
   async function connect(home, experimentalApi = true, withMcp=mcpMode) {
     if (rpc && rpc.child.exitCode === null && rpc.child.signalCode === null) await require('node:events').once(rpc.child, 'exit');
     if(channel){channel.close();await verifyNoCredential(root,channel.config.http_headers.Authorization.slice(7));}channel=withMcp?await createAgentChannel({list:async()=>{calls.push({mcp:'list'});return 'probe-tool-result';},invoke:async()=>{calls.push({mcp:'invoke'});return 'probe-tool-result';}}):null;
@@ -78,29 +94,29 @@ async function main() {
       bridge = await startChatBridge({ baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'fixture', protocol: stage, apiKey: '' }, `probe_${stage}`, stage === 'responses');
       const params = { model: 'fixture', modelProvider: 'atelier', cwd: root, sandbox: 'read-only', approvalPolicy: 'never' };
       if(mcpMode){
-        await connect(home,true,false);const old=await rpc.call('thread/start',params);await turn(old.thread.id,false);rpc.close();
-        await connect(home);await rpc.call('thread/resume',{...params,threadId:old.thread.id});report.cases.push({protocol:stage,path:'old-thread-mcp',...await turn(old.thread.id,true)});rpc.close();
-        await connect(home);const fresh=await rpc.call('thread/start',params);report.cases.push({protocol:stage,path:'new-mcp',...await turn(fresh.thread.id,true)});rpc.close();
-        await connect(home);await rpc.call('thread/resume',{...params,threadId:fresh.thread.id});report.cases.push({protocol:stage,path:'resume-mcp',...await turn(fresh.thread.id,true)});rpc.close();channel.close();await verifyNoCredential(root,channel.config.http_headers.Authorization.slice(7));bridge.close();continue;
+        await connect(home,true,false);const old=await rpc.call('thread/start',params);await turn(old.thread.id,false);await rpc.close();
+        await connect(home);await rpc.call('thread/resume',{...params,threadId:old.thread.id});report.cases.push({protocol:stage,path:'old-thread-mcp',...await turn(old.thread.id,true)});await rpc.close();
+        await connect(home);const fresh=await rpc.call('thread/start',params);report.cases.push({protocol:stage,path:'new-mcp',...await turn(fresh.thread.id,true)});await rpc.close();
+        await connect(home);await rpc.call('thread/resume',{...params,threadId:fresh.thread.id});report.cases.push({protocol:stage,path:'resume-mcp',...await turn(fresh.thread.id,true)});await rpc.close();channel.close();await verifyNoCredential(root,channel.config.http_headers.Authorization.slice(7));bridge.close();continue;
       }
       await connect(home, false);
       await assert.rejects(rpc.call('thread/start', { ...params, dynamicTools: tools }), /experimental/i);
-      report.cases.push({ protocol: stage, path: 'experimental-disabled', rejected: true }); rpc.close();
+      report.cases.push({ protocol: stage, path: 'experimental-disabled', rejected: true }); await rpc.close();
       await connect(home);
       const fresh = await rpc.call('thread/start', { ...params, dynamicTools: tools });
-      report.cases.push({ protocol: stage, path: 'new', ...await turn(fresh.thread.id, true) }); rpc.close();
+      report.cases.push({ protocol: stage, path: 'new', ...await turn(fresh.thread.id, true) }); await rpc.close();
       await connect(home);
       await rpc.call('thread/resume', { ...params, threadId: fresh.thread.id });
       report.cases.push({ protocol: stage, path: 'resume-after-process-restart', ...await turn(fresh.thread.id, true) });
-      const old = await rpc.call('thread/start', params); await turn(old.thread.id, false); rpc.close();
+      const old = await rpc.call('thread/start', params); await turn(old.thread.id, false); await rpc.close();
       await connect(home);
       // Deliberately try the undocumented field; report actual behavior rather than assuming it is rejected.
       await rpc.call('thread/resume', { ...params, threadId: old.thread.id, dynamicTools: tools });
       report.cases.push({ protocol: stage, path: 'old-thread-resume-with-extra-field', ...await turn(old.thread.id, false) });
-      rpc.close(); bridge.close();
+      await rpc.close(); bridge.close();
     }
     report.route = mcpMode?'Unified per-execution MCP verified for new, resumed and old threads.':'New threads and persisted dynamic tools work; old threads require reviewed internal MCP adapter.';
     console.log(JSON.stringify(report, null, 2));
-  } finally { rpc?.close(); channel?.close(); bridge?.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); await fs.rm(root, { recursive: true, force: true }); }
+  } finally { await rpc?.close(); channel?.close(); bridge?.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); await fs.rm(root, { recursive: true, force:true,maxRetries:8,retryDelay:150}); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

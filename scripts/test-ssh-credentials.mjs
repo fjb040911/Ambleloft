@@ -11,14 +11,14 @@ try{
  await app.evaluate(({ipcMain})=>ipcMain.removeHandler('ssh:list'));
  await page.getByRole('button',{name:'新建项目',exact:true}).click();await page.getByRole('radio',{name:'SSH 远端项目',exact:false}).check();
  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('请完全退出并重新启动应用');
- await page.getByLabel('主机 / IP',{exact:true}).fill('example.test');await page.getByLabel('SSH 用户名',{exact:true}).fill('fixture');await page.getByLabel('SSH 密码',{exact:true}).fill('isolated-ssh-fixture');
- await expect(page.getByRole('button',{name:'保存连接并测试',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'新建 SSH 连接',exact:true})).toBeDisabled();
  await app.close();app=undefined;page=await launch();
  // Keep real save/list/encryption; avoid making a network connection in this probe.
  await app.evaluate(({ipcMain})=>{ipcMain.removeHandler('ssh:connect');ipcMain.handle('ssh:connect',()=>{throw Error('TEST_CONNECTION_STAGE_REACHED');});});
  await page.getByRole('button',{name:'新建项目',exact:true}).click();await page.getByRole('radio',{name:'SSH 远端项目',exact:false}).check();
+ await page.getByRole('button',{name:'新建 SSH 连接',exact:true}).click();
  await page.getByLabel('主机 / IP',{exact:true}).fill('example.test');await page.getByLabel('SSH 用户名',{exact:true}).fill('fixture');await page.getByLabel('SSH 密码',{exact:true}).fill('isolated-ssh-fixture');await page.getByLabel('使用系统安全存储记住凭据',{exact:true}).check();
- await page.getByRole('button',{name:'保存连接并测试',exact:true}).click();
+ await page.getByRole('button',{name:'保存并连接',exact:true}).click();
  const alert=page.getByRole('dialog').getByRole('alert');await expect(alert).toContainText('TEST_CONNECTION_STAGE_REACHED',{timeout:20000});
  const records=await page.evaluate(()=>window.desktop.ssh.list());assert.equal(records[0].remember,true);assert.ok(!JSON.stringify(records).includes('isolated-ssh-fixture'));
  await app.close();app=undefined;page=await launch();

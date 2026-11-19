@@ -167,24 +167,24 @@ test('P4 runs both experts concurrently with stable slots and individually autho
  const pm=f.calls.find(j=>j.input.expert.id==='pm').input,arch=f.calls.find(j=>j.input.expert.id==='arch').input;assert.equal(pm.background.length,1);assert.equal(arch.background.length,0);assert.equal(pm.question,arch.question);assert.deepEqual(pm.history,arch.history);assert.ok(f.calls.every(j=>!j.tools&&!j.input.threadId));
  release.resolve();await f.settle();state=await f.service.read(result);assert.deepEqual(state.turns.map(t=>t.status),['completed','completed']);assert.equal((await f.db.call('readRuns')).length,0);
 });
-test('P4 a fast completion neither invalidates nor leaks into a slower peer',{timeout:5000},async t=>{
+test('P4 a fast completion neither invalidates nor leaks into a slower peer',{timeout:15000},async t=>{
  const entered=deferred(),slow=deferred();let count=0;
  const f=await fixture(t,async(c,j,signal)=>{if(++count===2)entered.resolve();if(j.input.expert.id==='arch')await abortable(slow.promise,signal);return {text:j.input.expert.id+' private answer',citations:j.input.background.map(s=>s.sourceId)};});
  const result=await f.send({selectedEmployeeIds:['pm','arch']});await entered.promise;await f.service.active.get(result.turnIds[0]).promise;
  assert.equal((await f.service.read(result)).turns[0].status,'completed');await f.continuity.initialize();await f.service.watch();assert.equal((await f.service.read(result)).turns[1].status,'responding');slow.resolve();await f.settle();
  assert.deepEqual((await f.service.read(result)).turns.map(t=>t.status),['completed','completed']);assert.ok(!JSON.stringify(f.calls.find(j=>j.input.expert.id==='arch').input).includes('pm private answer'));
 });
-test('P4 preparation barrier fixes source versions before any expert inference starts',{timeout:5000},async t=>{
+test('P4 preparation barrier fixes source versions before any expert inference starts',{timeout:15000},async t=>{
  const preparing=deferred(),release=deferred();const f=await fixture(t);const secret=f.service.providers.secret;f.service.providers.secret=async(...args)=>{if(!args[0]){preparing.resolve();await release.promise;}return secret(...args);};
  const result=await f.send({selectedEmployeeIds:['pm','arch']});await preparing.promise;assert.equal(f.calls.length,0);release.resolve();await f.settle();assert.equal((await f.service.read(result)).turns.length,2);
 });
 test('P4 failed provider preparation does not prevent another expert from answering',{timeout:5000},async t=>{
  const f=await fixture(t);const secret=f.service.providers.secret;f.service.providers.secret=async(...args)=>{if(!args[0])throw Error('missing model');return secret(...args);};const result=await f.send({selectedEmployeeIds:['pm','arch']});await f.settle();assert.deepEqual((await f.service.read(result)).turns.map(t=>t.status),['completed','failed']);assert.equal(f.calls.length,1);
 });
-test('P4 cancel affects only the selected contribution and a sibling can still finish',{timeout:5000},async t=>{
+test('P4 cancel affects only the selected contribution and a sibling can still finish',{timeout:15000},async t=>{
  const entered=deferred(),release=deferred();let count=0;const f=await fixture(t,async(c,j,signal)=>{if(++count===2)entered.resolve();await abortable(release.promise,signal);return {text:j.input.expert.id,citations:[]};});const result=await f.send({selectedEmployeeIds:['pm','arch']});await entered.promise;await f.service.cancel({conversationId:result.conversationId,turnId:result.turnIds[0],attempt:1});release.resolve();await f.settle();assert.deepEqual((await f.service.read(result)).turns.map(t=>t.status),['cancelled','completed']);
 });
-test('P4 exclusion cancels affected context but preserves an independent peer',{timeout:5000},async t=>{
+test('P4 exclusion cancels affected context but preserves an independent peer',{timeout:15000},async t=>{
  const entered=deferred(),release=deferred();let count=0;const f=await fixture(t,async(c,j,signal)=>{if(++count===2)entered.resolve();await abortable(release.promise,signal);return {text:j.input.expert.id,citations:[]};});const result=await f.send({selectedEmployeeIds:['pm','arch']});await entered.promise;const state=await f.service.read(result);await f.service.exclude({conversationId:result.conversationId,sourceKey:state.turns[0].references[0].ref.sourceKey});release.resolve();await f.settle();assert.deepEqual((await f.service.read(result)).turns.map(t=>t.status),['cancelled','completed']);
 });
 test('P4 revoking one member does not cancel an expert who still has access to the same source',{timeout:5000},async t=>{

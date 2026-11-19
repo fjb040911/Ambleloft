@@ -1,6 +1,6 @@
 {
   "name": "ambleloft",
-  "version": "0.9.13",
+  "version": "0.9.14",
   "private": true,
   "description": "Open-source, extensible desktop Agent workspace",
   "main": "electron/main.cjs",
@@ -32,7 +32,7 @@
     "test:office": "node scripts/test-office-preview.mjs",
     "extensions:validate": "node scripts/validate-extension.cjs",
     "test:extensions:engine": "node scripts/probes/extension-engine.cjs",
-    "test:extensions:electron": "electron scripts/probes/extension-electron.cjs",
+    "test:extensions:electron": "node scripts/probes/run-extension-electron.cjs",
     "extensions:bundle": "node scripts/prepare-extension-validator.cjs",
     "test:extensions:packaged": "node scripts/probes/package-extension-probe.cjs",
     "test:extensions:packages": "node scripts/test-extension-packages.mjs",

@@ -7,7 +7,7 @@ try{
  const launch=async()=>{app=await electron.launch({args:['.',`--user-data-dir=${root}`],env:{...process.env,ATELIER_DEV:'0'}});const page=await app.firstWindow();await page.getByRole('textbox',{name:'任务内容'}).waitFor();return page;};
  let page=await launch();await app.evaluate(({dialog},source)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[source]});dialog.showMessageBox=async()=>({response:1});},path.resolve('examples/extensions/notification-auth'));
  await page.evaluate(()=>window.desktop.extensions.install({development:true}));
- await page.locator('.sidebar').getByRole('button',{name:'通知与认证演示',exact:true}).click();
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'通知与认证演示',exact:true}).click();
  await wait(()=>view('document.querySelector("#status")?.textContent==="已准备好"'));
  await view('document.querySelector("[data-op=publish]").click()');await page.getByRole('button',{name:'确认执行',exact:true}).click();await wait(async()=> (await page.evaluate(()=>window.desktop.messages.list())).items.length===1);
  await page.getByRole('button',{name:/消息中心/}).click();await page.locator('.message-open').click();await page.getByRole('button',{name:'完成任务',exact:true}).click();await page.getByRole('button',{name:'确认执行',exact:true}).click();await wait(async()=> (await page.evaluate(()=>window.desktop.messages.list())).items[0].businessState==='resolved');

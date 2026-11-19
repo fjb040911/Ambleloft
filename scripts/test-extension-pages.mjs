@@ -1,3 +1,4 @@
+import {openExtensionCenter, installExtension, manageExtension} from './fixtures/desktop.mjs';
 import http from 'node:http';import {createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';import {promisify} from 'node:util';
 import {_electron as electron} from '@playwright/test';import {mkdtemp,writeFile,readFile,rm,mkdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';import {zipSync,strToU8} from 'fflate';
@@ -10,7 +11,7 @@ async function capture(name){const file=path.resolve('test-results',name+'.png')
 async function views(){return app.evaluate(({webContents},origin)=>webContents.getAllWebContents().filter(w=>w.getURL().startsWith('amble-extension://')||(origin&&w.getURL().startsWith(origin+'/'))).map(w=>({id:w.id,url:w.getURL()})),devOrigin);}
 async function waitFor(predicate,timeout=10000){const started=Date.now();while(!await predicate()){if(Date.now()-started>timeout)throw Error('Condition timed out');await new Promise(r=>setTimeout(r,50));}}
 async function run(id,code){return app.evaluate(({webContents},{id,code})=>webContents.fromId(id).executeJavaScript(code),{id,code});}
-async function openHome(page){const group=page.locator('.sidebar').getByRole('button',{name:'扩展',exact:true});if(await group.getAttribute('aria-expanded')==='false')await group.click();await page.locator('.sidebar').getByRole('button',{name:'A5 Page Fixture',exact:true}).click();}
+async function openHome(page){const rail=page.locator('.activity-rail').getByRole('button',{name:/^(扩展|Extensions)$/});if(await rail.getAttribute('aria-expanded')!=='true')await rail.click();await page.getByRole('button',{name:'Fixture',exact:true}).click();}
 try{
  const entries={'extension.json':strToU8(JSON.stringify(manifest)),'main.cjs':strToU8(source),'web/index.html':strToU8(html),'web/app.js':strToU8(js),'web/style.css':strToU8('body {background:rgb(250,20,20);color:white;}button{padding:16px;}')};
  await writeFile(archive,zipSync(entries));let selectedPath=archive;
@@ -22,21 +23,21 @@ try{
  app=await electron.launch({args:['.',`--user-data-dir=${path.join(root,'profile')}`],env:{...process.env,ATELIER_DEV:'0'}});const first=await app.firstWindow();await first.getByRole('textbox',{name:'任务内容'}).waitFor();
  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});dialog.showMessageBox=async()=>({response:1});},selectedPath);
  await first.evaluate(root=>window.desktop.patchWorkspace({changes:[{kind:'project',action:'put',id:'selected',expectedRevision:null,value:{id:'selected',name:'Visible project',path:root,createdAt:'today'}},{kind:'project',action:'put',id:'other',expectedRevision:null,value:{id:'other',name:'Hidden project',path:root,createdAt:'today'}}]}),root);
- await first.getByRole('button',{name:'设置',exact:true}).click();await first.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();if(developmentTest){await first.getByRole('button',{name:'更多安装方式',exact:true}).click();await first.getByRole('menuitem',{name:'加载开发目录',exact:true}).click();}else await first.getByRole('button',{name:'安装扩展',exact:true}).click();await first.locator('.integration-entry').filter({hasText:'A5 Page Fixture'}).waitFor();await first.getByRole('button',{name:'返回应用',exact:true}).click();
+ await openExtensionCenter(first);await installExtension(first,{development:developmentTest});await first.getByRole('button',{name:'管理 A5 Page Fixture',exact:true}).waitFor();
  if(developmentTest)await first.evaluate(url=>window.desktop.extensions.development({id:'fixture.page',url}),devOrigin);
  await openHome(first);await waitFor(async()=> (await views()).length===1);let v=(await views())[0];await run(v.id,'window.ready');
  // A newly created native view must inherit the already-saved language.
  await first.getByRole('button',{name:'设置',exact:true}).click();
  await first.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'通用',exact:true}).click();
  await first.getByLabel('界面语言',{exact:true}).selectOption('en');
- await first.locator('.settings-return button').click();
- await first.locator('.sidebar .new-task').click();await waitFor(async()=> (await views()).length===0);
- await first.locator('.sidebar').getByRole('button',{name:'A5 Page Fixture',exact:true}).click();
+ await first.getByRole('button',{name:/^(返回应用|Back to app)$/}).click();
+ await first.getByRole('button',{name:/^Ambleloft (工作台|workspace)$/i}).click();await waitFor(async()=> (await views()).length===0);
+ await openHome(first);
  await waitFor(async()=> (await views()).length===1);v=(await views())[0];await run(v.id,'window.ready');
  assert.equal(await run(v.id,'window.context.locale'),'en');console.log('PASS new native extension page inherits saved English locale.');
  await first.getByRole('button',{name:'Settings',exact:true}).click();
  await first.getByLabel('Interface language',{exact:true}).selectOption('zh-CN');
- await first.locator('.settings-return button').click();
+ await first.getByRole('button',{name:/^(返回应用|Back to app)$/}).click();
  const firstId=await (await app.browserWindow(first)).evaluate(w=>w.id);
  if(developmentTest){const url=JSON.stringify(devOrigin.replace('http:','ws:')+'/hmr');assert.equal(await run(v.id,`new Promise((resolve,reject)=>{const socket=new WebSocket(${url});socket.onmessage=e=>{socket.close();resolve(e.data);};socket.onerror=()=>reject(Error('WebSocket blocked'));})`),'ok');}
  assert.deepEqual(await run(v.id,'[typeof require,typeof process,typeof desktop]'),['undefined','undefined','undefined']);assert.equal((await run(v.id,'ambleExtension.invoke("anything",{})')).error.code,'NOT_FOUND');
@@ -48,7 +49,7 @@ try{
  const visible=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].contentView.children.map(c=>c.getVisible()));assert.ok(visible.includes(false));
  await first.getByLabel('选择授权项目',{exact:true}).selectOption('selected');await first.getByRole('button',{name:'确认授权',exact:true}).click();await waitFor(()=>run(v.id,'!!window.selection'));
  const selection=await run(v.id,'window.selection');assert.deepEqual(selection,{ok:true,value:{id:'selected',name:'Visible project',description:''}});assert.ok(!JSON.stringify(selection).includes(root));
- await app.evaluate(({webContents,BrowserWindow},ids)=>{BrowserWindow.fromId(ids.owner).focus();webContents.fromId(ids.view).focus();}, {owner:firstId,view:v.id});await new Promise(r=>setTimeout(r,100));await app.evaluate(({webContents},id)=>webContents.fromId(id).sendInputEvent({type:'keyDown',keyCode:'Escape'}),v.id);await waitFor(()=>first.evaluate(()=>document.activeElement===document.querySelector('.toolbar .icon-button')));
+ await app.evaluate(({webContents,BrowserWindow},ids)=>{BrowserWindow.fromId(ids.owner).focus();webContents.fromId(ids.view).focus();}, {owner:firstId,view:v.id});await new Promise(r=>setTimeout(r,100));await app.evaluate(({webContents},id)=>webContents.fromId(id).sendInputEvent({type:'keyDown',keyCode:'Escape'}),v.id);await waitFor(()=>first.evaluate(()=>document.activeElement===document.querySelector('[data-extension-host-focus]')));
  await first.evaluate(()=>window.desktop.extensions.activate('fixture.page'));const startsBeforeWindows=(await readFile(log,'utf8')).trim().split('\n').length;
  await first.evaluate(()=>window.desktop.newWindow());await first.evaluate(()=>window.desktop.newWindow());await waitFor(async()=> (await app.context().pages()).filter(p=>p.url().includes('index.html')&&!p.url().startsWith('amble-extension:')&&(!devOrigin||!p.url().startsWith(devOrigin))).length===3);
  const hostPages=app.context().pages().filter(p=>!p.url().startsWith('amble-extension:')&&(!devOrigin||!p.url().startsWith(devOrigin)));const second=hostPages.find(p=>p!==first),third=hostPages.find(p=>p!==first&&p!==second);await second.getByRole('textbox',{name:'任务内容'}).waitFor();await third.getByRole('textbox',{name:'任务内容'}).waitFor();await Promise.all([openHome(second),openHome(third)]);await waitFor(async()=> (await views()).length===3);
@@ -56,8 +57,8 @@ try{
  const secondId=await (await app.browserWindow(second)).evaluate(w=>w.id);const secondView=await app.evaluate(({BrowserWindow},id)=>BrowserWindow.fromId(id).contentView.children.find(c=>c.webContents&&c.webContents.getURL().includes('/index.html')&&!c.webContents.getURL().startsWith('file:')).webContents.id,secondId);await run(secondView,'document.querySelector("#select").click()');await second.getByRole('dialog',{name:'允许扩展访问'}).waitFor();await second.close();await waitFor(async()=> (await views()).length===2);assert.equal((await first.evaluate(()=>window.desktop.extensions.list())).installed[0].runtime.state,'active');
  await first.getByRole('button',{name:'设置',exact:true}).click();await waitFor(async()=>await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().some(w=>w.contentView.children.some(c=>!c.getVisible()))));await first.getByRole('button',{name:'返回应用',exact:true}).click();
  await app.evaluate(({BrowserWindow},id)=>{const w=BrowserWindow.fromId(id);w.setSize(1000,740);w.webContents.setZoomFactor(1.25);},firstId);await first.evaluate(()=>window.dispatchEvent(new Event('resize')));await new Promise(r=>setTimeout(r,200));const css=await first.locator('.extension-surface').boundingBox();const physical=await app.evaluate(({BrowserWindow},id)=>BrowserWindow.fromId(id).contentView.children.find(c=>c.webContents&&c.webContents.getURL().includes('/index.html')&&!c.webContents.getURL().startsWith('file:')).getBounds(),firstId);assert.ok(Math.abs(physical.x-css.x*1.25)<2);assert.ok(Math.abs(physical.width-css.width*1.25)<2);
- await first.locator('.sidebar .new-task').click();await waitFor(async()=> (await views()).length===1);
- await third.getByRole('button',{name:'设置',exact:true}).click();await third.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();await third.locator('.integration-entry').filter({hasText:'A5 Page Fixture'}).click();await third.getByRole('button',{name:'停用',exact:true}).click();await waitFor(async()=> (await views()).length===0);
+ await first.getByRole('button',{name:/^Ambleloft (工作台|workspace)$/i}).click();await waitFor(async()=> (await views()).length===1);
+ await openExtensionCenter(third);await manageExtension(third,'A5 Page Fixture');await third.getByRole('button',{name:'停用',exact:true}).click();await waitFor(async()=> (await views()).length===0);
  await mkdir('test-results',{recursive:true});await third.screenshot({path:'test-results/extensions-a5.png'});
  console.log('A5 desktop passed: isolated static assets/CSP, scoped page bridge, host project consent, three windows share one backend, close/switch/disable cleanup, settings overlay and resize/zoom.');
 }finally{await app?.close();for(const socket of sockets)socket.destroy();if(server)await new Promise(resolve=>server.close(resolve));await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}

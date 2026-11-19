@@ -124,4 +124,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   },
 });
 
-ipcRenderer.on('extension-page:focus-host',()=>document.querySelector('.toolbar .icon-button')?.focus());
+ipcRenderer.on('extension-page:focus-host',()=>{
+  const target = document.querySelector('[data-extension-host-focus]') || document.querySelector('.toolbar .icon-button');
+  target?.focus();
+});

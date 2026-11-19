@@ -1,3 +1,4 @@
+import {replyToModelProbe} from './fixtures/model.mjs';
 // Formal Electron UI + real pinned engine + local deterministic inference.
 // Set ATELIER_TEST_APP to a macOS .app to run the same acceptance on a packaged build.
 import http from 'node:http';
@@ -12,8 +13,10 @@ let app,server,release,round=0,protocol,requests=[],serverError;
 const results=[];
 async function until(fn){for(let i=0;i<400;i++){if(serverError)throw serverError;if(await fn())return;await new Promise(r=>setTimeout(r,100));}throw Error('User input acceptance timed out');}
 try{
- server=http.createServer(async(req,res)=>{try{
-  let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);requests.push(body);round++;
+ server=http.createServer(async(req,res)=>{
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+try{
+  let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);if(replyToModelProbe(req,res,body))return;requests.push(body);round++;
   const tools=(body.tools||[]).flatMap(t=>t.type==='namespace'?t.tools.map(x=>({...x,namespace:t.name})):[t.function||t]);
   const name=['input_capabilities','input_request','extension_list_operations'][round-1];
   const tool=name?tools.find(t=>t.name===name||t.name?.endsWith('_'+name)||t.name?.startsWith(name)):null;

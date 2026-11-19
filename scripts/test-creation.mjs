@@ -1,3 +1,4 @@
+import {replyToModelProbe} from './fixtures/model.mjs';
 // Real Electron + pinned engine + deterministic local inference. No account or device required.
 import http from 'node:http';
 import {_electron as electron,expect} from '@playwright/test';
@@ -17,11 +18,13 @@ async function until(fn){for(let i=0;i<400;i++){if(serverError)throw serverError
 try{
  const project=path.join(root,'project');await mkdir(project);
  await cp('resources/skills/skill-master/examples/travel-skill',path.join(project,'travel'),{recursive:true});
- server=http.createServer(async(req,res)=>{try{
-  let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);requests.push(body);
+ server=http.createServer(async(req,res)=>{
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+try{
+  let raw='';for await(const c of req)raw+=c;const body=JSON.parse(raw);if(replyToModelProbe(req,res,body))return;requests.push(body);
   const call=calls[round++];const tools=(body.tools||[]).flatMap(t=>t.type==='namespace'?t.tools.map(x=>({...x,namespace:t.name})):[t.function||t]);
   const tool=call?tools.find(t=>t.name===call[0]||t.name?.endsWith('_'+call[0])||t.name?.startsWith(call[0])):null;
-  if(call)assert.ok(tool,'Missing tool: '+call[0]);
+  if(call)assert.ok(tool,'Missing tool: '+call[0]+'; available: '+tools.map(t=>t.name).join(', '));
   const item=tool?{id:'fc'+round,type:'function_call',call_id:'call'+round,name:tool.name,...(tool.namespace?{namespace:tool.namespace}:{}),arguments:JSON.stringify(call[1]),status:'completed'}:{id:'msg'+round,type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'文件已检查，请使用创建卡安装并试用。',annotations:[]}]};
   res.writeHead(200,{'Content-Type':'text/event-stream'});let sequence=0;
   const emit=(type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:sequence++,...data})}\n\n`);
@@ -42,7 +45,9 @@ try{
  await page.getByRole('button',{name:'填入聊天输入框',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue(/请用技能大师/);
  // Send through the actual composer; inference and source generation are deterministic fixtures.
- await page.getByRole('textbox',{name:'任务内容',exact:true}).fill('创建验收：三步差旅登记');
+ await page.getByRole('textbox',{name:'任务内容',exact:true}).press('End');
+ await page.getByRole('textbox',{name:'任务内容',exact:true}).press('Shift+Enter');
+ await page.getByRole('textbox',{name:'任务内容',exact:true}).pressSequentially('创建验收：三步差旅登记');
  await page.getByRole('button',{name:'发送任务',exact:true}).click();
  await until(async()=> (await page.evaluate(()=>window.desktop.listRuns())).length>0);
  const run=(await page.evaluate(()=>window.desktop.listRuns()))[0];

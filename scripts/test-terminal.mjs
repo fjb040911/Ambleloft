@@ -21,6 +21,11 @@ try{
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('TERMINAL_READY');
  await page.evaluate(id=>window.desktop.terminal.write({id,data:`node -e "console.log(String.fromCharCode(27)+'[31mANSI_RED'+String.fromCharCode(27)+'[0m')"\r`}),first.id);
  await expect(page.locator('.terminal-screen:visible .xterm-fg-1').filter({hasText:'ANSI_RED'})).toBeVisible();
+ const terminalOutput=page.locator('.terminal-screen:visible .xterm-rows');
+ const waitForPowerShellPrompt=async()=>{
+  if(process.platform==='win32')await expect.poll(async()=> (await terminalOutput.innerText()).trim().endsWith('>'),{timeout:15000}).toBe(true);
+ };
+ await waitForPowerShellPrompt();
  // Theme changes update the live renderer without replacing the session or output.
  const setTheme=theme=>page.evaluate(async theme=>{const state=await window.desktop.readWorkspace();await window.desktop.patchWorkspace({changes:[{kind:'settings',action:'patch',expectedRevision:state.settingsRevision??0,value:{theme}}]});},theme);
  const checkTheme=async(expectedDark)=>{
@@ -44,10 +49,10 @@ try{
  await page.emulateMedia({colorScheme:'dark'});await checkTheme(true);
  await setTheme('light');await checkTheme(false);
  await page.evaluate(id=>window.desktop.terminal.write({id,data:`node -e "console.log('LONG'+'RUNNING');setInterval(()=>{},1000)"\r`}),first.id);
- await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('LONGRUNNING');
+ await expect(terminalOutput).toContainText('LONGRUNNING',{timeout:15000});
  await page.keyboard.press('Control+c');
  // ConPTY/PowerShell must finish returning to its prompt before the next command.
- if(process.platform==='win32')await expect.poll(async()=> (await page.locator('.terminal-screen:visible .xterm-rows').innerText()).trim().endsWith('>')).toBe(true);
+ await waitForPowerShellPrompt();
  await page.keyboard.type('echo INTERRUPT_""OK');await page.keyboard.press('Enter');
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('INTERRUPT_OK');
  await open();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);

@@ -1,11 +1,13 @@
 const assert=require('node:assert/strict');
 const http=require('node:http');
 const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
 const {AgentRuntime}=require('../electron/agent-runtime.cjs');
 const {CodexRPC}=require('../electron/codex-rpc.cjs');
 (async()=>{
- const directory=await fs.mkdtemp('/tmp/atelier-bridge-test-');let mode='tool';let requests=[];const events=[];
- const imagePath=directory+'/fixture.png';
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'atelier-bridge-test-'));let mode='tool';let requests=[];const events=[];
+ const imagePath=path.join(directory,'fixture.png');
  await fs.writeFile(imagePath,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGP4z8BAEiJN9aiGUQ1DSgMAkPn/Afnh+ngAAAAASUVORK5CYII=','base64'));
  const server=http.createServer(async(req,res)=>{
   let raw='';for await(const chunk of req)raw+=chunk;const data=JSON.parse(raw);requests.push(data);
