@@ -8,7 +8,7 @@ test('short and empty knowledge results do not create blank page scrolling',asyn
  await page.evaluate(()=>{window.desktop!.spaces!.knowledge=async()=>[];(window as any).spaceQA.emit();});
  await expect(page.getByText('没有匹配的执行依据',{exact:true})).toBeVisible();
  expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
- await page.screenshot({path:'/tmp/knowledge-empty-scroll.png'});
+ await page.screenshot({path:test.info().outputPath('knowledge-empty-scroll.png')});
 });
 for(const width of [390,1280])test(`knowledge excerpts use page scrolling and filters shrink naturally at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:900});await page.goto(fixture);
@@ -24,7 +24,7 @@ for(const width of [390,1280])test(`knowledge excerpts use page scrolling and fi
  await page.getByRole('textbox',{name:'搜索执行依据'}).fill('不存在');
  await expect(page.getByText('没有匹配的执行依据',{exact:true})).toBeVisible();
  const blank=await page.locator('.wf-knowledge-results').evaluate(el=>{const scroll=el.closest('.qa-scroll')!;return scroll.scrollHeight>scroll.clientHeight?scroll.scrollHeight-(el.getBoundingClientRect().bottom-scroll.getBoundingClientRect().top+scroll.scrollTop):0;});expect(blank).toBeLessThanOrEqual(49);
- await page.screenshot({path:`/tmp/knowledge-filtered-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`knowledge-filtered-${width}.png`)});
 });
 test('archived sources are labelled, searchable and read-only',async({page})=>{
  await page.goto(fixture);await page.evaluate(async()=>{await window.desktop!.spaces!.lifecycle({id:'space',action:'archive'});});
@@ -32,7 +32,7 @@ test('archived sources are labelled, searchable and read-only',async({page})=>{
  const scope=page.getByRole('combobox',{name:'空间范围',exact:true});await expect(scope).toContainText('所有空间（含归档）');
  await expect(scope.locator('optgroup[label="已归档空间"]')).toContainText('产品发布（已归档）');
  await scope.selectOption('space');await expect(page.locator('.wf-knowledge-entry')).toHaveCount(1);
- await page.screenshot({path:'/tmp/knowledge-archived-source.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('knowledge-archived-source.png'),fullPage:true});
  const scroller=page.locator('.qa-scroll');await scroller.evaluate(el=>{el.scrollTop=100;});const top=await scroller.evaluate(el=>el.scrollTop);
  await page.getByRole('button',{name:'查看原文与依据变更'}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();

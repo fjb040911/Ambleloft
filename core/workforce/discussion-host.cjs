@@ -102,12 +102,12 @@ const methods={
    const r={id:input.clientRequestId,spaceId:space.id,prompt,mode:'discussion',projectId:null,replyTo:previous?.id||null,round:(previous?.round||0)+1,createdAt:new Date().toISOString(),documentRefs:documents,participants:[],discussion:{schemaVersion:1,id:root,mode:'host',provenance:'recorded'},host:{providerId:input.providerId,model:input.model,status:'preparing',ruleVersion,revision:1,steps:[],brief:prior?.host.brief||null}};
    r.composer=composer;if(input.intent)r.intent=input.intent;if(input.taskContext)r.taskContext=input.taskContext;s.requests.unshift(r);return {request:r,space};
   });
-  if(!prepared)return this.snapshot();
+  if(!prepared)return this.snapshot({output:'preview'});
   const controller=new AbortController(),job={controller,requestId:input.clientRequestId,spaceId:input.spaceId,promise:null};
   this.hostJobs.set(input.clientRequestId,job);this.spaceLocks.set(input.spaceId,(this.spaceLocks.get(input.spaceId)||0)+1);
   job.promise=coordinate.call(this,prepared,input,hostContext,controller.signal).catch(async error=>{
    controller.abort();
-   const current=(await this.snapshot()).requests.find(r=>r.id===input.clientRequestId);
+   const current=(await this.snapshot({output:'status'})).requests.find(r=>r.id===input.clientRequestId);
    await Promise.allSettled((current?.participants||[]).filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
    await this.change(s=>{const r=s.requests.find(r=>r.id===input.clientRequestId);if(r?.host){r.host.status=job.stopped?'interrupted':'failed';r.host.error=require('../automation/structured-output.cjs').structuredErrorMessage(error,input.locale);r.host.errorCode=typeof error.code==='string'?error.code:error.message;r.host.finishedAt=new Date().toISOString();if(error.diagnostics)r.host.outputDiagnostics=error.diagnostics;r.host.revision++;
     for(const p of r.participants){
@@ -119,12 +119,12 @@ const methods={
     }
    }});
   }).finally(()=>{this.discussionModelControllers?.delete(input.clientRequestId);this.hostJobs.delete(input.clientRequestId);const n=this.spaceLocks.get(input.spaceId)-1;if(n)this.spaceLocks.set(input.spaceId,n);else this.spaceLocks.delete(input.spaceId);this.publish();});
-  return this.snapshot();
+  return this.snapshot({output:'preview'});
  },
  async stopDiscussionHost({requestId}){
   await this.stopDiscussionFollowups(requestId);
   const job=this.hostJobs?.get(requestId);if(job){job.stopped=true;job.controller.abort(Object.assign(Error('DISCUSSION_STOPPED'),{code:'DISCUSSION_STOPPED'}));}
-  const r=(await this.snapshot()).requests.find(r=>r.id===requestId);if(!r)return {stopped:false};
+  const r=(await this.snapshot({output:'status'})).requests.find(r=>r.id===requestId);if(!r)return {stopped:false};
   await Promise.allSettled(r.participants.filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
   if(job)await job.promise;
   return {stopped:!!job||r.participants.length>0};
@@ -148,11 +148,11 @@ async function coordinate({request,space},input,hostContext,signal){
   // A follow-up can resume an expert while the coordinator was synthesizing.
   // Re-enter the execution barrier before attempting another summary.
   while(true){
-   const latest=(await this.snapshot()).requests.find(r=>r.id===request.id);
+   const latest=(await this.snapshot({output:'status'})).requests.find(r=>r.id===request.id);
    if(!latest.participants.some(p=>live.has(p.status))&&!(latest.followups||[]).some(f=>['queued','processing'].includes(f.state)||f.deliveries?.some(d=>['pending','queued','dispatching'].includes(d.state))))break;
    await delay(this.hostPollMs||500,undefined,{signal});await this.settleDiscussionFollowups(request.id,signal);
   }
-  const snapshot=await this.snapshot(),current=snapshot.requests.find(r=>r.id===request.id);
+  const snapshot=await this.snapshot({topicRequestId:request.id}),current=snapshot.requests.find(r=>r.id===request.id);
   if((current.followups||[]).some(f=>f.state==='failed'||f.deliveries?.some(d=>['failed','unknown','unconfirmed','interrupted'].includes(d.state)))){await update(r=>{r.host.status='needs-input';r.host.error='有更新尚未得到专家确认，请核对投递记录后继续 / Some updates were not confirmed by experts; review before continuing';});return;}
   const requirementRevision=current.requirementsRevision||0,modelRevision=current.modelRevision||0;
   if(current.executionModel){config=await abortable(this.workforce.providers.secret(current.executionModel.providerId,current.executionModel.model),signal);await update(r=>{r.host.model=config.model;r.host.providerId=config.id;});}
@@ -244,12 +244,12 @@ async function coordinate({request,space},input,hostContext,signal){
   while(true){
    signal.throwIfAborted();
    await this.settleDiscussionFollowups(request.id,signal);
-   const refreshed=(await this.snapshot()).requests.find(r=>r.id===request.id);
+   const refreshed=(await this.snapshot({output:'status'})).requests.find(r=>r.id===request.id);
    if(!refreshed.participants.some(p=>live.has(p.status))&&!(refreshed.followups||[]).some(f=>['queued','processing'].includes(f.state)||f.deliveries?.some(d=>['pending','queued','dispatching'].includes(d.state))))break;
    try{await delay(this.hostPollMs||500,undefined,{signal});}
    catch(error){signal.throwIfAborted();throw error;}
   }
-  const after=(await this.snapshot()).requests.find(r=>r.id===request.id);
+  const after=(await this.snapshot({output:'status'})).requests.find(r=>r.id===request.id);
   if((after.followups||[]).some(f=>f.state==='failed'||f.deliveries?.some(d=>['failed','unknown','unconfirmed','interrupted'].includes(d.state)))){await update(r=>{r.host.status='needs-input';r.host.error='有更新尚未得到专家确认，请核对投递记录后继续 / Some updates were not confirmed by experts; review before continuing';});return;}
   if(after.participants.some(p=>p.status!=='completed')){await update(r=>{r.host.status='failed';r.host.error='专家分析未完成，请查看结果后继续 / Expert analysis incomplete; review before continuing';});return;}
  }

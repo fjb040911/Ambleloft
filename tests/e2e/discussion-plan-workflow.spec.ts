@@ -47,7 +47,7 @@ test('failed save retains the plan and never starts execution; manually editing 
  await card(page).getByRole('button',{name:'手动编辑草稿'}).click();await expect(page.getByRole('region',{name:'整理为任务',exact:true})).toBeVisible();expect(await calls(page,'createTaskDraft')).toHaveLength(0);await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await expect(card(page)).toHaveCount(0);await page.getByRole('region',{name:'本次任务'}).getByRole('button',{name:'查看并确认'}).click();await expect(card(page)).toBeVisible();
 });
 for(const [width,lang,theme] of [[1280,'zh','light'],[390,'en','dark']] as const)test(`host workflow layout ${width} ${lang} ${theme}`,async({page})=>{
- await page.setViewportSize({width,height:900});await setup(page,`?lang=${lang}&theme=${theme}`);await send(page,'准备一个计划');await expect(card(page)).toBeVisible();await card(page).scrollIntoViewIfNeeded();await expect(page.locator('form.composer')).toHaveCount(1);expect(await card(page).evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBeTruthy();await page.screenshot({path:`/tmp/host-workflow-${width}.png`});expect(await calls(page,'control')).toHaveLength(0);
+ await page.setViewportSize({width,height:900});await setup(page,`?lang=${lang}&theme=${theme}`);await send(page,'准备一个计划');await expect(card(page)).toBeVisible();await card(page).scrollIntoViewIfNeeded();await expect(page.locator('form.composer')).toHaveCount(1);expect(await card(page).evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBeTruthy();await page.screenshot({path:test.info().outputPath(`host-workflow-${width}.png`)});expect(await calls(page,'control')).toHaveLength(0);
 });
 test('requirements and relationships are guided one step at a time, then each relationship unlocks',async({page})=>{
  await setup(page);await send(page,'生成任务');
@@ -126,7 +126,7 @@ test('collapsed workflow stays closed through updates and navigation, and restor
  await page.getByRole('region',{name:'本次任务'}).getByRole('button',{name:'继续完善',exact:true}).click();
  await expect(card(page).getByLabel('验收范围')).toHaveValue('先核对数据来源，不确认旧范围');
  expect(await calls(page,'coordinate')).toHaveLength(1);expect(await calls(page,'control')).toHaveLength(0);
- await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await page.screenshot({path:'/tmp/task-guide-collapsed.png'});
+ await page.getByRole('button',{name:'收起任务配置',exact:true}).click();await page.screenshot({path:test.info().outputPath('task-guide-collapsed.png')});
 });
 
 for(const viaChat of [true,false])test(`revisit keeps the current task (${viaChat?'chat':'button'})`,async({page})=>{
@@ -171,7 +171,7 @@ for(const [width,lang,theme] of [[1280,'zh','light'],[390,'en','dark']] as const
  await page.evaluate(async()=>{await (window as any).__finishVisibleReply();});
  await expect(page.getByText('接口验证是后续交付的前置条件。',{exact:true})).toBeInViewport();await expect(card(page)).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/chat-first-guide-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`chat-first-guide-${width}.png`)});
 });
 
 test('round document collection remains available from its menu and old drafts can be reopened',async({page})=>{

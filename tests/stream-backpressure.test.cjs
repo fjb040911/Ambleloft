@@ -59,6 +59,7 @@ test('writer respects drain, counts encoded bytes, reserves control capacity and
  blocked=false;stream.writableLength=0;stream.emit('drain');assert.deepEqual(writes,['12345678','stop']);assert.equal(writer.bytes,0);writer.close();assert.equal(stream.listenerCount('drain'),0);
 });
 test('HTTP backpressure waits without buffering new chunks and cancellation releases listeners',async()=>{
+ const metrics=require('../electron/performance-metrics.cjs').metrics,before=metrics.snapshot().current.bridgeWriteWaitMs?.count||0;
  let finish;const stream=new Writable({highWaterMark:1,write(chunk,encoding,callback){finish=callback;}}),controller=new AbortController(),waits=[];
  let done=false;const pending=writeChunk(stream,'chunk',controller.signal,value=>waits.push(value)).then(()=>{done=true;});await delay(1);assert.equal(done,false);finish();await pending;assert.deepEqual(waits,[true,false]);
  const cancelled=writeChunk(stream,'next',controller.signal);controller.abort(Error('cancel'));await assert.rejects(cancelled,/cancel/);assert.equal(stream.listenerCount('drain'),0);assert.equal(stream.listenerCount('close'),0);finish();stream.destroy();

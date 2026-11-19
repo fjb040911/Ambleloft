@@ -38,7 +38,7 @@ function automationPersistence(db,transaction,check){
   }
  };
  return {
-  capture(run,turnId,now=Date.now()){
+  capture(run,turnId,now=Date.now()){return require('../../electron/storage-timing.cjs').measure('databaseSnapshotMs',()=>{
    if(!turnId||!run.projectId)return;
    const conversationId=run.conversationId;if(!conversationId)return;
    if(db.prepare('SELECT 1 FROM automation_turns WHERE conversation_id=? AND turn_id=?').get(conversationId,turnId))return;
@@ -46,10 +46,13 @@ function automationPersistence(db,transaction,check){
    const next=run.messages.findIndex((m,i)=>i>start&&m.role==='user'&&(!m.turnKey||m.turnKey!==turnId));
    const messages=run.messages.slice(start,next<0?undefined:next).map(({id,role,text})=>({id,role,text:text||''}));
    const snapshot={conversationId,turnId,version:1,projectId:run.projectId,status:run.status,messages};
-   db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,JSON.stringify(snapshot));
+   // The public automation API already rejects snapshots above 256 KiB. Keep
+   // that explicit outcome without copying an unbounded transcript at commit.
+   const data=require('../../electron/stored-json.cjs').boundedJSON(snapshot,256*1024)??JSON.stringify({conversationId,turnId,version:1,projectId:run.projectId,status:run.status,oversized:true});
+   db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,data);
    require('../project-insights/persistence.cjs').captureActivity(db,snapshot,now);
    if(run.status==='completed')for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
-  },
+  });},
   handlers:{
    automationRead({context,input}){
     if(!input||typeof input.conversationId!=='string'||typeof input.turnId!=='string'||!Number.isSafeInteger(input.version)||input.version<1)fail('INVALID_ARGUMENT');
@@ -59,7 +62,7 @@ function automationPersistence(db,transaction,check){
     if(!row||row.project_id!==identity.project_id)fail('NOT_FOUND');
     if(row.created<Date.now()-RETENTION)fail('SOURCE_EXPIRED');
     check({...context,capability:'conversations.read',projectId:row.project_id});
-    if(Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');return parse(row);
+    const value=parse(row);if(value.oversized||Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');return value;
    },
    automationRecover(){return transaction(()=>{db.prepare("UPDATE automation_events SET status=CASE WHEN attempts>=6 THEN 'dead' ELSE 'pending' END WHERE status='delivering'").run();for(const row of db.prepare("SELECT * FROM automation_jobs WHERE status='running'").all()){const job=parse(row);job.status='unknown';job.error='OUTCOME_UNKNOWN';saveJob(job);resultEvent(job);}reconcile();});},
    automationReconcile(){return transaction(reconcile);},

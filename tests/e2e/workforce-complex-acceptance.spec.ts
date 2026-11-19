@@ -38,14 +38,14 @@ for(const [width,theme] of [[1440,'light'],[390,'dark']] as const)test(`one dire
  await page.setViewportSize({width,height:1000});await enter(page,'fallback',theme);
  await expect(page.locator('.wf-graph-node')).toHaveCount(10);
  const action=controls(page).getByRole('button',{name:'处理待办 · 1'});await action.scrollIntoViewIfNeeded();
- await expect(page.getByRole('dialog')).toHaveCount(0);await page.screenshot({path:`/tmp/complex-overview-${width}.png`});
+ await expect(page.getByRole('dialog')).toHaveCount(0);await page.screenshot({path:test.info().outputPath(`complex-overview-${width}.png`)});
  await action.focus();await page.keyboard.press('Enter');
  const detail=page.getByRole('region',{name:'任务详情与验收'});
  await expect(detail.getByRole('heading',{name:'验证访问边界',exact:true})).toBeVisible();await expect(detail).toContainText('连续验收未见改善');
  await expect(detail.getByRole('button',{name:'按原标准修复',exact:true})).toBeVisible();
  expect(await detail.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  const footer=detail.locator('.wf-review-actions');const box=(await footer.boundingBox())!;expect(box.y+box.height).toBeLessThanOrEqual(1000);
- await page.screenshot({path:`/tmp/complex-fallback-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`complex-fallback-${width}.png`)});
 });
 test('missing evidence retries directly without reject-then-retry or editing criteria',async({page})=>{
  await enter(page,'missing-evidence');await controls(page).getByRole('button',{name:'处理待办 · 1'}).click();

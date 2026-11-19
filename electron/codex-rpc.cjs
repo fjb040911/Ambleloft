@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process');
-const {ByteLineReader,ByteWriter}=require('./byte-stream.cjs');
+const {ByteWriter}=require('./byte-stream.cjs');
+const {RpcJsonReader}=require('./rpc-json-reader.cjs');
 const {StreamRedactor}=require('./stream-redactor.cjs');
 const {StringDecoder}=require('node:string_decoder');
 const path = require('node:path');
@@ -57,41 +58,77 @@ function configurationArgs(config, home, extensionMcp, platform = process.platfo
 }
 class CodexRPC {
   constructor({ executable, config, home, cwd, notification, request, exit, extensionMcp }) {
-    this.pending = new Map(); this.sequence = 0; this.closed = false; this.tail = '';
+    this.pending = new Map(); this.incoming=new Map();this.results=new WeakMap(); this.sequence = 0; this.closed = false; this.tail = '';
+    this.options={executable,config,home,cwd,notification,request,exit,extensionMcp};
+    this.stopped=new Promise(resolve=>{this.resolveStopped=resolve;});
+  }
+  start() {
+    const {executable,config,home,cwd,notification,request,exit,extensionMcp}=this.options;
     const env = codexEnvironment(config, home);
     if(extensionMcp)env.AMBLE_EXTENSION_AUTH=extensionMcp.http_headers.Authorization;
-    this.child = spawn(executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home, extensionMcp)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
-    this.stopped = new Promise(resolve => this.child.once('close', resolve));
+    this.child = require('./owned-process.cjs').spawnOwnedProcess(spawn,executable, ['app-server', '--listen', 'stdio://', ...configurationArgs(config, home, extensionMcp)], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     const failed = error => {
       if (this.closed) return;
-      this.closed = true;this.reader?.close();this.writer?.close();this.child.kill('SIGTERM');
+      this.closed = true;this.incoming.clear();this.reader?.close();this.writer?.close();this.terminate();
       for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
-      this.pending.clear();const timer=setTimeout(()=>{if(this.child.exitCode===null&&this.child.signalCode===null)this.child.kill('SIGKILL');},2000);timer.unref();exit(error);
+      this.pending.clear();const timer=setTimeout(()=>{if(process.platform!=='win32'&&this.child.exitCode===null&&this.child.signalCode===null)this.child.kill('SIGKILL');},2000);timer.unref();exit(error);
     };
     this.child.stdin.on('error',failed);
     const decoder=new StringDecoder('utf8'),redactor=new StreamRedactor(config.apiKey);
     this.child.stderr.on('data',data=>{this.tail=(this.tail+redactor.write(decoder.write(data))).slice(-5000);});
     this.child.stderr.on('end',()=>{this.tail=(this.tail+redactor.write(decoder.end())+redactor.end(true)).slice(-5000);});
     this.writer=new ByteWriter(this.child.stdin,failed);
-    this.reader=new ByteLineReader(this.child.stdout,line=>{
-      let message; try { message = JSON.parse(line); } catch { return; }
+    this.reader=new RpcJsonReader(this.child.stdout,(message,frame)=>{
+      if(!message||typeof message!=='object'||Array.isArray(message))throw Error('INVALID_RPC_MESSAGE');
       if (message.method) {
-        if (message.id !== undefined) request(message);
+        if (message.id !== undefined) {if(frame.encodedBytes>8*1024*1024)throw Object.assign(Error('引擎交互请求超过内存预算'),{code:'STREAM_BUFFER_LIMIT'});this.incoming.set(message.id,frame);request(message);return this.incoming.has(message.id);}
         else notification(message);
       } else if (this.pending.has(message.id)) {
-        const pending = this.pending.get(message.id); this.pending.delete(message.id); clearTimeout(pending.timer);
-        if (message.error) pending.reject(Object.assign(new Error(redact(message.error.message || 'Codex 请求失败', config.apiKey)),{code:message.error.code,rpcRejected:true}));
-        else pending.resolve(message.result);
+        const pending = this.pending.get(message.id);
+        try{
+          if (message.error) pending.reject(Object.assign(new Error(require('./rpc-text.cjs').preview({config},message.error,'message',16000) || 'Codex 请求失败'),{code:message.error.code,rpcRejected:true}));
+          else {if(require('./text-spool.cjs').reference(message,'result'))throw Error('INVALID_RPC_RESULT');const result=message.result;if(frame.store&&result&&typeof result==='object')this.results.set(result,frame);pending.resolve(result);return true;}
+        }catch(error){pending.reject(error);throw error;}
+        finally{this.pending.delete(message.id);clearTimeout(pending.timer);}
       }
 
-    },failed);
-    this.child.once('error', error => failed(new Error(`Codex 启动失败：${error.code || 'unknown'}`)));
+    },failed,{root:home});
+    this.reader.setBackpressure(!!this.pressure);
+    this.child.once('error', error => {this.resolveStopped();failed(new Error(`Codex 启动失败：${error.code || 'unknown'}`));});
+    this.child.once('exit',(code)=>{
+      this.resolveStopped(code);
+      if(this.closed){this.destroyPipes();return;}
+      // Inherited handles may keep close/EOF pending after the engine exited.
+      // Drain available notifications, but never wait indefinitely for an heir.
+      this.reader.setBackpressure(false);
+      const timer=setTimeout(()=>{this.reader.end();void this.reader.finished.then(()=>{this.destroyPipes();failed(new Error(`Codex 进程退出（${code}）${this.tail?'\n'+this.tail:''}`));});},2000);timer.unref();
+      this.child.once('close',()=>clearTimeout(timer));
+    });
     this.child.once('close', async(code,signal)=>{await this.reader.finished;failed(new Error(`Codex 进程退出（${signal || code}）${this.tail ? '\n' + this.tail : ''}`));});
   }
-  send(message) { if (this.closed) throw new Error('Codex 已断开'); return this.writer.send(`${JSON.stringify(message)}\n`,message.id!==undefined&&!message.method||['turn/interrupt','thread/archive'].includes(message.method)); }
-  setBackpressure(value){this.reader?.setBackpressure(value);}
+  send(message) { if (this.closed) throw new Error('Codex 已断开'); const ticket=this.writer.send(`${JSON.stringify(message)}\n`,message.id!==undefined&&!message.method||['turn/interrupt','thread/archive'].includes(message.method));if(message.id!==undefined&&!message.method){this.reader?.release(this.incoming.get(message.id));this.incoming.delete(message.id);}return ticket; }
+  setBackpressure(value){this.pressure=!!value;this.reader?.setBackpressure(value);}
+  releaseResult(value){const frame=value&&typeof value==='object'&&this.results.get(value);if(frame){this.reader?.release(frame);this.results.delete(value);}}
   call(method, params, timeout = 30000) {
+    if(method==='initialize'){
+      if(this.initializing)return this.initializing;
+      if(this.closed)return Promise.reject(new Error('Codex 已断开'));
+      const controller=new AbortController(),deadline=Date.now()+timeout;this.initializationController=controller;
+      const timer=setTimeout(()=>controller.abort(new Error('Codex 请求超时：initialize')),timeout);
+      controller.signal.addEventListener('abort',()=>{void this.close().catch(()=>{});},{once:true});
+      const work=require('./engine-initialization.cjs').initializeInOrder(this.options.home,async()=>{
+        controller.signal.throwIfAborted();if(this.closed)throw Error('执行已停止');
+        try{this.start();return await this.callRaw(method,params,Math.max(1,deadline-Date.now()));}
+        catch(error){await this.close();throw error;}
+      });
+      this.initializing=require('../core/automation/inference-deadline.cjs').abortable(work,controller.signal).finally(()=>clearTimeout(timer));
+      return this.initializing;
+    }
+    return this.callRaw(method,params,timeout);
+  }
+  callRaw(method,params,timeout){
     if (this.closed) return Promise.reject(new Error('Codex 已断开'));
+    if(!this.child)return Promise.reject(new Error('Codex 尚未初始化'));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.writer.cancel(this.pending.get(id)?.ticket);this.pending.delete(id); reject(new Error(`Codex 请求超时：${method}`)); }, timeout);
@@ -100,13 +137,16 @@ class CodexRPC {
     });
   }
   close() {
-    if (this.closed) return this.stopped;
-    this.closed = true;
+    if (this.closed) return Promise.all([this.stopped,this.termination]).then(()=>{});
+    this.closed = true;this.incoming.clear();
+    if(!this.child){this.initializationController?.abort(new Error('执行已停止'));this.resolveStopped();return this.stopped;}
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('执行已停止')); }
-    this.pending.clear(); this.reader.close();this.writer.close(); this.child.kill('SIGTERM');
+    this.pending.clear(); this.reader.close();this.writer.close(); this.terminate();
     const child = this.child;
-    const timer = setTimeout(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 2000); timer.unref();
-    return this.stopped;
+    const timer = setTimeout(() => { if (process.platform!=='win32'&&child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 2000); timer.unref();
+    return Promise.all([this.stopped,this.termination]).then(value=>{clearTimeout(timer);this.destroyPipes();return value[0];});
   }
+  terminate(){this.termination ||= require('./owned-process.cjs').stopOwnedProcess(this.child);this.termination.catch(error=>{this.terminationError=error;});return this.termination;}
+  destroyPipes(){this.child?.stdin.destroy();this.child?.stdout.destroy();this.child?.stderr.destroy();}
 }
 module.exports = { CodexRPC, findCodex, configurationArgs, codexEnvironment };

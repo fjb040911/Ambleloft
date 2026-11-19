@@ -12,6 +12,7 @@ const {snapshot,compare}=require('./file-changes.cjs');
 const {collectArtifacts} = require('./artifacts.cjs');
 const {startChatBridge,usesChat} = require('./chat-bridge.cjs');
 const {fields:streamFields,secrets:streamSecrets,cleanText}=require('./stream-redactor.cjs');
+const rpcText=require('./rpc-text.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 
 class AgentRuntime {
@@ -270,15 +271,19 @@ class AgentRuntime {
       if(!rpc){const config=await this.provider.secret(run.providerId,run.model);rpc=this.rpcFactory({executable:await findCodex(config.executable),config,home:await prepareEngineHome(this.directory),cwd:run.cwd,notification:()=>{},request:()=>{},exit:()=>{}});owned=true;
         await rpc.call('initialize',{clientInfo:{name:'atelier',version:require('../package.json').version}});rpc.send({method:'initialized',params:{}});}
       const result=await rpc.call('thread/read',{threadId,includeTurns:true});
-      const found=result.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId===item.id));
+      let found;try{found=result.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId===item.id));}finally{rpc.releaseResult?.(result);}
       if(found){this.recordFormInput(run,item,item.target.turnKey);await this.persist(undefined,run);}return found;
-    }finally{if(owned)rpc?.close();}
+    }finally{if(owned)await rpc?.close();}
   }
   switchModel(input){if(this.runs.some(r=>r.id===input.runId&&r.originHandoff))throw Error('受限调查不支持通用模型切换');return require('./model-switch.cjs').switchModel.call(this,input);}
   switchPermission(input){if(this.runs.some(r=>r.id===input.runId&&r.originHandoff))throw Error('受限调查不能提高权限');return require('./permission-switch.cjs').switchPermission.call(this,input);}
-  async start(input, hostContext={}) {
+  async start(input,hostContext={}){
+    // Keep the security boundary before receipt lookup as well as execution.
     if(input?.originHandoff||input?.runId&&this.runs.find(r=>r.id===input.runId)?.originHandoff)throw Error('受限调查不能转入通用执行，请从原讨论重新发起');
     if(this.investigation)await this.investigation.guard({runId:input?.runId,projectId:input?.projectId});
+    return require('./composer-start.cjs').start(this,input,hostContext);
+  }
+  async startOnce(input, hostContext={}) {
     if (this.closing || this.editing) throw new Error('请等待当前操作结束');
     if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?(c.requestRunId===input.runId||c.run?.id===input.runId):c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
     if (!input || typeof input.prompt !== 'string' || (!input.prompt.trim() && !input.selectedSkillIds?.length) || input.prompt.length > 20000) throw new Error('请输入 1–20000 字的任务内容');
@@ -366,7 +371,7 @@ class AgentRuntime {
       // same durable input must not create a second visible user message.
       if(hostContext.inputDelivery)run.messages=run.messages.filter(message=>
         (message.userInputId||message.formSubmissionId)!==hostContext.inputDelivery.id||message.inputDeliveryState==='delivered');
-      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.userAuthored&&!draft?{inputSource:'user',inputDeliveryState:'queued'}:{}), ...((hostContext.formSubmissionId||hostContext.userInputId)?{...(hostContext.userInputId?{userInputId:hostContext.userInputId,inputSource:'user'}:{formSubmissionId:hostContext.formSubmissionId}),...(hostContext.inputDelivery?{inputDeliveryState:'queued'}:{})}:{}), model: config.model, modelChange, skills: context.skills.snapshots, ...(attachments.length?{attachments:attachments.map(file=>({name:path.basename(file.path),path:file.path}))}:{}), text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
+      run.messages.push({ id: context.turnKey, role: 'user', ...(hostContext.composerRequest?{composerRequest:hostContext.composerRequest}:{}), ...(hostContext.userAuthored&&!draft?{inputSource:'user',inputDeliveryState:'queued'}:{}), ...((hostContext.formSubmissionId||hostContext.userInputId)?{...(hostContext.userInputId?{userInputId:hostContext.userInputId,inputSource:'user'}:{formSubmissionId:hostContext.formSubmissionId}),...(hostContext.inputDelivery?{inputDeliveryState:'queued'}:{})}:{}), model: config.model, modelChange, skills: context.skills.snapshots, ...(attachments.length?{attachments:attachments.map(file=>({name:path.basename(file.path),path:file.path}))}:{}), text: prompt+(attachments.length?'\n\n附件：\n'+attachments.map(file=>file.path).join('\n'):''), timing: context.timing });
       if(run.collaboration&&this.spaces)await this.spaces.authorizeRun(run);
       context.config = config;
       if (!previous && this.database) {
@@ -443,10 +448,10 @@ class AgentRuntime {
     }
     if(run.collaboration?.mode==='discussion')params.developerInstructions+=require('./conversation-agent.cjs').executionInstructions;
     context.engineParameters=params;
-    const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId } : {}) });
+    const thread = await rpc.call(run.threadId ? 'thread/resume' : 'thread/start', { ...params, ...(run.threadId ? { threadId: run.threadId, excludeTurns:true } : {}) });
     if (context.done || context.cancelled) return;
     if(context.pendingModelChange&&(thread.model!==config.model||thread.modelProvider!=='atelier'))throw Error('引擎未确认排队任务的新模型');
-    run.threadId = thread.thread.id; run.status = 'running'; this.changed(run);
+    run.threadId = thread.thread.id;rpc.releaseResult?.(thread); run.status = 'running'; this.changed(run);
     const send=()=>{if(context.done||context.cancelled)throw Object.assign(Error('已停止'),{code:'CANCELLED',rpcRejected:true,turnBoundary:true});return rpc.call('turn/start', { threadId: run.threadId,...(context.inputDelivery?{clientUserMessageId:context.inputDelivery.id}:{}), input: [{ type: 'text', text: (context.discussionUpdate?`User task update, version ${context.discussionUpdate.version}. Reassess your earlier result and affected subagents, then call acknowledge_update after applying it. Original user message:\n`:'')+run.messages.find(m=>m.id===context.turnKey).text + (context.skills?.explicit ? '\n\nThe user explicitly selected these workflows for this request:\n' + context.skills.explicit : '') }] });};
     let turn;const target={threadId:run.threadId,mode:'start',turnKey:context.turnKey};
     if(context.inputDelivery?.dispatch){const sent=await context.inputDelivery.dispatch(target,send);turn=await sent.receipt;}
@@ -487,6 +492,15 @@ class AgentRuntime {
     const clean = value => cleanText(context,value);
     run.lastEventAt=new Date().toISOString();
     const stamp = () => ({ turnKey: context.turnKey, order: run.nextEventOrder = (run.nextEventOrder || 0) + 1 });
+    const segment=require('./bridge-segments.cjs').segment({method,params});
+    if(segment){
+      let item=run.messages.find(message=>message.id===segment.group);
+      if(!item){item={id:segment.group,role:'assistant',text:'',...(segment.reasoning?{kind:'reasoning',reasoningFormat:'text'}:{}),...stamp()};run.messages.push(item);}
+      require('./bridge-segments.cjs').apply(context,{method,params},item,'text');
+      item.status=method==='item/completed'?'completed':'running';
+      if(['commentary','final_answer'].includes(params.item?.phase))item.phase=params.item.phase;
+      this.changed(run,{stream:!wasRetrying&&(method.endsWith('Delta')||method.endsWith('/delta')),bytes:rpcText.length(params,'delta')*2,items:[['messages',item.id]]});return;
+    }
     if(method==='serverRequest/resolved'){
       run.questions=(run.questions||[]).filter(q=>q.rpcId!==params.requestId);
       if(!context.cancelled&&['waiting','running'].includes(run.status))run.status=run.approvals.length||run.questions.some(q=>q.blocking)?'waiting':'running';
@@ -499,14 +513,14 @@ class AgentRuntime {
     else if (method === 'item/agentMessage/delta') {
       let item = run.messages.find(item => item.id === params.itemId);
       if (!item) { item = { id: params.itemId, role: 'assistant', text: '', ...stamp() }; run.messages.push(item); }
-      streamFields(context).append(item,'text',params.delta,streamSecrets(context),{scope:params.threadId});
+      for(const part of rpcText.parts(params,'delta'))streamFields(context).append(item,'text',part,streamSecrets(context),{scope:params.threadId});
     } else if (['item/reasoning/summaryTextDelta', 'item/reasoning/textDelta', 'item/reasoning/summaryPartAdded'].includes(method)) {
       let item = run.messages.find(item => item.id === params.itemId);
       if (!item) { item = { id: params.itemId, role: 'assistant', kind: 'reasoning', text: '', summary: [], content: [], status: 'running', ...stamp() }; run.messages.push(item); }
       const field = method === 'item/reasoning/textDelta' ? 'content' : 'summary';
       const index = field === 'content' ? params.contentIndex : params.summaryIndex;
       if (Number.isInteger(index) && index >= 0 && index < 1000) {
-        item[field] ||= [];streamFields(context).append(item[field],index,params.delta,streamSecrets(context),{scope:params.threadId});
+        item[field] ||= [];for(const part of rpcText.parts(params,'delta'))streamFields(context).append(item[field],index,part,streamSecrets(context),{scope:params.threadId});
         streamFields(context).join(item,'text',()=> (require('./text-spool.cjs').nonempty(item.summary)?item.summary:item.content||[]).join('\n\n'),params.threadId,()=>{const parts=require('./text-spool.cjs').nonempty(item.summary)?item.summary:item.content||[];return Object.keys(parts).map(i=>require('./text-spool.cjs').part(parts,String(i)));});
         item.reasoningFormat=require('./text-spool.cjs').nonempty(item.summary)?'summary':'text';
       }
@@ -517,15 +531,15 @@ class AgentRuntime {
         let existing = run.messages.find(message => message.id === item.id);
         if (!existing) { existing = { id: item.id, role: 'assistant', kind: 'reasoning', text: '', summary: [], content: [], ...stamp() }; run.messages.push(existing); }
         for(const parts of [existing.summary,existing.content])for(let i=0;i<(parts?.length||0);i++)streamFields(context).flush(parts,i);
-        if (item.summary?.length) existing.summary = item.summary.map(clean);
-        if (item.content?.length) existing.content = item.content.map(clean);
+        if (item.summary?.length) existing.summary = rpcText.array(context,item.summary);
+        if (item.content?.length) existing.content = rpcText.array(context,item.content);
         require('./text-spool.cjs').spoolObject(existing,this.textSpool);streamFields(context).join(existing,'text',()=> (require('./text-spool.cjs').nonempty(existing.summary)?existing.summary:existing.content||[]).join('\n\n'),params.threadId,()=>{const parts=require('./text-spool.cjs').nonempty(existing.summary)?existing.summary:existing.content||[];return Object.keys(parts).map(key=>require('./text-spool.cjs').part(parts,key));});
         existing.reasoningFormat=require('./text-spool.cjs').nonempty(existing.summary)?'summary':'text';
         existing.status = method === 'item/completed' ? 'completed' : 'running';
       } else if (item.type === 'agentMessage') {
         let existing = run.messages.find(message => message.id === item.id);
         if (!existing) { existing = { id: item.id, role: 'assistant', text: '', ...stamp() }; run.messages.push(existing); }
-        streamFields(context).reset(existing,'text');existing.text = clean(item.text);
+        rpcText.copy(context,existing,'text',item,'text');
         if (['commentary', 'final_answer'].includes(item.phase)) existing.phase = item.phase;
         existing.status = method === 'item/completed' ? 'completed' : 'running';
       } else if (['commandExecution', 'fileChange', 'mcpToolCall', 'webSearch', 'plan', 'contextCompaction'].includes(item.type)) {
@@ -551,9 +565,14 @@ class AgentRuntime {
         const previous = run.tools.find(tool => tool.id === item.id);
         if(previous)streamFields(context).flush(previous,'detail');
         if(previous)streamFields(context).reset(previous,'detail');
-        const tool = Object.defineProperties({},Object.getOwnPropertyDescriptors(previous||stamp()));Object.assign(tool,{ id: item.id, type: item.type, label: clean(item.command || item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress'),
-          detail: clean(item.aggregatedOutput || item.text || (item.type==='webSearch'?JSON.stringify({query:item.query,action:item.action}):'') || (item.type==='mcpToolCall'?JSON.stringify({arguments:item.arguments,result:item.result,error:item.error}):'') || (item.changes ? JSON.stringify(item.changes, null, 2) : '')) });
-        if(!item.aggregatedOutput&&!item.text&&!['webSearch','mcpToolCall'].includes(item.type)&&!item.changes&&previous&&Object.hasOwn(previous,'detail'))Object.defineProperty(tool,'detail',Object.getOwnPropertyDescriptor(previous,'detail'));
+        const tool = Object.defineProperties({},Object.getOwnPropertyDescriptors(previous||stamp()));Object.assign(tool,{ id: item.id, type: item.type, label: clean(item.tool || (item.type==='webSearch'?'搜索资料':item.type==='plan'?'任务规划':'文件变更')), status: item.status || (method==='item/completed'?'completed':'inProgress') });
+        if(rpcText.length(item,'command'))rpcText.copy(context,tool,'label',item,'command');
+        if(rpcText.length(item,'aggregatedOutput'))rpcText.copy(context,tool,'detail',item,'aggregatedOutput');
+        else if(rpcText.length(item,'text'))rpcText.copy(context,tool,'detail',item,'text');
+        else if(item.type==='webSearch')rpcText.replace(context,tool,'detail',rpcText.json(context,{query:item.query,action:item.action}));
+        else if(item.type==='mcpToolCall')rpcText.replace(context,tool,'detail',rpcText.json(context,{arguments:item.arguments,result:item.result,error:item.error}));
+        else if(item.changes)rpcText.replace(context,tool,'detail',rpcText.json(context,item.changes));
+        else if(!previous||!Object.hasOwn(previous,'detail'))tool.detail='';
         if(item.type==='commandExecution'&&Number.isInteger(item.exitCode))tool.exitCode=item.exitCode;
         if(item.type==='commandExecution'&&Array.isArray(item.commandActions))tool.commandActions=item.commandActions.filter(action=>['read','listFiles','search','unknown'].includes(action.type)).map(action=>({type:action.type,...Object.fromEntries(['name','path','query'].filter(key=>typeof action[key]==='string').map(key=>[key,clean(action[key])]))}));
         if(item.type==='contextCompaction'){tool.label='上下文压缩';tool.detail='';}
@@ -563,12 +582,12 @@ class AgentRuntime {
       const tool=run.tools.find(tool=>tool.id===params.itemId);if(tool)tool.progress=clean(params.message);
     } else if (method === 'item/commandExecution/outputDelta') {
       const tool = run.tools.find(tool => tool.id === params.itemId);
-      if (tool) streamFields(context).append(tool,'detail',params.delta,streamSecrets(context),{scope:params.threadId});
+      if (tool) for(const part of rpcText.parts(params,'delta'))streamFields(context).append(tool,'detail',part,streamSecrets(context),{scope:params.threadId});
     } else if (method === 'turn/completed') {
       void this.finish(context, params.turn.status === 'completed' ? 'completed' : params.turn.status === 'interrupted' ? 'interrupted' : 'failed', clean(params.turn.error?.message)); return;
     } else if (method === 'error') { run.error = clean(params.error?.message || params.message); run.retrying=params.willRetry===true; }
     else return;
-    this.changed(run,{stream:!wasRetrying&&/\/(?:delta|outputDelta|textDelta|summaryTextDelta)$/.test(method),bytes:typeof params.delta==='string'?params.delta.length*2:0,items:params.itemId?[[method.includes('commandExecution')?'tools':'messages',params.itemId]]:undefined});
+    this.changed(run,{stream:!wasRetrying&&/\/(?:delta|outputDelta|textDelta|summaryTextDelta)$/.test(method),bytes:rpcText.length(params,'delta')*2,items:params.itemId?[[method.includes('commandExecution')?'tools':'messages',params.itemId]]:undefined});
   }
   request(context, message) {
     if (context.done||context.cancelled) return;
@@ -657,7 +676,7 @@ class AgentRuntime {
     streamFields(context).finish(status!=='completed');
     context.done = true;this.conversation.stop(context);this.native.finish(context);context.inputDelivery?.reject(Object.assign(Error(error||'任务已停止'),{code:'CANCELLED'}));
     for(const finish of context.remoteApprovals?.values()||[])finish(false);
-    context.extensionChannel?.close();context.rpc?.close(); context.bridge?.close();
+    context.extensionChannel?.close();this.closeEngine(context.rpc); context.bridge?.close();
     const diagnostic=context.lastModelDiagnostic;
     if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
       error = (diagnostic.stage==='translate_tools'?'模型响应已接收，但工具调用解析失败。':error)+'\n模型请求诊断：'+diagnostic.reason+'；阶段：'+diagnostic.stage+
@@ -688,6 +707,11 @@ class AgentRuntime {
     try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publishRun(context.run); } }
     this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);if(context.run)this.streamBytes.delete(context.run.id);this.updateStoragePressure();this.drain();
   }
-  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown();this.unsubscribePressure?.(); }
+  closeEngine(rpc) {
+    if(!rpc)return;this.engineClosures ||= new Set();
+    const pending=Promise.resolve().then(()=>rpc.close()).catch(error=>{this.engineCleanupError=error;console.error('ENGINE_CLEANUP_FAILED',error.code||'unknown');}).finally(()=>this.engineClosures.delete(pending));
+    this.engineClosures.add(pending);
+  }
+  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown();await Promise.all(this.engineClosures||[]);this.unsubscribePressure?.();if(this.engineCleanupError)throw this.engineCleanupError; }
 }
 module.exports = { AgentRuntime };

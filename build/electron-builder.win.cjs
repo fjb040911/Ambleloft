@@ -3,8 +3,8 @@ module.exports = {
   ...base,
   beforePack: './build/verify-engine.win.cjs',
   files: [...base.files, 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
-  extraResources: base.extraResources.map(resource => resource.to === 'engine'
-    ? {from: 'vendor/engine/win32-${arch}', to: 'engine'} : resource),
+  extraResources: [{from:'build/windows-process-host.exe',to:'tools/windows-process-host.exe'},...base.extraResources.map(resource => resource.to === 'engine'
+    ? {from: 'vendor/engine/win32-${arch}', to: 'engine'} : resource)],
   win: {
     ...base.win,
     target: [{target: 'nsis', arch: ['x64']}, {target:'zip',arch:['x64']}],

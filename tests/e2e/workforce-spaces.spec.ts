@@ -22,7 +22,7 @@ test('discussion composer selects mentioned experts in a narrow window',async({p
  await expect(page.getByRole('button',{name:'本条发送给',exact:true})).toContainText('文案员工');
  await expect(page.getByRole('button',{name:'发起讨论',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.locator('.wf-discussion-composer').screenshot({path:'/tmp/workforce-discussion-composer.png'});
+ await page.locator('.wf-discussion-composer').screenshot({path:test.info().outputPath('workforce-discussion-composer.png')});
 });
 test('removed expert association is visible, can be unlinked, and does not block member edits',async({page})=>{
  await enter(page);
@@ -44,7 +44,7 @@ test('removed expert association is visible, can be unlinked, and does not block
  expect(calls[1].input.value.members.map((m:any)=>m.employeeId)).toEqual(['writer']);
 });
 for(const width of [390,800,1280])test(`space layout is contained at ${width}px`,async({page})=>{
- await page.setViewportSize({width,height:900});await enter(page);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:`/tmp/workforce-space-${width}.png`,fullPage:true});await page.locator('.wf-action-row').filter({hasText:'发布文案'}).click();const box=await page.getByRole('region',{name:'任务详情与验收'}).boundingBox();expect(box!.width).toBeLessThanOrEqual(width);expect(box!.x).toBeGreaterThanOrEqual(0);await page.screenshot({path:`/tmp/workforce-space-review-${width}.png`});
+ await page.setViewportSize({width,height:900});await enter(page);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:test.info().outputPath(`workforce-space-${width}.png`),fullPage:true});await page.locator('.wf-action-row').filter({hasText:'发布文案'}).click();const box=await page.getByRole('region',{name:'任务详情与验收'}).boundingBox();expect(box!.width).toBeLessThanOrEqual(width);expect(box!.x).toBeGreaterThanOrEqual(0);await page.screenshot({path:test.info().outputPath(`workforce-space-review-${width}.png`)});
 });
 test('reading an empty space does not reorder spaces and onboarding is contextual',async({page})=>{
  await page.goto(fixture);const order=await page.locator('.wf-space-entry-title strong').allTextContents();await page.getByRole('button',{name:/下一轮规划 明确下一轮/}).click();await expect(page.getByRole('button',{name:'添加空间成员',exact:true})).toBeVisible();await expect(page.getByText('先对齐，再一起推进')).toHaveCount(0);await page.getByRole('button',{name:'项目空间',exact:true}).click();expect(await page.locator('.wf-space-entry-title strong').allTextContents()).toEqual(order);
@@ -56,7 +56,7 @@ test('empty team guides member selection without a redundant experts link',async
  const empty=page.locator('.wf-team-empty');await expect(empty.getByText('还没有空间成员')).toBeVisible();
  await expect(page.getByRole('button',{name:'我的专家',exact:true})).toHaveCount(0);
  expect(await page.locator('body').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await empty.screenshot({path:'/tmp/space-team-empty-narrow.png'});
+ await empty.screenshot({path:test.info().outputPath('space-team-empty-narrow.png')});
  await empty.getByRole('button',{name:'选择成员与分工'}).click();
  await expect(page.getByRole('dialog',{name:'空间成员与分工'})).toBeVisible();
 });
@@ -121,7 +121,7 @@ test('discussion context, close and reopen retain the selected history',async({p
  await page.getByRole('button',{name:'关闭讨论',exact:true}).click();await expect(page.getByText('讨论已关闭。重新打开后可以继续补充。')).toBeVisible();await expect(page.getByLabel('这次想推进什么？')).toHaveCount(0);
  await page.getByRole('button',{name:'重新打开讨论',exact:true}).click();await expect(page.getByLabel('这次想推进什么？')).toBeVisible();
  await panel.getByRole('button',{name:'新话题',exact:true}).click();await expect(page.getByRole('heading',{name:'新话题'})).toBeVisible();await expect(page.getByText('建议先明确受众')).toHaveCount(0);
- await panel.getByText('明确发布目标').click();await expect(page.getByText('建议先明确受众')).toBeVisible();await page.screenshot({path:'/tmp/workforce-discussion-layout.png'});
+ await panel.getByText('明确发布目标').click();await expect(page.getByText('建议先明确受众')).toBeVisible();await page.screenshot({path:test.info().outputPath('workforce-discussion-layout.png')});
 });
 test('a discussion reference opens its pinned version without changing the execution basis',async({page})=>{
  await enter(page);await page.getByRole('tab',{name:'讨论',exact:true}).click();await page.getByRole('button',{name:'发布方案 v1',exact:true}).click();
@@ -132,7 +132,7 @@ test('a discussion reference opens its pinned version without changing the execu
 test('discussion context remains usable in a narrow window',async({page})=>{
  await page.setViewportSize({width:390,height:800});await enter(page);await page.getByRole('tab',{name:'讨论',exact:true}).click();
  await page.getByRole('button',{name:'查看讨论与相关内容'}).click();const panel=page.getByRole('complementary',{name:'讨论上下文'});await expect(page.getByRole('button',{name:'发布方案 v1',exact:true})).toBeVisible();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:'/tmp/workforce-discussion-narrow.png',fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:test.info().outputPath('workforce-discussion-narrow.png'),fullPage:true});
 });
 for(const width of [390,1280])test(`discussion renders the real task transcript and keeps the composer fixed at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:800});await page.goto(fixture);
@@ -141,7 +141,7 @@ for(const width of [390,1280])test(`discussion renders the real task transcript 
  const composer=page.getByLabel('这次想推进什么？'),transcript=page.locator('.qa-scroll');await expect(page.locator('.discussion-expert-transcript [aria-label="助手消息"]')).toContainText('真实回复段落 60');await expect(page.getByRole('article',{name:'你的消息'})).toHaveCount(1);
  const before=await composer.boundingBox();await transcript.evaluate(el=>{el.scrollTop=0});await expect.poll(()=>transcript.evaluate(el=>el.scrollHeight>el.clientHeight)).toBeTruthy();
  const top=await composer.boundingBox();expect(Math.abs(before!.y-top!.y)).toBeLessThan(2);await page.getByRole('button',{name:'回到最新消息'}).click();await expect.poll(()=>transcript.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(5);const bottom=await composer.boundingBox();expect(Math.abs(before!.y-bottom!.y)).toBeLessThan(2);
- await page.screenshot({path:`/tmp/discussion-long-fixed-${width}.png`});expect(bottom!.y+bottom!.height).toBeLessThanOrEqual(800);const send=await page.getByRole('button',{name:'发起讨论',exact:true}).boundingBox();expect(send!.y+send!.height).toBeLessThanOrEqual(800);
+ await page.screenshot({path:test.info().outputPath(`discussion-long-fixed-${width}.png`)});expect(bottom!.y+bottom!.height).toBeLessThanOrEqual(800);const send=await page.getByRole('button',{name:'发起讨论',exact:true}).boundingBox();expect(send!.y+send!.height).toBeLessThanOrEqual(800);
 });
 
 for(const width of [390,1280])test(`long discussion remains interactive with model and participant popovers at ${width}px`,async({page})=>{
@@ -159,7 +159,7 @@ for(const width of [390,1280])test(`long discussion remains interactive with mod
  const send=page.getByRole('button',{name:'发起讨论',exact:true});expect((await send.boundingBox())!.y+(await send.boundingBox())!.height).toBeLessThanOrEqual(800);
  await send.click();await expect(page.getByRole('alert')).toContainText('测试网络失败');await expect(composer).toHaveValue('继续核对边界');
  const input=await page.evaluate(()=>(window as any).spaceQA.calls.find((c:any)=>c.action==='start').input);expect(input).toMatchObject({providerId:'provider-a',model:'模型 B',employeeIds:['writer'],replyTo:'discussion'});
- await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0);await page.screenshot({path:`/tmp/discussion-interactive-${width}.png`});
+ await expect(page.locator('[data-slot="popover-content"]')).toHaveCount(0);await page.screenshot({path:test.info().outputPath(`discussion-interactive-${width}.png`)});
 });
 test('discussion send acknowledges immediately and preserves edits while a slow request fails',async({page})=>{
  await enter(page);await page.getByRole('tab',{name:'讨论',exact:true}).click();
@@ -208,10 +208,10 @@ for(const width of [390,800,1280])test(`expert mention is a keyboard-controlled 
  await composer.fill('请 @测试');await composer.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true});await expect(composer).toHaveValue('请 @测试');await expect(popup).toBeVisible();
  await composer.press('Escape');await composer.fill('请 @测试 后续内容');await composer.evaluate((el:HTMLTextAreaElement)=>{el.setSelectionRange(5,5);el.dispatchEvent(new Event('select',{bubbles:true}));});await composer.press('ArrowLeft');await composer.press('ArrowRight');await expect(popup).toBeVisible();await composer.press('Enter');await expect(composer).toHaveValue(/请 @测试专家\d  后续内容/);
  await composer.fill('user@example.com');await expect(popup).toBeHidden();await composer.fill('请@测试');await expect(popup).toBeVisible();await composer.press('Escape');
- await composer.fill('请 @');await expect(popup).toBeVisible();await page.screenshot({animations:'disabled',path:`/tmp/discussion-mention-${width}.png`});
+ await composer.fill('请 @');await expect(popup).toBeVisible();await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-mention-${width}.png`)});
  await composer.press('Escape');await page.getByRole('button',{name:'回复操作'}).first().click();await expect(page.getByRole('menuitem',{name:'保存为文档草稿'})).toBeVisible();await page.keyboard.press('Escape');
  await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=0;});const tabs=await page.locator('.wf-space-navigation').boundingBox(),header=await page.locator('.wf-discussion-header').boundingBox();expect(header!.y-(tabs!.y+tabs!.height)).toBeLessThan(width>800?40:90);
- await page.screenshot({animations:'disabled',path:`/tmp/discussion-layout-${width}.png`});
+ await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-layout-${width}.png`)});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
 
@@ -226,17 +226,17 @@ for(const width of [390,800,1280])test(`space tabs share headings and sticky pag
   await page.getByRole('tab',{name:title,exact:true}).click();await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBe(0);
   expect((await heading.boundingBox())!.y).toBeCloseTo(initialHeading!.y,0);expect((await heading.boundingBox())!.height).toBeCloseTo(initialHeading!.height,0);expect((await tabs.boundingBox())!.y).toBeCloseTo(initialTabs!.y,0);
  }
- await expect(page.getByRole('button',{name:/讨论头部|空间页面/})).toHaveCount(0);await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-top-${width}.png`});
+ await expect(page.getByRole('button',{name:/讨论头部|空间页面/})).toHaveCount(0);await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-page-top-${width}.png`)});
  const composer=page.locator('.wf-discussion-composer'),input=page.getByLabel('这次想推进什么？'),send=page.getByRole('button',{name:'发起讨论',exact:true});
  // Fill without Playwright scrolling the textarea into view first.
  await input.fill('保留这份草稿');await scroller.evaluate(el=>{el.scrollTop=0;});const before=await composer.boundingBox();expect(before!.y+before!.height).toBeLessThanOrEqual(850);expect(before!.y+before!.height).toBeGreaterThan(835);
  await scroller.evaluate(el=>{el.scrollTop=600;});await expect.poll(async()=>(await tabs.boundingBox())!.y).toBeLessThan(2);
  await expect(tabs).toHaveCSS('background-color','rgb(255, 255, 255)');expect((await tabs.boundingBox())!.width).toBeCloseTo((await page.locator('.wf-space-tabs').boundingBox())!.width,0);const during=await composer.boundingBox();expect(Math.abs(before!.y-during!.y)).toBeLessThan(2);await expect(input).toHaveValue('保留这份草稿');
  await expect(page.locator('.wf-request-list')).toHaveCSS('overflow-y','visible');await expect(send).toHaveCSS('width','32px');await expect(send).toHaveCSS('height','32px');
- await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-sticky-${width}.png`});
+ await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-page-sticky-${width}.png`)});
  await page.getByRole('button',{name:'回到最新消息'}).click();await expect.poll(()=>scroller.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(5);
  await expect(page.getByRole('button',{name:'继续讨论',exact:true})).toHaveCount(0);const lastReply=await page.locator('.wf-request-list').boundingBox();expect(lastReply!.y+lastReply!.height).toBeLessThanOrEqual((await composer.boundingBox())!.y+1);
- await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-bottom-${width}.png`});
+ await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-page-bottom-${width}.png`)});
  await page.getByRole('tab',{name:'文档与产物',exact:true}).click();await expect(page.locator('.wf-discussion-composer')).toHaveCount(0);await page.getByRole('tab',{name:'讨论',exact:true}).click();await expect(input).toHaveValue('保留这份草稿');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
 });
@@ -248,7 +248,7 @@ for(const theme of ['light','dark'])test(`short and empty discussions keep the f
  await page.getByRole('button',{name:'查看讨论与相关内容'}).click();await page.getByRole('button',{name:'新话题',exact:true}).click();
  await page.getByRole('button',{name:'收起讨论上下文'}).click();await expect(page.locator('.wf-discussion-header h2')).toHaveText('新话题');await scroller.evaluate(el=>{el.scrollTop=0;});
  const b=await footer.boundingBox();expect(b!.y+b!.height).toBeCloseTo(900,0);await expect(page.locator('.wf-space-detail-heading')).toBeVisible();
- await page.screenshot({animations:'disabled',path:`/tmp/discussion-page-empty-${theme}.png`});
+ await page.screenshot({animations:'disabled',path:test.info().outputPath(`discussion-page-empty-${theme}.png`)});
 });
 
 for(const width of [390,1280])test(`discussion topic toolbar stays visible while history scrolls at ${width}px`,async({page})=>{
@@ -287,7 +287,7 @@ for(const width of [390,800,1280])test(`space directory intro and sticky scopes 
  if(width===1280)expect(await scroller.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
  await expect(page.getByRole('button',{name:english?'Create a project space':'创建项目空间',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/space-directory-header-${width}.png`,fullPage:true});
+ await page.screenshot({path:test.info().outputPath(`space-directory-header-${width}.png`),fullPage:true});
  // A long active list must not carry its deep scroll offset into an empty scope.
  await page.evaluate(()=>{const qa=(window as any).spaceQA;for(let i=0;i<15;i++)qa.snapshot.spaces.push({...structuredClone(qa.snapshot.spaces[1]),id:`extra-${i}`,name:`测试空间 ${i}`});qa.emit();});
  await expect(page.locator('.wf-space-entry')).toHaveCount(12);
@@ -303,7 +303,7 @@ for(const width of [390,800,1280])test(`space directory intro and sticky scopes 
  const blank=await page.locator('.wf-space-browser').evaluate(el=>{const scroller=el.closest('.qa-scroll')!;return scroller.scrollHeight>scroller.clientHeight?scroller.scrollHeight-(el.getBoundingClientRect().bottom-scroller.getBoundingClientRect().top+scroller.scrollTop):0;});expect(blank).toBeLessThanOrEqual(49);
  await expect(page.getByText(english?'No archived spaces':'暂无归档空间',{exact:true})).toBeVisible();
  await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby',await page.getByRole('tab',{name:english?/Archived/:/已归档/}).getAttribute('id') as string);
- await page.screenshot({path:`/tmp/space-directory-sticky-${width}.png`});
+ await page.screenshot({path:test.info().outputPath(`space-directory-sticky-${width}.png`)});
  await page.keyboard.press('ArrowLeft');await page.keyboard.press('Enter');
  await expect(page.getByRole('tab',{name:english?/Needs attention/:/需要处理/})).toHaveAttribute('aria-selected','true');
  await expect(page.locator('.wf-space-entry')).toHaveCount(1);
@@ -342,7 +342,7 @@ for(const width of [390,800,1280])test(`directory empty states and recovery at $
   const rect=await empty.boundingBox();expect(rect!.height).toBeLessThan(320);
   expect(await empty.evaluate(el=>getComputedStyle(el).borderTopWidth)).toBe('0px');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
-  await page.screenshot({path:`/tmp/space-empty-${scope}-${width}.png`,fullPage:true});
+  await page.screenshot({path:test.info().outputPath(`space-empty-${scope}-${width}.png`),fullPage:true});
   if(width===1280)expect(await page.locator('.qa-scroll').evaluate(el=>el.scrollHeight-el.clientHeight)).toBeLessThanOrEqual(1);
  }
  await page.getByRole('textbox',{name:en?'Search spaces':'搜索项目空间'}).fill('no-such-space');

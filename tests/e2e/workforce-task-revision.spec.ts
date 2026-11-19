@@ -22,7 +22,7 @@ test('node revision replaces instructions and pauses only on explicit save, with
  await dialog.getByRole('textbox',{name:'共同目标',exact:true}).fill('交付公网可访问的前端与 API');
  await dialog.getByRole('button',{name:'继续分配工作',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).spaceQA.calls)).toEqual([]);
- await page.screenshot({path:'/tmp/task-revision-editor.png'});
+ await page.screenshot({path:test.info().outputPath('task-revision-editor.png')});
  await dialog.getByRole('button',{name:'检查计划',exact:true}).click();
  await expect(dialog.getByRole('button',{name:'确认并启动',exact:true})).toHaveCount(0);
  await dialog.getByRole('button',{name:'暂停计划并保存修订',exact:true}).click();
@@ -45,7 +45,7 @@ test('closing the editor retains its draft without pausing and works in a narrow
  await dialog.getByRole('textbox',{name:'任务内容',exact:true}).fill('保留但尚未生效的修订');
  const close=dialog.getByRole('button',{name:'保留草稿并关闭',exact:true});
  await expect(close).toBeVisible();expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBeTruthy();
- await page.screenshot({path:'/tmp/task-revision-narrow.png'});
+ await page.screenshot({path:test.info().outputPath('task-revision-narrow.png')});
  await close.click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>(window as any).spaceQA.calls)).toEqual([]);
  await page.getByRole('button',{name:'修订任务',exact:true}).click();await expect(dialog.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue('保留但尚未生效的修订');
 });

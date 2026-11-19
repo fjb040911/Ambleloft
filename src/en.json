@@ -1823,5 +1823,7 @@
   "原始尺寸": "Original size",
   "图片文件不可访问，可能已移动或删除": "The image file is inaccessible. It may have been moved or deleted.",
   "图片不可用": "Image unavailable",
-  "预览图片": "Preview image"
+  "预览图片": "Preview image",
+  "草稿暂时无法保存，刷新前请先复制输入内容。": "The draft could not be saved. Copy your input before reloading.",
+  "正在确认发送结果…": "Confirming delivery…"
 }

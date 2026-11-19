@@ -54,9 +54,9 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  const next=page.getByRole('region',{name:english?'Current task':'本次任务'}),button=next.getByRole('button');
   await button.focus();await expect(button).toBeFocused();
   await expect.poll(()=>button.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));})).toBeTruthy();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:`/tmp/task-handoff-${width}-${english}-${dark}.png`});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await page.screenshot({path:test.info().outputPath(`task-handoff-${width}-${english}-${dark}.png`)});
  await button.press('Enter');const guide=page.locator('.wf-task-guide-inline');await expect(guide.getByLabel('需要检查哪些链接？')).toBeVisible();
- expect(await guide.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();expect((await page.locator('.wf-discussion-footer').boundingBox())!.height).toBeLessThan(400);await expect(page.locator('form.composer')).toHaveCount(1);await guide.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));await page.screenshot({path:`/tmp/task-handoff-guide-${width}-${english}-${dark}.png`});
+ expect(await guide.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();expect((await page.locator('.wf-discussion-footer').boundingBox())!.height).toBeLessThan(400);await expect(page.locator('form.composer')).toHaveCount(1);await guide.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));await page.screenshot({path:test.info().outputPath(`task-handoff-guide-${width}-${english}-${dark}.png`)});
  await page.getByRole('button',{name:english?'Collapse task configuration':'收起任务配置',exact:true}).click();await expect(guide).toBeHidden();await expect(page.getByRole('textbox',{name:english?'What should we discuss?':'这次想推进什么？',exact:true})).toBeFocused();
 });
 
@@ -68,7 +68,7 @@ test('long task proposals expand on demand; editing does not collapse the active
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeEnabled();await guide.getByRole('button',{name:'编辑计划',exact:true}).click();const packages=guide.locator('.wf-guide-package');await expect(packages).toHaveCount(6);await expect(guide.locator('.wf-guide-package[open]')).toHaveCount(0);
  await packages.first().locator(':scope > summary').click();await packages.first().getByLabel('任务名称',{exact:true}).fill('只检查这轮发布的接口契约');await expect(packages.first()).toHaveAttribute('open');
  await expect(guide.getByRole('button',{name:'确认并启动'})).toBeHidden();await expect(page.locator('form.composer')).toHaveCount(1);
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await packages.first().locator(':scope > summary').scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/task-proposals-long-narrow.png'});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();await packages.first().locator(':scope > summary').scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('task-proposals-long-narrow.png')});
 });
 
 
@@ -123,7 +123,7 @@ for(const width of [1280,390])test('AI plan summary replaces empty and automatic
  await expect(preview.getByRole('heading',{name:'新版发布验证'})).toBeVisible();await expect(preview.getByText('核对所有发布链接',{exact:true})).toBeVisible();
  await expect(preview.locator('.wf-plan-graph')).toBeVisible();await expect(preview.getByLabel('共同目标',{exact:true})).toHaveCount(0);
  await expect(guide.getByLabel('需要检查哪些链接？')).toBeVisible();
- await preview.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/ai-plan-preview-'+width+'.png'});
+ await preview.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('ai-plan-preview-')+width+'.png'});
  expect(await preview.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  await preview.getByRole('button',{name:'编辑计划',exact:true}).click();await preview.getByLabel('共同目标',{exact:true}).fill('仅核对三个已确认链接');
  await preview.getByRole('button',{name:'收起编辑',exact:true}).click();await expect(preview.getByText('仅核对三个已确认链接',{exact:true})).toBeVisible();

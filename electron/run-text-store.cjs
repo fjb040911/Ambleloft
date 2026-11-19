@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS run_texts(run_id TEXT NOT NULL,collection TEXT NOT NU
 CREATE TABLE IF NOT EXISTS run_text_chunks(run_id TEXT NOT NULL,collection TEXT NOT NULL,item_key TEXT NOT NULL,field TEXT NOT NULL,seq INTEGER NOT NULL,start INTEGER NOT NULL,text BLOB NOT NULL,PRIMARY KEY(run_id,collection,item_key,field,seq),FOREIGN KEY(run_id,collection,item_key,field) REFERENCES run_texts(run_id,collection,item_key,field) ON DELETE CASCADE);
 CREATE INDEX IF NOT EXISTS run_text_offsets ON run_text_chunks(run_id,collection,item_key,field,start);
 CREATE INDEX IF NOT EXISTS task_context_active_run ON task_context_projections(json_extract(data,'$.runId'),status);
+CREATE TABLE IF NOT EXISTS composer_start_receipts(id TEXT PRIMARY KEY,digest TEXT NOT NULL,run_id TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS run_patch_receipts(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,result TEXT NOT NULL);
 `;
 function writeText(db,runId,collection,key,change){
@@ -31,6 +32,16 @@ function hydrateItem(db,runId,collection,row){
  return item;
 }
 function readItems(db,runId,collection){return db.prepare('SELECT item_key,data FROM run_items WHERE run_id=? AND collection=? ORDER BY position').all(runId,collection).map(row=>hydrateItem(db,runId,collection,row));}
+// Indexing and bounded automation snapshots consume these references in chunks;
+// fetching metadata must not hydrate reasoning, tools or unrelated message text.
+function readRunReferences(db,id){
+ const row=db.prepare('SELECT data FROM runs WHERE id=?').get(id);if(!row)return null;const run=JSON.parse(row.data);
+ run.messages=db.prepare("SELECT item_key,data FROM run_items WHERE run_id=? AND collection='messages' ORDER BY position").all(id).map(row=>{
+  const item=JSON.parse(row.data),field='["text"]';
+  if(db.prepare("SELECT 1 FROM run_texts WHERE run_id=? AND collection='messages' AND item_key=? AND field=?").get(id,row.item_key,field))item.text=require('./stored-json.cjs').storedText(db,[id,'messages',row.item_key,field]);
+  return item;
+ });return run;
+}
 function readRun(db,id){const row=db.prepare('SELECT data FROM runs WHERE id=?').get(id);if(!row)return null;const run=JSON.parse(row.data);for(const collection of require('./run-patches.cjs').collections){const items=readItems(db,id,collection);if(items.length||!Array.isArray(run[collection]))run[collection]=items;}return run;}
 function readToolText(db,{id,toolId,activityId,offset,limit=64000}){
  if(!Number.isInteger(limit)||limit<1||limit>64000||offset!==undefined&&(!Number.isInteger(offset)||offset<0))throw Error('分页位置或大小无效');
@@ -45,4 +56,4 @@ function readToolText(db,{id,toolId,activityId,offset,limit=64000}){
  const text=rows.map(row=>Buffer.from(row.text).subarray(Math.max(0,start-row.start)*2,Math.min(Buffer.byteLength(row.text)/2,end-row.start)*2).toString('utf16le')).join('');
  return {text,offset:start,total:stored.length,version:stored.revision};
 }
-module.exports={schema,writeText,hydrateItem,readItems,readRun,readToolText};
+module.exports={schema,writeText,hydrateItem,readItems,readRun,readRunReferences,readToolText};

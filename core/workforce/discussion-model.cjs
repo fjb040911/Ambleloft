@@ -13,7 +13,7 @@ const methods={
   let record;const results=[];
   try{
    const config=await abortable(this.workforce.providers.secret(input.providerId,input.model),AbortSignal.timeout(30000));
-   const before=(await this.snapshot()).requests.find(r=>r.id===input.requestId);if(!before)throw Error('讨论不存在');
+   const before=(await this.snapshot({output:'status',requestIds:[input.requestId]})).requests.find(r=>r.id===input.requestId);if(!before)throw Error('讨论不存在');
    const old=before.executionModel||{providerId:before.host?.providerId,model:before.host?.model};
    const oldConfig=await abortable(this.workforce.providers.secret(old.providerId,old.model),AbortSignal.timeout(30000));
    confirmCrossing({providerId:oldConfig.id,baseUrl:oldConfig.baseUrl},config,input);
@@ -33,7 +33,7 @@ const methods={
    this.discussionConversationModelControllers?.get(input.requestId)?.abort(reason);
    const done=new Set();const deadline=Date.now()+60000;
    while(true){
-    const r=(await this.snapshot()).requests.find(r=>r.id===input.requestId);if(this.closing||!r||r.liveStopped)throw Error('讨论模型切换已停止');
+    const r=(await this.snapshot({output:'status',requestIds:[input.requestId]})).requests.find(r=>r.id===input.requestId);if(this.closing||!r||r.liveStopped)throw Error('讨论模型切换已停止');
     const targets=r.participants.filter(p=>p.runId&&live.has(p.status)&&!done.has(p.runId));
     for(const p of targets){done.add(p.runId);const result=await this.runtime.switchModel({runId:p.runId,providerId:config.id,model:config.model,confirmProviderChange:input.confirmProviderChange});results.push(result);if(!['applied','configured'].includes(result.state))throw Error(result.error||'专家模型未确认生效');}
     if(targets.length)continue;
@@ -44,7 +44,7 @@ const methods={
    if(record){await this.change(s=>{const r=s.requests.find(r=>r.id===input.requestId);if(r?.modelChange?.id===record.id)Object.assign(r.modelChange,{state:'failed',effective:null,error:(results.some(result=>result.state==='applied')?'部分专家已切换，本轮已停止 / Some experts changed models; this round was stopped: ':'')+e.message});});await this.stopDiscussionHost({requestId:input.requestId,skipPermissionWait:true});}
    else throw e;
   }finally{this.discussionPermissionJobs.delete(input.requestId);release();}
-  return this.snapshot();
+  return this.snapshot({output:'preview'});
  }
 };
 module.exports={discussionModelMethods:methods};

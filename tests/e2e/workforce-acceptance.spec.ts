@@ -16,7 +16,7 @@ for(const [width,theme] of [[1280,'light'],[390,'dark']] as const)test(`automati
  await expect(detail.getByRole('button',{name:'验收通过',exact:true})).toBeEnabled();
  expect(await detail.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  const button=(await detail.getByRole('button',{name:'验收通过',exact:true}).boundingBox())!;expect(button.y+button.height).toBeLessThanOrEqual(900);
- await page.screenshot({path:`/tmp/acceptance-review-${width}-${theme}.png`});
+ await page.screenshot({path:test.info().outputPath(`acceptance-review-${width}-${theme}.png`)});
 });
 test('rerun confirmation lists affected descendants before sending a restart',async({page})=>{
  await enter(page);await page.locator('.wf-graph-node[data-package-id="copy"]').click();await page.getByRole('button',{name:'从此处重跑',exact:true}).click();

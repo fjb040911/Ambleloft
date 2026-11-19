@@ -5,18 +5,29 @@ const {hash,key}=require('./sources.cjs');
 const LIMITS=Object.freeze({files:4,fileBytes:64*1024,totalBytes:256*1024,chars:4000,lines:80,candidates:100});
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const fail=code=>{throw Object.assign(Error(code),{code});};
-function relativePath(value){if(typeof value!=='string'||!value||value.length>512||value.includes('\\')||/[\x00-\x1f\x7f]/.test(value)||path.isAbsolute(value)||/^[a-z]:/i.test(value)||value.split('/').some(p=>!p||p==='.'||p==='..'))fail('PATH_OUTSIDE');return value;}
+// Windows has no O_NOFOLLOW. Opening alone grants no trusted bytes: callers
+// verify every path component and descriptor identity before any read/write.
+function openFlags(mode){
+ if(typeof fs.constants.O_NOFOLLOW==='number')return mode|fs.constants.O_NOFOLLOW|(fs.constants.O_NONBLOCK||0);
+ if(process.platform==='win32')return mode;
+ return fail('UNSUPPORTED');
+}
+function relativePath(value){
+ if(typeof value!=='string'||!value||value.length>512||value.includes('\\')||/[\x00-\x1f\x7f]/.test(value)||path.isAbsolute(value)||/^[a-z]:/i.test(value)||value.split('/').some(p=>!p||p==='.'||p==='..'))fail('PATH_OUTSIDE');
+ if(process.platform==='win32'&&value.split('/').some(part=>/[<>:"|?*]/.test(part)||/[ .]$/.test(part)||/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)|^(?:conin\$|conout\$)$/i.test(part)))fail('PATH_OUTSIDE');
+ return value;
+}
 function sensitive(name){return name.split('/').some(p=>/^(\.git|\.ssh|\.aws|\.config|node_modules|vendor|dist|build|coverage|\.env(?:\..*)?|credentials?(?:\..*)?|secrets?(?:\..*)?|id_rsa|id_ed25519)$/i.test(p))||/\.(pem|key|p12|pfx|keystore|sqlite|db)$/i.test(name);}
 const signature=s=>[s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs,s.mode,s.nlink].map(String).join(':');
 function chain(root,name){const paths=[root];for(const part of name.split('/'))paths.push(path.join(paths.at(-1),part));return paths.map((p,index)=>{const stat=fs.lstatSync(p,{bigint:true});if(stat.isSymbolicLink())fail('SYMLINK');if(index<paths.length-1&&!stat.isDirectory())fail('PATH_OUTSIDE');if(index===paths.length-1&&(!stat.isFile()||stat.nlink!==1n))fail('NOT_REGULAR');return {path:p,stat};});}
 // Only immutable descriptors supply bytes. Recheck the entire path and descriptor before and after reading.
 function readFile(root,name,{limits=LIMITS,hook=()=>{}}={}){
- if(typeof fs.constants.O_NOFOLLOW!=='number')fail('UNSUPPORTED');relativePath(name);if(sensitive(name))fail('SENSITIVE');
+ const flags=openFlags(fs.constants.O_RDONLY);relativePath(name);if(sensitive(name))fail('SENSITIVE');
  const realRoot=fs.realpathSync(root);if(realRoot!==path.resolve(root))fail('ROOT_CHANGED');
  const initial=chain(realRoot,name),target=initial.at(-1);if(target.stat.size>BigInt(limits.fileBytes))fail('TOO_LARGE');
  hook('beforeOpen');let fd;
  const verify=()=>{const now=chain(realRoot,name);if(now.some((v,i)=>signature(v.stat)!==signature(initial[i].stat)))fail('READ_RACE');if(fs.realpathSync(root)!==realRoot||fs.realpathSync(target.path)!==target.path)fail('READ_RACE');if(signature(fs.fstatSync(fd,{bigint:true}))!==signature(target.stat))fail('READ_RACE');};
- try{fd=fs.openSync(target.path,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);verify();hook('beforeRead');verify();const bytes=Buffer.alloc(Number(target.stat.size)+1);let count=0,n;while(count<bytes.length&&(n=fs.readSync(fd,bytes,count,bytes.length-count,count))>0)count+=n;if(count!==Number(target.stat.size))fail('READ_RACE');hook('afterRead');verify();const second=Buffer.alloc(count+1);let length=0;while(length<second.length&&(n=fs.readSync(fd,second,length,second.length-length,length))>0)length+=n;if(length!==count||!bytes.subarray(0,count).equals(second.subarray(0,length)))fail('READ_RACE');verify();
+ try{fd=fs.openSync(target.path,flags);verify();hook('beforeRead');verify();const bytes=Buffer.alloc(Number(target.stat.size)+1);let count=0,n;while(count<bytes.length&&(n=fs.readSync(fd,bytes,count,bytes.length-count,count))>0)count+=n;if(count!==Number(target.stat.size))fail('READ_RACE');hook('afterRead');verify();const second=Buffer.alloc(count+1);let length=0;while(length<second.length&&(n=fs.readSync(fd,second,length,second.length-length,length))>0)length+=n;if(length!==count||!bytes.subarray(0,count).equals(second.subarray(0,length)))fail('READ_RACE');verify();
   const data=bytes.subarray(0,count);if(data.includes(0))fail('BINARY');let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(data);}catch{fail('BINARY');}
   // Reject whole files rather than retaining a partially redacted prompt with unknown credentials.
   if(/-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*["']?[^\s"']{8,}/i.test(text))fail('SENSITIVE');
@@ -45,4 +56,4 @@ function captureFiles(run,project,excluded=[],question='',options={}){
  return {items,omissions};
 }
 function currentFile(item,project,run){if(!project||project.id!==item.fileTarget.projectId||project.path!==item.fileTarget.configuredPath||run.cwd!==item.fileTarget.cwd||run.remote||project.type==='ssh')return 'unavailable';try{if(fs.realpathSync(project.path)!==item.fileTarget.root||fs.realpathSync(run.cwd)!==item.fileTarget.root)return 'unavailable';const now=readFile(item.fileTarget.root,item.fileEvidence.path);if(now.rootIdentity!==item.fileTarget.rootIdentity)return 'unavailable';return now.contentHash===item.contentHash?'unchanged':'changed';}catch(error){return error.code==='ENOENT'?'missing':'unavailable';}}
-module.exports={LIMITS,readFile,captureFiles,currentFile,candidates};
+module.exports={LIMITS,readFile,captureFiles,currentFile,candidates,openFlags};

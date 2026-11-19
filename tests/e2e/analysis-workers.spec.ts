@@ -21,7 +21,7 @@ for(const expert of [false,true])test(`native subagent progress and individual s
  expect(await agent.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  await agent.evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).filter(a=>a.effect?.getComputedTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{})));});
  await expect(agent.getByRole('button',{name:'停止分析',exact:true})).toBeInViewport();
- await page.screenshot({path:expert?'/tmp/amble-analysis-expert.png':'/tmp/amble-analysis-chat.png'});
+ await page.screenshot({path:expert?test.info().outputPath('amble-analysis-expert.png'):test.info().outputPath('amble-analysis-chat.png')});
  await page.evaluate(()=>{const w=window as any,t=w.__analysisRun.tools[0];t.analysisTitle='Composer layout review';t.nativeLifecycle=[{status:'running',at:new Date().toISOString()}];t.nativeActivity=[{id:'inspect',title:'检查布局',status:'running',text:'第一段输出'}];w.__analysisEmit();});
  await expect(trigger).toContainText('开始工作');
  await expect(trigger).toContainText('Composer layout review');await agent.locator('summary').filter({hasText:'检查布局'}).click();await expect(agent.getByText('第一段输出',{exact:true})).toBeVisible();

@@ -14,7 +14,7 @@ for(const c of [{name:'desktop-zh',width:1280,en:false,dark:false},{name:'narrow
  await page.getByRole('button',{name:c.en?'Refresh role library':'刷新角色库'}).click();await expect(cards).toHaveCount(10);
  await categories.scrollIntoViewIfNeeded();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  expect(await categories.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/role-discovery-${c.name}.png`});
+ await page.screenshot({path:test.info().outputPath(`role-discovery-${c.name}.png`)});
 });
 test('personal discovery edits survive steps and do not restore a removed skill',async({page})=>{
  await page.goto(url);await page.getByRole('button',{name:'查看详情：产品经理',exact:true}).click();await page.getByRole('button',{name:'调整后添加'}).click();
@@ -30,5 +30,5 @@ test('offline refresh keeps filters and verified metadata; long content fits nar
  await page.getByRole('searchbox',{name:'搜索专家、能力或工作目标'}).fill('PM');await page.getByRole('button',{name:'刷新角色库'}).click();
  await expect(page.locator('.wf-role-card')).toHaveCount(1);await expect(page.getByRole('searchbox')).toHaveValue('PM');await expect(page.getByRole('alert').filter({hasText:'角色库暂时无法刷新。'})).toBeVisible();
  expect(await page.locator('.wf-role-card').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await page.locator('.wf-role-card').scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/role-discovery-offline-long.png'});
+ await page.locator('.wf-role-card').scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('role-discovery-offline-long.png')});
 });

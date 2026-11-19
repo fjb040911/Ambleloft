@@ -7,7 +7,7 @@ for(const view of ['spaces','experts','store','knowledge'])for(const config of [
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
  expect(await intro.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
  await expect(intro).toHaveAttribute('data-tone',({spaces:'lilac',experts:'mint',store:'cream',knowledge:'pink'} as Record<string,string>)[view]);
- await intro.screenshot({path:`/tmp/workforce-intro-${view}-${config.name}.png`});
+ await intro.screenshot({path:test.info().outputPath(`workforce-intro-${view}-${config.name}.png`)});
  if(view==='knowledge'){
   const en=!!config.query;await intro.getByRole('button',{name:en?'Search execution references':'搜索执行依据'}).click();
   await expect(page.getByRole('textbox',{name:en?'Search execution references':'搜索执行依据'})).toBeFocused();

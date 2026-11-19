@@ -78,7 +78,8 @@ export interface SpaceAPI{
  cancelTaskGuide(input:{id:string;requestId:string}):Promise<unknown>;
  createGuidedPlan(input:{pauseBeforeApply?:boolean;id:string;expectedRevision:number;basisConfirmation?:{context:string;documents:{id:string;revision:number;hash:string;expectedRevision:number;expectedAdoptedRevision:number|null}[]}}):Promise<WorkPlan>;
  lifecycle(input:{id:string;expectedRevision:number;action:'archive'|'restore'|'delete'}):Promise<Space|{id:string;deleted:true}>;
- snapshot(input?:{output?:'preview';requestIds?:string[]}):Promise<SpaceSnapshot>;
+ snapshot(input?:{output?:'preview'|'status';requestIds?:string[]}):Promise<SpaceSnapshot>;
+ outputs(input:{requestIds:string[];employeeIds?:string[]}):Promise<SpaceSnapshot>;
  submitDocumentReview(input:{id:string;revision:number;expectedRevision:number}):Promise<SpaceDocument>;
  discussionLifecycle(input:{requestId:string;expectedRevision:number;action:'close'|'reopen'|'delete'}):Promise<{status:'open'|'closed'|'deleted';revision:number;updatedAt:string}>;
  exportDocument?(input:{id:string;revision:number}):Promise<{path:string}|null>;

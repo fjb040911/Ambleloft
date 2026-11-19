@@ -45,7 +45,7 @@ const methods={
    return targets.length?this.start({...next,mode:'discussion',employeeIds:targets},hostContext):this.coordinateDiscussion(next,hostContext);
   }
   if(!record.duplicate)this.startDiscussionFollowups(record.requestId,hostContext);
-  return this.snapshot();
+  return this.snapshot({output:'preview'});
  },
  startDiscussionFollowups(requestId,hostContext={}){
   this.discussionFollowupJobs ||= new Map();
@@ -75,7 +75,7 @@ const methods={
   if(this.discussionPermissionJobs?.has(requestId))await abortable(this.discussionPermissionJobs.get(requestId),signal);
   while(this.discussionFollowupJobs?.has(requestId))await abortable(this.discussionFollowupJobs.get(requestId).promise,signal);
   await this.pumpDiscussionUpdates();signal.throwIfAborted();
-  return (await this.snapshot()).requests.find(r=>r.id===requestId);
+  return (await this.snapshot({output:'status',requestIds:[requestId]})).requests.find(r=>r.id===requestId);
  },
  async stopDiscussionFollowups(requestId){
   this.discussionFollowupJobs?.get(requestId)?.controller.abort(error('CANCELLED'));
@@ -85,7 +85,7 @@ const methods={
 
 async function processFollowups(requestId,hostContext,signal){
  while(!signal.aborted){
-  const snapshot=await this.snapshot(),r=snapshot.requests.find(r=>r.id===requestId),f=r?.followups?.find(f=>f.state==='queued');
+  const snapshot=await this.snapshot({output:'preview',previewLimit:4000,requestIds:[requestId]}),r=snapshot.requests.find(r=>r.id===requestId),f=r?.followups?.find(f=>f.state==='queued');
   if(!f||r.liveStopped)return;
   await this.change(s=>{s.requests.find(r=>r.id===requestId).followups.find(x=>x.id===f.id).state='processing';});
   const scope=r.participants.map(p=>({employeeId:p.employeeId,name:p.role?.name||p.contribution?.author.name,status:p.status,instruction:p.instruction,output:(p.output||'').slice(-4000),activity:(this.runtime.runs.find(run=>run.id===p.runId)?.tools||[]).slice(-6).map(t=>({label:t.label,status:t.status}))}));
@@ -127,7 +127,7 @@ async function processFollowups(requestId,hostContext,signal){
 
 async function pump(){
  if(this.closing)return;
- let s=await this.snapshot();
+ let s=await this.snapshot({output:'status'});
  for(const r of s.requests.filter(r=>r.modelChange?.state==='configured')){
   const runs=(r.modelChange.runIds||r.participants.map(p=>p.runId)).map(id=>this.runtime.runs.find(run=>run.id===id));
   const failed=runs.some(run=>run?.modelChange?.state==='failed');
@@ -136,7 +136,7 @@ async function pump(){
  }
  if(s.requests.some(r=>!r.liveStopped&&(r.followups||[]).some(f=>f.allParticipants&&r.participants.some(p=>!f.deliveries.some(d=>d.employeeId===p.employeeId))))){
   await this.change(s=>{for(const r of s.requests)if(!r.liveStopped)for(const f of r.followups||[])if(f.allParticipants)for(const p of r.participants)if(!f.deliveries.some(d=>d.employeeId===p.employeeId))f.deliveries.push({id:'discussion:'+randomUUID(),employeeId:p.employeeId,state:'pending'});});
-  s=await this.snapshot();
+  s=await this.snapshot({output:'status'});
  }
  for(const r of s.requests)for(const f of r.followups||[])for(const delivery of f.deliveries||[]){
   if(['applied','failed','unknown','unconfirmed','interrupted'].includes(delivery.state))continue;

@@ -46,13 +46,13 @@ test('composer popovers move and restore keyboard focus without overflowing',asy
  await page.screenshot({path:'test-results/composer-accessibility.png'});
 });
 
-test('pending submission protects input and a failure retains the draft',async({page})=>{
+test('pending submission accepts new typing without resending and a failure retains both drafts',async({page})=>{
  await setup(page);
- await page.evaluate(()=>{(window as any).desktop.startRun=()=>new Promise((resolve,reject)=>{(window as any).__rejectSend=reject;});});
+ await page.evaluate(()=>{(window as any).__sendCount=0;(window as any).desktop.startRun=()=>new Promise((resolve,reject)=>{(window as any).__sendCount++;(window as any).__rejectSend=reject;});});
  const input=page.getByRole('textbox',{name:'任务内容',exact:true});await input.fill('保留这份草稿');
- await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(input).toBeDisabled();
+ await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(input).toBeEnabled();await expect(input).toHaveValue('');await input.fill('新输入');await input.press('Enter');expect(await page.evaluate(()=>(window as any).__sendCount)).toBe(1);
  await page.evaluate(()=>(window as any).__rejectSend(new Error('暂时无法发送')));
- await expect(input).toBeEnabled();await expect(input).toHaveValue('保留这份草稿');
+ await expect(input).toBeEnabled();await expect(input).toHaveValue('保留这份草稿\n\n新输入');
 });
 
 test('composer grows, handles IME and retains running drafts until explicitly sent',async({page})=>{

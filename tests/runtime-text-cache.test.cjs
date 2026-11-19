@@ -6,7 +6,7 @@ const {reference,RuntimeTextCache}=require('../electron/runtime-text-cache.cjs')
 const {pageRun,summary}=require('../electron/history-pages.cjs');
 const {previewTool}=require('../electron/tool-previews.cjs');
 const {participantOutput}=require('../core/workforce/output-preview.cjs');
-async function fixture(t){const dir=await fs.mkdtemp(path.join(os.tmpdir(),'runtime-text-')),db=new Database(dir);await db.call('ready');t.after(async()=>{await db.close();await fs.rm(dir,{recursive:true,force:true});});return {dir,db};}
+async function fixture(t){const dir=await fs.mkdtemp(path.join(os.tmpdir(),'runtime-text-')),db=new Database(dir),closeBeforeDatabase=[];await db.call('ready');t.after(async()=>{for(const close of closeBeforeDatabase)close();await db.close();await fs.rm(dir,{recursive:true,force:true,maxRetries:3,retryDelay:100});});return {dir,db,closeBeforeDatabase};}
 function makeRun(i=0){return {id:'r'+i,status:'completed',messages:[{id:'u',role:'user',text:'Supplement '+i,timing:{outcome:'completed'}},{id:'a',role:'assistant',status:'completed',text:('answer 😀 '+i).repeat(4000)}],tools:[{id:'t',turnKey:'u',type:'analysis',status:'completed',detail:('tool '+i+' 中文😀').repeat(12000),nativeActivity:[{id:'child',text:'activity'.repeat(3000)}],analysisAgent:{name:'Memory audit'}}],approvals:[],questions:[],model:'new-model',permission:'full',modelChange:{state:'applied'},permissionChange:{state:'applied'},conversation:{updates:[{id:'update',state:'applied',text:'Keep supplementary requirement'}]}};}
 test('startup and summary/preview paths do not load persisted full text; semantic readers get exact bodies',async t=>{
  const {db,dir}=await fixture(t),input=Array.from({length:20},(_,i)=>makeRun(i));await db.call('saveRuns',input);
@@ -21,8 +21,8 @@ test('startup and summary/preview paths do not load persisted full text; semanti
  const count=db.textCache.stats().loads;await db.call('saveRunUpdates',[run]);assert.equal(db.textCache.stats().loads,count);
 });
 test('full text LRU is byte bounded and oversized reads are not retained',async t=>{
- const {db}=await fixture(t);await db.call('saveRuns',[makeRun()]);const [run]=await db.call('readRuntimeRuns');
- const cache=new RuntimeTextCache(db.file,{maxBytes:200000,maxEntryBytes:200000,maxEntries:1});t.after(()=>cache.close());
+ const {db,closeBeforeDatabase}=await fixture(t);await db.call('saveRuns',[makeRun()]);const [run]=await db.call('readRuntimeRuns');
+ const cache=new RuntimeTextCache(db.file,{maxBytes:200000,maxEntryBytes:200000,maxEntries:1});closeBeforeDatabase.push(()=>cache.close());
  const ref=reference(run.messages[1],'text'),large=reference(run.tools[0],'detail');
  assert.equal(cache.read(ref),makeRun().messages[1].text);assert.equal(cache.stats().entries,1);
  assert.equal(cache.read(large),makeRun().tools[0].detail);assert.equal(cache.stats().entries,1);assert.ok(cache.stats().bytes<=200000);
@@ -62,4 +62,10 @@ test('failed writes retain the new live value and retry without losing archived 
  db.request=(method,args)=>method==='saveRunPatches'&&fail?(fail=false,Promise.reject(Error('injected write failure'))):request(method,args);
  await assert.rejects(db.call('saveRunUpdates',[run]),/injected/);assert.equal(reference(run.messages[1],'text'),undefined);assert.equal(run.messages[1].text,original+' retry');assert.equal((await db.call('readRun',{id:run.id})).messages[1].text,original);
  await db.call('saveRunUpdates',[run]);assert.ok(reference(run.messages[1],'text'));assert.equal(run.messages[1].text,original+' retry');
+});
+
+test('request indicators never access messages, tools or body getters',()=>{
+ const {requestState}=require('../electron/history-pages.cjs');
+ const run={id:'r',status:'waiting',approvals:[{}],questions:[{}],get messages(){throw Error('MESSAGES_READ');},get tools(){throw Error('TOOLS_READ');}};
+ assert.deepEqual(requestState(run),{id:'r',status:'waiting',approval:true,input:true});run.approvals=[];run.questions=[];assert.deepEqual(requestState(run),{id:'r',status:'waiting',approval:false,input:false});assert.throws(()=>requestState(undefined),/不存在/);
 });

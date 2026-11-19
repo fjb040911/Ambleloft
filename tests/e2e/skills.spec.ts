@@ -113,12 +113,12 @@ for(const language of ['en','zh-CN'])test(`system guidance has its own searchabl
  await page.locator('.activity-rail').getByRole('button',{name:en?'Extensions':'扩展',exact:true}).click();
  await page.getByRole('button',{name:en?'Skills & extensions':'技能与扩展',exact:true}).click();
  await expect(page.getByRole('button',{name:en?/^System built-in/:/^系统内置/})).toHaveAttribute('aria-expanded','false');
- await page.screenshot({path:`/tmp/system-skills-secondary-${language}.png`});
+ await page.screenshot({path:test.info().outputPath(`system-skills-secondary-${language}.png`)});
  await page.getByRole('button',{name:en?/^System built-in/:/^系统内置/}).click();
  const group=page.getByRole('region',{name:en?'System built-in':'系统内置',exact:true});
  await expect(group).toContainText(en?'Task creation guide':'任务创建引导');
  await expect(group.getByRole('button',{name:en?'Use in chat':'在聊天中使用'})).toHaveCount(0);
- await page.screenshot({path:`/tmp/builtin-skills-${language}.png`});
+ await page.screenshot({path:test.info().outputPath(`builtin-skills-${language}.png`)});
  await group.getByRole('button').click();
  const dialog=page.getByRole('dialog',{name:en?'Task creation guide':'任务创建引导',exact:true});await expect(dialog).toContainText('default to English');
  await expect(dialog.getByRole('button',{name:en?'Disable':'停用',exact:true})).toHaveCount(0);

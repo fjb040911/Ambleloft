@@ -56,13 +56,14 @@ function createPersistence(db,transaction,root){
    for(const field of db.prepare("SELECT item_key,field,revision FROM run_texts WHERE run_id=? AND collection='messages' ORDER BY item_key,field").iterate(row.id))signature.update(JSON.stringify(field));
    const fingerprint=signature.digest('hex'),old=db.prepare('SELECT signature,source_ids FROM continuity_source_scans WHERE run_id=?').get(row.id);
    if(old?.signature===fingerprint){for(const id of JSON.parse(old.source_ids)){const source=sourceById(id);if(source)yield source;}continue;}
-   const sources=runSources(readRun(row.id),s);yield* sources;
+   const sources=runSources(require('../../electron/run-text-store.cjs').readRunReferences(db,row.id),s);yield* sources;
    db.prepare('INSERT INTO continuity_source_scans VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET signature=excluded.signature,source_ids=excluded.source_ids').run(row.id,fingerprint,JSON.stringify(sources.map(v=>v.id)));
   }
   db.exec('DELETE FROM continuity_source_scans WHERE run_id NOT IN (SELECT id FROM runs)');
   for(const row of db.prepare('SELECT id FROM expert_chats').iterate())yield* expertChatSources(db,row.id);
  }
- function syncSources(){
+ function syncSources(){return require('../../electron/storage-timing.cjs').measure('databaseIndexMs',syncSourcesNow);}
+ function syncSourcesNow(){
   const s=state(),seen=new Set();
   let changed=false;
   function put(value){

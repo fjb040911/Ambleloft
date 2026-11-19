@@ -21,4 +21,8 @@ function projectPage(run,before,limit=30) {
  return {...publicRun,messages:messages.map(previewMessage),taskApps:run.taskApps?.filter(p=>keys.has(p.turnKey)),fileChanges:run.fileChanges?.filter(p=>keys.has(p.turnKey)),tools:run.tools.filter(t=>keys.has(t.turnKey)||(!t.turnKey&&users.length===1)).map(previewTool),plans:run.plans?.filter(p=>keys.has(p.turnKey)),artifacts:run.artifacts?.filter(p=>keys.has(p.turnKey)),summaryOnly:false,historyBefore:start?first.id:null,turnOffset:start,totalTurns:users.length};
 }
 function pageRun(...args){const started=performance.now();try{return projectPage(...args);}finally{require('./performance-metrics.cjs').metrics.record('pageRunMs',performance.now()-started);}}
-module.exports={summary,pageRun,previewMessage};
+function requestState(run){
+ if(!run)throw new Error('会话不存在');
+ return {id:run.id,status:run.status,approval:!!run.approvals?.length,input:!!run.questions?.length};
+}
+module.exports={summary,pageRun,previewMessage,requestState};

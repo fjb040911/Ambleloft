@@ -26,7 +26,7 @@ for(const [width,english,dark] of [[1280,false,false],[390,false,true],[1280,tru
  await context.locator(':scope > summary').click();
  await detail.locator('.wf-task-detail').evaluate(el=>el.scrollTop=0);
  expect(await detail.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/task-review-${width}-${english}.png`});
+ await page.screenshot({path:test.info().outputPath(`task-review-${width}-${english}.png`)});
  await tabs.getByRole('tab',{name:english?'Conversation':'任务对话',exact:true}).click();
  await expect(detail.locator('.wf-node-conversation')).toBeVisible();
  // Status refresh must not steal the view from a user writing rework instructions.

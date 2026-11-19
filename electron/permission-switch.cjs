@@ -16,17 +16,19 @@ async function switchPermission(input,change){
  if(context.permissionTransition||context.done||context.cancelled)throw Error('任务状态已变化，请重试');
  const transition={phase:'pausing',completed:new Map(),controller:new AbortController()};context.permissionTransition=transition;
  const record={id:randomUUID(),requested:change?.requested||input.permission,previous:change?.previous||run.permission||'default',state:'switching',effective:null,startedAt:new Date().toISOString()};run[change?'modelChange':'permissionChange']=record;
- const check=()=>{if(context.cancelled||context.done||transition.controller.signal.aborted||this.closing)throw Error('权限切换已停止');};
+ const check=()=>{transition.controller.signal.throwIfAborted();if(context.cancelled||context.done||this.closing)throw Error('权限切换已停止');};
  const archived=new Set();
  const deadline=Date.now()+(this.permissionTimeoutMs||30000);
+ const timer=setTimeout(()=>transition.controller.abort(Error('权限切换超时，已停止续跑')),Math.max(1,deadline-Date.now()));
+ const bounded=promise=>require('../core/automation/inference-deadline.cjs').abortable(promise,transition.controller.signal);
  const wait=async()=>{check();if(Date.now()>deadline)throw Error('未能确认执行已暂停；权限未确认生效');await delay(25,undefined,{signal:transition.controller.signal});};
  this.changed(run);
  try{
-  await this.persist(undefined,run);
+  await bounded(this.persist(undefined,run));
   // Preparation keeps its original permissions until there is a confirmed engine turn.
   while(!run.threadId||!run.turnId||!context.rpc)await wait();check();
   let rpc=context.rpc;const p=policy(input.permission,context.remoteProject);
-  const request=async(method,args)=>{check();const result=await rpc.call(method,args,Math.max(1,deadline-Date.now()));check();return result;};
+  const request=async(method,args)=>{check();const result=await bounded(rpc.call(method,args,Math.max(1,deadline-Date.now())));check();return result;};
   // Pause host tools as well as engine tools. Abort is not proof of completion:
   // the channel must drain before any permission change is advertised.
   const channelPause=context.extensionChannel?.pause();
@@ -55,14 +57,14 @@ async function switchPermission(input,change){
   await suspend(run.threadId);
   // A child may have spawned another child while its parent was being paused.
   while([...context.nativeThreads?.keys()||[]].some(id=>!targets.has(id))){for(const tool of [...context.nativeThreads.values()])await suspend(tool.nativeThreadId,tool);}
-  if(channelPause)await channelPause;check();
+  if(channelPause)await bounded(channelPause);check();
   require('./stream-redactor.cjs').fields(context).finish(true);
   transition.phase='configuring';
   // Loaded threads ignore thread/resume configuration overrides in the bundled
   // engine. Unload and restore the same IDs after all work has quiesced.
   for(const target of [...targets.values()].reverse()){await request('thread/archive',{threadId:target.threadId});archived.add(target.threadId);}
   for(const target of targets.values()){await request('thread/unarchive',{threadId:target.threadId});archived.delete(target.threadId);}
-  if(change){await change.reconnect(context,check);rpc=context.rpc;check();}
+  if(change){await bounded(change.reconnect(context,check,Math.max(1,deadline-Date.now())));rpc=context.rpc;check();}
   for(const target of targets.values()){
    const applied=await request('thread/resume',{...(!target.tool?context.engineParameters:{}),threadId:target.threadId,...(change?change.parameters(context,target):{}),sandbox:p.sandbox,approvalPolicy:p.approvalPolicy,excludeTurns:true});
    if(change&&!change.matches(applied))throw Error('引擎未确认请求的模型，已停止续跑');
@@ -99,7 +101,7 @@ async function switchPermission(input,change){
   // Never silently resume with a mixture of old and new child policies.
   await this.stop(run.id);this.changed(run);await this.persist(undefined,run);
   return structuredClone(record);
- }
+ }finally{clearTimeout(timer);}
 }
 function permissionNotification(context,message){
  const transition=context.permissionTransition;if(!transition)return false;

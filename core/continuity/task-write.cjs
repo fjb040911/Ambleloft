@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {createHash} = require('node:crypto');
-const {readFile} = require('./task-files.cjs');
+const {readFile,openFlags} = require('./task-files.cjs');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 // The intent must already be committed. Never retry or roll back an uncertain write.
 function applyWrite(intent, {hook = () => {}} = {}) {
@@ -12,7 +12,7 @@ function applyWrite(intent, {hook = () => {}} = {}) {
  let fd;
  try {
   hook('beforeOpen');
-  fd = fs.openSync(target, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+  fd = fs.openSync(target, openFlags(fs.constants.O_RDWR));
   const stat = fs.fstatSync(fd, {bigint: true});
   if (!stat.isFile() || stat.nlink !== 1n || stat.ino !== initial.ino || stat.dev !== initial.dev || (stat.mode & 0o222n) === 0n) throw Error('WRITE_TARGET_CHANGED');
   const verify = () => {

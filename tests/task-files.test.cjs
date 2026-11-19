@@ -7,6 +7,21 @@ const {createHash}=require('node:crypto');
 const {readFile,captureFiles,currentFile,LIMITS}=require('../core/continuity/task-files.cjs');
 function fixture(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'task-files-')),root=fs.realpathSync(dir);t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.writeFileSync(path.join(root,'main.js'),'const version = 1;\n');return root;}
 const inputs=root=>({run:{id:'run',projectId:'p',cwd:root,fileChanges:[{turnKey:'turn',files:[{path:'main.js',status:'modified',hunks:[{newStart:1}]}]}]},project:{id:'p',path:root}});
+
+test('Windows controlled reads work without O_NOFOLLOW and reject device/alternate-stream aliases',t=>{
+ const root=fixture(t);assert.equal(readFile(root,'main.js').text,'const version = 1;\n');
+ if(process.platform==='win32')for(const name of ['main.js:private','NUL','con.txt','COM1','LPT1.log','CONIN$','main.js.','main.js '])assert.throws(()=>readFile(root,name),/PATH_OUTSIDE/);
+});
+test('descriptor mismatch is rejected before any bytes are read even if the pathname looks unchanged',t=>{
+ const root=fixture(t),other=path.join(root,'other.txt');fs.writeFileSync(other,'external bytes');const open=fs.openSync,read=fs.readSync;let reads=0;
+ t.mock.method(fs,'openSync',(file,...args)=>open(file===path.join(root,'main.js')?other:file,...args));
+ t.mock.method(fs,'readSync',(...args)=>{reads++;return read(...args);});
+ assert.throws(()=>readFile(root,'main.js'),/READ_RACE/);assert.equal(reads,0);
+});
+test('directory junction replacement is rejected before returning external content',t=>{
+ const root=fixture(t);fs.mkdirSync(path.join(root,'sub'));fs.writeFileSync(path.join(root,'sub','main.js'),'inside');fs.mkdirSync(path.join(root,'outside'));fs.writeFileSync(path.join(root,'outside','main.js'),'outside');let read=false;
+ assert.throws(()=>readFile(root,'sub/main.js',{hook(stage){if(stage==='beforeOpen'){fs.renameSync(path.join(root,'sub'),path.join(root,'original'));fs.symlinkSync(path.join(root,'outside'),path.join(root,'sub'),process.platform==='win32'?'junction':'dir');}if(stage==='beforeRead')read=true;}}),/SYMLINK|READ_RACE/);assert.equal(read,false);
+});
 test('H2 controlled excerpt records full content digest, line range, capture time and unknown legacy baseline',t=>{const root=fixture(t),{run,project}=inputs(root),result=captureFiles(run,project);assert.equal(result.items.length,1);const item=result.items[0];assert.equal(item.fileEvidence.contentHash,createHash('sha256').update('const version = 1;\n').digest('hex'));assert.equal(item.fileEvidence.evidenceTime,'capture-time');assert.equal(item.fileEvidence.recordedVersionMatch,null);assert.equal(item.fileEvidence.startLine,1);assert.equal(currentFile(item,project,run),'unchanged');fs.writeFileSync(path.join(root,'main.js'),'changed');assert.equal(currentFile(item,project,run),'changed');assert.equal(item.body,'const version = 1;\n');});
 test('H2 rejects absolute, parent, Windows and malformed paths',t=>{const root=fixture(t);for(const name of ['../secret','/etc/passwd','C:/secret','a\\b','a/../b','a//b','./main.js','a\0b'])assert.throws(()=>readFile(root,name),/PATH_OUTSIDE/);});
 test('H2 refuses leaf and intermediate symlinks including links staying inside project',t=>{const root=fixture(t);fs.symlinkSync(path.join(root,'main.js'),path.join(root,'alias'));fs.mkdirSync(path.join(root,'real'));fs.writeFileSync(path.join(root,'real','x'),'secret');fs.symlinkSync(path.join(root,'real'),path.join(root,'linked'));assert.throws(()=>readFile(root,'alias'),/SYMLINK/);assert.throws(()=>readFile(root,'linked/x'),/SYMLINK/);});

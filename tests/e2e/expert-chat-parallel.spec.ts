@@ -24,7 +24,7 @@ const card=(page:Page,name:string)=>page.locator('.expert-turn').filter({has:pag
 test('multiple recipients launch one round with a single question and stable independent cards',async({page})=>{
  await prepare(page);await sendPair(page);await expect(page.locator('.expert-question')).toHaveCount(1);expect(await page.evaluate(()=>(window as any).__parallelSubmits[0].selectedEmployeeIds)).toEqual(['pm','arch']);
  await page.evaluate(()=>(window as any).__complete('arch'));await expect(card(page,'架构师')).toContainText('架构师的独立回答');await expect(card(page,'产品经理')).toContainText('专家正在回复');await expect(page.locator('.expert-speaker strong')).toHaveText(['产品经理','架构师']);
- await page.screenshot({path:'/tmp/p4-parallel.png'});expect(await page.evaluate(()=>(window as any).__runtimeStarts)).toBe(0);
+ await page.screenshot({path:test.info().outputPath('p4-parallel.png')});expect(await page.evaluate(()=>(window as any).__runtimeStarts)).toBe(0);
  await card(page,'产品经理').getByRole('button',{name:'停止回复',exact:true}).click();await expect(card(page,'产品经理').getByRole('button',{name:'重试此专家'})).toBeVisible();await expect(card(page,'架构师')).toContainText('架构师的独立回答');
 });
 test('retry updates only the failed expert in place and preserves the successful answer',async({page})=>{
@@ -36,5 +36,5 @@ test('excluding one expert source does not stop the independent peer and remains
 });
 test('recipient limit is explicit, removable and narrow layouts remain usable',async({page})=>{
  await page.setViewportSize({width:390,height:844});await prepare(page);for(const name of ['产品经理','架构师','测试专家','运维专家'])await select(page,name);await expect(page.locator('.expert-recipient')).toContainText('4/4');
- const input=page.locator('textarea:visible').last();await input.fill('@安全专家');await input.press('End');await expect(page.getByRole('option').filter({hasText:'安全专家'})).toHaveAttribute('aria-disabled','true');await input.press('Escape');await page.getByRole('button',{name:'移除专家 测试专家',exact:true}).click();await expect(page.locator('.expert-recipient')).toContainText('3/4');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:'/tmp/p4-parallel-mobile.png'});
+ const input=page.locator('textarea:visible').last();await input.fill('@安全专家');await input.press('End');await expect(page.getByRole('option').filter({hasText:'安全专家'})).toHaveAttribute('aria-disabled','true');await input.press('Escape');await page.getByRole('button',{name:'移除专家 测试专家',exact:true}).click();await expect(page.locator('.expert-recipient')).toContainText('3/4');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath('p4-parallel-mobile.png')});
 });

@@ -7,7 +7,7 @@ const mutationCalls=(page:Page)=>page.evaluate(()=>(window as any).spaceQA.calls
 for(const [width,en,dark] of [[1440,false,false],[390,false,true],[1440,true,true],[390,true,false]] as const)test(`graph and detail ${width} en=${en} dark=${dark}`,async({page})=>{
  await page.setViewportSize({width,height:1000});await enter(page,`?lang=${en?'en':'zh'}&theme=${dark?'dark':'light'}`);await tasks(page,en);
  const graph=page.locator('.wf-plan-graph');const node=graph.locator('[data-package-id="bundle"]');
- if(width===390){await expect.poll(async()=>Number((await graph.getByRole('status',{name:en?'Zoom level':'缩放比例'}).textContent())?.replace('%',''))).toBeGreaterThanOrEqual(80);await graph.scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/workforce-graph-initial-${en}.png`});}
+ if(width===390){await expect.poll(async()=>Number((await graph.getByRole('status',{name:en?'Zoom level':'缩放比例'}).textContent())?.replace('%',''))).toBeGreaterThanOrEqual(80);await graph.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath(`workforce-graph-initial-${en}.png`)});}
  await expect(node).toContainText(en?'Waiting for prerequisites':'等待前置任务');await expect(node).toContainText('发布文案');
  await graph.getByRole('button',{name:en?'Read at 100 percent':'原始比例阅读'}).click();await expect(graph.getByRole('status',{name:en?'Zoom level':'缩放比例'})).toHaveText('100%');
  await graph.getByRole('button',{name:en?'Zoom in graph':'放大流程图'}).click();await graph.getByRole('button',{name:en?'Fit graph':'查看全图'}).click();
@@ -20,7 +20,7 @@ for(const [width,en,dark] of [[1440,false,false],[390,false,true],[1440,true,tru
  await page.getByRole('combobox',{name:en?'Filter tasks by status':'任务状态筛选'}).selectOption('accepted');await expect(graph.locator('.wf-graph-node')).toHaveCount(3);await expect(node).toHaveAttribute('data-dimmed','true');
  await page.getByRole('combobox',{name:en?'Filter tasks by status':'任务状态筛选'}).selectOption('all');await graph.getByRole('button',{name:en?'Fit graph':'查看全图'}).click();
  await graph.scrollIntoViewIfNeeded();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- await page.screenshot({path:`/tmp/workforce-graph-${width}-${en}-${dark}.png`});expect(await mutationCalls(page)).toEqual([]);
+ await page.screenshot({path:test.info().outputPath(`workforce-graph-${width}-${en}-${dark}.png`)});expect(await mutationCalls(page)).toEqual([]);
 });
 test('selection survives refresh and graph gestures cannot mutate dependencies',async({page})=>{
  await page.setViewportSize({width:1600,height:1000});await enter(page);await tasks(page);const graph=page.locator('.wf-plan-graph');await graph.locator('[data-package-id="copy"]').click();
@@ -56,7 +56,7 @@ test('repair-workflow fork and join remains read-only and exposes every blocking
  await page.setViewportSize({width:1600,height:1000});await enter(page);await page.evaluate(()=>{const qa=(window as any).spaceQA,p=qa.snapshot.plans[0],base=p.packages[0].definition;p.name='设备维修工单 · 流程验证';p.packages=[['contract','接口契约与部署边界',[],'review'],['environment','远端环境核验',[],'failed'],['api','远端 API 与持久化实现',['contract','environment'],'pending'],['web','本地工单网页开发',['contract'],'pending'],['verify','远端接口独立验证',['api'],'pending'],['delivery','端到端联调与验收',['web','verify'],'pending']].map(([id,title,dependencies,status])=>({id,definition:{...base,id,title,dependencies},status,attempts:[]}));qa.emit();});
  await page.getByRole('tab',{name:'任务',exact:true}).click();const graph=page.locator('.wf-plan-graph');await expect(graph.locator('.wf-graph-node')).toHaveCount(6);await expect(graph.locator('.react-flow__edge')).toHaveCount(6);
  await graph.locator('[data-package-id="api"]').click();await expect(graph.locator('[data-package-id="contract"]')).toHaveAttribute('data-relation','upstream');await expect(graph.locator('[data-package-id="environment"]')).toHaveAttribute('data-relation','upstream');await expect(graph.locator('[data-package-id="web"]')).toHaveAttribute('data-relation','none');await expect(graph.locator('[data-package-id="delivery"]')).toHaveAttribute('data-relation','downstream');
- const detail=page.getByRole('region',{name:'任务详情与验收'});await expect(detail.getByRole('region',{name:'调度依据'})).toContainText('远端环境核验 · 执行失败');await page.screenshot({path:'/tmp/workforce-repair-graph-detail.png'});await detail.getByRole('button',{name:'返回流程图'}).click();await graph.getByRole('button',{name:'查看全图'}).click();await graph.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/workforce-repair-graph.png'});expect(await mutationCalls(page)).toEqual([]);
+ const detail=page.getByRole('region',{name:'任务详情与验收'});await expect(detail.getByRole('region',{name:'调度依据'})).toContainText('远端环境核验 · 执行失败');await page.screenshot({path:test.info().outputPath('workforce-repair-graph-detail.png')});await detail.getByRole('button',{name:'返回流程图'}).click();await graph.getByRole('button',{name:'查看全图'}).click();await graph.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('workforce-repair-graph.png')});expect(await mutationCalls(page)).toEqual([]);
 });
 test('unsaved plan preview displays live dependencies, detects cycles and never saves',async({page})=>{
  await enter(page);await tasks(page);await page.evaluate(()=>{const qa=(window as any).spaceQA;const p=qa.snapshot.plans[0];p.status='paused';qa.emit();localStorage.setItem('workforce-plan-draft:space:launch',JSON.stringify({revision:p.revision,value:{name:'预览计划',goal:'验证依赖',packages:p.packages.map((w:any)=>w.definition)}}));});
@@ -69,7 +69,7 @@ test('long titles and 200% font scaling preserve graph controls and complete det
  await page.setViewportSize({width:390,height:900});await enter(page,'?lang=en&theme=dark');await tasks(page,true);
  await page.evaluate(()=>{document.documentElement.style.setProperty('--font-scale','2');const qa=(window as any).spaceQA;qa.snapshot.plans[0].packages[0].definition.title='Contract, deployment boundary and integration verification '.repeat(8);qa.emit();});
  const graph=page.locator('.wf-plan-graph');await graph.getByRole('button',{name:/Locate attention/}).click();const node=graph.locator('[data-package-id="copy"]');await expect(node).toBeFocused();await node.press('Enter');const detail=page.getByRole('region',{name:'Task details and review'});await expect(detail.getByRole('heading').first()).toContainText('Contract, deployment');
- await detail.getByRole('button',{name:'Back to graph',exact:true}).click();expect(await graph.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();await graph.getByRole('button',{name:'Fit graph'}).click();await graph.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/workforce-graph-font-200.png'});expect(await mutationCalls(page)).toEqual([]);
+ await detail.getByRole('button',{name:'Back to graph',exact:true}).click();expect(await graph.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();await graph.getByRole('button',{name:'Fit graph'}).click();await graph.scrollIntoViewIfNeeded();await page.screenshot({path:test.info().outputPath('workforce-graph-font-200.png')});expect(await mutationCalls(page)).toEqual([]);
 });
 
 for(const dark of [false,true])test(`execution flows follow dependencies without blinking or moving nodes dark=${dark}`,async({page})=>{
@@ -102,7 +102,7 @@ test('reduced motion retains static execution cues and stale prerequisites never
  await page.evaluate(()=>{const qa=(window as any).spaceQA,p=qa.snapshot.plans[0];p.packages[0].status='accepted';p.packages[1].status='running';qa.emit();});
  const graph=page.locator('.wf-plan-graph'),running=graph.locator('[data-package-id="bundle"]');await graph.getByRole('button',{name:'Locate running'}).click();
  await expect(running).toBeFocused();await expect(running.locator('.wf-graph-node-light rect')).toHaveCSS('animation-name','none');await expect(running.locator('.wf-graph-node-light rect')).toHaveCSS('stroke-dasharray','none');await expect(graph.locator('.wf-graph-edge-flow')).toHaveCSS('animation-name','none');
- await graph.screenshot({path:'/tmp/workforce-graph-flow-reduced.png'});
+ await graph.screenshot({path:test.info().outputPath('workforce-graph-flow-reduced.png')});
  await page.evaluate(()=>{const qa=(window as any).spaceQA;qa.snapshot.plans[0].packages[0].stale=true;qa.emit();});await expect(graph.locator('.wf-graph-edge-flow')).toHaveCount(0);
  expect(await graph.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();expect(await mutationCalls(page)).toEqual([]);
 });

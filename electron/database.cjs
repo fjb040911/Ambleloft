@@ -14,7 +14,7 @@ class Database {
   this.pending=new Map();this.sequence=0;this.failed=null;this.closed=false;
   const fail=error=>{this.failed=error;for(const p of this.pending.values())p.reject(error);this.pending.clear();};
   this.worker.on('error',fail);this.worker.on('exit',code=>{if(!this.closed)fail(new Error(`数据库进程已退出（${code}）`));});
-  this.worker.on('message',message=>{if(message.fatal){fail(new Error(message.fatal));return;}const p=this.pending.get(message.id);if(!p)return;this.pending.delete(message.id);metrics.record('databaseMs',performance.now()-p.started);if(message.error)p.reject(Object.assign(new Error(message.error),{code:message.code}));else p.resolve(message.value);});
+  this.worker.on('message',message=>{if(message.fatal){fail(new Error(message.fatal));return;}const p=this.pending.get(message.id);if(!p)return;this.pending.delete(message.id);this.lastTimings=message.timings||{};for(const [name,value]of Object.entries(this.lastTimings))metrics.record(name,value);metrics.record('databaseMs',performance.now()-p.started);if(message.error)p.reject(Object.assign(new Error(message.error),{code:message.code}));else p.resolve(message.value);});
  }
  call(method,args,options){
   let captured,saveOptions;

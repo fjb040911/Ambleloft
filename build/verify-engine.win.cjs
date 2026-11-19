@@ -8,6 +8,7 @@ module.exports = async context => {
   if (process.platform !== 'win32' || context.electronPlatformName !== 'win32' || context.arch !== 1 || process.arch !== 'x64') {
     throw new Error('Windows package must be built and verified on Windows x64');
   }
+  require('../scripts/prepare-windows-process.cjs')(context.packager.projectDir);
   const root = path.join(context.packager.projectDir, 'vendor/engine/win32-x64');
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
   if (manifest.version !== ENGINE_VERSION || manifest.platform !== 'win32' || manifest.arch !== 'x64') throw new Error('Engine manifest mismatch');

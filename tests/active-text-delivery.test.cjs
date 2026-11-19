@@ -6,6 +6,27 @@ const {RunDelivery}=require('../electron/run-delivery.cjs'),{createRunPublisher,
 const {packets}=require('../electron/stream-json.cjs');
 function store(t){const s=new spool.TextSpool();t.after(()=>s.close());return s;}
 function run(){return {id:'r',status:'running',messages:[{id:'u',role:'user',text:'task'},{id:'a',role:'assistant',text:''}],tools:[],approvals:[],questions:[]};}
+
+test('SSE framing uses one write for small events and bounded complete packets for spooled final bodies',t=>{
+ const framing={prefix:'event: response.completed\ndata: ',suffix:'\n\n'};
+ assert.equal([...packets({text:'中文😀'},65536,framing)].length,1);
+ const s=store(t),body={},text='中文😀\n"\\'.repeat(30000);spool.install(body,'text',s.create(text));
+ const chunks=[...packets(body,65536,framing)];assert.ok(chunks.length>1);assert.ok(chunks.every(c=>c.length<=65536));
+ const wire=Buffer.concat(chunks).toString('utf8');assert.ok(wire.startsWith(framing.prefix)&&wire.endsWith(framing.suffix));assert.deepEqual(JSON.parse(wire.slice(framing.prefix.length,-2)),{text});
+});
+
+test('short sequential bridge segments share one file and preserve immutable offset reads and final JSON',t=>{
+ const s=store(t),parts=[],expected=[];let previous;
+ for(let i=0;i<2000;i++){
+  const value=s.createSegment(),part={};spool.install(part,'text',value);
+  const text=(i+' 中文😀\n"\\\ud800').repeat(i%5+1);s.append(value,text);parts.push(part);expected.push({text});
+  if(previous)assert.throws(()=>s.append(previous,'late'),/SEGMENT_CLOSED/);previous=value;
+ }
+ assert.equal(s.stats().files,1);
+ assert.deepEqual(JSON.parse(Buffer.concat([...packets({parts})]).toString('utf8')),{parts:expected});
+ for(const i of [0,1,19,1999]){const ref=spool.reference(parts[i],'text');assert.equal(spool.read(ref,1,ref.length-1),expected[i].text.slice(1,-1));}
+ assert.equal(s.stats().writtenBytes,expected.reduce((n,p)=>n+p.text.length*2,0));
+});
 test('active body stays append-backed, projections do not read it and all UTF-16 pages remain available',t=>{
  const s=store(t),r=run(),fields=new StreamFields(s),message=r.messages[1],delta='中文😀\ud800\n'.repeat(1000);
  for(let i=0;i<100;i++)fields.append(message,'text',delta,[]);fields.finish();
