@@ -107,7 +107,8 @@ test('archive completion does not override navigation while saving',async({page}
   await expect.poll(()=>page.evaluate(()=>typeof (window as any).__release)).toBe('function');
   // Native New Task remains available while the archive IPC request is pending.
   await page.evaluate(()=>{(window as any).__command('new-task');});
-  await expect(page.getByRole('textbox',{name:'任务内容'})).toBeAttached();
+  // The pending modal may hide the background from the accessibility tree.
+  await expect(page.getByRole('textbox',{name:'任务内容',includeHidden:true})).toBeAttached();
   await page.evaluate(()=>{(window as any).__release();});
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('textbox',{name:'任务内容'})).toBeVisible();

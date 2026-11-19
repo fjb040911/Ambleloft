@@ -161,6 +161,7 @@ function DiscussionPanel({restoreReading,toolbar,space,projects,employees,data,r
   }
  },[contextTab,selectedDiscussion]);
  const discussionLayout=useDiscussionLayout(),contextOpen=discussionLayout.open;
+ const restoringDiscussion=useRef(false);
  const transcriptRef=useRef<HTMLDivElement>(null),followingRef=useRef(false),[awayFromEnd,setAwayFromEnd]=useState(false);
  useDiscussionScrollFade(transcriptRef,contextTab==='list',discussionLayout.narrow);
  const scrollToLatest=()=>{const el=transcriptRef.current;if(!el)return;followingRef.current=true;setAwayFromEnd(false);const scroller=spaceScroller(el);scroller.scrollTo({top:scroller.scrollHeight,behavior:'instant'});};
@@ -169,12 +170,12 @@ function DiscussionPanel({restoreReading,toolbar,space,projects,employees,data,r
  useLayoutEffect(()=>{
   const el=transcriptRef.current;if(!el||contextTab!=='list')return;
   const scroller=spaceScroller(el),key='discussion:'+space.id+':'+(selectedDiscussion||'new'),saved=allowReadingRestore.current?readReading(key):null;allowReadingRestore.current=true;
-  let restoring=!!saved,frame=0;
+  let restoring=!!saved,frame=0;restoringDiscussion.current=restoring;
   const origin=()=>scroller===document.scrollingElement?0:scroller.getBoundingClientRect().top;
   const update=()=>{if(restoring||!el.getClientRects().length||!scroller.clientHeight)return;followingRef.current=scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<60;setAwayFromEnd(!followingRef.current);const anchor=Array.from(el.querySelectorAll<HTMLElement>('.wf-request')).find(r=>r.getBoundingClientRect().bottom>origin());saveReading(key,{turnId:anchor?.id||'',offset:anchor?anchor.getBoundingClientRect().top-origin():0,top:scroller.scrollTop,following:followingRef.current});};
-  const restore=()=>{if(!restoring||!saved||!el.getClientRects().length||!scroller.clientHeight)return;const anchor=document.getElementById(saved.turnId);scroller.scrollTop=saved.following?scroller.scrollHeight:anchor?scroller.scrollTop+anchor.getBoundingClientRect().top-origin()-saved.offset:saved.top;followingRef.current=saved.following;setAwayFromEnd(!saved.following);};
+  const restore=()=>{if(!restoring||!saved||!el.getClientRects().length||!scroller.clientHeight)return;const anchor=document.getElementById(saved.turnId);scroller.scrollTop=anchor?scroller.scrollTop+anchor.getBoundingClientRect().top-origin()-saved.offset:saved.top;followingRef.current=saved.following;setAwayFromEnd(!saved.following);};
   const observer=new ResizeObserver(()=>{if(restoring){cancelAnimationFrame(frame);frame=requestAnimationFrame(restore);}});
-  const finish=()=>{restoring=false;observer.disconnect();cancelAnimationFrame(frame);};
+  const finish=()=>{restoring=false;restoringDiscussion.current=false;observer.disconnect();cancelAnimationFrame(frame);};
   followingRef.current=saved?.following||false;setAwayFromEnd(scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight>=60);
   // Expert history and disclosure layout may arrive after the first frame. A
   // temporary short document must not turn a reading anchor into follow-end.
@@ -195,7 +196,7 @@ function DiscussionPanel({restoreReading,toolbar,space,projects,employees,data,r
  useEffect(()=>subscribeRuns(run=>{if(relatedRunRef.current.has(run.id))setDiscussionRuns(old=>({...old,[run.id]:run}));}),[]);
  // Streaming updates follow the end, never the host response heading. Keep
  // the reader's position when they have scrolled away from the latest content.
- useLayoutEffect(()=>{if(contextTab!=='list')return;if(followingRef.current)scrollToLatest();else if(transcriptRef.current){const el=spaceScroller(transcriptRef.current);setAwayFromEnd(el.scrollHeight-el.scrollTop-el.clientHeight>=60);}},[visible.length,latest?.host?.revision,latest?.followups,discussionRuns,pendingPrompt]);
+ useLayoutEffect(()=>{if(contextTab!=='list'||restoringDiscussion.current)return;if(followingRef.current)scrollToLatest();else if(transcriptRef.current){const el=spaceScroller(transcriptRef.current);setAwayFromEnd(el.scrollHeight-el.scrollTop-el.clientHeight>=60);}},[visible.length,latest?.host?.revision,latest?.followups,discussionRuns,pendingPrompt]);
  const topics=roots.map(root=>({root,context:topicContext(root.id,discussions,docs,(data.plans||[]).filter(p=>p.spaceId===space.id),(data.taskDrafts||[]).filter(d=>d.spaceId===space.id))}));
  const selectedContext=topics.find(t=>t.root.id===selectedDiscussion)?.context;
  const currentTask=topicTask(selectedContext);

@@ -142,7 +142,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     const top=el.getBoundingClientRect().top,anchor=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(node=>node.getBoundingClientRect().bottom>top);
     if(anchor)saveReading(run.id,{turnId:anchor.dataset.turnId!,offset:anchor.getBoundingClientRect().top-top,top:el.scrollTop,following:following.current});
   };
-  const jumpTurn=(id:string)=>{scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});};
+  const jumpTurn=(id:string)=>{readingRecovery.current=null;following.current=false;onFollowingChange(false);scrollToMessage(id,{align:'start',scrollMargin:0,behavior:'instant'});};
   const jump=()=>{if(visibleRef.current)scrollToEnd({behavior:'instant'});};
   useLayoutEffect(()=>{
     if(!visible)return;

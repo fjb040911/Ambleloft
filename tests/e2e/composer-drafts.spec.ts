@@ -68,12 +68,13 @@ test('storage failure prevents sending an unrecorded request',async({page})=>{
 test('reload restores the reader anchor and per-turn disclosure without opening other turns',async({page})=>{
  await page.addInitScript(()=>{(window as any).fixtureMessages=Array.from({length:12},(_,i)=>[{id:'u'+i,role:'user',text:'Question '+i,timing:{outcome:'completed'}},{id:'thought'+i,role:'assistant',kind:'reasoning',text:'Thought '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(18)}]).flat();});
  await start(page);const viewport=page.getByRole('region',{name:'任务消息'}),turn=page.locator('[data-turn-id="u4"]');await expect.poll(()=>viewport.evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
- await turn.locator('.turn-progress-toggle').click();await expect(turn.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+ await page.getByRole('button',{name:'第 5 轮：Question 4',exact:true}).click();await turn.locator('.turn-progress-toggle').click();await expect(turn.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
  await page.evaluate(()=>{const viewport=document.querySelector('.conversation-scroll')!,anchor=document.querySelector('[data-turn-id="u4"]')!;viewport.scrollTop+=anchor.getBoundingClientRect().top-viewport.getBoundingClientRect().top-20;});
  await expect.poll(()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('amble.reading.v1:draft-a')||'null')?.following)).toBe(false);await page.getByRole('textbox',{name:'继续对话'}).fill('reader draft');
  const saved=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('amble.reading.v1:draft-a')!));await reload(page);
- await expect(turn.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');await expect(page.locator('[data-turn-id="u5"] .turn-progress-toggle')).toHaveAttribute('aria-expanded','false');await expect(page.getByRole('textbox',{name:'继续对话'})).toHaveValue('reader draft');
+ await expect(turn.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');await expect(page.getByRole('textbox',{name:'继续对话'})).toHaveValue('reader draft');
  await expect.poll(()=>page.locator(`[data-turn-id="${saved.turnId}"]`).evaluate((el,offset)=>Math.abs(el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top-offset),saved.offset)).toBeLessThan(3);
+ await page.getByRole('button',{name:'第 6 轮：Question 5',exact:true}).click();await expect(page.locator('[data-turn-id="u5"] .turn-progress-toggle')).toHaveAttribute('aria-expanded','false');
 });
 
 test('expanded long message restores its page without loading the entire body',async({page})=>{

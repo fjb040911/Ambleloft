@@ -32,7 +32,7 @@ export function DiscussionFollowups({request}:{request:SpaceRequest}){
 
 export function ExpertContributions({request,children,actions,onVisibility}:{request:SpaceRequest;children:React.ReactNode;actions?:React.ReactNode;onVisibility?:(id:string,open:boolean)=>void}){
  const L=useCopy(),[open,setOpen]=useDraftState('discussion-experts:'+request.id,false),ref=useRef<HTMLDivElement>(null);
- useEffect(()=>{onVisibility?.(request.id,!request.host||open);},[request.id,!!request.host,open,onVisibility]);
+ useEffect(()=>{onVisibility?.(request.id,open);},[request.id,!!request.host,open,onVisibility]);
  useEffect(()=>{const el=ref.current;if(!el)return;const reveal=()=>setOpen(true);el.addEventListener('reveal-expert',reveal);return()=>el.removeEventListener('reveal-expert',reveal);},[!!request.host,!!request.participants.length]);
  if(!request.host)return <>{children}</>;
  if(!request.participants.length)return null;
