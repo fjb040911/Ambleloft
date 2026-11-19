@@ -4,3 +4,31 @@
 @import "shadcn/tailwind.css";
 @custom-variant dark (&:is([data-theme="dark"] *));
 @source inline("shimmer");
+
+/* Never animate text clipping or background-position for running task labels.
+   Three cached gradients cross-fade to preserve the sweep without repainting
+   their text every frame. No canvas, font measurement or per-frame JS. */
+.composite-shimmer { position: relative; width: fit-content; max-width: 100%; }
+.composite-shimmer > [data-shimmer-layer] {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  text-overflow: inherit;
+  pointer-events: none;
+  user-select: none;
+  color: var(--text);
+  background-image: linear-gradient(110deg, transparent 35%, currentColor 50%, transparent 65%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  opacity: 0;
+  animation: composite-text-sweep 2s linear infinite;
+  will-change: opacity;
+}
+.composite-shimmer > [data-shimmer-layer]::before { content: attr(data-shimmer-text); }
+.composite-shimmer:dir(rtl) > [data-shimmer-layer] { animation-direction: reverse; }
+@keyframes composite-text-sweep { 0%, 66.666%, 100% { opacity: 0; } 33.333% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .composite-shimmer > [data-shimmer-layer] { display: none; animation: none; will-change: auto; }
+}

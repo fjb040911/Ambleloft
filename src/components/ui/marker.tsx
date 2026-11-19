@@ -3,6 +3,7 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
+import { ShimmerLayers } from "./shimmer"
 
 const markerVariants = cva(
   "group/marker relative flex min-h-4 w-full items-center gap-2 text-left text-sm text-muted-foreground [&_svg:not([class*='size-'])]:size-4 [a]:underline [a]:underline-offset-3 [a]:hover:text-foreground",
@@ -54,16 +55,17 @@ function MarkerIcon({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function MarkerContent({ className, ...props }: React.ComponentProps<"span">) {
+function MarkerContent({ className, shimmer = false, children, ...props }: React.ComponentProps<"span"> & { shimmer?: boolean }) {
   return (
     <span
       data-slot="marker-content"
       className={cn(
         "min-w-0 wrap-break-word group-data-[variant=separator]/marker:flex-none group-data-[variant=separator]/marker:text-center *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground",
+        shimmer && "composite-shimmer",
         className
       )}
       {...props}
-    />
+    >{children}{shimmer && <ShimmerLayers>{children}</ShimmerLayers>}</span>
   )
 }
 

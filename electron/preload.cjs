@@ -27,6 +27,8 @@ const legacyRunEvent=(_event,value)=>{
 };
 
 if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
+  // Immutable local metadata must be available before the first renderer layout.
+  platform: process.platform,
   updates:{...Object.fromEntries(['snapshot','check','download','update','cancel','preferences','restart','schedule','cancelSchedule'].map(action=>[action,input=>ipcRenderer.invoke('update:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('update:event',h);return()=>ipcRenderer.removeListener('update:event',h);}},
   growth:Object.fromEntries(['status','jobs','policy','dismiss'].map(action=>[action,input=>ipcRenderer.invoke('growth:'+action,input)])),
   investigation:Object.fromEntries(['start','read','list','cancel','revokeWrite','resume','revokeResume','open'].map(action=>[action,input=>ipcRenderer.invoke('investigation:'+action,input)])),

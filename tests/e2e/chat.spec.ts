@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 import {createRequire} from 'node:module';
+
+test('silent model preserves compositor sweep, readable status and editable draft',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.questions=[];r.tools=[];r.lastEventAt=new Date(Date.now()-30000).toISOString();r.messages=[{id:'u',role:'user',text:'Wait for the model',timing:{startedAt:r.lastEventAt}}];w.__emit();});
+ const activity=page.getByLabel('当前运行状态');await expect(activity).toContainText('等待新的响应');
+ const pending=page.getByRole('region',{name:'任务执行过程'});await expect(pending).toContainText('等待模型响应');
+ const labels=page.locator('.run-activity [data-slot="marker-content"],.process-entry [data-slot="marker-content"]');
+ await expect(labels).toHaveCount(2);
+ await expect(labels.locator('[data-shimmer-layer]')).toHaveCount(6);
+ expect(await labels.evaluateAll(elements=>elements.flatMap(el=>el.getAnimations({subtree:true}).filter(a=>a.playState==='running').map(a=>(a as CSSAnimation).animationName)))).toEqual(Array(6).fill('composite-text-sweep'));
+ expect(await labels.evaluateAll(elements=>elements.map(el=>el.textContent))).toEqual(['等待模型响应','等待新的响应']);
+ expect(await labels.evaluateAll(elements=>elements.map(el=>getComputedStyle(el).animationName))).toEqual(['none','none']);
+ await expect(page.locator('.run-activity [data-slot="spinner"]')).toBeVisible();
+ const clock=activity.locator('.activity-clock'),before=await clock.innerText();await expect(clock).not.toHaveText(before);
+ const composer=page.getByRole('textbox',{name:'继续对话',exact:true});await composer.fill('Unsent while the model is silent');await expect(composer).toHaveValue('Unsent while the model is silent');
+});
 const xml = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="a" value="开始" vertex="1" parent="1" style="rounded=1;"><mxGeometry x="20" y="20" width="120" height="60" as="geometry"/></mxCell><mxCell id="b" value="完成" vertex="1" parent="1"><mxGeometry x="240" y="20" width="120" height="60" as="geometry"/></mxCell><mxCell id="e" edge="1" source="a" target="b" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell></root></mxGraphModel>';
 const rich = '# 渲染验收\n\n**重点内容** 和 `inline`。\n\n| 项目 | 结果 |\n|---|---|\n| 测试 | 成功 |\n\n- [x] 已完成\n\n公式：$E=mc^2$\n\n```typescript\nconst hello = "world";\n```\n\n```mermaid\nflowchart LR\n A[输入] --> B[输出]\n```\n\n```echarts\n{"xAxis":{"type":"category","data":["A","B"]},"yAxis":{},"series":[{"type":"bar","data":[3,7]}]}\n```\n\n```drawio\n'+xml+'\n```\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60"><rect width="200" height="60" fill="#e3ecfa"/><text x="20" y="35">Vector preview</text></svg>\n```';
 async function prepare(page: import('@playwright/test').Page, text = rich, language: 'zh-CN'|'en' = 'zh-CN') {
@@ -23,9 +39,47 @@ async function prepare(page: import('@playwright/test').Page, text = rich, langu
   }, {text,language});
   await page.goto('/');
   await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
+  // Lazy route effects must subscribe before the fixture emits a form update.
+  await page.waitForFunction(()=>typeof (window as any).__formsChanged==='function');
 }
+test('background SSH execution does not mount unseen transcripts and visited drafts survive switching',async({page})=>{
+ await prepare(page,'Initial answer');
+ const composer=page.getByRole('textbox',{name:'继续对话',exact:true});await composer.fill('keep selected draft');
+ await page.evaluate(()=>{const w=window as any;w.__emitEvent({...structuredClone(w.__demoRun),id:'background-ssh',title:'Background SSH wait',status:'running',approvals:[],questions:[],messages:[{id:'ssh-user',role:'user',text:'Wait for SSH'}]});});
+ await expect(page.locator('.tree-task > button:first-child').filter({hasText:'Background SSH wait'})).toBeVisible();
+ await expect(page.locator('.conversation-page')).toHaveCount(1);
+ await page.locator('.tree-task > button:first-child').filter({hasText:'Background SSH wait'}).click();
+ await expect(composer).toHaveValue('');await composer.fill('SSH draft');
+ await page.locator('.tree-task > button:first-child').filter({hasText:'任务体验验收'}).click();
+ await expect(composer).toHaveValue('keep selected draft');
+ await expect(page.locator('.conversation-page')).toHaveCount(2);
+});
+
+test('medium history defers offscreen Markdown but remains navigable',async({page})=>{
+ await prepare(page,'Initial answer');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:12},(_,i)=>[{id:'medium-u'+i,role:'user',text:'Question '+i},{id:'medium-a'+i,role:'assistant',phase:'final_answer',text:('**Answer '+i+'**\n\n'+('Long historical paragraph 中文. '.repeat(20))+'\n\n').repeat(12)}]).flat();w.__emit();});
+ await expect(page.locator('[data-turn-id="medium-u11"] .markdown strong').first()).toHaveText('Answer 11');
+ await expect(page.locator('[data-turn-id="medium-u0"] .markdown')).toHaveCount(0);
+ await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 1 轮：/}).click();
+ await expect(page.locator('[data-turn-id="medium-u0"] .markdown strong').first()).toHaveText('Answer 0');
+ await expect(page.getByRole('textbox',{name:'继续对话',exact:true})).toBeVisible();
+});
+
+test('delayed Markdown loading keeps escaped content and composer focus',async({page})=>{
+ let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+ await page.route('**/src/MarkdownContent.tsx*',async route=>{await gate;await route.continue();});
+ try{await prepare(page,'**Formatted result**\n\n<img src=x onerror="window.__unsafe=true">');
+ const composer=page.getByRole('textbox',{name:'继续对话',exact:true});await composer.fill('Draft while parser loads');
+ await expect(page.locator('.markdown').last()).toContainText('<img');
+ expect(await page.evaluate(()=>(window as any).__unsafe)).toBeUndefined();
+ release();await expect(page.locator('.markdown strong')).toHaveText('Formatted result');
+ await expect(composer).toHaveValue('Draft while parser loads');await expect(composer).toBeFocused();
+ }finally{release();}
+});
+
 test('streaming preserves existing markdown table and link DOM instead of flashing and resetting scroll',async({page})=>{
  await prepare(page,'| 名称 | 说明 |\n|---|---|\n| 数据 | '+('很长的内容'.repeat(80))+' |\n\n[参考资料](https://example.com)\n\n继续输出');
+ await expect(page.locator('.table-scroll')).toBeVisible();
  await page.evaluate(()=>{const table=document.querySelector('.table-scroll')!;const link=document.querySelector<HTMLAnchorElement>('.markdown a')!;(window as any).__markdownNodes={table,link};table.scrollLeft=120;link.focus();});
  await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.at(-1).text+='，新增一段文字';w.__emit();});
  await expect(page.locator('.markdown')).toContainText('新增一段文字');
@@ -653,10 +707,13 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect.poll(async()=>Math.round((await page.locator('#workspace-sidebar').boundingBox())!.width)).toBe(256);
  const navigation=page.getByRole('navigation',{name:'分组导航'});
  for(const name of ['项目','任务','协作工作平台','扩展'])await expect(navigation.getByRole('button',{name,exact:true})).toBeVisible();
+ // Never-visited categories must not mount their trees and layout effects.
+ await expect(page.locator('.workspace-navigation > [data-slot="sidebar-group"]')).toHaveCount(1);
  await page.screenshot({path:'test-results/task-sidebar.png'});
  for(const name of ['项目','任务','项目','任务']){
   const group=navigation.getByRole('button',{name,exact:true});
   await group.click();await expect(group).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.workspace-navigation > [data-slot="sidebar-group"]:visible')).toHaveCount(1);
   await expect(navigation.locator('[aria-pressed=true]')).toHaveCount(1);
   await expect(page.locator('[data-slot=message][data-align=start]')).toContainText('保持当前任务');
   await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
@@ -664,55 +721,28 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect(page.locator('.tree-task.selected')).toContainText('任务体验验收');
 });
 
-test('activity and thinking indicators animate only while running and respect reduced motion',async({page})=>{
+test('activity and thinking sweeps preserve text, stop on attention and respect reduced motion',async({page})=>{
  await prepare(page,'完成');
- await page.evaluate(()=>{
-  const run=(window as any).__demoRun;
-  run.status='running';run.approvals=[];run.lastEventAt=new Date().toISOString();
-  run.messages=run.messages.slice(0,1);(window as any).__emit();
- });
- const status=page.locator('.run-activity [data-slot="marker"]');
- await expect(status).toContainText('执行中');
- await expect(status.locator('.shimmer')).toBeVisible();
- await expect(status.locator('[data-slot="spinner"]')).toBeVisible();
- await expect(status.locator('.shimmer')).toHaveCSS('animation-name','tw-shimmer');
- const shimmer=status.locator('.shimmer');
- expect(await shimmer.evaluate(el=>getComputedStyle(el).backgroundImage)).not.toBe('none');
- const initialPosition=await shimmer.evaluate(el=>getComputedStyle(el).backgroundPosition);
- await expect.poll(()=>shimmer.evaluate(el=>getComputedStyle(el).backgroundPosition)).not.toBe(initialPosition);
-
- await page.evaluate(()=>{
-  const run=(window as any).__demoRun;
-  run.messages.push({id:'thinking',role:'assistant',kind:'reasoning',reasoningFormat:'text',text:'正在分析输入'});
-  (window as any).__emit();
- });
- const thinking=page.locator('.process-entry.reasoning [data-slot="trace-line"]');
- const thinkingTitle=thinking.locator('[data-slot="trace-title"]');
- await expect(thinking).toContainText('思考过程');
- await expect(thinking).toHaveAttribute('data-status','running');
- await expect(thinkingTitle).toBeVisible();
- await expect(thinkingTitle).toHaveCSS('animation-name','tw-shimmer');
- const thinkingPosition=await thinkingTitle.evaluate(el=>getComputedStyle(el).backgroundPosition);
- await expect.poll(()=>thinkingTitle.evaluate(el=>getComputedStyle(el).backgroundPosition)).not.toBe(thinkingPosition);
- await page.screenshot({path:'test-results/loading-marker.png'});
- await page.evaluate(()=>document.documentElement.dataset.theme='dark');
- expect(await shimmer.evaluate(el=>getComputedStyle(el).backgroundImage)).not.toBe('none');
- await page.screenshot({path:'test-results/loading-marker-dark.png'});
- await page.emulateMedia({reducedMotion:'reduce'});
- await expect(status.locator('.shimmer')).toHaveCSS('animation-name','none');
- await expect(status.locator('[data-slot="spinner"]')).toHaveCSS('animation-name','none');
- await expect(thinkingTitle).toHaveCSS('animation-name','none');
- await expect(thinking.locator('[data-slot="spinner"]')).toHaveCSS('animation-name','none');
- expect(await thinkingTitle.evaluate(el=>getComputedStyle(el).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
- expect(await status.locator('.shimmer').evaluate(el=>getComputedStyle(el).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
- await page.emulateMedia({reducedMotion:'no-preference'});
- await expect(thinkingTitle).toHaveCSS('animation-name','tw-shimmer');
- await page.evaluate(()=>{(window as any).__demoRun.status='waiting';(window as any).__emit();});
- await expect(thinkingTitle).toHaveCSS('animation-name','none');
- await expect(thinking.locator('[data-slot="spinner"]')).toHaveCount(0);
- await expect(status).toContainText('需要你批准');
- await expect(page.locator('[data-slot="marker"] .shimmer')).toHaveCount(0);
- await expect(page.locator('[data-slot="marker"] [data-slot="spinner"]')).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.lastEventAt=new Date().toISOString();r.messages=r.messages.slice(0,1);w.__emit();});
+ const status=page.locator('.run-activity [data-slot="marker"]');await expect(status).toContainText('执行中');
+ const label=status.locator('[data-slot="marker-content"]'),layer=label.locator('[data-shimmer-layer="0"]');
+ await expect(label.locator('[data-shimmer-layer]')).toHaveCount(3);
+ await expect(label).toHaveCSS('animation-name','none');await expect(layer).toHaveCSS('animation-name','composite-text-sweep');
+ const position=await layer.evaluate(e=>getComputedStyle(e).backgroundPosition),opacity=await layer.evaluate(e=>getComputedStyle(e).opacity);
+ await expect.poll(()=>layer.evaluate(e=>getComputedStyle(e).opacity)).not.toBe(opacity);await expect(layer).toHaveCSS('background-position',position);
+ expect(await label.textContent()).toBe('执行中');
+ await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=0;}));const sweepStart=await label.screenshot();
+ await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>{a.currentTime=666;}));const sweepEnd=await label.screenshot();
+ expect(sweepStart.equals(sweepEnd)).toBe(false);await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>a.play()));
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.push({id:'thinking',role:'assistant',kind:'reasoning',reasoningFormat:'text',text:'正在分析输入'});w.__emit();});
+ const thinking=page.locator('.process-entry.reasoning [data-slot="trace-line"]'),title=thinking.locator('[data-slot="trace-title"]');
+ await expect(title).toContainText('思考过程');await expect(title.locator('[data-shimmer-layer]')).toHaveCount(3);
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect(title).toBeVisible();
+ expect(await title.evaluate(e=>getComputedStyle(e).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
+ await page.emulateMedia({reducedMotion:'reduce'});await expect(layer).toHaveCSS('display','none');await expect(layer).toHaveCSS('animation-name','none');await expect(status.locator('[data-slot="spinner"]')).toHaveCSS('animation-name','none');
+ await page.emulateMedia({reducedMotion:'no-preference'});await expect(layer).toHaveCSS('animation-name','composite-text-sweep');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__emit();});
+ await expect(title.locator('[data-shimmer-layer]')).toHaveCount(0);await expect(status).toContainText('需要你批准');await expect(status.locator('[data-shimmer-layer]')).toHaveCount(0);await expect(status.locator('[data-slot="spinner"]')).toHaveCount(0);
 });
 
 for(const resume of ['button','wheel'] as const)test(`message scroller follows output, pauses for reading, and resumes at the latest message via ${resume}`,async({page})=>{
@@ -1304,4 +1334,33 @@ test('legacy image messages support previews and missing files show a useful err
  const message=page.locator('[data-message-role="user"]');await expect(message.locator('[data-slot=bubble-content]')).toHaveText('旧的图片消息');await expect(message.getByText('图片不可用')).toBeVisible();
  await message.getByRole('button',{name:'预览图片 old.png'}).click();await expect(page.getByRole('dialog').getByRole('alert')).toContainText('图片文件不可访问，可能已移动或删除');
  await page.keyboard.press('Escape');await expect(page.getByRole('textbox',{name:'继续对话'})).toBeEditable();
+});
+
+
+test('100 Hz versioned streaming preserves terminal state, exact copied text and draft',async({page})=>{
+ test.setTimeout(60000);await prepare(page,'');
+ const require=createRequire(process.cwd()+'/package.json'),source=require('node:fs').readFileSync(require.resolve('./electron/run-events.mjs'),'utf8');
+ await page.route('**/__probe/run-events.mjs',route=>route.fulfill({contentType:'text/javascript',body:source}));
+ await page.evaluate(async()=>{
+  const w=window as any;
+  const {createRunPublisher}=await import(/* @vite-ignore */'/__probe/run-events.mjs');
+  const publisher=createRunPublisher('100hz-regression'),run=w.__demoRun;
+  run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'Deterministic stream'},{id:'a',role:'assistant',phase:'final_answer',text:''}];
+  w.desktop.getRunSnapshot=async()=>structuredClone(publisher.snapshot(run.id));w.__emitEvent(publisher.encode(run));
+  w.__stream={sent:0,done:false,started:performance.now()};
+  // Windows can wake timers later than 10 ms. Send all elapsed slots so the
+  // producer rate is independent of timer granularity, then assert the rate.
+  const tick=()=>{try{const due=Math.min(800,Math.floor((performance.now()-w.__stream.started)/10)+1);while(w.__stream.sent<due){const i=w.__stream.sent;run.messages[1].text+=i+' 中文😀\n';w.__emitEvent(publisher.encode(run));w.__stream.sent++;}if(w.__stream.sent===800){run.status='completed';w.__emitEvent(publisher.encode(run));w.__stream.done=true;w.__stream.elapsed=performance.now()-w.__stream.started;}else setTimeout(tick,5);}catch(error){w.__stream.error=String(error);w.__stream.done=true;}};tick();
+ });
+ await page.waitForFunction(()=>(window as any).__stream.sent>=30);
+ const composer=page.getByRole('textbox',{name:'继续对话',exact:true});await composer.fill('Unsent draft during 100 Hz output');
+ await page.waitForFunction(()=>(window as any).__stream.done,{},{timeout:30000});
+ await expect(page.locator('.turn-actions')).toHaveCount(1);
+ await expect(composer).toHaveValue('Unsent draft during 100 Hz output');
+ await page.locator('.turn-actions').getByRole('button',{name:'拷贝',exact:true}).click();
+ const copied=await page.evaluate(()=>(window as any).__copiedText),expected=Array.from({length:800},(_,i)=>i+' 中文😀\n').join('');
+ const hash=(text:string)=>require('node:crypto').createHash('sha256').update(text).digest('hex');
+ expect(hash(copied)).toBe(hash(expected));expect(copied.length).toBe(expected.length);
+ const metrics=await page.evaluate(()=>(window as any).__stream);expect(metrics.error).toBeUndefined();expect(metrics.sent).toBe(800);expect(metrics.sent*1000/metrics.elapsed).toBeGreaterThan(90);
+ await test.info().attach('stream-integrity',{body:JSON.stringify({sent:metrics.sent,elapsedMs:metrics.elapsed,rateHz:metrics.sent*1000/metrics.elapsed,length:copied.length,sha256:hash(copied),completed:true,draftPreserved:true}),contentType:'application/json'});
 });

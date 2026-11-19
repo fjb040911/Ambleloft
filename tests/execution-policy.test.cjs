@@ -24,12 +24,12 @@ test('shell can inherit proxy/certificate settings but not model credentials or 
 
 test('Windows engine and tools retain OS paths without widening other platforms or leaking secrets', () => {
   const config={baseUrl:'https://example.com/v1',model:'fixture'};
-  const inherited={Path:'C:\\tools',SYSTEMROOT:'C:\\Windows',USERPROFILE:'C:\\Users\\qa',APPDATA:'C:\\Users\\qa\\AppData\\Roaming',LOCALAPPDATA:'C:\\Users\\qa\\AppData\\Local',TEMP:'C:\\Temp',UNRELATED_SECRET:'private',OPENAI_API_KEY:'secret'};
+  const inherited={Path:'C:\\tools',SYSTEMROOT:'C:\\Windows',USERPROFILE:'C:\\Users\\qa',APPDATA:'C:\\Users\\qa\\AppData\\Roaming',LOCALAPPDATA:'C:\\Users\\qa\\AppData\\Local',TEMP:'C:\\Temp',PROGRAMDATA:'C:\\ProgramData',UNRELATED_SECRET:'private',OPENAI_API_KEY:'secret'};
   for(const platform of ['win32','darwin','linux']){
     const env=codexEnvironment(config,os.tmpdir(),inherited,platform);
     const args=configurationArgs(config,undefined,undefined,platform);
     const entry=args.find(s=>s.startsWith('shell_environment_policy.include_only='));const allowed=JSON.parse(entry.slice(entry.indexOf('=')+1));
-    for(const key of ['SystemRoot','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP']){
+    for(const key of ['SystemRoot','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','ProgramData']){
       assert.equal(allowed.includes(key),platform==='win32');assert.equal(!!env[key],platform==='win32');
     }
     if(platform==='win32'){assert.equal(env.PATH,'C:\\tools');assert.equal(env.SystemRoot,'C:\\Windows');}
@@ -68,4 +68,13 @@ test('new and resumed threads receive execution policy without relaxing sandbox 
     assert.match(thread.params.developerInstructions, /C\["documents\/\{space\}\/\{doc\}\/\{hash\}\.md"\]/);
     assert.equal(calls.filter(c => c.method === 'turn/start').length, 1);
   }
+});
+
+// Integration assertion: checking the allowlist alone misses native startup failures.
+test('Windows OpenSSH starts with the actual isolated engine environment', {skip:process.platform!=='win32'}, async t=>{
+ const executable=path.join(process.env.SystemRoot||'C:/Windows','System32/OpenSSH/ssh.exe');
+ try{await fs.access(executable);}catch{t.skip('Windows OpenSSH is not installed');return;}
+ const env=codexEnvironment({baseUrl:'http://127.0.0.1:1',model:'fixture'},os.tmpdir());
+ const result=await require('node:util').promisify(require('node:child_process').execFile)(executable,['-V'],{env,windowsHide:true,timeout:5000});
+ assert.match(result.stdout+result.stderr,/OpenSSH/);
 });

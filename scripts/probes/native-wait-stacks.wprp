@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0" Author="Ambleloft isolated test">
+ <Profiles>
+  <SystemCollector Id="SC" Name="Ambleloft native wait collector"><BufferSize Value="256"/><Buffers Value="256"/></SystemCollector>
+  <SystemProvider Id="SP"><Keywords><Keyword Value="ProcessThread"/><Keyword Value="Loader"/><Keyword Value="CSwitch"/><Keyword Value="ReadyThread"/><Keyword Value="SampledProfile"/></Keywords><Stacks><Stack Value="CSwitch"/><Stack Value="ReadyThread"/><Stack Value="SampledProfile"/></Stacks></SystemProvider>
+  <Profile Id="NativeWait.Verbose.File" Name="NativeWait" Description="CPU and blocked-thread stacks" LoggingMode="File" DetailLevel="Verbose"><Collectors><SystemCollectorId Value="SC"><SystemProviderId Value="SP"/></SystemCollectorId></Collectors></Profile>
+  <Profile Id="NativeWait.Verbose.Memory" Name="NativeWait" Description="Bounded recent CPU and blocked-thread stacks" LoggingMode="Memory" DetailLevel="Verbose"><Collectors><SystemCollectorId Value="SC"><SystemProviderId Value="SP"/></SystemCollectorId></Collectors></Profile>
+ </Profiles>
+</WindowsPerformanceRecorder>

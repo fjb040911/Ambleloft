@@ -91,7 +91,10 @@ function createWindow() {
 app.on('second-instance', (_event, argv) => { const link = argv.find(value => value.startsWith('ambleloft://')); if (link) receiveStoreURL(link); const window=windows.focused();if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); } });
 app.whenReady().then(async () => {
   const stopMetrics=startMetrics();app.once('will-quit',stopMetrics);
-  app.on('web-contents-created',(_event,contents)=>contents.on('render-process-gone',(_event,details)=>metrics.exited(details.reason,details.exitCode)));
+  app.on('web-contents-created',(_event,contents)=>{
+    contents.on('render-process-gone',(_event,details)=>metrics.exited(details.reason,details.exitCode));
+    for(const state of ['unresponsive','responsive'])contents.on(state,()=>metrics.responsiveness(state,contents.id));
+  });
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
   let updateTransaction=null;

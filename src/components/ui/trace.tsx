@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cn } from "cn"
+import { ShimmerLayers } from "./shimmer"
 
 import {
   Collapsible,
@@ -21,8 +22,6 @@ function Trace({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-// Apply the plain shimmer class on titles: a Tailwind descendant variant
-// makes background-position !important in this app and freezes its keyframes.
 const TraceRunningContext = React.createContext(false)
 
 function TraceLine({
@@ -59,14 +58,14 @@ function TraceIcon({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function TraceTitle({ className, ...props }: React.ComponentProps<"span">) {
+function TraceTitle({ className, children, ...props }: React.ComponentProps<"span">) {
   const running = React.useContext(TraceRunningContext)
   return (
     <span
       data-slot="trace-title"
-      className={cn("min-w-0 truncate motion-reduce:shimmer-none motion-reduce:animate-none", running && "shimmer", className)}
+      className={cn("min-w-0 truncate", running && "composite-shimmer", className)}
       {...props}
-    />
+    >{children}{running && <ShimmerLayers>{children}</ShimmerLayers>}</span>
   )
 }
 

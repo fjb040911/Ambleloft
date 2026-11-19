@@ -46,8 +46,8 @@ import InputDeliveryPanel,{useInputDeliveries} from './InputDeliveryPanel';
 import {interruptedQuestion} from '../core/inputs/interrupted-question.mjs';
 import TaskAppCard from './TaskAppCard';
 
-export const runStatus = { preparing: '正在准备', running: '执行中', waiting: '等待审批', stopping: '正在停止', completed: '本轮已结束', failed: '执行失败', interrupted: '已停止 / 中断' };
-export const isRunning = (run: AgentRun) => ['preparing', 'running', 'waiting', 'stopping'].includes(run.status);
+import {isRunning,runStatus} from './run-status';
+export {isRunning,runStatus} from './run-status';
 function Duration({ timing }: { timing: TurnTiming }) {
   if (!timing.outcome) return null;
   const seconds = typeof timing.durationMs === 'number' && Number.isFinite(timing.durationMs) ? Math.max(0, Math.floor(timing.durationMs / 1000)) : null;
@@ -234,7 +234,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
    const flows=formsByTurn.get(turn.user.id)||[],apps=appsByTurn.get(turn.user.id)||[];
    // Keep the end anchor measured: a placeholder for the latest turn makes
    // composer resizing mount history and shift the scroll target while typing.
-   return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={turns.length>30&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
+   return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={turns.length>8&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };

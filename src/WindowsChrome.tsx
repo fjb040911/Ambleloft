@@ -4,6 +4,7 @@ import {Button} from './components/ui/button';
 import {SidebarTrigger} from './components/ui/sidebar';
 import {GlobalSidebarActions} from './GlobalActions';
 import {t} from './i18n';
+import {afterPaint} from './after-paint';
 
 /** Mounted only when the desktop bridge identifies Windows. */
 export default function WindowsChrome({settings=false,collapsedActions=false,onNewTask}:{settings?:boolean;collapsedActions?:boolean;onNewTask():void}) {
@@ -12,11 +13,13 @@ export default function WindowsChrome({settings=false,collapsedActions=false,onN
    const root=getComputedStyle(document.documentElement);
    void window.desktop?.setWindowChrome?.({color:root.getPropertyValue('--activity-rail').trim(),symbolColor:root.getPropertyValue('--text').trim()}).catch(()=>{});
   };
-  const observer=new MutationObserver(update);
+  let cancel=()=>{};
+  const schedule=()=>{cancel();cancel=afterPaint(update);};
+  const observer=new MutationObserver(schedule);
   observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   const media=matchMedia('(prefers-color-scheme: dark)');
-  media.addEventListener('change',update);update();
-  return ()=>{observer.disconnect();media.removeEventListener('change',update);};
+  media.addEventListener('change',schedule);schedule();
+  return ()=>{cancel();observer.disconnect();media.removeEventListener('change',schedule);};
  },[]);
  return <div className="windows-chrome" aria-label={t('窗口工具栏')}>
   {!settings&&<SidebarTrigger aria-controls="workspace-sidebar" aria-label={t('显示 / 隐藏侧栏')} title={t('显示 / 隐藏侧栏')}/>}
