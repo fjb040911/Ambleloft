@@ -1,8 +1,9 @@
+import {Table, TableHeader, TableBody, TableRow, TableHead, TableCell} from './components/ui/table';
 import {createMarkdownSplitter} from './markdown-blocks.mjs';
-import {CodeBlock as TraceCodeBlock,CodeBlockContent} from './components/ui/code-block';
+import {CodeBlock as TraceCodeBlock,CodeBlockHeader,CodeBlockActions,CodeBlockTitle,CodeBlockContent} from './components/ui/code-block';
 import {Button} from './components/ui/button';
 import {t, useLanguage} from './i18n';
-import { createContext, useContext, memo, useMemo, useRef, type ReactNode, isValidElement } from 'react';
+import { Fragment, createContext, useContext, memo, useMemo, useRef, type ReactNode, isValidElement } from 'react';
 import ReactMarkdown, {type Components} from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -28,7 +29,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const language = /language-([^\s]+)/.exec(child?.props.className || '')?.[1]?.toLowerCase() || 'text';
   const source = textOf(children).replace(/\n$/, '');
   const format = ['mermaid', 'echarts', 'drawio', 'svg'].includes(language) ? language : language === 'xml' && /<mx(GraphModel|file)/.test(source) ? 'drawio' : '';
-  return format ? <Artifact language={format} source={source} /> : <div className="code-block"><div className="artifact-toolbar"><span>{language}</span><CopyButton text={source} /></div><pre>{children}</pre></div>;
+  return format ? <Artifact language={format} source={source} /> : <TraceCodeBlock className="my-4"><CodeBlockHeader><CodeBlockTitle>{language}</CodeBlockTitle><CodeBlockActions><CopyButton text={source}/></CodeBlockActions></CodeBlockHeader><CodeBlockContent className="max-h-[420px]"><span className={child?.props.className}>{child?.props.children ?? children}</span></CodeBlockContent></TraceCodeBlock>;
 }
 type MarkdownResources={resourceUrl?:(path:string)=>string;onFileLink?:(path:string)=>void};
 const ResourceContext=createContext<MarkdownResources>({});
@@ -42,9 +43,32 @@ const MarkdownImage:NonNullable<Components['img']>=({alt,src})=>{
  const {resourceUrl}=useContext(ResourceContext);
  return resourceUrl&&src&&!/^[a-z][a-z0-9+.-]*:|^\/\//i.test(src)?<img src={resourceUrl(src)} alt={alt||''} loading="lazy"/>:<span className="image-placeholder">{t('图片：')}{alt||t('未命名')}{t('（外部图片暂不自动加载）')}</span>;
 };
-const MarkdownTable:NonNullable<Components['table']>=({children})=><div className="table-scroll"><table>{children}</table></div>;
+const MarkdownCode: NonNullable<Components['code']> = ({ children, node, ...props }) => {
+  if (typeof children !== 'string' || children.length < 64) {
+    return <code {...props}>{children}</code>;
+  }
+
+  // Keep each slash with its directory. Spaces inside a segment are real,
+  // selectable text; the visual boundary between segments is an empty wbr.
+  if (/^(?:\/(?!\/)|[A-Za-z]:\/|[\p{L}\p{N}_.~@+-]+\/)/u.test(children) && !children.includes('//')) {
+    const segments = children.split(/(?<=\/)/);
+    return <code {...props} data-inline-path="">{segments.map((segment, index) =>
+      <Fragment key={index}><span>{segment}</span>{index < segments.length - 1 && <wbr/>}</Fragment>
+    )}</code>;
+  }
+
+  if (!/^[$_\p{ID_Start}][$\p{ID_Continue}]*$/u.test(children)) return <code {...props}>{children}</code>;
+  const words = children.split(/(?<=[\p{Ll}\p{Nd}])(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u);
+  if (words.length === 1) return <code {...props}>{children}</code>;
+
+  // A wbr supplies a layout opportunity without adding characters to copied text.
+  return <code {...props} data-camel-identifier="">{words.flatMap((word, index) =>
+    index === 0 ? [word] : [<wbr key={index}/>, word]
+  )}</code>;
+};
+const MarkdownTable:NonNullable<Components['table']>=({children})=><Table>{children}</Table>;
 const TracePre:NonNullable<Components['pre']>=({children})=><TraceCodeBlock size="sm"><CodeBlockContent wrap className="max-h-64">{textOf(children).replace(/\n$/,'')}</CodeBlockContent></TraceCodeBlock>;
-const components:Components={pre:CodeBlock,a:MarkdownLink,img:MarkdownImage,table:MarkdownTable};
+const components:Components={pre:CodeBlock,code:MarkdownCode,a:MarkdownLink,img:MarkdownImage,table:MarkdownTable,thead:({children})=><TableHeader>{children}</TableHeader>,tbody:({children})=><TableBody>{children}</TableBody>,tr:({children})=><TableRow>{children}</TableRow>,th:({children,style})=><TableHead style={style}>{children}</TableHead>,td:({children,style})=><TableCell style={style}>{children}</TableCell>};
 const traceComponents:Components={...components,pre:TracePre};
 const MarkdownBlock=memo(function MarkdownBlock({text,trace}:{text:string;trace:boolean}){
  return <ReactMarkdown remarkPlugins={[remarkGfm,remarkMath]} rehypePlugins={[[rehypeKatex,{strict:false,trust:false}],[rehypeHighlight,{detect:false}]]} components={trace?traceComponents:components}>{text}</ReactMarkdown>;

@@ -74,7 +74,7 @@ test('a standalone new task must not inherit the project from a previously viewe
  await expect(page.getByRole('article',{name:'助手消息'}).getByText('协作执行记录的交付内容',{exact:true})).toBeVisible();
  await page.evaluate(()=>{const w=window as any,original=w.desktop.getRunPage;w.desktop.getRunPage=async(input:any)=>{await new Promise(resolve=>setTimeout(resolve,200));return original(input);};w.desktop.startRun=async(input:any)=>{w.__startInput=input;return {id:'new-standalone',title:input.prompt,projectId:input.projectId,cwd:input.projectId?'/tmp/fixture':'/scratch/new',status:'completed',model:'fixture',createdAt:new Date().toISOString(),messages:[{id:'u',role:'user',text:input.prompt}],tools:[],approvals:[]};};});
  await page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:'任务',exact:true}).click();
- await page.locator('.new-task').click();
+ await page.locator('#workspace-sidebar').getByRole('button',{name:/^新建任务/}).click();
  await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
  await page.getByRole('textbox',{name:'任务内容'}).fill('这是不关联项目的新任务');
  // Wait for the old full execution's delayed load to settle before sending.

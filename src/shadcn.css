@@ -91,6 +91,8 @@
 .composer {
  --ui-radius-2xl: 1.125rem;
  --input: oklch(0.922 0 0);
+ --composer-fill: light-dark(#fff, color-mix(in oklab, var(--input) 50%, transparent));
+ --composer-outline: light-dark(#dedede, transparent);
  --ring: oklch(0.708 0 0);
 }
 [data-theme="dark"] .composer { --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); }

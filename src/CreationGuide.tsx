@@ -1,5 +1,6 @@
+import ChatDisclosure from './ChatDisclosure';
 import {useEffect,useRef,useState} from 'react';
-import {WandSparkles,ArrowRight,Download,Settings2,ChevronDown} from 'lucide-react';
+import {WandSparkles,ArrowRight,Download,Settings2} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {t,formatDateTime} from './i18n';
@@ -30,12 +31,11 @@ export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=
  const status=state.trialStale?'版本或设置已变化，请重新试用':state.trial==='confirmed'?'已试用确认':({brief:'了解需求',building:'生成与验证',ready:'文件已检查，待安装',installed:state.installed?.hasConfiguration?'已安装，请配置并试用':'已安装，待试用'}[state.stage]);
  const resume=()=>onPrompt(t('继续创建。请先读取创建进度和待回答问题，保留已确认的信息，从未完成的步骤继续。'),CREATOR_ID);
  return <section className="creation-guide mb-4 min-w-0 px-1" aria-label={t('创建进度')}>
-  <details className="group/creation">
-   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 rounded-md py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+  <ChatDisclosure heading={<span className="flex flex-wrap items-center gap-2">
     <span className="min-w-0 flex-1 break-words font-medium">{state.title||t('创建技能 / 扩展')}</span>
     <span className="text-xs text-muted-foreground">{t(status)}</span>
-    <span className="flex items-center gap-1 text-xs text-muted-foreground">{t('方案与验证详情')}<ChevronDown className="size-3.5 group-open/creation:rotate-180" aria-hidden="true"/></span>
-   </summary>
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">{t('方案与验证详情')}</span>
+   </span>}>
    <div className="mt-2 max-h-[20dvh] overflow-y-auto overscroll-contain border-l border-border pl-3 text-sm">
     <div className="flex max-w-prose flex-col gap-3 py-1">
      <p className="whitespace-pre-wrap break-words">{state.summary||t('需求正在整理中')}</p>
@@ -55,7 +55,7 @@ export function CreationGuide({run,active,onPrompt,openSettings,hasPendingInput=
      {state.trialPrompt&&<p className="break-words text-muted-foreground">{t('试用方式')}：{state.trialPrompt}</p>}
     </div>
    </div>
-  </details>
+  </ChatDisclosure>
   {!hasPendingInput&&<p className="mt-1 text-sm text-muted-foreground">{state.trial==='confirmed'?t('已记录你的试用结果，可以继续使用或改进。'):state.stage==='ready'?t('安装已检查的版本，然后在对话中试用。'):state.stage==='installed'?t('试用符合预期后，再确认创建完成。'):state.nextStep||t('先说说想解决的问题，AI 会逐步帮你完善。')}</p>}
   {error&&<Alert variant="destructive" className="mt-3"><AlertDescription>{error}<Button variant="ghost" size="sm" onClick={()=>void refresh()}>{t('重新加载')}</Button></AlertDescription></Alert>}
   {!hasPendingInput&&<div className="mt-3 flex flex-wrap items-center gap-2">

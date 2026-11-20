@@ -58,7 +58,18 @@ class ConversationAgent {
  }
  async prepare(context){
   const run=context.run,message=run.messages.find(m=>m.id===context.turnKey);
-  const decision=await this.decide(context,message.text,true);
+  let decision;
+  // A chat-only turn has no executor to interrupt. Discard the old inference
+  // and route the same user message again using the explicitly chosen model.
+  try{
+   while(!context.done&&!context.cancelled){
+    const config=context.config;
+    try{decision=await this.decide(context,message.text,true);}
+    catch(error){if(context.config===config)throw error;}
+    if(context.config===config)break;
+   }
+  }finally{context.routingInitialMessage=false;}
+
   if(context.done||context.cancelled)return false;
   // Selected workflows/attachments require the executor's actual tool access.
   if(context.skills?.snapshots?.length||context.attachments?.length)decision.action='execute';
@@ -73,6 +84,14 @@ class ConversationAgent {
   const target={mode:'conversation',turnKey:context.turnKey};
   if(context.inputDelivery?.dispatch){const sent=await context.inputDelivery.dispatch(target,complete);await sent.receipt;}
   else{await context.inputDelivery?.onDispatch(target);await complete();}
+  if(context.pendingModelChange&&!decision.fallback){
+   const record=context.pendingModelChange,config=context.config;
+   run.providerId=config.id;run.model=config.model;run.baseUrl=config.baseUrl;
+   run.providerFingerprint=require('./provider.cjs').fingerprint(config);run.modelSessionId=randomUUID();
+   message.model=config.model;message.modelChange=config.model;
+   record.state='applied';record.effective=record.requested;record.finishedAt=new Date().toISOString();
+   context.pendingModelChange=null;context.pendingModelConfig=null;
+  }
   context.conversationOnly=true;await this.runtime.finish(context,'completed');return false;
  }
  async route(context,item){

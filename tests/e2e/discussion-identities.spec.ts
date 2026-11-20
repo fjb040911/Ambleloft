@@ -52,10 +52,12 @@ test('discussion experts share functional subagent names, streaming details and 
  const card=page.locator('.analysis-agent:visible').filter({hasText:'API contract review'});
  const trigger=card.locator(':scope > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]');
  await expect(trigger).toContainText('开始工作');await expect(trigger).not.toContainText('Kepler');await trigger.click();
- await expect(card.getByText('Review API contracts',{exact:true})).toBeVisible();await card.locator('summary').filter({hasText:'Inspect contracts'}).click();await expect(card.getByText('First chunk',{exact:true})).toBeVisible();
+ await expect(card.getByText('Review API contracts',{exact:true})).toBeVisible();await card.getByRole('button').filter({hasText:'Inspect contracts'}).click();await expect(card.getByText('First chunk',{exact:true})).toBeVisible();
  await page.evaluate(()=>{const q=(window as any).identityQA,run=q.runs['expert-0'];run.tools[0].nativeActivity[0].text+='; next chunk';run.tools[0].detail='Checking compatibility';q.update(run.id,{});});
  await expect(card.getByText('First chunk; next chunk',{exact:true})).toBeVisible();await expect(card.getByText('Checking compatibility',{exact:true})).toBeVisible();await expect(trigger).toHaveAttribute('aria-expanded','true');
  await page.evaluate(()=>{const q=(window as any).identityQA,run=q.runs['expert-0'],tool=run.tools[0];tool.status='completed';tool.nativeActivity[0].status='completed';tool.nativeLifecycle.push({status:'completed',at:'2026-11-14T01:01:00Z'});q.update(run.id,{status:'completed'});});
+ const summary=page.locator('[data-expert-id="writer"] .turn-progress-toggle:visible');
+ await expect(summary).toHaveAttribute('aria-expanded','false');await summary.click();
  await expect(card.getByRole('button',{name:'API contract review · 开始工作',exact:true})).toBeVisible();
  await expect(trigger).toContainText('已完成');if(await trigger.getAttribute('aria-expanded')==='false')await trigger.click();
  await expect(card.getByRole('list',{name:'执行记录'})).toContainText('开始工作');await expect(card.getByRole('list',{name:'执行记录'})).toContainText('已完成');await expect(card.getByRole('button',{name:'停止分析',exact:true})).toHaveCount(0);

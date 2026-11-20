@@ -40,3 +40,57 @@ for(const theme of ['light','dark'])test(`sidebar rows have one surface through 
  const toggle=nav.locator('.tree-toggle').first();await toggle.hover();await expect(toggle).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
  await page.keyboard.press('Tab');await toggle.focus();await expect(toggle).toHaveCSS('outline-style','solid');
 });
+
+test('the sidebar header divider follows the list scroll position',async({page})=>{
+ await page.setViewportSize({width:1394,height:600});
+ await page.addInitScript(()=>{
+  const projects=Array.from({length:24},(_,i)=>({id:String(i),name:'项目 '+i,path:'/tmp/'+i,createdAt:new Date().toISOString()}));
+  localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'light',layoutMode:'activity',language:'zh-CN',projects,tasks:[]}));
+ });
+ await page.goto('/');
+ const list=page.locator('.workspace-navigation');
+ const header=page.locator('#workspace-sidebar [data-slot=sidebar-header]');
+ const atTop=await header.evaluate(el=>getComputedStyle(el).boxShadow);
+ await list.evaluate(el=>el.scrollTop=120);
+ await expect(header).not.toHaveCSS('box-shadow',atTop);
+ await list.evaluate(el=>el.scrollTop=0);
+ await expect(header).toHaveCSS('box-shadow',atTop);
+});
+
+test('project and standalone task titles fade within the space left by actions', async ({page}) => {
+ await page.setViewportSize({width:1394,height:947});
+ await page.addInitScript(() => {
+  const createdAt=new Date().toISOString();
+  const project={id:'p',name:'项目'.repeat(20),path:'/tmp/fixture',createdAt};
+  const tasks=['p',null].flatMap(projectId=>['短标题','长标题'.repeat(12)].map((title,i)=>({
+   id:String(projectId)+i,projectId,title,prompt:title,status:'draft',modelId:'',createdAt
+  })));
+  localStorage.setItem('atelier.workspace.v1',JSON.stringify({theme:'light',language:'zh-CN',layoutMode:'activity',projects:[project],tasks}));
+ });
+ await page.goto('/');
+ for(const group of ['项目','任务']){
+  const tab=page.getByRole('navigation',{name:'分组导航'}).getByRole('button',{name:group,exact:true});
+  if(await tab.getAttribute('aria-expanded')!=='true')await tab.click();
+  const list=page.locator('.workspace-navigation [data-slot=sidebar-group]:visible');
+  const short=list.locator('.tree-task').filter({hasText:'短标题'});
+  const long=list.locator('.tree-task').filter({hasText:'长标题'});
+  const checkWidth=(row:typeof short)=>row.locator('.nav-title-text').evaluate(el=>el.getBoundingClientRect().width-el.parentElement!.clientWidth);
+  await short.hover();
+  expect(await checkWidth(short)).toBeLessThan(0);
+  const rows=group==='项目'?[list.locator('.project-tree-row'),long]:[long];
+  for(const row of rows){
+   await page.mouse.move(1100,100);
+   const viewport=row.locator('.nav-title-viewport');
+   const width=await viewport.evaluate(el=>el.clientWidth);
+   expect(await checkWidth(row)).toBeGreaterThan(0);
+   await expect(row.locator('.nav-title-text')).toHaveCSS('mask-image',/linear-gradient/);
+   await row.locator('.row-menu').first().hover();
+   await expect.poll(()=>viewport.evaluate(el=>el.clientWidth)).toBeLessThan(width);
+   await row.locator('.row-menu').first().focus();
+   await page.mouse.move(1100,100);
+   await expect(row.locator('.row-menu').first()).toHaveCSS('opacity','1');
+   expect(await viewport.evaluate(el=>el.clientWidth)).toBeLessThan(width);
+   await row.locator('.row-menu').first().blur();
+  }
+ }
+});

@@ -398,6 +398,7 @@ class AgentRuntime {
       context.run = run;
       if(hostContext.discussionInput)context.discussionUpdate=this.discussionUpdate(run,hostContext.discussionInput,context.turnKey);
       context.dualAgent=!!(hostContext.userAuthored||previous?.conversation)&&!run.collaboration;
+      context.routingInitialMessage=context.dualAgent&&!!hostContext.userAuthored;
       if(context.dualAgent)run.conversation ||= {version:0,updates:[]};
       if(this.creation&&context.skills?.snapshots.some(s=>s.id==='builtin-skill-master'))await this.creation.ensure(run.id);
       context.creationActive=!!(this.creation&&await this.creation.read(run.id).catch(()=>null));

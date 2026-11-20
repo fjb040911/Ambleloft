@@ -11,20 +11,24 @@ function confirmCrossing(run,config,input){if((run.baseUrl!==config.baseUrl||run
 async function switchModel(input){
  validate(input);
  const run=this.runs.find(r=>r.id===input.runId);if(!run)throw Error('任务不存在');
+ const queued=[...this.contexts.values()].find(c=>c.run===run&&!c.done&&!c.cancelled);
+ if(!queued)throw Error('本轮已结束，请为下一轮选择模型');
  const config=await abortable(this.provider.secret(input.providerId,input.model),AbortSignal.timeout(30000));
+ if(queued.done||queued.cancelled||this.closing)throw Error('本轮已结束，请为下一轮选择模型');
  confirmCrossing(run,config,input);
  const previous={providerId:run.providerId,model:run.model};
- const queued=[...this.contexts.values()].find(c=>c.run===run&&!c.done&&!c.cancelled);
- if(queued?.run.queued&&!queued.launched){
+ if(!queued.launched && (queued.run.queued || queued.routingInitialMessage)){
   if(queued.permissionTransition)throw Error('执行设置正在切换，请等待结果');
   if(run.collaboration)await this.spaces?.authorizeRun(run);
-  if(!queued.launched&&!queued.done&&!queued.cancelled){
+  if(!queued.launched&&!queued.done&&!queued.cancelled&&(queued.run.queued||queued.routingInitialMessage)){
    if(queued.remoteProject)config.remoteOnly=true;
-   const record={id:randomUUID(),requested:choice(config),previous,state:'configured',effective:null,startedAt:new Date().toISOString()};
+   const record={id:randomUUID(),turnKey:queued.turnKey,requested:choice(config),previous,state:'configured',effective:null,startedAt:new Date().toISOString()};
    queued.pendingModelConfig=config;queued.pendingModelChange=record;this.conversation.stop(queued);delete queued.conversationAbort;queued.config=config;run.modelChange=record;
-   this.changed(run);await this.persist(undefined,run);return structuredClone(record);
+   this.changed(run);await this.persist(undefined,run);
+   return structuredClone(record);
   }
  }
+ if(queued.conversationOnly || (queued.conversationPreparation && !queued.launched && !queued.run.queued))throw Error('本轮聊天回复正在完成，请为下一轮选择模型');
  return require('./permission-switch.cjs').switchPermission.call(this,{runId:run.id,permission:run.permission||'default'}, {
   requested:choice(config),previous,
   reconnect:async(context,check,timeoutMs)=>{

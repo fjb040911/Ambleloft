@@ -1,3 +1,7 @@
+import {Card,CardHeader,CardTitle,CardAction,CardContent} from '../components/ui/card';
+import {Button} from '../components/ui/button';
+import {CodeBlock,CodeBlockContent} from '../components/ui/code-block';
+import {Alert, AlertDescription} from '../components/ui/alert';
 import VirtualBlock from '../VirtualBlock';
 import {Maximize2,Workflow} from 'lucide-react';
 import PreviewDialog from '../PreviewDialog';
@@ -38,25 +42,25 @@ function Mermaid({ source }: { source: string }) {
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [source, id]);
-  return error ? <p className="artifact-error" role="alert">{error}</p> : svg ? <img className="diagram-svg" alt={t("Mermaid 图表")} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} /> : <p role="status">{t('正在生成图表…')}</p>;
+  return error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : svg ? <img className="diagram-svg" alt={t("Mermaid 图表")} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} /> : <p role="status">{t('正在生成图表…')}</p>;
 }
 export default function Artifact({ language, source }: { language: string; source: string }) {
   useLanguage();
   const [raw, setRaw] = useState(false); const {status:copy,copy:copySource}=useCopyFeedback();
   const [expanded, setExpanded] = useState(false);
   const [previewOpen,setPreviewOpen]=useState(false);
-  return <section className={`artifact ${expanded ? 'artifact-expanded' : ''}`} aria-label={`${language} 图表`}>
-    <div className="artifact-toolbar"><strong>{language === 'drawio' ? t('draw.io · 基础预览') : language}</strong><div>
-      <button type="button" onClick={() => setRaw(!raw)}>{raw ? t('预览') : t('源码')}</button>
-      {language==='mermaid'?<button type="button" aria-label={t('最大化 Mermaid 图表')} title={t('最大化 Mermaid 图表')} onClick={()=>setPreviewOpen(true)}><Maximize2 size={16}/></button>:<button type="button" onClick={() => setExpanded(!expanded)}>{expanded ? t('收起') : t('放大')}</button>}
-      <button type="button" aria-live="polite" onClick={()=>void copySource(source)}>{t(copy)}</button>
-      <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([source], { type: 'text/plain' })); const a = document.createElement('a'); a.href = url; a.download = `diagram.${language === 'echarts' ? 'json' : language === 'mermaid' ? 'mmd' : language}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>{t('下载')}</button>
-    </div></div>
-    {raw ? <pre>{source}</pre> : source.length > 50000 ? <p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p> : <div className="artifact-preview"><VirtualBlock enabled preserveState><Suspense fallback={<p>{t('正在加载预览…')}</p>}>
+  return <Card role="region" size="sm" className={`artifact ${expanded ? 'artifact-expanded' : ''}`} aria-label={`${language} 图表`}>
+    <CardHeader><CardTitle>{language === 'drawio' ? t('draw.io · 基础预览') : language}</CardTitle><CardAction className="flex flex-wrap items-center gap-1">
+      <Button type="button" size="sm" variant="ghost" onClick={() => setRaw(!raw)}>{raw ? t('预览') : t('源码')}</Button>
+      {language==='mermaid'?<Button type="button" size="sm" variant="ghost" aria-label={t('最大化 Mermaid 图表')} title={t('最大化 Mermaid 图表')} onClick={()=>setPreviewOpen(true)}><Maximize2 size={16}/></Button>:<Button type="button" size="sm" variant="ghost" onClick={() => setExpanded(!expanded)}>{expanded ? t('收起') : t('放大')}</Button>}
+      <Button type="button" size="sm" variant="ghost" aria-live="polite" onClick={()=>void copySource(source)}>{t(copy)}</Button>
+      <Button type="button" size="sm" variant="ghost" onClick={() => { const url = URL.createObjectURL(new Blob([source], { type: 'text/plain' })); const a = document.createElement('a'); a.href = url; a.download = `diagram.${language === 'echarts' ? 'json' : language === 'mermaid' ? 'mmd' : language}`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>{t('下载')}</Button>
+    </CardAction></CardHeader><CardContent>
+    {raw ? <CodeBlock><CodeBlockContent className="max-h-[420px]">{source}</CodeBlockContent></CodeBlock> : source.length > 50000 ? <Alert variant="destructive"><AlertDescription>{t('内容过大，请查看源码或下载。')}</AlertDescription></Alert> : <div className="artifact-preview"><VirtualBlock enabled preserveState><Suspense fallback={<p>{t('正在加载预览…')}</p>}>
       {language === 'mermaid' ? <Mermaid source={source} /> : language === 'echarts' ? <Chart source={source} /> : language === 'drawio' ? <Drawio source={source} /> : <img className="diagram-svg" alt={t("SVG 图形")} src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(cleanSvg(source))}`} />}
     </Suspense></VirtualBlock></div>}
-    {previewOpen&&<PreviewDialog name={t('Mermaid 图表')} icon={<Workflow size={18}/>} contentClass="is-diagram" maximizedOnly close={()=>setPreviewOpen(false)}>
-      <div className="mermaid-dialog-canvas">{source.length>50000?<p className="artifact-error">{t('内容过大，请查看源码或下载。')}</p>:<Mermaid source={source}/>}</div>
+    </CardContent>{previewOpen&&<PreviewDialog name={t('Mermaid 图表')} icon={<Workflow size={18}/>} contentClass="is-diagram" maximizedOnly close={()=>setPreviewOpen(false)}>
+      <div className="mermaid-dialog-canvas">{source.length>50000?<Alert variant="destructive"><AlertDescription>{t('内容过大，请查看源码或下载。')}</AlertDescription></Alert>:<Mermaid source={source}/>}</div>
     </PreviewDialog>}
-  </section>;
+  </Card>;
 }

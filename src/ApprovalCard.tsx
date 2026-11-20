@@ -1,3 +1,4 @@
+import {CodeBlock,CodeBlockContent} from './components/ui/code-block';
 import {useId,useState} from 'react';
 import {Terminal,FilePenLine,Copy,Check} from 'lucide-react';
 import {Item,ItemMedia,ItemContent,ItemTitle,ItemDescription,ItemActions,ItemFooter} from './components/ui/item';
@@ -24,7 +25,7 @@ export default function ApprovalCard({approval,disabled,pending,error,decide}:{a
    <ItemDescription>{t('仅限本次请求')}</ItemDescription>
    {typeof params.subagent==='string'&&<ItemDescription>{t('发起专家')} · {params.subagent}</ItemDescription>}
    {reason&&<ItemDescription className="line-clamp-none break-words">{reason}</ItemDescription>}
-   {command&&<div className="flex min-w-0 items-start gap-2"><pre tabIndex={0} aria-label={t('待执行命令')} className="m-0 max-h-24 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{command}</pre><Button variant="ghost" size="icon-xs" aria-label={t(status)} title={t(status)} onClick={()=>void copy(command)}>{status==='已复制'?<Check/>:<Copy/>}</Button><span className="sr-only" role="status">{status==='复制命令'?'':t(status)}</span></div>}
+   {command&&<div className="flex min-w-0 items-start gap-2"><CodeBlock size="sm" className="min-w-0 flex-1"><CodeBlockContent wrap className="max-h-24" aria-label={t('待执行命令')}>{command}</CodeBlockContent></CodeBlock><Button variant="ghost" size="icon-xs" aria-label={t(status)} title={t(status)} onClick={()=>void copy(command)}>{status==='已复制'?<Check/>:<Copy/>}</Button><span className="sr-only" role="status">{status==='复制命令'?'':t(status)}</span></div>}
    {!command&&<ItemDescription className="line-clamp-none">{t('请查看请求详情，确认操作内容后再决定。')}</ItemDescription>}
    {cwd&&<ItemDescription className="line-clamp-none break-all">{t('工作目录')} · {cwd}</ItemDescription>}
   </ItemContent>
@@ -34,7 +35,7 @@ export default function ApprovalCard({approval,disabled,pending,error,decide}:{a
   </ItemFooter>
   {details&&<ItemContent id={detailsId} role="region" aria-label={t('授权请求详情')} className="w-full basis-full min-w-0">
    <ItemTitle>{t('授权请求详情')}</ItemTitle><ItemDescription className="line-clamp-none">{t('此授权仅用于当前请求，不会开启完全访问。')}</ItemDescription>
-   <pre tabIndex={0} className="m-0 max-h-[24vh] overflow-auto overscroll-contain whitespace-pre-wrap break-all font-mono text-xs">{raw}</pre>
+   <CodeBlock size="sm"><CodeBlockContent wrap className="max-h-[24vh]">{raw}</CodeBlockContent></CodeBlock>
   </ItemContent>}
   {error&&<Alert variant="destructive" className="basis-full"><AlertDescription>{t('提交未成功，请重试。')} {error}</AlertDescription></Alert>}
  </Item>;

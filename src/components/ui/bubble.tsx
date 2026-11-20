@@ -21,8 +21,6 @@ const bubbleVariants = cva(
       variant: {
         default:
           "*:data-[slot=bubble-content]:bg-primary *:data-[slot=bubble-content]:text-primary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-primary/80",
-        user:
-          "max-w-[90%] max-[800px]:max-w-[96%] *:data-[slot=bubble-content]:bg-message *:data-[slot=bubble-content]:text-message-foreground *:data-[slot=bubble-content]:border-0 *:data-[slot=bubble-content]:rounded-(--radius-message) *:data-[slot=bubble-content]:px-(--message-padding-inline) *:data-[slot=bubble-content]:py-(--message-padding-block) *:data-[slot=bubble-content]:text-[.9375rem] *:data-[slot=bubble-content]:leading-normal *:data-[slot=bubble-content]:font-medium",
         secondary:
           "*:data-[slot=bubble-content]:bg-secondary *:data-[slot=bubble-content]:text-secondary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]",
         muted:
