@@ -264,6 +264,7 @@ main.chat-main { --dock-surface: var(--chat-canvas); background: var(--chat-canv
 .conversation-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation-content { max-width: 920px; padding: 0 28px 26px; margin: auto; }
 .conversation-dock { position: relative; flex-shrink: 0; width: 100%; max-width: 920px; margin: 0 auto; padding: 8px 28px 8px; background: var(--dock-surface, var(--surface)); }
+:is(.new-task-composer, .conversation-dock) > [data-slot="alert"] { margin-block-end: 12px; }
 .jump-latest { position: absolute; right: 30px; top: -38px; box-shadow: 0 3px 12px #0001; background: var(--raised); }
 .message { padding: 18px 0; background: transparent; border: 0; }
 .message-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }

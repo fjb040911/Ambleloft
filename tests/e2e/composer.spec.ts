@@ -1,11 +1,11 @@
 import {test,expect} from '@playwright/test';
-async function setup(page:import('@playwright/test').Page){
- await page.addInitScript(()=>{
+async function setup(page:import('@playwright/test').Page,secondTask=false){
+ await page.addInitScript(secondTask=>{
  sessionStorage.setItem('atelier.active-view.v1',JSON.stringify({page:'home',activeGroup:'chats'}));
  const providers=[{id:'a',name:'服务 A',model:'Model A',models:['Model A','Model B'],configured:true,baseUrl:'http://localhost/v1',hasKey:false,executable:''},{id:'b',name:'服务 B',model:'Model 1',models:['Model 1'],configured:true,baseUrl:'http://localhost/v2',hasKey:false,executable:''}];
  const run={id:'r',providerId:'a',title:'现有任务',model:'Model A',baseUrl:providers[0].baseUrl,cwd:'/tmp',createdAt:new Date().toISOString(),status:'completed',error:'',messages:[{id:'u',role:'user',text:'你好'},{id:'a',role:'assistant',text:'你好'}],tools:[],approvals:[]};
- (window as any).desktop={getProvider:async()=>providers[0],listProviders:async()=>({defaultId:'a',providers}),getDevice:async()=>({name:'Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>[run],onRun:()=>()=>{},onCommand:()=>()=>{},selectAttachments:async()=>[{name:'brief.txt',path:'/tmp/brief.txt'}],startRun:async(input:any)=>{(window as any).__sent=input;return {...run,model:input.model,providerId:input.providerId,status:'running'};}};
- });await page.goto('/');
+ (window as any).desktop={getProvider:async()=>providers[0],listProviders:async()=>({defaultId:'a',providers}),getDevice:async()=>({name:'Mac',memoryGB:64,mode:'desktop'}),readWorkspace:async()=>({layoutMode:'classic',tasks:[],projects:[],theme:'light'}),saveWorkspace:async()=>{},listRuns:async()=>secondTask?[run,{...run,id:'r2',title:'另一项任务'}]:[run],onRun:(listener:any)=>{(window as any).__notifyRun=listener;return()=>{};},onCommand:()=>()=>{},selectAttachments:async()=>[{name:'brief.txt',path:'/tmp/brief.txt'}],startRun:async(input:any)=>{(window as any).__sent=input;return {...run,model:input.model,providerId:input.providerId,status:'running'};}};
+ },secondTask);await page.goto('/');
 }
 test('composer groups models, adds context, preserves draft through settings',async({page})=>{
  await setup(page);await page.getByRole('textbox',{name:'任务内容',exact:true}).fill('我的草稿');
@@ -53,6 +53,12 @@ test('pending submission accepts new typing without resending and a failure reta
  await page.getByRole('button',{name:'发送任务',exact:true}).click();await expect(input).toBeEnabled();await expect(input).toHaveValue('');await input.fill('新输入');await input.press('Enter');expect(await page.evaluate(()=>(window as any).__sendCount)).toBe(1);
  await page.evaluate(()=>(window as any).__rejectSend(new Error('暂时无法发送')));
  await expect(input).toBeEnabled();await expect(input).toHaveValue('保留这份草稿\n\n新输入');
+ const notice=page.getByRole('alert').filter({hasText:'暂时无法发送'});
+ const composer=page.locator('.new-task-composer .composer');
+ const alertBox=(await notice.boundingBox())!;
+ expect((await composer.boundingBox())!.y-alertBox.y-alertBox.height).toBeCloseTo(12,0);
+ await notice.getByRole('button',{name:'关闭提示'}).click();
+ expect((await composer.boundingBox())!.y).toBeCloseTo(alertBox.y,0);
 });
 
 test('composer grows, handles IME and retains running drafts until explicitly sent',async({page})=>{
@@ -129,3 +135,107 @@ test('prompt input isolates docs radius and focus from legacy theme in home and 
   }
  }
 });
+
+test('a changed endpoint requires confirmation at send time and cancel preserves the draft',async({page})=>{
+ await setup(page);
+ await page.locator('.tree-task > button:first-child').click();
+ await page.evaluate(()=>{
+  const desktop=(window as any).desktop,list=desktop.listProviders;
+  desktop.listProviders=async()=>{const catalog=await list();return {...catalog,providers:catalog.providers.map((p:any)=>({...p,baseUrl:'https://new.example/v1'}))};};
+ });
+ const input=page.getByRole('textbox',{name:'继续对话'});
+ await input.fill('确认后才发送');await input.press('Enter');
+ const dialog=page.getByRole('alertdialog');await expect(dialog).toContainText('https://new.example/v1');
+ await dialog.getByRole('button',{name:'取消',exact:true}).click();await expect(input).toHaveValue('确认后才发送');
+ expect(await page.evaluate(()=>(window as any).__sent)).toBeUndefined();
+ await input.press('Enter');await dialog.getByRole('button',{name:'切换模型服务',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__sent)).toMatchObject({runId:'r',confirmProviderChange:true,confirmedProviderBaseUrl:'https://new.example/v1',prompt:'确认后才发送'});
+});
+
+test('a rejected continuation has one dismissible notice owned by its task',async({page})=>{
+ await setup(page,true);
+ const task=(title:string)=>page.locator('.tree-task > button:first-child').filter({hasText:title});
+ await task('现有任务').click();
+ await page.evaluate(()=>{(window as any).desktop.startRun=async()=>{throw Error("Error invoking remote method 'agent:start': Error: 切换服务需要确认将会话历史发送到新的端点");};});
+ const input=page.getByRole('textbox',{name:'继续对话'});
+ await input.fill('保留草稿');await input.press('Enter');
+ const notice=page.getByRole('alert').filter({hasText:'重新选择模型'});
+ await expect(notice).toHaveCount(1);await expect(input).toHaveValue('保留草稿');
+ const alertBox=(await notice.boundingBox())!;
+ const composerBox=(await page.locator('.conversation-dock .composer:visible').boundingBox())!;
+ expect(composerBox.y-alertBox.y-alertBox.height).toBeCloseTo(12,0);
+ await expect(page.getByText(/Error invoking remote method/)).toHaveCount(0);
+ await task('另一项任务').click();await expect(notice).toHaveCount(0);
+ await task('现有任务').click();await expect(input).toHaveValue('保留草稿');
+ // A non-resident task may have been unmounted. Reproduce the failure to check dismissal.
+ await input.press('Enter');await notice.getByRole('button',{name:'关闭提示'}).click();
+ await expect(notice).toHaveCount(0);await expect(input).toHaveValue('保留草稿');
+});
+
+for(const width of [1240,390]){
+ test(`first send keeps the composer anchored until the conversation opens at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:740});
+  await setup(page);
+  await page.evaluate(()=>{
+   const w=window as any,desktop=w.desktop,start=desktop.startRun;
+   desktop.startRun=(input:any)=>new Promise(resolve=>{
+    w.acceptFirstMessage=async()=>resolve({...await start(input),id:'fresh-chat',messages:[{id:'first',role:'user',text:input.prompt}]});
+   });
+  });
+  const firstInput=page.getByRole('textbox',{name:'任务内容',exact:true});
+  await firstInput.fill('首轮消息\n'.repeat(60));await firstInput.press('Enter');
+  await expect(page.getByLabel('正在发送的消息')).toBeVisible();
+  const box=page.locator('.composer:visible > [data-slot=input-group]');
+  const pending=await box.boundingBox();
+  const userBubble=page.locator('[data-slot=bubble-content]:visible').first();
+  const before=(await userBubble.boundingBox())!;
+  await page.evaluate(()=>(window as any).acceptFirstMessage());
+  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
+  const opened=await box.boundingBox();
+  const after=(await userBubble.boundingBox())!;
+  expect(before.y).toBeCloseTo(after.y,0);
+  expect(pending!.y+pending!.height).toBeCloseTo(opened!.y+opened!.height,0);
+  expect(pending!.y).toBeCloseTo(opened!.y,0);
+  expect(pending!.width).toBeCloseTo(opened!.width,0);
+ });
+}
+
+for(const width of [1240,390]){
+ test(`first outgoing bubble keeps its position when accepted at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:740});
+  let release!:()=>void;
+  const loading=new Promise<void>(resolve=>{release=resolve;});
+  const moduleRequested=page.waitForRequest(request=>new URL(request.url()).pathname==='/src/Conversation.tsx');
+  await page.route('**/src/Conversation.tsx*',async route=>{await loading;await route.continue();});
+  await setup(page);
+  await page.evaluate(()=>{
+   const w=window as any,start=w.desktop.startRun;
+   w.desktop.startRun=(input:any)=>new Promise(resolve=>{
+    w.acceptFirstMessage=async()=>{
+     const run={...await start(input),id:'new-chat',messages:[{id:'first',role:'user',text:input.prompt}]};
+     w.__notifyRun({...run,status:'preparing',summaryOnly:true,messages:[]});
+     resolve(run);
+    };
+   });
+  });
+  const text='请帮我整理今天的安排';
+  const input=page.getByRole('textbox',{name:'任务内容',exact:true});
+  await input.fill(text);await input.press('Enter');
+  const bubble=page.locator('[data-slot=bubble-content]:visible').filter({hasText:text});
+  await expect(bubble).toHaveCount(1);
+  const pending=(await bubble.boundingBox())!;
+  await page.evaluate(()=>(window as any).acceptFirstMessage());
+  try{
+   await moduleRequested;
+   await page.evaluate(()=>new Promise<void>(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done()))));
+   await expect(bubble).toBeVisible();
+   expect((await bubble.boundingBox())!.y).toBeCloseTo(pending.y,0);
+  }finally{release();}
+  await expect(page.getByRole('textbox',{name:'继续对话'})).toBeVisible();
+  await expect(bubble).toHaveCount(1);
+  const accepted=(await bubble.boundingBox())!;
+  expect(pending.y).toBeLessThan(160);
+  expect(pending.y).toBeCloseTo(accepted.y,0);
+  expect(pending.x).toBeCloseTo(accepted.x,0);
+ });
+}

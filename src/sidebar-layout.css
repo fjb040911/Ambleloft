@@ -23,6 +23,8 @@
 .workspace-group-title { padding:8px 24px 5px 16px; font-size:16px; font-weight:600; line-height:20px; }
 .nav-empty { color:var(--muted); font-size:.75rem; line-height:1.5; margin:6px 10px 8px; }
 .project-tree-row,.tree-task { position:relative; display:flex; align-items:center; min-height:32px; border-radius:var(--radius-list); }
+/* Keep the hover path open across the navigation padding up to the preview. */
+.project-tree-row[data-preview-open]::after { content:""; position:absolute; inset-block:0; left:100%; width:12px; }
 .project-tree-row:hover,.tree-task:hover { background:var(--hover); }
 .project-tree-name,.tree-task > button:first-child { min-height:32px; min-width:0; flex:1; background:transparent; color:inherit; }
 /* The viewport tracks space left by badges and actions; the text keeps its intrinsic width. */

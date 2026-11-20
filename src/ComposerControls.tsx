@@ -3,6 +3,8 @@ import PermissionStatus from './PermissionStatus';
 import ModelStatus from './ModelStatus';
 import {InputGroupButton} from './components/ui/input-group';
 import {cn} from 'cn';
+import ComposerErrorNotice from './ComposerErrorNotice';
+import {composerError,modelServiceConfirmation} from './model-service-feedback';
 import {useConfirm} from './Confirmation';
 import {useEffect,useRef,useState} from 'react';
 import {Plus,X,ChevronDown,ShieldCheck,Folder,Sparkles,Check} from 'lucide-react';
@@ -13,7 +15,7 @@ import {Button} from './components/ui/button';
 import {ToggleGroup,ToggleGroupItem} from './components/ui/toggle-group';
 import {Popover,PopoverTrigger,PopoverContent,PopoverTitle,PopoverDescription} from './components/ui/popover';
 import {Command,CommandInput,CommandList,CommandEmpty,CommandGroup,CommandItem} from './components/ui/command';
-export interface ComposerOptions {clientMutationId?:string;employeeId?:string;selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean}
+export interface ComposerOptions {clientMutationId?:string;employeeId?:string;selectedSkillIds?:string[];providerId?:string;model?:string;permission?:'default'|'full';attachments?:{name:string;path:string}[];confirmProviderChange?:boolean;confirmedProviderBaseUrl?:string}
 const popupLayout='w-80 max-w-[calc(100vw-24px)] max-h-[min(380px,var(--available-height))] overflow-y-auto motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none';
 export default function ComposerControls({permissionChange,modelChange,catalog,value,onChange,disabled,permissionDisabled=disabled,onPermissionChange,permissionScope,onModelChange,previousProviderIds,modelDisabled=disabled,modelPending=false,openSettings,previousProviderId,previousBaseUrl}:{permissionChange?:PermissionChange;modelChange?:ModelChange;catalog:ProviderCatalog;value:ComposerOptions;onChange(value:ComposerOptions):void;disabled?:boolean;permissionDisabled?:boolean;onPermissionChange?(permission:'default'|'full'):Promise<void>;permissionScope?:string;onModelChange?(value:ComposerOptions):Promise<void>;previousProviderIds?:string[];modelDisabled?:boolean;modelPending?:boolean;openSettings?(section:string):void;previousProviderId?:string;previousBaseUrl?:string}){
  const confirm=useConfirm();
@@ -56,11 +58,11 @@ export function ModelPicker({catalog,value,onChange,disabled,pending=false,openS
  const confirm=useConfirm(),modelTrigger=useRef<HTMLButtonElement>(null);
  const [open,setOpen]=useState(false),[modelError,setModelError]=useState('');
  useEffect(()=>{if(disabled)setOpen(false);},[disabled]);
- return (    <>{modelError&&<Alert variant="destructive"><AlertDescription>{modelError} <Button variant="ghost" size="sm" onClick={()=>setModelError('')}>{t('关闭提示')}</Button></AlertDescription></Alert>}<Popover open={open} onOpenChange={setOpen}>
+ return (    <>{modelError&&<ComposerErrorNotice message={modelError} dismiss={()=>setModelError('')}/>}<Popover open={open} onOpenChange={setOpen}>
      <PopoverTrigger render={<Button type="button" variant="ghost" size="sm" className="max-w-full" disabled={disabled} aria-label={t('选择模型')} ref={modelTrigger}/> }><span className="composer-model-name min-w-0 truncate">{value.model||t('选择模型')}</span>{pending&&<span className="text-xs text-muted-foreground">{t('下一轮')}</span>}<ChevronDown/></PopoverTrigger>
      <PopoverContent className={popupLayout} side="top" align="end" sideOffset={8} aria-label={t('模型列表')}>
       <PopoverTitle className="sr-only">{t('模型列表')}</PopoverTitle>
-      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{setModelError('');const crossing=previousProviderIds?.some(id=>id!==p.id)||(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setOpen(false);if(!await confirm({title:t('切换模型服务'),description:t('切换服务后，当前任务历史将发送到新的模型服务。是否继续？'),action:t('切换模型服务'),returnFocus:modelTrigger.current}))return;}setOpen(false);try{await onChange({...value,providerId:p.id,model,confirmProviderChange:!!crossing});setModelError('');}catch(e){setModelError((e as Error).message);}}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
+      <Command><CommandInput aria-label={t('搜索模型')} placeholder={t('搜索模型')}/><CommandList aria-label={t('模型列表')}><CommandEmpty>{t('未找到匹配的模型')}</CommandEmpty>{catalog.providers.map(p=><CommandGroup key={p.id} heading={p.name}>{(p.models||[p.model]).map(model=><CommandItem key={model} value={`${p.id}:${model}`} keywords={[p.name||p.id||p.baseUrl,model]} aria-label={`${model} ${p.name}`} data-checked={value.providerId===p.id&&value.model===model} onSelect={async()=>{setModelError('');const crossing=previousProviderIds?.some(id=>id!==p.id)||(!!previousProviderId&&previousProviderId!==p.id)||(!!previousBaseUrl&&previousBaseUrl!==p.baseUrl);if(crossing){setOpen(false);if(!await confirm({...modelServiceConfirmation(p),returnFocus:modelTrigger.current}))return;}setOpen(false);try{await onChange({...value,providerId:p.id,model,confirmProviderChange:!!crossing,confirmedProviderBaseUrl:crossing?p.baseUrl:undefined});setModelError('');}catch(e){setModelError(composerError(e));}}}><span className="min-w-0 break-all">{model}</span></CommandItem>)}</CommandGroup>)}</CommandList></Command>
       {!catalog.providers.length&&<PopoverDescription>{t('尚未配置模型服务')}</PopoverDescription>}{openSettings&&<Button variant="ghost" size="sm" onClick={()=>{setOpen(false);openSettings('providers');}}>{t('配置模型服务')}</Button>}
      </PopoverContent>
     </Popover></>);

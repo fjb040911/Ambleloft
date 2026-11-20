@@ -140,9 +140,9 @@ declare global {
       searchWorkspace?(input:{query:string;kind:string;cursor?:string}):Promise<{items:SearchResult[];total:number;next:string|null}>;
       listRuns(): Promise<AgentRun[]>;
       composerSendStatus?(input:{clientMutationId:string;runId?:string;kind:'start'|'append'|'discussion'}):Promise<{state:'pending'|'accepted'|'absent';runId?:string;discussionId?:string;deliveryState?:string}>;
-      startRun(input: { clientMutationId?:string; employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
+      startRun(input: { clientMutationId?:string; employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmedProviderBaseUrl?:string;confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
       accessArtifact(input:{runId:string;id:string;preview?:boolean}):Promise<(DeliveredFile&{text:string})|null>;
-      switchRunModel?(input:{runId:string;providerId:string;model:string;confirmProviderChange?:boolean}):Promise<ModelChange>;
+      switchRunModel?(input:{runId:string;providerId:string;model:string;confirmedProviderBaseUrl?:string;confirmProviderChange?:boolean}):Promise<ModelChange>;
       switchRunPermission?(input:{runId:string;permission:'default'|'full';confirmed?:boolean}):Promise<PermissionChange>;
       stopRun(id: string): Promise<void>;
       answerRun(input:{runId:string;requestId:string;answers:Record<string,string>}):Promise<void>;

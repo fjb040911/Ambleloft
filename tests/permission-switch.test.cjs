@@ -62,6 +62,32 @@ test('a child completed during suspension is configured but not restarted',async
  await f.runtime.switchPermission(full);assert.equal(f.calls.filter(c=>c.method==='turn/start'&&c.args.threadId==='child').length,0);
 });
 
+const missingChildArchive=()=>Object.assign(Error('no archived rollout found for thread id child'),{rpcRejected:true});
+test('a completed child without an archived rollout retains its identity and results across a permission switch',async()=>{
+ const f=fixture({hook(method,args){if(method==='thread/unarchive'&&args.threadId==='child')throw missingChildArchive();}});
+ f.child.status='completed';f.child.detail='existing result';
+ assert.equal((await f.runtime.switchPermission(full)).state,'applied');
+ assert.ok(f.calls.some(c=>c.method==='thread/resume'&&c.args.threadId==='child'));
+ assert.deepEqual(f.calls.filter(c=>c.method==='turn/start').map(c=>c.args.threadId),['parent']);
+ assert.equal(f.child.detail,'existing result');assert.equal(f.child.status,'completed');
+});
+test('a missing archive cannot bypass identity and policy checks or hide an active child',async()=>{
+ for(const scenario of ['active','wrong id','wrong policy','missing history']){
+  const f=fixture({hook(method,args){
+   if(args.threadId!=='child')return;
+   if(method==='thread/unarchive')throw missingChildArchive();
+   if(method==='thread/resume'){
+    if(scenario==='missing history')throw Error('no rollout found');
+    return {thread:{id:scenario==='wrong id'?'another':'child'},sandbox:{type:scenario==='wrong policy'?'readOnly':'dangerFullAccess'},approvalPolicy:'never'};
+   }
+  }});
+  if(scenario!=='active')f.child.status='completed';
+  const record=await f.runtime.switchPermission(full);
+  assert.equal(record.state,'failed');assert.equal(record.effective,null);assert.equal(f.run.status,'interrupted');
+  assert.equal(f.calls.some(c=>c.method==='turn/start'),false);assert.ok(f.context.switchFailureReason.includes(record.error));
+ }
+});
+
 test('a turn accepted before activation retries only a rejected interrupt and waits for the completion boundary',async()=>{
  let first=true;const f=fixture({children:false,hook:(method)=>{if(method==='turn/interrupt'&&first){first=false;throw Object.assign(Error('no active turn to interrupt'),{rpcRejected:true});}}});
  assert.equal((await f.runtime.switchPermission(full)).state,'applied');assert.equal(f.calls.filter(c=>c.method==='turn/interrupt').length,2);
