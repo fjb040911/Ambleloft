@@ -220,7 +220,11 @@ test('approval stays above composer while history scrolls; decision clears it', 
 });
 test('broken and executable content falls back without running',async({page})=>{
   await prepare(page,'<script>window.pwned=true</script>\n\n```echarts\n{"series":[{"type":"custom","renderItem":"alert(1)"}]}\n```\n\n```mermaid\ninvalid !!!\n```');
-  await expect(page.locator('.artifact-error')).toHaveCount(2);
+  const chart = page.getByRole('region', { name: 'echarts 图表' });
+  const diagram = page.getByRole('region', { name: 'mermaid 图表' });
+  await expect(chart.locator('.artifact-error')).toBeVisible();
+  await diagram.scrollIntoViewIfNeeded();
+  await expect(diagram.locator('.artifact-error')).toBeVisible({ timeout: 15000 });
   expect(await page.evaluate(()=>(window as any).pwned)).toBeUndefined();
   await page.setViewportSize({width:800,height:600});
   const box=await page.getByRole('textbox',{name:'继续对话'}).boundingBox();
@@ -1390,7 +1394,12 @@ test('clipboard images and files become removable attachments without changing t
  await page.evaluate(()=>(window as any).__finishPaste());
  const attachments=page.getByLabel('附件',{exact:true});await expect(attachments.getByText('截图.png')).toBeVisible();await expect(attachments.getByText('报告.txt')).toBeVisible();
  expect(await page.evaluate(()=>(window as any).__pasted[0].bytes)).toEqual([137,80,78,71]);
- await paste();await page.evaluate(()=>(window as any).__finishPaste());await expect(attachments.locator('[data-slot=attachment]')).toHaveCount(2);
+ await page.evaluate(()=>{delete (window as any).__finishPaste;});
+ await paste();
+ await page.waitForFunction(()=>typeof (window as any).__finishPaste==='function');
+ await page.evaluate(()=>(window as any).__finishPaste());
+ await expect(page.getByRole('button',{name:'发送后续消息',exact:true})).toBeEnabled();
+ await expect(attachments.locator('[data-slot=attachment]')).toHaveCount(2);
  await page.getByRole('button',{name:'移除附件 截图.png'}).click();await expect(attachments.getByText('截图.png')).toHaveCount(0);await expect(input).toHaveValue('请分析这些文件');
  await page.evaluate(()=>{window.desktop!.importAttachments=async()=>{throw Error('单次粘贴内容不能超过 25 MB');};});await paste();await expect(page.getByRole('alert')).toContainText('25 MB');await expect(attachments.getByText('报告.txt')).toBeVisible();
  // Text-only paste is left to the browser, without cancellation or IPC import.

@@ -1,3 +1,5 @@
+import {replyToModelProbe, fixtureToolCall} from './fixtures/model.mjs';
+import {openExtensionCenter, installExtension, manageExtension, showExtensionEntries} from './fixtures/desktop.mjs';
 // Real distributable Demo, isolated profiles, local model fixture only.
 import {_electron as electron} from '@playwright/test';import {mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';import path from 'node:path';import {tmpdir} from 'node:os';import http from 'node:http';import assert from 'node:assert/strict';import builder from './build-extension-demo.cjs';
 const root=await mkdtemp(path.join(tmpdir(),'amble-a7-demo-'));let app,server;let round=0;const requests=[];
@@ -5,16 +7,18 @@ async function waitFor(fn){for(let i=0;i<200;i++){if(await fn())return;await new
 async function view(code){return app.evaluate(({webContents},code)=>{const w=webContents.getAllWebContents().find(w=>w.getURL().startsWith('amble-extension:'));if(!w)throw Error('No extension view');return w.executeJavaScript(code);},code);}
 try{
  const built=await builder.buildDemo({output:path.join(root,'artifacts')});
- server=http.createServer(async(req,res)=>{let raw='';for await(const chunk of req)raw+=chunk;const request=JSON.parse(raw);requests.push(request);const call=round++===0;
-  const item=call?{type:'function_call',id:'fc1',call_id:'call1',namespace:'mcp__amble_extensions',name:'extension_invoke_operation',arguments:JSON.stringify({operationId:'example.project-card.describe',input:{projectId:'p'}}),status:'completed'}:{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'Project card read.',annotations:[]}]};
+ server=http.createServer(async(req,res)=>{
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+let raw='';for await(const chunk of req)raw+=chunk;const request=JSON.parse(raw);if(replyToModelProbe(req,res,request))return;requests.push(request);const call=round++===0;
+  const item=call?fixtureToolCall(request,'extension_invoke_operation',{operationId:'example.project-card.describe',input:{projectId:'p'}},round):{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'Project card read.',annotations:[]}]};
   res.writeHead(200,{'Content-Type':'text/event-stream'});let sequence=0;const emit=(type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:sequence++,...data})}\n\n`);const response={id:'response'+round,object:'response',status:'in_progress',output:[]};emit('response.created',{response});emit('response.output_item.added',{output_index:0,item});emit('response.output_item.done',{output_index:0,item});emit('response.completed',{response:{...response,status:'completed',output:[item],usage:{input_tokens:1,output_tokens:1,total_tokens:2}}});res.end();
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  for(const mode of ['directory','archive']){
   app=await electron.launch({args:['.',`--user-data-dir=${path.join(root,'profile-'+mode)}`],env:{...process.env,ATELIER_DEV:'0'}});const page=await app.firstWindow();await page.getByRole('textbox',{name:'任务内容'}).waitFor();
   await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});dialog.showMessageBox=async()=>({response:1});},mode==='directory'?built.directory:built.output);
   await page.evaluate(root=>window.desktop.patchWorkspace({changes:[{kind:'project',action:'put',id:'p',expectedRevision:null,value:{id:'p',name:'Demo Project',description:'A shared project overview.',path:root,createdAt:'today'}}]}),root);
-  await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('navigation',{name:'设置导航'}).getByRole('button',{name:'扩展',exact:true}).click();if(mode==='directory'){await page.getByRole('button',{name:'更多安装方式',exact:true}).click();await page.getByRole('menuitem',{name:'加载开发目录',exact:true}).click();}else await page.getByRole('button',{name:'安装扩展',exact:true}).click();await page.getByRole('heading',{name:'项目卡片',exact:true}).waitFor();
-  await page.getByRole('button',{name:'返回应用',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:'扩展',exact:true}).click();await page.locator('.sidebar').getByRole('button',{name:'项目卡片',exact:true}).click();
+  await openExtensionCenter(page);await installExtension(page,{development:mode==='directory'});await manageExtension(page,'项目卡片');await page.getByRole('heading',{name:'项目卡片',exact:true}).waitFor();
+  await page.getByRole('button',{name:'返回已安装',exact:true}).click();await showExtensionEntries(page);await page.getByRole('region',{name:'扩展业务入口',exact:true}).getByRole('button',{name:'项目卡片',exact:true}).click();
   await waitFor(()=>app.evaluate(({webContents})=>webContents.getAllWebContents().some(w=>w.getURL().startsWith('amble-extension:'))));await waitFor(()=>view('!document.querySelector("#choose").disabled'));
   assert.equal(await view('document.querySelector("#card").hidden'),true);await mkdir('test-results',{recursive:true});
   await writeFile('test-results/demo-empty.png',Buffer.from(await app.evaluate(async({webContents})=>(await webContents.getAllWebContents().find(w=>w.getURL().startsWith('amble-extension:')).capturePage()).toPNG().toString('base64')),'base64'));

@@ -1,17 +1,18 @@
+import {showTasks, taskButton, seedRuns} from './fixtures/desktop.mjs';
 import { _electron as electron } from '@playwright/test';
-import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 const directory=await mkdtemp(path.join(tmpdir(),'atelier-mermaid-'));
 const source='flowchart LR\n  A["输入：17 × 23"] -->|计算| B["输出：391"]';
-const run={id:'mermaid-copy',title:'Mermaid 数字与复制验证',model:'fixture',baseUrl:'http://127.0.0.1/v1',cwd:'/fixture',createdAt:new Date().toISOString(),status:'completed',error:'',approvals:[],tools:[],messages:[{id:'u',role:'user',text:'展示 17 × 23 的计算结果。'},{id:'a',role:'assistant',text:'```mermaid\n'+source+'\n```'}]};
-await writeFile(path.join(directory,'conversations.json'),JSON.stringify([run]));
+const run={id:'mermaid-copy',title:'Mermaid 数字与复制验证',model:'fixture',baseUrl:'http://127.0.0.1/v1',cwd:directory,createdAt:new Date().toISOString(),status:'completed',error:'',approvals:[],tools:[],messages:[{id:'u',role:'user',text:'展示 17 × 23 的计算结果。'},{id:'a',role:'assistant',text:'```mermaid\n'+source+'\n```'}]};
+await seedRuns(directory,run);
 let app;
 try{
  app=await electron.launch({args:['.',`--user-data-dir=${directory}`],env:{...process.env,ATELIER_DEV:'0'}});
  await app.evaluate(({clipboard})=>{globalThis.__clipboardSnapshot=clipboard.availableFormats().map(format=>[format,clipboard.readBuffer(format)]);});
- const page=await app.firstWindow();await page.locator('.tree-task > button:first-child').filter({hasText:'Mermaid 数字与复制验证'}).click();
+ const page=await app.firstWindow();await showTasks(page);await taskButton(page,'Mermaid 数字与复制验证').click();
  const img=page.getByAltText('Mermaid 图表');await img.waitFor();
  const labels=await img.evaluate(el=>{
   const doc=new DOMParser().parseFromString(decodeURIComponent(el.src.split(',').slice(1).join(',')),'image/svg+xml');
@@ -22,8 +23,9 @@ try{
  await page.locator('.artifact').getByRole('button',{name:'复制',exact:true}).click();
  await page.locator('.artifact').getByRole('button',{name:'已复制',exact:true}).waitFor();
  assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),source);
- // await page.locator('.message-label').getByRole('button',{name:'复制',exact:true}).click();
- // await page.locator('.message-label').getByRole('button',{name:'已复制',exact:true}).waitFor();
+ const actions = page.getByRole('group',{name:'回复操作'});
+ await actions.getByRole('button',{name:'拷贝',exact:true}).click();
+ await actions.getByRole('button',{name:'已复制',exact:true}).waitFor();
  assert.equal(await app.evaluate(({clipboard})=>clipboard.readText()),run.messages[1].text);
  assert.equal(await page.evaluate(async()=>{try{await window.desktop.copyText({bad:true});return false;}catch{return true;}}),true);
  await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/mermaid-labels-copy.png'});

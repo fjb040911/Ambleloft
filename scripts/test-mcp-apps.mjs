@@ -1,3 +1,5 @@
+import {showTasks, taskButton} from './fixtures/desktop.mjs';
+import {replyToModelProbe, fixtureToolCall} from './fixtures/model.mjs';
 import http from 'node:http';
 import {_electron as electron,expect} from '@playwright/test';
 import {mkdtemp,rm,mkdir} from 'node:fs/promises';
@@ -8,8 +10,12 @@ const root=await mkdtemp(path.join(tmpdir(),'amble-mcp-apps-'));let app,server,r
 async function waitFor(fn){for(let i=0;i<300;i++){if(await fn())return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Timed out');}
 try{
  server=http.createServer(async(req,res)=>{
-  for await(const _chunk of req){}const call=round++===0;
-  const item=call?{type:'function_call',id:'fc1',call_id:'call1',namespace:'mcp__amble_extensions',name:'extension_invoke_operation',arguments:JSON.stringify({operationId:'example.task-form.render',input:{destination:'上海',amount:1200}}),status:'completed'}:{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'请在差旅记录中核对信息。',annotations:[]}]};
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+
+  let raw='';for await(const chunk of req)raw+=chunk;
+  const request=JSON.parse(raw);if(replyToModelProbe(req,res,request))return;
+  const call=round++===0;
+  const item=call?fixtureToolCall(request,'extension_invoke_operation',{operationId:'example.task-form.render',input:{destination:'上海',amount:1200}},round):{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'请在差旅记录中核对信息。',annotations:[]}]};
   res.writeHead(200,{'Content-Type':'text/event-stream'});let sequence=0;const emit=(type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:sequence++,...data})}\n\n`);const response={id:'response'+round,object:'response',status:'in_progress',output:[]};emit('response.created',{response});emit('response.output_item.added',{output_index:0,item});emit('response.output_item.done',{output_index:0,item});emit('response.completed',{response:{...response,status:'completed',output:[item],usage:{input_tokens:1,output_tokens:1,total_tokens:2}}});res.end();
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const launch=async()=>{app=await electron.launch({args:['.',`--user-data-dir=${path.join(root,'profile')}`],env:{...process.env,ATELIER_DEV:'0'}});const page=await app.firstWindow();page.on('console',m=>{if(m.type()==='error')console.log('renderer:',m.text());});await page.getByRole('textbox',{name:'任务内容'}).waitFor();return page;};
@@ -21,7 +27,7 @@ try{
  const task=await page.evaluate(providerId=>window.desktop.startRun({prompt:'MCP Apps demo',providerId,permission:'full'}),provider.id);
  await waitFor(async()=>{const run=(await page.evaluate(()=>window.desktop.listRuns())).find(r=>r.id===task.id);return run&&['completed','failed'].includes(run.status);});
  const run=await page.evaluate(id=>window.desktop.getRunPage({id}),task.id);assert.equal(run.status,'completed',run.error);assert.equal(run.taskApps?.length,1,JSON.stringify(run));
- await page.locator('.sidebar').getByRole('button',{name:/MCP Apps demo/}).first().click();
+ await showTasks(page);await taskButton(page,/MCP Apps demo/).click();
  await page.getByRole('button',{name:'打开交互内容',exact:true}).click();
  let frame=page.frameLocator('.task-app-card iframe');await expect(frame.locator('#destination')).toHaveValue('上海');await expect(frame.locator('#save')).toBeEnabled();
  const iframe=page.frames().find(f=>f.url().startsWith('amble-app:'));assert.ok(iframe);

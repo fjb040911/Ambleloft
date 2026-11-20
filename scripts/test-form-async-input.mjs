@@ -1,3 +1,4 @@
+import {replyToModelProbe, fixtureToolCall} from './fixtures/model.mjs';
 import http from 'node:http';
 import {_electron as electron,expect} from '@playwright/test';
 import {mkdtemp,rm,mkdir} from 'node:fs/promises';
@@ -8,8 +9,10 @@ const root=await mkdtemp(path.join(tmpdir(),'amble-mcp-apps-'));let app,server,r
 async function waitFor(fn){for(let i=0;i<300;i++){if(await fn())return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Timed out');}
 try{
  server=http.createServer(async(req,res)=>{
-  let body='';for await(const chunk of req)body+=chunk;requests.push(JSON.parse(body));const call=round++<3;
-  const item=call?{type:'function_call',id:'fc1',call_id:'call1',namespace:'mcp__amble_extensions',name:round===1?'forms_list':round===2?'forms_present':'extension_list_operations',arguments:JSON.stringify(round===2?{key}:{}),status:'completed'}:{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'请填写表单。',annotations:[]}]};
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+
+  let body='';for await(const chunk of req)body+=chunk;const request=JSON.parse(body);if(replyToModelProbe(req,res,request))return;requests.push(request);const call=round++<3;
+  const item=call?fixtureToolCall(request,round===1?'forms_list':round===2?'forms_present':'extension_list_operations',round===2?{key}:{},round):{type:'message',id:'msg1',role:'assistant',status:'completed',content:[{type:'output_text',text:'请填写表单。',annotations:[]}]};
   const send=()=>{res.writeHead(200,{'Content-Type':'text/event-stream'});let sequence=0;const emit=(type,data)=>res.write(`event: ${type}\ndata: ${JSON.stringify({type,sequence_number:sequence++,...data})}\n\n`);const response={id:'response'+round,object:'response',status:'in_progress',output:[]};emit('response.created',{response});emit('response.output_item.added',{output_index:0,item});emit('response.output_item.done',{output_index:0,item});emit('response.completed',{response:{...response,status:'completed',output:[item],usage:{input_tokens:1,output_tokens:1,total_tokens:2}}});res.end();};if(round===4)release=send;else send();
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const launch=async()=>{app=await electron.launch({args:['.',`--user-data-dir=${path.join(root,'profile')}`],env:{...process.env,ATELIER_DEV:'0'}});const page=await app.firstWindow();page.on('console',m=>{if(m.type()==='error')console.log('renderer:',m.text());});await page.getByRole('textbox',{name:'任务内容'}).waitFor();return page;};

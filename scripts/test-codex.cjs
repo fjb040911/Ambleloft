@@ -10,6 +10,8 @@ const { probeProvider } = require('../electron/provider.cjs');
 (async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'atelier-codex-test-'));
   let mode = 'text'; let requests = []; let toolSent = false;
+  let releaseFirstDelta;
+  let waitForFirstDelta = true;
   const server = http.createServer(async (req, res) => {
     if (!/^\/v[12]\/responses/.test(req.url)) { res.writeHead(404); res.end(); return; }
     let body = ''; for await (const chunk of req) body += chunk;
@@ -52,8 +54,15 @@ const { probeProvider } = require('../electron/provider.cjs');
     event('response.output_item.added', { output_index: outputIndex, item: { ...item, status: 'in_progress', ...(item.type === 'message' ? { content: [] } : { arguments: '' }) } });
     if (item.type === 'message') {
       event('response.content_part.added', { output_index: outputIndex, item_id: itemId, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
+      const firstDelta = waitForFirstDelta ? new Promise(resolve => { releaseFirstDelta = resolve; }) : null;
+      waitForFirstDelta = false;
       event('response.output_text.delta', { output_index: outputIndex, item_id: itemId, content_index: 0, delta: 'Ambleloft fixture ' });
-      await new Promise(resolve => setTimeout(resolve, 50));
+      if (firstDelta) {
+        const timer = setTimeout(() => releaseFirstDelta?.(), 5000);
+        await firstDelta;
+        clearTimeout(timer);
+        releaseFirstDelta = null;
+      }
       event('response.output_text.delta', { output_index: outputIndex, item_id: itemId, content_index: 0, delta: 'reply' });
       event('response.output_text.done', { output_index: outputIndex, item_id: itemId, content_index: 0, text: 'Ambleloft fixture reply' });
       event('response.content_part.done', { output_index: outputIndex, item_id: itemId, content_index: 0, part: item.content[0] });
@@ -64,7 +73,10 @@ const { probeProvider } = require('../electron/provider.cjs');
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const config = { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'fixture-model', executable: '', apiKey: '' };
   const updates = [];
-  const runtime = new AgentRuntime({ directory, provider: { secret: async () => config }, workspace: { read: async () => ({ projects: [] }) }, publish: run => updates.push(run) });
+  const runtime = new AgentRuntime({ directory, provider: { secret: async () => config }, workspace: { read: async () => ({ projects: [] }) }, publish: run => {
+    updates.push(run);
+    if (run.messages.some(message => message.text === 'Ambleloft fixture ')) releaseFirstDelta?.();
+  } });
   const finished = async id => {
     const until = Date.now() + 45000;
     while (Date.now() < until) {

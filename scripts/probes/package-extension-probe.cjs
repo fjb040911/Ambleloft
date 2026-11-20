@@ -16,7 +16,7 @@ async function main() {
     } });
     const executable = path.join(root, 'out', process.arch === 'arm64' ? 'mac-arm64' : 'mac', 'ExtensionProbe.app/Contents/MacOS/ExtensionProbe');
     await new Promise((resolve, reject) => {
-      const child = spawn(executable, [], { stdio: 'inherit', env: { HOME: root, TMPDIR: os.tmpdir(), PATH: '/usr/bin:/bin' } });
+      const child = spawn(executable, [root], { stdio: 'inherit', env: { HOME: root, TMPDIR: os.tmpdir(), PATH: '/usr/bin:/bin' } });
       child.once('error', reject); child.once('exit', code => code === 0 ? resolve() : reject(new Error(`Packaged probe exited ${code}`)));
     });
   } finally { await fs.rm(root, { recursive: true, force: true }); }

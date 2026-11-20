@@ -48,9 +48,9 @@ async function until(fn){for(let i=0;i<400;i++){if(fn())return;await sleep(25);}
  assert.equal(events.find(e=>e.method==='turn/completed').params.turn.status,'completed');
  const inferenceRequestsBeforeLateAnswer=requests.length;
  const next=await rpc.call('turn/start',{threadId:thread.id,input:[{type:'text',text:'LATE_ANSWER_SENTINEL'}]});assert.notEqual(next.turn.id,started.turn.id);await until(()=>events.filter(e=>e.method==='turn/completed').length===2);assert.ok(JSON.stringify(requests.at(-1)).includes('LATE_ANSWER_SENTINEL'));assert.ok(JSON.stringify(requests.at(-1)).includes('STEER_ANSWER_SENTINEL'));
- rpc.close();rpc=new CodexRPC({executable,config:bridge.config,home,cwd:root,notification:()=>{},request:()=>{},exit:()=>{}});await rpc.call('initialize',{clientInfo:{name:'amble_reconcile_probe',version:'1'}});rpc.send({method:'initialized',params:{}});const persisted=await rpc.call('thread/read',{threadId:thread.id,includeTurns:true});assert.ok(persisted.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId==='answer-1')),'client id must survive engine restart');
+ await rpc.close();rpc=new CodexRPC({executable,config:bridge.config,home,cwd:root,notification:()=>{},request:()=>{},exit:()=>{}});await rpc.call('initialize',{clientInfo:{name:'amble_reconcile_probe',version:'1'}});rpc.send({method:'initialized',params:{}});const persisted=await rpc.call('thread/read',{threadId:thread.id,includeTurns:true});assert.ok(persisted.thread.turns.some(t=>t.items.some(i=>i.type==='userMessage'&&i.clientId==='answer-1')),'client id must survive engine restart');
  console.log(JSON.stringify({mode,passed:true,inferenceRequestsBeforeLateAnswer,formShown,independentDone,sameTurnSteer:true,wrongAndCompletedTurnRejected:true,lateAnswerNewTurn:true}));
  }
- rpc.close();rpc=null;channel?.close();channel=null;bridge?.close();bridge=null;
- }}finally{rpc?.close();channel?.close();bridge?.close();server.closeAllConnections();await new Promise(r=>server.close(r));await fs.rm(root,{recursive:true,force:true});}
+ await rpc.close();rpc=null;channel?.close();channel=null;bridge?.close();bridge=null;
+ }}finally{await rpc?.close();channel?.close();bridge?.close();server.closeAllConnections();await new Promise(r=>server.close(r));await fs.rm(root,{recursive:true,force:true,maxRetries:8,retryDelay:150});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

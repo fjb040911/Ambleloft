@@ -1,3 +1,4 @@
+import {openExtensionCenter} from './fixtures/desktop.mjs';
 // Explicit live acceptance. Native installation dialogs are accepted by a test callback;
 // business confirmation is clicked in the real renderer. Existing encrypted credentials
 // are copied only to a temporary profile and never logged or decrypted by this script.
@@ -9,15 +10,16 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),{Database}=require('../electron/database.cjs');
+const source=process.env.AMBLE_STORE_SOURCE_FILE;
+if(!source)throw Error('Supply AMBLE_STORE_SOURCE_FILE');
 const root=await mkdtemp(path.join(tmpdir(),'amble-store-desktop-')),profile=path.join(root,'profile'),project=path.join(root,'project');
-const source=process.env.AMBLE_STORE_SOURCE_FILE;if(!source)throw Error('Supply AMBLE_STORE_SOURCE_FILE');
 let app,page;const result={store:false,realModel:false,travel:false,ticket:false};
 const button=(name,scope=page)=>scope.getByRole('button',{name,exact:true});
 async function until(fn,timeout=180000){const end=Date.now()+timeout;while(Date.now()<end){const value=await fn();if(value)return value;await new Promise(r=>setTimeout(r,250));}throw Error('Live acceptance timed out');}
 async function launch(){app=await electron.launch({args:['.',`--user-data-dir=${profile}`],env:{...process.env,ATELIER_DEV:'0',AMBLE_STORE_SOURCE_FILE:source}});page=await app.firstWindow();await page.waitForFunction(()=>!!window.desktop?.store);await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});}
 const flows=id=>page.evaluate(runId=>window.desktop.forms.list({runId}),id);
 async function waitForm(id){return until(async()=>{const [flow]=await flows(id);if(flow)return flow;const run=await page.evaluate(id=>window.desktop.getRunPage({id}),id);if(run.status==='failed')throw Error('Real provider failed: '+run.error);return null;});}
-const center=()=>button('技能与扩展',page.locator('.activity-rail')).click();
+const center=()=>openExtensionCenter(page);
 async function listing(name){await page.getByRole('tab',{name:'发现',exact:true}).click();await button('查看详情',page.locator('.store-card').filter({has:page.getByText(name,{exact:true})})).click();}
 try{
  await mkdir(project);await mkdir('test-results',{recursive:true});
@@ -26,7 +28,7 @@ try{
   if(!encrypted?.providers?.length)throw Error('Existing provider unavailable');if(process.env.AMBLE_STORE_LIVE_PROVIDER_ID){if(!encrypted.providers.some(p=>p.id===process.env.AMBLE_STORE_LIVE_PROVIDER_ID))throw Error('Selected provider unavailable');encrypted.defaultId=process.env.AMBLE_STORE_LIVE_PROVIDER_ID;}const db=new Database(profile);try{await db.call('ready');await db.call('writeSetting',{key:'providers',value:encrypted});}finally{await db.close();}
  }
  await launch();await page.evaluate(async project=>{const s=await window.desktop.readWorkspace();await window.desktop.patchWorkspace({changes:[{kind:'settings',action:'patch',expectedRevision:s.settingsRevision??0,value:{language:'zh-CN',theme:'light'}},{kind:'project',action:'put',id:'store-test',expectedRevision:null,value:{id:'store-test',name:'Store 实际验收',path:project,createdAt:new Date().toISOString()}}]});},project);
- await center();await page.locator('.store-card').getByText('三步差旅登记',{exact:true}).waitFor();await page.screenshot({path:'test-results/store-desktop-discover.png'});
+ await center();await page.getByRole('tab',{name:'发现',exact:true}).click();await page.locator('.store-card').getByText('三步差旅登记',{exact:true}).waitFor();await page.screenshot({path:'test-results/store-desktop-discover.png'});
  // Exercise actual main-process URL routing, IPC and renderer without invoking
  // the OS protocol handler or claiming packaged-app registration was tested.
  const sourceId=(await page.evaluate(()=>window.desktop.store.catalog())).source.id;
@@ -44,7 +46,7 @@ try{
   await center();await page.getByRole('tab',{name:/已安装/}).click();const ext=page.locator('.store-installed-row').filter({has:page.getByRole('heading',{name:'设备售后工单（测试）',exact:true})});await button('准备试用',ext).click();await page.getByLabel('聊天引导',{exact:true}).fill('请使用 labs.service-desk 扩展的设备售后工单技能，读取技能并打开它的 ticket 三步业务表单。测试设备 STORE-DESKTOP-TEST，启动后日志中断，联系人 TEST-USER，常规优先级。先检查服务健康，然后展示已声明表单等待我填写确认；不要直接提交，不使用通用补充信息表单。');await button('填入聊天输入框').click();assert.equal((await page.evaluate(()=>window.desktop.listRuns())).length,1);await button('发送任务').click();const ticketRun=await until(async()=> (await page.evaluate(()=>window.desktop.listRuns())).find(x=>x.id!==travelRun.id));await waitForm(ticketRun.id);
   const ticket=page.getByLabel('设备售后登记',{exact:true});await expect(ticket).toBeVisible();await ticket.getByLabel('设备编号',{exact:false}).fill('STORE-DESKTOP-TEST');await ticket.getByLabel('遇到的问题',{exact:false}).fill('启动后日志中断');await button('下一步',ticket).click();await ticket.getByLabel('优先级',{exact:false}).selectOption('normal');await ticket.getByLabel('联系人或测试工号',{exact:false}).fill('TEST-USER');await button('下一步',ticket).click();await ticket.getByRole('checkbox').check();await button('创建测试工单',ticket).click();const confirm=page.getByRole('dialog',{name:'确认扩展操作',exact:true});await expect(confirm).toBeVisible();await button('确认执行',confirm).click();const done=await until(async()=>{const [f]=await flows(ticketRun.id);return f?.status==='completed'?f:null;});result.ticket=done.results.confirm.ticketId;assert.match(result.ticket,/^SR-/);await expect(ticket.getByLabel('提交结果',{exact:true})).toContainText(result.ticket);await page.screenshot({path:'test-results/store-desktop-ticket-receipt.png'});
  }
- await app.close();app=null;await launch();assert.equal((await page.evaluate(()=>window.desktop.store.catalog())).installed.length,2);result.restart=true;await page.evaluate(async()=>{const s=await window.desktop.readWorkspace();await window.desktop.patchWorkspace({changes:[{kind:'settings',action:'patch',expectedRevision:s.settingsRevision??0,value:{language:'en',theme:'dark'}}]});});await button('Skills & extensions',page.locator('.activity-rail')).click();await page.locator('.store-card').getByText('Three-step travel registration',{exact:true}).waitFor();await page.screenshot({path:'test-results/store-desktop-en-dark.png'});
+ await app.close();app=null;await launch();assert.equal((await page.evaluate(()=>window.desktop.store.catalog())).installed.length,2);result.restart=true;await page.evaluate(async()=>{const s=await window.desktop.readWorkspace();await window.desktop.patchWorkspace({changes:[{kind:'settings',action:'patch',expectedRevision:s.settingsRevision??0,value:{language:'en',theme:'dark'}}]});});await page.locator('.activity-rail').getByRole('button',{name:'Extensions',exact:true}).click();await button('Skills & extensions').click();await page.getByRole('tab',{name:'Discover',exact:true}).click();await page.locator('.store-card').getByText('Three-step travel registration',{exact:true}).waitFor();await page.screenshot({path:'test-results/store-desktop-en-dark.png'});
  await writeFile(`test-results/store-desktop-${result.realModel?'live':'smoke'}.json`,JSON.stringify({...result,profile:'isolated, removed',nativeInstallConfirmation:'accepted by test callback',businessConfirmation:result.ticket?'real renderer dialog clicked':'not exercised'},null,2));console.log(JSON.stringify(result));
 }catch(error){if(app){await page.screenshot({path:'test-results/store-desktop-failure.png'}).catch(()=>{});console.error((await page.locator('body').innerText()).slice(-3000));}throw error;
 }finally{await app?.close();await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});}

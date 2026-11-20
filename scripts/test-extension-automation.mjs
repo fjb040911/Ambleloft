@@ -4,6 +4,8 @@ import {tmpdir} from 'node:os';import path from 'node:path';import http from 'no
 import {Database} from '../electron/database.cjs';import {ExtensionService} from '../core/extensions/service.cjs';import {createProviderStore} from '../electron/provider.cjs';
 const root=await mkdtemp(path.join(tmpdir(),'amble-m2-desktop-')),profile=path.join(root,'profile'),source=path.join(root,'source'),id='fixture.summary';let app,db;let requests=0;
 const server=http.createServer(async(req,res)=>{
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+
  let body='';for await(const chunk of req)body+=chunk;const data=JSON.parse(body);requests++;assert.equal(data.tools,undefined);assert.equal(data.stream,false);assert.equal(data.max_output_tokens,2048);
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({summary:'Summary from local fixture'})}]}]}));
 });

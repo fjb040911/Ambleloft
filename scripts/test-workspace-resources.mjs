@@ -1,4 +1,5 @@
-import { _electron as electron } from '@playwright/test';
+import {showTasks, taskButton} from './fixtures/desktop.mjs';
+import { _electron as electron, expect } from '@playwright/test';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,9 +7,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 
 const server = http.createServer(async (req, res) => {
+ if (req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+
   let body = ''; for await (const chunk of req) body += chunk;
   const data = JSON.parse(body);
-  const item = { id: 'msg_desktop', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'Desktop Codex verified', annotations: [] }] };
+  const text = data.stream === false ? JSON.stringify({status:'ok',count:2}) : 'Desktop Codex verified';
+  const item = { id: 'msg_desktop', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] };
   const response = { id: 'resp_desktop', object: 'response', status: 'completed', output: [item], usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
   if (!data.stream) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(response)); return; }
   res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -31,10 +35,9 @@ try {
   await page.screenshot({ path: 'test-results/desktop-home.png' });
   await page.getByRole('textbox', { name: '任务内容' }).fill('桌面验证：整理项目');
   await page.getByRole('button', { name: '保存任务草稿' }).click();
-  await page.getByRole('dialog').waitFor();
-  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect.poll(()=>page.evaluate(async()=> (await window.desktop.readWorkspace()).tasks.length)).toBe(1);
   await page.reload();
-  await page.locator('.tree-task > button:first-child').filter({hasText:'桌面验证：整理项目'}).waitFor();
+  await showTasks(page);await taskButton(page,'桌面验证：整理项目').waitFor();
   const draft = await page.evaluate(async()=> (await window.desktop.readWorkspace()).tasks[0]);
   assert.ok(draft.conversationId);
   await page.getByRole('button', { name: '设置', exact: true }).click();
@@ -45,17 +48,16 @@ try {
   await page.getByLabel('模型 ID', { exact: true }).fill('fixture-model');
   await page.getByRole('button', { name: '保存配置', exact: true }).click();
   await page.getByRole('button', { name: '测试连接' }).click();
-  await page.getByText('Responses 端点测试成功。', { exact: false }).waitFor();
+  await page.getByText('端点与结构化输出测试通过。', { exact: false }).waitFor();
   await page.screenshot({ path: 'test-results/desktop-provider.png' });
-  await page.reload();
-  await page.locator('.tree-task > button:first-child').filter({hasText:'桌面验证：整理项目'}).click();
-  await page.getByRole('button', { name: '继续此聊天', exact:true }).click();
+  await page.getByRole('button',{name:'返回应用',exact:true}).click();
+  await showTasks(page);await taskButton(page,'桌面验证：整理项目').click();
   await page.getByRole('button', { name: '发送任务', exact: true }).click();
   await page.getByText('Desktop Codex verified', { exact: true }).waitFor({ timeout: 45000 });
   await page.getByText('本轮已结束', { exact: true }).waitFor();
   await page.screenshot({ path: 'test-results/desktop-conversation.png' });
   await page.reload();
-  await page.locator('.tree-task > button:first-child').filter({hasText:'桌面验证：整理项目'}).click();
+  await showTasks(page);await taskButton(page,'桌面验证：整理项目').click();
   await page.getByText('Desktop Codex verified', { exact: true }).waitFor();
   const runs = await page.evaluate(()=>window.desktop.listRuns());
   assert.equal(runs[0].conversationId,draft.conversationId);

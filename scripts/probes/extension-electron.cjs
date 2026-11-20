@@ -1,14 +1,14 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, utilityProcess } = require('electron');
 const fs = require('node:fs/promises');
-const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const assert = require('node:assert/strict');
-let directory, win, view, child, exitCode = 0;
+const directory = process.argv[app.isPackaged ? 1 : 2];
+let win, view, child, exitCode = 0;
 app.on('window-all-closed', () => {});
 const watchdog = setTimeout(() => { console.error('Electron probe timed out'); app.exit(1); }, 20000);
 (async () => {
-  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'amble-extension-electron-'));
+  if (!directory) throw new Error('Run this probe with run-extension-electron.cjs');
   app.setPath('userData', path.join(directory, 'profile'));
   await app.whenReady();
   const utility = await new Promise((resolve, reject) => {
@@ -52,7 +52,5 @@ const watchdog = setTimeout(() => { console.error('Electron probe timed out'); a
   console.log(JSON.stringify({ platform: process.platform, arch: process.arch, packaged: app.isPackaged, versions: process.versions, utility, checks: { isolatedPreload: true, childFrameRejected: true, hostRejected: true, navigationRejected: true, modalHiddenPixel: modalPixel, visiblePixel, compositorCaptureIncludesView, modalVisualStatus: compositorCaptureIncludesView ? "verified" : "requires-screen-capture", boundsAndZoom: true } }, null, 2));
 })().catch(error => { console.error(error); exitCode = 1; }).finally(async () => {
   clearTimeout(watchdog); child?.kill(); view?.webContents.close(); win?.destroy();
-  try { if (directory) await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
-  catch (error) { console.error('Temporary profile cleanup failed:', error.code); exitCode = 1; }
-  finally { app.exit(exitCode); }
+  app.exit(exitCode);
 });
