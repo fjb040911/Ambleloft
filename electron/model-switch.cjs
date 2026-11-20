@@ -7,7 +7,11 @@ const {fingerprint,redact}=require('./provider.cjs');
 const {imageInputInstructions}=require('./model-capabilities.cjs');
 const choice=config=>({providerId:config.id,model:config.model});
 function validate(input){if(!input||typeof input.providerId!=='string'||!input.providerId||typeof input.model!=='string'||!input.model.trim())throw Error('请选择有效的模型服务和模型');}
-function confirmCrossing(run,config,input){if((run.baseUrl!==config.baseUrl||run.providerId&&run.providerId!==config.id)&&input.confirmProviderChange!==true)throw Error('切换服务需要确认将会话历史发送到新的端点');}
+function confirmCrossing(run,config,input){
+ const crossing=run.baseUrl!==config.baseUrl||run.providerId&&run.providerId!==config.id;
+ const confirmed=input.confirmProviderChange===true&&(input.confirmedProviderBaseUrl===undefined||input.confirmedProviderBaseUrl===config.baseUrl);
+ if(crossing&&!confirmed)throw Error('切换服务需要确认将会话历史发送到新的端点');
+}
 async function switchModel(input){
  validate(input);
  const run=this.runs.find(r=>r.id===input.runId);if(!run)throw Error('任务不存在');

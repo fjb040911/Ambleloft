@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef} from 'react';
 import {useDraftState,writeDraft} from './useDraftState';
 import type {ComposerOptions} from './ComposerControls';
 export type ComposerReceipt={id:string;text:string;options:ComposerOptions;runId?:string;kind:'start'|'append'|'discussion';state:'sending'|'accepted'|'failed';deliveryState?:string;restoreDraft?:boolean};
-const optionsKey=(o:ComposerOptions)=>JSON.stringify([o.employeeId||'',o.providerId||'',o.model||'',o.permission||'default',!!o.confirmProviderChange,o.selectedSkillIds||[],(o.attachments||[]).map(f=>[f.path,f.name])]);
+const optionsKey=(o:ComposerOptions)=>JSON.stringify([o.employeeId||'',o.providerId||'',o.model||'',o.permission||'default',!!o.confirmProviderChange,o.confirmedProviderBaseUrl,o.selectedSkillIds||[],(o.attachments||[]).map(f=>[f.path,f.name])]);
 export function useComposerReceipt(scope:string,restore:(receipt:ComposerReceipt)=>void,onAccepted?:(runId?:string,receipt?:ComposerReceipt)=>void){
  const [record,setRecord,error]=useDraftState<ComposerReceipt|null>(scope+':receipt',null,value=>{
   const r=value as ComposerReceipt;return r&&typeof r.id==='string'&&typeof r.text==='string'&&r.options&&['start','append','discussion'].includes(r.kind)&&['sending','accepted','failed'].includes(r.state)?r:null;

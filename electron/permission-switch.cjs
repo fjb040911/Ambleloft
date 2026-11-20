@@ -63,10 +63,20 @@ async function switchPermission(input,change){
   // Loaded threads ignore thread/resume configuration overrides in the bundled
   // engine. Unload and restore the same IDs after all work has quiesced.
   for(const target of [...targets.values()].reverse()){await request('thread/archive',{threadId:target.threadId});archived.add(target.threadId);}
-  for(const target of targets.values()){await request('thread/unarchive',{threadId:target.threadId});archived.delete(target.threadId);}
+  for(const target of targets.values()){
+   try{await request('thread/unarchive',{threadId:target.threadId});}
+   catch(error){
+    // A completed child can already have a regular rollout. Ask the engine
+    // to resume that exact thread below, without starting another child turn.
+    if(!target.tool||target.resume||!error.rpcRejected||error.message!==`no archived rollout found for thread id ${target.threadId}`)throw error;
+    target.verifyRestoredId=true;
+   }
+   archived.delete(target.threadId);
+  }
   if(change){await bounded(change.reconnect(context,check,Math.max(1,deadline-Date.now())));rpc=context.rpc;check();}
   for(const target of targets.values()){
    const applied=await request('thread/resume',{...(!target.tool?context.engineParameters:{}),threadId:target.threadId,...(change?change.parameters(context,target):{}),sandbox:p.sandbox,approvalPolicy:p.approvalPolicy,excludeTurns:true});
+   if(target.verifyRestoredId&&applied.thread?.id!==target.threadId)throw Error('引擎未确认恢复原子代理，已停止续跑');
    if(change&&!change.matches(applied))throw Error('引擎未确认请求的模型，已停止续跑');
    if(applied.sandbox?.type!==p.sandboxPolicy.type||applied.approvalPolicy!==p.approvalPolicy)throw Error('引擎未确认请求的权限，已停止续跑');
   }
@@ -99,7 +109,10 @@ async function switchPermission(input,change){
   for(const threadId of archived)try{await context.rpc.call('thread/unarchive',{threadId},5000);}catch{}
   context.permissionTransition=null;
   // Never silently resume with a mixture of old and new child policies.
-  if(!context.done)await this.stop(run.id);
+  if(!context.done){
+   if(!context.cancelled)context.switchFailureReason=`${label}切换失败，本轮已中断：${record.error}`;
+   await this.stop(run.id);
+  }
   this.changed(run);await this.persist(undefined,run);
   return structuredClone(record);
  }finally{clearTimeout(timer);}

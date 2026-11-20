@@ -43,6 +43,12 @@ for(const mode of ['activity','classic'])test(`${mode}: long names leave space f
  await row.hover();const card=page.getByRole('region',{name:'项目信息',exact:true});await expect(card).toBeVisible();await expect(card).toContainText(remoteName);for(const value of ['alice','2222','build.internal.example.test','私钥','firmware-development','developer','1 个任务'])await expect(card).toContainText(value);
  await expect(card).not.toContainText('/sensitive/private-key');await expect(card).not.toContainText('do-not-display');await expect(card).toBeVisible();expect(await card.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
  const stateBox=await state.boundingBox(),actions=await row.locator('.tree-row-actions').boundingBox();expect(stateBox!.x+stateBox!.width).toBeLessThanOrEqual(actions!.x+1);
+ const listBox=(await page.locator('.workspace-navigation').boundingBox())!;
+ const rowBox=(await row.boundingBox())!;
+ await expect.poll(async()=>(await card.boundingBox())?.x??0).toBeGreaterThanOrEqual(listBox.x+listBox.width-1);
+ // Pause in the gutter longer than the dismiss delay before entering the card.
+ await page.mouse.move(rowBox.x+rowBox.width+4,rowBox.y+rowBox.height/2,{steps:20});
+ await page.waitForTimeout(300);await expect(card).toBeVisible();
  await card.hover();await expect(card).toBeVisible();await page.screenshot({path:`test-results/project-info-${mode}.png`});
 });
 test('minimum sidebar keeps status icon visible and card follows live connection failures',async({page})=>{

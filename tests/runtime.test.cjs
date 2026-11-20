@@ -152,7 +152,9 @@ test('resumed conversations keep their service and model when defaults change',a
   const resumed=await runtime.start({prompt:'continue',runId:run.id});
   assert.ok(run.modelSessionId);assert.equal(resumed.modelSessionId,run.modelSessionId);assert.equal(resumed.providerId,first.id);assert.equal(resumed.model,'b');assert.equal(resumed.baseUrl,first.baseUrl);await runtime.finish(runtime.active,'completed');
   await assert.rejects(runtime.start({prompt:'switch',runId:run.id,providerId:second.id,model:'c'}),/确认/);
-  const switched=await runtime.start({prompt:'switch',runId:run.id,providerId:second.id,model:'c',confirmProviderChange:true,permission:'full'});assert.equal(switched.model,'c');assert.equal(switched.permission,'full');await runtime.finish(runtime.active,'completed');
+  await assert.rejects(runtime.start({prompt:'switch',runId:run.id,providerId:second.id,model:'c',confirmProviderChange:true,confirmedProviderBaseUrl:first.baseUrl}),/确认/);
+  const switched=await runtime.start({prompt:'switch',runId:run.id,providerId:second.id,model:'c',confirmProviderChange:true,confirmedProviderBaseUrl:second.baseUrl,permission:'full'});assert.equal(switched.model,'c');assert.equal(switched.permission,'full');await runtime.finish(runtime.active,'completed');
+  const followup=await runtime.start({prompt:'continue again',runId:run.id});assert.equal(followup.providerId,second.id);await runtime.finish(runtime.active,'completed');
   const fresh=await runtime.start({prompt:'new'});assert.notEqual(fresh.modelSessionId,run.modelSessionId);assert.equal(fresh.providerId,second.id);await runtime.finish(runtime.active,'completed');
   await runtime.shutdown();
  }finally{await fs.rm(directory,{recursive:true,force:true});}

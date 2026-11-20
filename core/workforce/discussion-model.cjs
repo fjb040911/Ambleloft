@@ -35,7 +35,7 @@ const methods={
    while(true){
     const r=(await this.snapshot({output:'status',requestIds:[input.requestId]})).requests.find(r=>r.id===input.requestId);if(this.closing||!r||r.liveStopped)throw Error('讨论模型切换已停止');
     const targets=r.participants.filter(p=>p.runId&&live.has(p.status)&&!done.has(p.runId));
-    for(const p of targets){done.add(p.runId);const result=await this.runtime.switchModel({runId:p.runId,providerId:config.id,model:config.model,confirmProviderChange:input.confirmProviderChange});results.push(result);if(!['applied','configured'].includes(result.state))throw Error(result.error||'专家模型未确认生效');}
+    for(const p of targets){done.add(p.runId);const result=await this.runtime.switchModel({runId:p.runId,providerId:config.id,model:config.model,confirmProviderChange:input.confirmProviderChange,confirmedProviderBaseUrl:input.confirmedProviderBaseUrl});results.push(result);if(!['applied','configured'].includes(result.state))throw Error(result.error||'专家模型未确认生效');}
     if(targets.length)continue;
     if(r.participants.some(p=>!p.runId&&live.has(p.status))){if(Date.now()>deadline)throw Error('专家启动尚未完成，模型未确认生效');await delay(25);continue;}
     await this.change(s=>{const r=s.requests.find(r=>r.id===input.requestId);if(r.liveStopped)throw Error('讨论已停止');Object.assign(r.modelChange,{runIds:[...done],state:results.some(result=>result.state==='configured')?'configured':'applied',effective:results.some(result=>result.state==='configured')?null:choice(config),finishedAt:new Date().toISOString()});});break;

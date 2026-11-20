@@ -1,3 +1,6 @@
+import {useConfirm} from './Confirmation';
+import {composerError,modelServiceConfirmation} from './model-service-feedback';
+import ComposerErrorNotice from './ComposerErrorNotice';
 import {Alert,AlertDescription} from './components/ui/alert';
 import {readReading,saveReading} from './conversation-view-state';
 import {useComposerReceipt} from './useComposerReceipt';
@@ -19,7 +22,8 @@ import PendingMessage from './PendingMessage';
 import {unwrapInputResult} from './input-action-result';
 import {Button} from './components/ui/button';
 import ApprovalCard from './ApprovalCard';
-import {MessageScrollerProvider,MessageScroller,MessageScrollerViewport,MessageScrollerContent,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
+import ConversationViewport from './ConversationViewport';
+import {MessageScrollerProvider,MessageScrollerItem,MessageScrollerButton,useMessageScroller,useMessageScrollerVisibility} from './components/ui/message-scroller';
 import {createPortal,flushSync} from 'react-dom';
 import VirtualBlock from './VirtualBlock';
 import {turnGap,useTurnWindow} from './useTurnWindow';
@@ -78,6 +82,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   approve(id: string, decision: 'accept' | 'decline'): Promise<void>; submitting: boolean;
 }) {
   const language=useLanguage();
+  const confirm=useConfirm();
   const [options,setOptions,optionsStorageError]=useDraftState<ComposerOptions>('run:'+run.id+':options',{providerId:run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id,model:run.model,permission:run.permission||'default'},restoreComposerOptions);
   useEffect(()=>{onOptionsChange?.(options);},[options,onOptionsChange]);
   const [prompt, setPrompt, draftStorageError] = useDraftState('run:'+run.id+':text',''); const [pending,setPending]=useState<{id:string;decision:'accept'|'decline'}|null>(null);
@@ -85,12 +90,13 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const approvalLock=useRef(false);const [approvalError,setApprovalError]=useState<{id:string;message:string}|null>(null);
   const [recentOpen,setRecentOpen]=useState(false),[pendingOpen,setPendingOpen]=useState(false);
   const [modelBusy,setModelBusy]=useState(false);
-  useEffect(()=>{setOptions(current=>({...current,model:run.model,providerId:run.providerId||current.providerId}));},[run.id,run.model,run.providerId]);
-  const changeModel=async(next:ComposerOptions)=>{if(modelBusy)return;setModelBusy(true);try{const result=await window.desktop!.switchRunModel!({runId:run.id,providerId:next.providerId!,model:next.model!,confirmProviderChange:next.confirmProviderChange});if(result.state==='failed')return;if(!['applied','configured'].includes(result.state))throw Error(result.error||'模型未确认生效');setOptions(current=>({...current,model:next.model,providerId:next.providerId}));}finally{setModelBusy(false);}};
+  useEffect(()=>{setOptions(current=>({...current,model:run.model,providerId:run.providerId||current.providerId,confirmProviderChange:false,confirmedProviderBaseUrl:undefined}));},[run.id,run.model,run.providerId]);
+  const changeModel=async(next:ComposerOptions)=>{if(modelBusy)return;setModelBusy(true);try{const result=await window.desktop!.switchRunModel!({runId:run.id,providerId:next.providerId!,model:next.model!,confirmProviderChange:next.confirmProviderChange,confirmedProviderBaseUrl:next.confirmedProviderBaseUrl});if(result.state==='failed')return;if(!['applied','configured'].includes(result.state))throw Error(result.error||'模型未确认生效');setOptions(current=>({...current,model:next.model,providerId:next.providerId}));}finally{setModelBusy(false);}};
   const [permissionBusy,setPermissionBusy]=useState(false);
   useEffect(()=>{setOptions(current=>({...current,permission:run.permission||'default'}));},[run.id,run.permission]);
   const changePermission=async(permission:'default'|'full')=>{if(permissionBusy)return;setPermissionBusy(true);try{const result=await window.desktop!.switchRunPermission!({runId:run.id,permission,confirmed:permission==='full'});if(result.state!=='applied')throw Error(result.error||'权限未确认生效');setOptions(current=>({...current,permission}));}finally{setPermissionBusy(false);}};
   const [sendError,setSendError]=useState('');
+  const sendNotice=sendError&&<ComposerErrorNotice message={sendError} dismiss={()=>setSendError('')}/>;
   const [referenceError,setReferenceError]=useState('');
   const openReferenceFile=useCallback((href:string)=>{
     setReferenceError('');
@@ -103,6 +109,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const readingRecovery=useRef(readReading(run.id));
   const following=useRef(readingRecovery.current?.following!==false);
   const visibleRef=useRef(visible);visibleRef.current=visible;
+  useLayoutEffect(()=>{visibleRef.current=visible;return()=>{visibleRef.current=false;};},[visible]);
   const savedTop=useRef(readingRecovery.current?.top||0);
   const active = isRunning(run);
   const currentProviderId=run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id;
@@ -227,10 +234,27 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     const supplemental=!!inputAPI&&(active||mutation.current?.text===prompt);
     if(supplemental&&(options.attachments?.length||options.selectedSkillIds?.length)){setSendError(t('补充消息暂只支持文字，请移除附件和技能后发送'));return;}
     if(inputAPI&&(!deliveries.snapshot||deliveries.error)){setSendError(t('暂时无法读取补充消息，请重试'));return;}
-    const text=prompt.trim()?prompt:(!options.selectedSkillIds?.length&&options.attachments?.length?t('请查看所附文件。'):prompt);let requestId:string;try{requestId=receipt.begin(text,options,supplemental?'append':'start',run.id);}catch{setSendError(t('草稿暂时无法保存，刷新前请先复制输入内容。'));return;}sending.current=true;setInputSending(true);
-    setPendingMessage({text,attachments:options.attachments,ids:new Set(run.messages.map(message=>message.id))});setPrompt('');
+    const text=prompt.trim()?prompt:(!options.selectedSkillIds?.length&&options.attachments?.length?t('请查看所附文件。'):prompt);
+    const version=draftVersion.current;
+    let sendOptions=options;
+    let requestId:string|undefined;
+    sending.current=true;setInputSending(true);setSendError('');
     try{
-      setSendError('');
+      if(!supplemental&&!reworkMode&&options.providerId){
+        // Settings can change the address of an existing provider between turns.
+        const providers=window.desktop?.listProviders?await window.desktop.listProviders():catalog;
+        const target=providers.providers.find(p=>p.id===options.providerId);
+        const crossing=target&&(run.baseUrl!==target.baseUrl||!!run.providerId&&run.providerId!==target.id);
+        if(crossing&&!(options.confirmProviderChange&&options.confirmedProviderBaseUrl===target.baseUrl)){
+          if(!visibleRef.current||!await confirm(modelServiceConfirmation(target)))return;
+        }
+        sendOptions={...options,confirmProviderChange:!!crossing,confirmedProviderBaseUrl:crossing?target.baseUrl:undefined};
+      }
+      if(!visibleRef.current||version!==draftVersion.current)return;
+      try{requestId=receipt.begin(text,sendOptions,supplemental?'append':'start',run.id);}
+      catch{setSendError(t('草稿暂时无法保存，刷新前请先复制输入内容。'));return;}
+      setPendingMessage({text,attachments:options.attachments,ids:new Set(run.messages.map(message=>message.id))});
+      setPrompt('');
       if(supplemental){
         if(deliveries.snapshot?.policy.paused)await resumeInputs();
         mutation.current={text,id:requestId};
@@ -239,13 +263,13 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
         // Stop ends the old turn. A new prompt must carry the selected model and
         // provider through startRun, not restart the old model via the input outbox.
         if(deliveries.snapshot?.policy.paused)await resumeInputs([]);
-        await send(text,{...options,clientMutationId:requestId});
+        await send(text,{...sendOptions,clientMutationId:requestId});
       }
       receipt.accepted();
       // The submitted draft was cleared immediately; preserve any new typing.
-      if(!supplemental)setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false}));
+      if(!supplemental)setOptions(current=>({...current,attachments:[],selectedSkillIds:[],confirmProviderChange:false,confirmedProviderBaseUrl:undefined}));
       jump();
-    }catch(error){await receipt.uncertain();setSendError((error as Error).message);}finally{setPendingMessage(null);sending.current=false;setInputSending(false);void deliveries.refresh();}
+    }catch(error){if(requestId)await receipt.uncertain();setSendError(composerError(error));}finally{setPendingMessage(null);sending.current=false;setInputSending(false);void deliveries.refresh();}
   };
   const [requestOutcome,setRequestOutcome]=useState<{key:string;label:string}|null>(null);
   const decide = async (id:string,decision:'accept'|'decline')=>{if(approvalLock.current||!visibleRef.current||run.archivedAt||!isRunning(run)||run.status==='stopping'||!run.approvals.some(a=>a.id===id))return;approvalLock.current=true;setPending({id,decision});setApprovalError(null);try{await approve(id,decision);const fileChange=run.approvals.find(a=>a.id===id)?.method.includes('fileChange');setRequestOutcome({key:'approval:'+id,label:decision==='decline'?'已拒绝本次请求':fileChange?'已批准本次文件修改':'已批准本次命令'});}catch(e){setApprovalError({id,message:(e as Error).message});}finally{approvalLock.current=false;setPending(null);}};
@@ -336,7 +360,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       {inlineInputs}{outboxPanel}{pendingSurface}
       {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
-      {sendError&&<Alert variant="destructive"><AlertDescription>{sendError}</AlertDescription></Alert>}
+      {sendNotice}
       {run.status==='waiting'&&!hasRequest&&!deliveries.error&&<div role="status"><p>{t('正在等待操作，但尚未读取到具体请求。可以刷新或打开完整任务查看。')}</p><div className="settings-actions"><Button variant="outline" onClick={()=>{void deliveries.refresh();refreshRun?.();}}>{t('刷新待处理请求')}</Button><Button variant="ghost" onClick={()=>openSettings('task')}>{t('打开完整任务')}</Button></div></div>}
     </section>;
   }
@@ -350,36 +374,30 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   </div>;
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<Button variant="ghost" className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp data-icon="inline-end" aria-hidden="true"/></Button>}
-    <div className="conversation-body" inert={!!floatingHost&&!recentOpen} aria-hidden={floatingHost&&!recentOpen?true:undefined}>
-      {windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
-      <MessageScroller className="min-w-0 flex-1">
-        {/* Keep utility controls outside the message list so prepend anchoring tracks turns. */}
-        {(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
+    <ConversationViewport inert={!!floatingHost&&!recentOpen} busy={active} ref={scroll} onScroll={trackScroll}
+      preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}
+      navigation={windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
+      beforeViewport={(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
           {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<Alert variant="destructive"><AlertDescription>{historyError}</AlertDescription></Alert>}
         </div>}
-        <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll} preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}>
-        {/* Bound anchor jumps to real content. The primitive's optional spacer would
-            otherwise keep short/folded final turns pinned above a blank viewport. */}
-        <MessageScrollerContent spacerClassName="hidden" className="conversation-content w-full gap-0 pt-[14px]" aria-busy={active}>
+      scrollButton={<MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
+        // Enable following before the primitive handles this click. Waiting for
+        // the resulting scroll event can miss the next streamed content resize.
+        following.current=true;flushSync(()=>onFollowingChange(true));
+      }}/>}>
           {windowed?<WindowedTurns handle={windowRef} viewport={scroll} ids={turnIds} turns={turns} visible={visible} selection={selection} onRangeChange={windowChanged} renderTurn={renderTurn} status={statusContent}/>:(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
           </ConversationScrollItem>)}
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
           {(!!expertChat.state?.turns.length||!!expertChat.error)&&<MessageScrollerItem messageId="expert-discussion"><ExpertTranscript chat={expertChat}/></MessageScrollerItem>}
-        </MessageScrollerContent>
-      </MessageScrollerViewport><MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
-        // Enable following before the primitive handles this click. Waiting for
-        // the resulting scroll event can miss the next streamed content resize.
-        following.current=true;flushSync(()=>onFollowingChange(true));
-      }}/></MessageScroller>
-    </div>
+    </ConversationViewport>
     <div className="conversation-dock">
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {inlineInputs}{outboxPanel}{pendingSurface}
       {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
-      {sendError&&<Alert variant="destructive"><AlertDescription>{sendError}</AlertDescription></Alert>}
+      {sendNotice}
 
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
       <ExpertRecipient chat={expertChat}/>
@@ -458,13 +476,14 @@ function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnN
 }
 function RetainedConversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(()=>readReading(props.run.id)?.following!==false);
+ const [initialPosition]=useState<'start'|'end'>(following?'end':'start');
  const [history,setHistory]=useState({input:props.run,value:props.run});
  let run=history.value;
  // Adjust before committing children so a rolling page never removes mounted
  // history for one frame. All transcript hosts share this boundary.
  if(history.input!==props.run){run=props.actionsOnly?props.run:retainRunHistory(history.value,props.run);setHistory({input:props.run,value:run});}
  if(run.originHandoff)return <InvestigationDetails id={run.originHandoff.id}/>;
- return <RunDetailsContext.Provider value={props.run.id}><RenderErrorBoundary key={props.run.id} runId={props.run.id}><ProcessDisclosureScope storageKey={'run:'+props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition="end" scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><FrozenConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></ProcessDisclosureScope></RenderErrorBoundary></RunDetailsContext.Provider>;
+ return <RunDetailsContext.Provider value={props.run.id}><RenderErrorBoundary key={props.run.id} runId={props.run.id}><ProcessDisclosureScope storageKey={'run:'+props.run.id}><MessageScrollerProvider autoScroll={props.visible!==false&&following} defaultScrollPosition={initialPosition} scrollEdgeThreshold={60} scrollPreviousItemPeek={14}><FrozenConversationBody {...props} run={run} onFollowingChange={setFollowing}/></MessageScrollerProvider></ProcessDisclosureScope></RenderErrorBoundary></RunDetailsContext.Provider>;
 }
 
 // Keep history accumulation outside this boundary so background pagination cannot

@@ -1076,6 +1076,7 @@
   "所有分组一起展示，快速浏览。": "Browse all groups together.",
   "按项目、任务、扩展分别浏览。": "Browse projects, tasks and extensions separately.",
   "草稿已保存": "Draft saved",
+  "模型服务已变更。请重新选择模型并确认接收会话历史的服务。": "The model service changed. Select the model again and confirm where to send this chat history.",
   "切换模型服务": "Switch model service",
   "今天，想完成什么？": "What would you like to work on today?",
   "继续你的任务": "Continue your task",

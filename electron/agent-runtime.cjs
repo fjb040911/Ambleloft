@@ -336,7 +336,7 @@ class AgentRuntime {
       let config = await this.provider.secret(providerId, requestedModel);
       let executable = await findCodex(config.executable);
       if (input.runId && !previous) throw new Error('对话不存在');
-      if (previous && (previous.baseUrl !== config.baseUrl || (previous.providerId && previous.providerId !== config.id)) && input.confirmProviderChange !== true) throw new Error('切换服务需要确认将会话历史发送到新的端点');
+      if(previous)require('./model-switch.cjs').confirmCrossing(previous,config,input);
       if (input.permission && !['default','full'].includes(input.permission)) throw new Error('权限模式无效');
       const attachments=input.attachments||[];
       if(!Array.isArray(attachments)||attachments.length>50)throw new Error('最多添加 50 个文件或文件夹');
@@ -684,6 +684,7 @@ class AgentRuntime {
   async finish(context, status, error = '') {
     if (context.done) return;
     if(context.cancelled)status='interrupted';
+    if(context.switchFailureReason){status='interrupted';error=context.switchFailureReason;}
     if(context.loopPauseReason){status='interrupted';error=context.loopPauseReason;}
     if(context.modelTimeoutReason){status='interrupted';error=context.modelTimeoutReason;}
     if(context.pendingModelChange){context.pendingModelChange.state='failed';context.pendingModelChange.effective=null;context.pendingModelChange.error=error||'任务未启动，新模型未确认生效';context.pendingModelChange=null;}
