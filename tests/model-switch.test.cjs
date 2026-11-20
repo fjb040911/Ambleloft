@@ -60,6 +60,22 @@ test('stop while changing models never restarts work',async t=>{
  const gate=deferred(),entered=deferred();const f=await fixture(t,{hook:async(method)=>{if(method==='thread/resume'){entered.resolve();await gate.promise;}}});const pending=f.runtime.switchModel(next);await entered.promise;await f.runtime.stop('run');gate.resolve();assert.equal((await pending).state,'failed');assert.equal(f.calls.some(c=>c.method==='turn/start'),false);
 });
 
+test('a switch finishing after its turn ended cannot stop the following turn',async t=>{
+ const f=await fixture(t),entered=deferred(),release=deferred();
+ f.runtime.persist=async()=>{entered.resolve();await release.promise;};
+ const pending=f.runtime.switchModel(next);
+ await entered.promise;
+ f.context.done=true;
+ f.runtime.contexts.delete(f.context.key);
+ const following={...f.context,key:'following',turnKey:'following',done:false,permissionTransition:null};
+ f.runtime.contexts.set(following.key,following);
+ let stops=0;f.runtime.stop=async()=>{stops++;};
+ release.resolve();
+ const result=await pending;
+ assert.equal(result.state,'failed');assert.equal(stops,0);
+ assert.equal(f.calls.length,0);
+});
+
 test('queued work stores the selected model without starting early and applies it when a slot opens',async t=>{
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'queued-model-'));let runtime;const calls=[];
  const configs=(id='a',model='old')=>({id,model,baseUrl:'https://a.invalid/v1',executable:process.execPath});
@@ -78,4 +94,26 @@ test('a conversation reply from the old model is not appended after switching; i
  const pending=f.runtime.deliverFormInput(item,{onDispatch:async()=>{}});const rejected=assert.rejects(pending,{code:'CANCELLED'});await entered.promise;
  assert.equal((await f.runtime.switchModel(next)).state,'applied');await rejected;gate.resolve({action:'reply',reply:'Late old response'});
  await f.runtime.deliverFormInput(item,{onDispatch:async()=>{}});assert.equal(f.run.messages.some(m=>m.text==='Late old response'),false);assert.equal(f.run.messages.filter(m=>m.userInputId===item.id).length,1);assert.equal(f.run.messages.at(-1).text,'New model response');
+});
+
+test('changing model during a chat-only reply repeats inference without starting an executor',async t=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'chat-model-switch-'));
+ const oldReply=deferred(),newReply=deferred(),entered=deferred(),models=[];
+ const runtime=new AgentRuntime({directory,publish(){},workspace:{read:async()=>({projects:[]})},
+  provider:{secret:async(id,model)=>({id,model,baseUrl:'https://fixture.invalid/v1',executable:process.execPath})},
+  conversationOptions:{infer:async config=>{models.push(config.model);if(config.model==='old'){entered.resolve();return oldReply.promise;}return newReply.promise;}},
+  rpcFactory:()=>assert.fail('a chat-only reply must not open an execution transport')});
+ t.after(async()=>{await runtime.shutdown();await fs.rm(directory,{recursive:true,force:true});});
+ await runtime.init();
+ const run=await runtime.start({prompt:'Hello',model:'old',providerId:'a'},{userAuthored:true});
+ const context=runtime.active;await entered.promise;
+ const result=await runtime.switchModel({...next,runId:run.id});
+ assert.equal(result.state,'configured');assert.equal(result.effective,null);
+ oldReply.resolve({action:'reply',reply:'Stale answer'});newReply.resolve({action:'reply',reply:'New answer'});
+ await context.conversationPreparation;
+ assert.deepEqual(models,['old','new']);assert.equal(context.run.modelChange.state,'applied');
+ assert.equal(context.run.model,'new');assert.equal(context.run.status,'completed');
+ assert.equal(context.run.messages[0].model,'new');
+ assert.equal(context.run.messages[0].modelChange,'new');
+ assert.deepEqual(context.run.messages.map(m=>m.text),['Hello','New answer']);
 });

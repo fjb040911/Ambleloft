@@ -1,3 +1,4 @@
+import {Alert,AlertDescription} from './components/ui/alert';
 import {readReading,saveReading} from './conversation-view-state';
 import {useComposerReceipt} from './useComposerReceipt';
 import {useDraftState,restoreComposerOptions} from './useDraftState';
@@ -6,7 +7,7 @@ import {ProcessDisclosureScope} from './process-disclosure';
 import {RunDetailsContext} from './ToolText';
 import {InvestigationDetails} from './Investigation';
 import {useExpertChat,ExpertRecipient,ExpertTranscript} from './ExpertChat';
-import {isConversationMessage} from './conversation-message';
+import {isConversationMessage,isCompletedPlan} from './conversation-message';
 import RunDiagnosticsButton from './RunDiagnosticsButton';
 import RenderErrorBoundary from './RenderErrorBoundary';
 import UserMessage from './UserMessage';
@@ -27,7 +28,7 @@ import SupplementalInputDock from './SupplementalInputDock';
 import {PersistentInputRecord} from './InputProcessRecord';
 import { t, useLanguage } from './i18n';
 import { Component, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode, type RefObject } from 'react';
-import { ChevronUp, Clock3 } from 'lucide-react';
+import { ChevronUp } from 'lucide-react';
 import SkillTags from './SkillTags';
 import ModelStatus from './ModelStatus';
 import PermissionStatus from './PermissionStatus';
@@ -37,7 +38,6 @@ import Markdown from './Markdown';
 import TurnActions from './TurnActions';
 import { conversationTurns, type ConversationTurn } from './conversation-turns';
 import {TurnProgress} from './ProcessPanel';
-import RunActivity from './RunActivity';
 import TurnFiles from './TurnFiles';
 import TurnNavigation from './TurnNavigation';
 import TaskForms, {useTaskForms} from './TaskForms';
@@ -53,7 +53,7 @@ export {isRunning,runStatus} from './run-status';
 function Duration({ timing }: { timing: TurnTiming }) {
   if (!timing.outcome) return null;
   const seconds = typeof timing.durationMs === 'number' && Number.isFinite(timing.durationMs) ? Math.max(0, Math.floor(timing.durationMs / 1000)) : null;
-  return <TraceDescription className="trace-duration inline-flex items-center gap-2"><Clock3 size={13} /><span>{seconds === null ? t("用时未完整记录") : <>{t("用时")} <strong>{Math.floor(seconds / 60)}</strong> {t("分")} <strong>{seconds % 60}</strong> {t("秒")}</>}{timing.outcome === 'failed' ? t(" · 执行失败") : timing.outcome === 'interrupted' ? t(" · 已中断") : ''}</span></TraceDescription>;
+  return <TraceDescription className="trace-duration inline-flex items-center gap-2"><span>{seconds === null ? t("用时未完整记录") : <>{t("用时")} {Math.floor(seconds / 60)} {t("分")} {seconds % 60} {t("秒")}</>}{timing.outcome === 'failed' ? t(" · 执行失败") : timing.outcome === 'interrupted' ? t(" · 已中断") : ''}</span></TraceDescription>;
 }
 function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=false,reworkMode=false,onFollowingChange, visible = true, floatingHost, run, send, stop, approve, submitting, catalog, openSettings, openFile, openReference, openChanges, embedded = false, embeddedPrompt, actionsOnly = false, hidePendingActions = false, refreshRun, selectedInput, onOpenInput }: {
   onOptionsChange?(options:ComposerOptions):void;
@@ -86,7 +86,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const [recentOpen,setRecentOpen]=useState(false),[pendingOpen,setPendingOpen]=useState(false);
   const [modelBusy,setModelBusy]=useState(false);
   useEffect(()=>{setOptions(current=>({...current,model:run.model,providerId:run.providerId||current.providerId}));},[run.id,run.model,run.providerId]);
-  const changeModel=async(next:ComposerOptions)=>{if(modelBusy)return;setModelBusy(true);try{const result=await window.desktop!.switchRunModel!({runId:run.id,providerId:next.providerId!,model:next.model!,confirmProviderChange:next.confirmProviderChange});if(!['applied','configured'].includes(result.state))throw Error(result.error||'模型未确认生效');setOptions(current=>({...current,model:next.model,providerId:next.providerId}));}finally{setModelBusy(false);}};
+  const changeModel=async(next:ComposerOptions)=>{if(modelBusy)return;setModelBusy(true);try{const result=await window.desktop!.switchRunModel!({runId:run.id,providerId:next.providerId!,model:next.model!,confirmProviderChange:next.confirmProviderChange});if(result.state==='failed')return;if(!['applied','configured'].includes(result.state))throw Error(result.error||'模型未确认生效');setOptions(current=>({...current,model:next.model,providerId:next.providerId}));}finally{setModelBusy(false);}};
   const [permissionBusy,setPermissionBusy]=useState(false);
   useEffect(()=>{setOptions(current=>({...current,permission:run.permission||'default'}));},[run.id,run.permission]);
   const changePermission=async(permission:'default'|'full')=>{if(permissionBusy)return;setPermissionBusy(true);try{const result=await window.desktop!.switchRunPermission!({runId:run.id,permission,confirmed:permission==='full'});if(result.state!=='applied')throw Error(result.error||'权限未确认生效');setOptions(current=>({...current,permission}));}finally{setPermissionBusy(false);}};
@@ -252,11 +252,18 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   // Temporary status belongs inside a turn, not in the scroller's direct-child
   // anchor list. Replacing a pending item with a real turn at the same count
   // makes the scroller rediscover a historical anchor and jump backwards.
+  // Older installations persisted switch feedback across subsequent turns.
+  const latestUser=turns.at(-1)?.user;
+  const change=run.modelChange;
+  const fromOlderTurn=change?.turnKey ? !!latestUser && change.turnKey!==latestUser.id
+    : !!(change?.startedAt && latestUser?.timing?.startedAt && Date.parse(change.startedAt)<Date.parse(latestUser.timing.startedAt));
+  const modelChange=fromOlderTurn ? undefined : change;
   const statusContent=<>
+          {active&&(run.storageBackpressure||run.queued)&&<p role="status" className="text-sm text-muted-foreground">{t(run.storageBackpressure?'正在保存输出 · 暂缓接收，保存后自动继续':'排队中 · 等待执行名额或工作目录释放')}</p>}
           {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><div key={r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={openInput}/></div>)}
           {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage attachments={pendingMessage.attachments} text={pendingMessage.text}/>}
-          {referenceError&&<div role="alert" className="error-banner">{referenceError}</div>}
-          {run.error && <div className="error-banner" role="alert">{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</div>}
+          {referenceError&&<Alert variant="destructive"><AlertDescription>{referenceError}</AlertDescription></Alert>}
+          {run.error && <Alert variant="destructive"><AlertDescription>{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</AlertDescription></Alert>}
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
   // The enclosing discussion already renders its prompt. Omit only the matching
@@ -327,28 +334,28 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     return <section className="wf-run-actions" aria-label={t('需要你处理')}>
       {hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
       {inlineInputs}{outboxPanel}{pendingSurface}
-      {(draftStorageError||optionsStorageError)&&<p className="error-banner" role="alert">{t(draftStorageError||optionsStorageError)}</p>}
+      {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
-      {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
+      {sendError&&<Alert variant="destructive"><AlertDescription>{sendError}</AlertDescription></Alert>}
       {run.status==='waiting'&&!hasRequest&&!deliveries.error&&<div role="status"><p>{t('正在等待操作，但尚未读取到具体请求。可以刷新或打开完整任务查看。')}</p><div className="settings-actions"><Button variant="outline" onClick={()=>{void deliveries.refresh();refreshRun?.();}}>{t('刷新待处理请求')}</Button><Button variant="ghost" onClick={()=>openSettings('task')}>{t('打开完整任务')}</Button></div></div>}
     </section>;
   }
   if(embedded)return <div className="discussion-expert-transcript" data-run-id={run.id}>
-    <PermissionStatus value={run.permissionChange}/><ModelStatus value={run.modelChange}/>
-    {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<p role="alert">{historyError}</p>}
+    <PermissionStatus value={run.permissionChange}/><ModelStatus value={modelChange}/>
+    {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<Alert variant="destructive"><AlertDescription>{historyError}</AlertDescription></Alert>}
     {turns.map(turn=><div className="conversation-turn" key={turn.user.id}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
-    {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact/>}
+
     {!hidePendingActions&&<>{inlineInputs}{outboxPanel}{pendingSurface}</>}
   </div>;
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
-    {floatingHost&&<button className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp size={16} aria-hidden="true"/></button>}
+    {floatingHost&&<Button variant="ghost" className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp data-icon="inline-end" aria-hidden="true"/></Button>}
     <div className="conversation-body" inert={!!floatingHost&&!recentOpen} aria-hidden={floatingHost&&!recentOpen?true:undefined}>
       {windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
       <MessageScroller className="min-w-0 flex-1">
         {/* Keep utility controls outside the message list so prepend anchoring tracks turns. */}
         {(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
-          {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<p role="alert">{historyError}</p>}
+          {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<Alert variant="destructive"><AlertDescription>{historyError}</AlertDescription></Alert>}
         </div>}
         <MessageScrollerViewport className="conversation-scroll" aria-label={t('任务消息')} ref={scroll} onScroll={trackScroll} preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}>
         {/* Bound anchor jumps to real content. The primitive's optional spacer would
@@ -371,9 +378,9 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {inlineInputs}{outboxPanel}{pendingSurface}
-      {(draftStorageError||optionsStorageError)&&<p className="error-banner" role="alert">{t(draftStorageError||optionsStorageError)}</p>}
-      {sendError&&<p className="error-banner" role="alert">{sendError}</p>}
-      {active&&run.approvals.length===0&&<RunActivity pendingInput={!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} turn={turns.at(-1)} visible={visible} compact={!floatingHost||recentOpen}/>}
+      {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
+      {sendError&&<Alert variant="destructive"><AlertDescription>{sendError}</AlertDescription></Alert>}
+
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}
       <ExpertRecipient chat={expertChat}/>
       <ChatComposer expertMentions={expertChat.mentions} onPasteAttachments={files=>setOptions(current=>({...current,attachments:[...(current.attachments||[]),...files].filter((file,index,all)=>all.findIndex(other=>other.path===file.path)===index)}))} attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending||expertChat.busy} sending={submitting||inputSending||expertChat.busy}
@@ -381,7 +388,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
         active={active} stopping={run.status==='stopping'} onStop={stop}
         canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length||!!options.attachments?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
         skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
-        controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls permissionChange={run.permissionChange} modelChange={run.modelChange} catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
+        controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls permissionChange={run.permissionChange} modelChange={modelChange} catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 
     </div>
   </div>;
@@ -471,7 +478,7 @@ const TurnTranscript=memo(function TurnTranscript({turn,run,requests,allRequests
  return <>
   {turn.user.modelChange&&<div className="turn-duration">{t('已切换模型：')}{turn.user.modelChange}</div>}
   {!hidePrompt&&<UserMessage message={turn.user.formSubmissionId?undefined:turn.user} context={<SkillTags snapshots={turn.user.skills}/>} text={allRequests.some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
-  {turn.messages.filter(message=>isConversationMessage(message)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} message={message} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={message}/></MessageContent></Message>)}
+  {turn.messages.filter(message=>isConversationMessage(message)&&!isCompletedPlan(message,turn)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} message={message} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={message}/></MessageContent></Message>)}
   <TurnProgress allRequests={allRequests} requests={requests} deliveries={deliveries} nativePending={nativePending} onOpenInput={onOpenInput} paused={paused} onToggle={onToggle} turn={turn} status={status} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
   {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={turn.final} onFileLink={openReference}/></MessageContent></Message>}
   <TurnFiles run={run} turnKey={turn.user.id} openFile={openFile} openReference={openReference} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}

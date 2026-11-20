@@ -1,15 +1,32 @@
-import { t } from './i18n';
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
-import type { ConversationTurn } from './conversation-turns';
-export default function TurnNavigation({ turns, selected, jump,offset=0 }: { offset?:number; turns: ConversationTurn[]; selected: string; jump(id: string): void }) {
-  const [preview, setPreview] = useState<{ id: string; text: string; number: number; x: number; y: number } | null>(null);
-  const show = (button: HTMLButtonElement, turn: ConversationTurn, index: number) => {
-    const rect = button.getBoundingClientRect();
-    setPreview({id:turn.user.id,text:turn.user.text,number:index+offset+1,x:rect.right+10,y:Math.max(12,Math.min(rect.top,window.innerHeight-220))});
-  };
-  return <><nav className="turn-navigation" aria-label={t("对话轮次导航")} onScroll={() => setPreview(null)}>{turns.map((turn,index) => <button key={turn.user.id} type="button" className="turn-anchor" aria-label={`第 ${index+offset+1} 轮：${turn.user.text.slice(0,80)}`} aria-current={selected===turn.user.id ? 'true' : undefined} aria-describedby={preview?.id===turn.user.id ? 'turn-question-preview' : undefined}
-    onMouseEnter={event=>show(event.currentTarget,turn,index)} onMouseLeave={()=>setPreview(null)} onFocus={event=>show(event.currentTarget,turn,index)} onBlur={()=>setPreview(null)} onKeyDown={event=>{if(event.key==='Escape')setPreview(null);}} onClick={()=>{setPreview(null);jump(turn.user.id);}}><span>{index+offset+1}</span></button>)}</nav>
-    {preview && createPortal(<div className="turn-preview" id="turn-question-preview" role="tooltip" style={{left:preview.x,top:preview.y}}><strong>{t("第")}{preview.number}{t("轮")}</strong><p>{preview.text}</p></div>,document.body)}
-  </>;
+import {useId, useState} from 'react';
+import {t} from './i18n';
+import type {ConversationTurn} from './conversation-turns';
+import {Button} from './components/ui/button';
+import {Tooltip, TooltipContent, TooltipTrigger} from './components/ui/tooltip';
+
+type Props = {offset?: number; turns: ConversationTurn[]; selected: string; jump(id: string): void};
+
+export default function TurnNavigation({turns, selected, jump, offset = 0}: Props) {
+  const prefix = useId();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const index = previewId === null ? -1 : turns.findIndex(turn => turn.user.id === previewId);
+  const preview = turns[index];
+  return <Tooltip open={!!preview} triggerId={preview ? prefix + previewId : null} disableHoverablePopup
+    onOpenChange={open => {if (!open) setPreviewId(null);}}>
+    <nav className="turn-navigation" aria-label={t('对话轮次导航')} onScroll={() => setPreviewId(null)}>
+      {turns.map((turn, i) => {
+        const number = i + offset + 1;
+        const id = turn.user.id;
+        return <TooltipTrigger key={id} id={prefix + id} onMouseEnter={() => setPreviewId(id)}
+          onFocus={() => setPreviewId(id)} onBlur={() => setPreviewId(null)} onMouseLeave={() => setPreviewId(null)}
+          render={<Button className="turn-anchor shrink-0" type="button" size="icon-sm" variant="ghost"
+            aria-label={`第 ${number} 轮：${turn.user.text.slice(0,80)}`} aria-current={selected === id || undefined}
+            onClick={() => {setPreviewId(null); jump(id);}}/>}><span aria-hidden="true" className="turn-tick"/></TooltipTrigger>;
+      })}
+    </nav>
+    {preview && <TooltipContent role="tooltip" side="right" align="start" className="flex max-h-48 flex-col items-start overflow-hidden">
+      <strong>{t('第')}{offset + index + 1}{t('轮')}</strong>
+      <p className="whitespace-pre-wrap wrap-anywhere">{preview.user.text.length>100?preview.user.text.slice(0,100)+'…':preview.user.text}</p>
+    </TooltipContent>}
+  </Tooltip>;
 }

@@ -7,7 +7,7 @@ test('switch feedback expires without moving composer, and restored success stay
  await page.getByRole('button',{name:'switching',exact:true}).click();
  await expect(page.getByRole('button',{name:/模型切换中/})).toBeVisible();
  await page.getByRole('button',{name:'configured',exact:true}).click();
- await expect(page.getByRole('button',{name:/等待排队任务开始执行/})).toBeVisible();
+ await expect(page.getByRole('button',{name:/等待新模型确认/})).toBeVisible();
  await page.getByRole('button',{name:'applied',exact:true}).click();
  await expect(page.locator('.change-success')).toHaveCount(2);
  const before=await input.boundingBox();
@@ -21,11 +21,15 @@ test('switch feedback expires without moving composer, and restored success stay
  await expect(page.getByRole('button',{name:/模型切换失败/})).toBeVisible();
  await page.getByRole('button',{name:/模型切换失败/}).click();
  await expect(page.getByRole('dialog')).toContainText('模型切换失败');
+ await page.getByRole('button',{name:'关闭提示'}).click();
+ await expect(page.getByRole('button',{name:/模型切换失败/})).toHaveCount(0);
+ await page.reload();await page.getByRole('button',{name:'failed',exact:true}).click();
+ await expect(page.getByRole('button',{name:/模型切换失败/})).toHaveCount(0);
 });
-for(const width of [1000,390])test(`compact activity fits at ${width}px`,async({page})=>{
+for(const width of [1000,390])test(`composer fits without a status strip at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:700});await page.goto('/tests/fixtures/composer-feedback.html');
  await expect(page.getByRole('textbox')).toBeVisible();
- const bounds=await page.locator('.run-activity').boundingBox();expect(bounds!.height).toBeLessThanOrEqual(32);
+ await expect(page.locator('.run-activity')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath(`composer-feedback-${width}.png`)});
 });

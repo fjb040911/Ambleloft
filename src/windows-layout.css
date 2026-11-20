@@ -13,7 +13,7 @@
 .app-shell.windows-desktop .toolbar {height:48px;min-height:48px;padding:0 20px;border-bottom:0;background:var(--surface);}
 .app-shell.windows-desktop .toolbar-left {padding-left:0;}
 .app-shell.windows-desktop .toolbar-title {font-size:14px;font-weight:500;}
-.windows-sidebar-heading {height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px;color:var(--text);font-size:14px;font-weight:600;}
+.windows-sidebar-heading {height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px;color:var(--text);font-size:16px;font-weight:600;}
 .windows-sidebar-heading .global-sidebar-actions {min-height:0;height:auto;padding:0;}
 .windows-sidebar-heading .sidebar-top-actions {padding:0;gap:2px;}
 .windows-sidebar-heading .icon-button {width:32px;height:32px;}

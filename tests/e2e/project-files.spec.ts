@@ -170,7 +170,7 @@ test('markdown uses normal paragraph spacing and renders escaped Mermaid indenta
  const spacing=await page.locator('.file-markdown .markdown').evaluate(el=>{const a=el.querySelectorAll(':scope > p');return {whiteSpace:getComputedStyle(el).whiteSpace,gap:a[1].getBoundingClientRect().top-a[0].getBoundingClientRect().bottom};});
  expect(spacing.whiteSpace).toBe('normal');expect(spacing.gap).toBeLessThanOrEqual(10);
  await page.evaluate(()=>{(window as any).__files['README.md'].text='```mermaid\nflowchart LR\n P2 / C2 同 A\n```';});
- await expect(page.locator('.artifact-error')).toContainText('Parse error');
+ await expect(page.getByRole('alert').filter({hasText:'Parse error'})).toContainText('Parse error');
 });
 
 test('expanded file panel keeps the current conversation draft, live messages and sending',async({page})=>{

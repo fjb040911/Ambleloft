@@ -215,11 +215,11 @@ test('creation overview yields to the form and keeps details available at deskto
  const before=await overview.boundingBox(),form=await dock.boundingBox();expect(form!.y-(before!.y+before!.height)).toBeGreaterThanOrEqual(12);expect(before!.height).toBeLessThan(65);
  await page.screenshot({path:'test-results/creation-intake-light.png',animations:'disabled'});
  await dock.getByRole('combobox',{name:/现有调试工具/}).selectOption('gdb');
- await overview.locator('summary').click();await expect(overview).toContainText('设备地址和工具路径');
+ await overview.locator('[data-slot=trace-collapsible-trigger]').click();await expect(overview).toContainText('设备地址和工具路径');
  await page.setViewportSize({width:760,height:900});await page.evaluate(()=>(window as any).__locale());
  await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
  await page.screenshot({path:'test-results/creation-intake-dark.png',animations:'disabled'});
- await page.getByRole('region',{name:'Creation progress',exact:true}).locator('summary').click();await page.setViewportSize({width:390,height:844});
+ await page.getByRole('region',{name:'Creation progress',exact:true}).locator('[data-slot=trace-collapsible-trigger]').click();await page.setViewportSize({width:390,height:844});
  await expect(page.getByRole('region',{name:'Needs your input',exact:true}).getByRole('button',{name:'Submit answers'})).toBeInViewport();await expect(page.getByRole('textbox',{name:'Continue task'})).toBeInViewport({ratio:1});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  const mobileOverview=page.getByRole('region',{name:'Creation progress',exact:true}),mobileDock=page.getByRole('region',{name:'Needs your input',exact:true});

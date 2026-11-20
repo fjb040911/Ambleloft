@@ -116,7 +116,9 @@ test('prompt input isolates docs radius and focus from legacy theme in home and 
    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme;},theme);
    await input.evaluate(el=>(el as HTMLElement).blur());
    await expect(group).toHaveCSS('border-radius','18px');
-   await expect(group).toHaveCSS('border-color','rgba(0, 0, 0, 0)');
+   await expect(group).toHaveCSS('border-color',theme==='light'?'rgb(222, 222, 222)':'rgba(0, 0, 0, 0)');
+   await expect(group).toHaveCSS('border-top-width','1px');
+   if(theme==='light')await expect(group).toHaveCSS('background-color','rgb(255, 255, 255)');
    await input.focus();
    await expect(group).toHaveCSS('border-color',theme==='light'?'oklch(0.708 0 0)':'oklch(0.556 0 0)');
    await expect.poll(()=>group.evaluate(el=>getComputedStyle(el).boxShadow)).toContain('0px 0px 0px 3px');

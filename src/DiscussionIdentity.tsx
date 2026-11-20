@@ -1,3 +1,4 @@
+import {Message, MessageContent, MessageHeader} from './components/ui/message';
 import {flushSync} from 'react-dom';
 import type {ReactNode} from 'react';
 import {Check,Clock,LoaderCircle,Pause,TriangleAlert,MoreHorizontal} from 'lucide-react';
@@ -31,8 +32,8 @@ export function DiscussionRoster({request,runs,names}:{request:SpaceRequest;runs
 export default function DiscussionIdentity({request,participant:p,run,fallbackName,archived,onSave,onOpenRecord,children}:{request:SpaceRequest;participant:SpaceParticipant;run?:AgentRun;fallbackName?:string;archived:boolean;onSave():void;onOpenRecord?:()=>void;children:ReactNode}){
  const L=useCopy(),name=speakerName(p,fallbackName),anchor=contributionAnchor(request,p),context=p.contribution?.context;
  const model=run?.model||p.contribution?.model;
- return <section className="wf-response" id={anchor} tabIndex={-1} aria-labelledby={anchor+'-name'} data-expert-id={p.employeeId}>
-  <header className="wf-speaker-header">
+ return <Message role="region" className="wf-response" id={anchor} tabIndex={-1} aria-labelledby={anchor+'-name'} data-expert-id={p.employeeId}>
+  <MessageContent><MessageHeader className="wf-speaker-header">
    <Avatar aria-hidden="true"><AvatarFallback>{Array.from(name).slice(0,2).join('')}</AvatarFallback></Avatar>
    <div className="wf-speaker-name"><strong id={anchor+'-name'}>{name}</strong><span>{model||L('模型信息未记录','Model not recorded')}</span></div>
    <div className="wf-response-meta"><DiscussionStatus participant={p} run={run}/>
@@ -42,7 +43,7 @@ export default function DiscussionIdentity({request,participant:p,run,fallbackNa
     </PopoverContent></Popover>
     {(p.output||onOpenRecord)&&<DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={L('回复操作','Response actions')}/> }><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup>{onOpenRecord&&<DropdownMenuItem onClick={onOpenRecord}>{L('查看执行记录','View execution record')}</DropdownMenuItem>}{p.output&&<DropdownMenuItem disabled={archived} onClick={onSave}>{L('保存为文档草稿','Save as document draft')}</DropdownMenuItem>}</DropdownMenuGroup></DropdownMenuContent></DropdownMenu>}
    </div>
-  </header>
+  </MessageHeader>
   {children}
- </section>;
+ </MessageContent></Message>;
 }

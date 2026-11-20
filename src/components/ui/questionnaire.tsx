@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { Questionnaire as QuestionnairePrimitive } from "@shadcn/react/questionnaire"
 import { cn } from "cn"

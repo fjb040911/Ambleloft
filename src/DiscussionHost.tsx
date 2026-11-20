@@ -1,3 +1,5 @@
+import ChatDisclosure from './ChatDisclosure';
+import {Message, MessageContent, MessageHeader} from './components/ui/message';
 import {useDraftState} from './useDraftState';
 import {TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent,TraceLine,TraceTitle,TraceDescription} from './components/ui/trace';
 import {useState,useEffect,useLayoutEffect,useRef} from 'react';
@@ -19,14 +21,14 @@ export function DiscussionFollowups({request}:{request:SpaceRequest}){
  const labels:Record<string,string>={pending:L('等待投递','Awaiting delivery'),queued:L('等待投递','Awaiting delivery'),dispatching:L('正在投递','Sending'),delivered:L('已送达，等待应用确认','Delivered; awaiting application'),applied:L('专家已确认应用','Expert confirmed application'),unknown:L('投递结果待核实','Delivery outcome unknown'),unconfirmed:L('专家尚未确认应用','Application not confirmed'),failed:L('未能送达','Delivery failed'),interrupted:L('已停止','Stopped')};
  return <>{request.followups?.map(f=><div key={f.id} id={'wf-followup-'+f.id} className="flex min-w-0 flex-col gap-3" aria-label={L('讨论追问','Discussion follow-up')}>
   <UserMessage text={f.text}/>
-  <section className="wf-response wf-host-response" aria-label={L('主持人追问回复','Host follow-up response')}>
-   <strong>{L('主持人','Host')}</strong>
+  <Message role="region" className="wf-response wf-host-response" aria-label={L('主持人追问回复','Host follow-up response')}>
+   <MessageContent><MessageHeader>{L('主持人','Host')}</MessageHeader>
    {f.reply&&<Markdown text={f.reply}/>}
    {['queued','processing'].includes(f.state)&&<p role="status" className="wf-muted">{L('主持人正在处理这条消息，专家继续工作。','The host is processing this message while experts keep working.')}</p>}
-   {f.error&&<p role="alert">{f.error}</p>}
+   {f.error&&<Alert variant="destructive"><AlertDescription>{f.error}</AlertDescription></Alert>}
    {f.state==='interrupted'&&<p className="wf-muted">{L('消息已保留，处理已停止。','Message preserved; processing stopped.')}</p>}
    {f.deliveries.length>0&&<ul className="m-0 list-none p-0 text-sm text-muted-foreground">{f.deliveries.map(d=><li key={d.id}>{request.participants.find(p=>p.employeeId===d.employeeId)?.role?.name||request.participants.find(p=>p.employeeId===d.employeeId)?.contribution?.author.name||d.employeeId} · {labels[d.state]||d.state}</li>)}</ul>}
-  </section>
+  </MessageContent></Message>
  </div>)}</>;
 }
 
@@ -51,20 +53,20 @@ export function DiscussionHostReply({requestId,host,children}:{requestId:string;
  const previousActivity=useRef({live,id:activity?.id});
  useLayoutEffect(()=>{const previous=previousActivity.current;if(previous.live&&(!live||previous.id!==activity?.id))setReasoningOpen(false);previousActivity.current={live,id:activity?.id};},[live,activity?.id]);
  const labels:Record<string,string>={preparing:L('准备中','Preparing'),running:L('协调中','Coordinating'),'needs-input':L('待你确认','Your input needed'),ready:L('可整理为任务','Ready to shape into tasks'),completed:L('本轮已完成','Round complete'),failed:L('协调未完成','Coordination incomplete'),interrupted:L('已停止','Stopped')};
- return <section className="wf-response wf-host-response" aria-label={L('主持人回复','Host response')}>
-  <header className="wf-speaker-header"><Avatar aria-hidden="true"><AvatarFallback><MessageCircle className="size-4"/></AvatarFallback></Avatar><div className="wf-speaker-name"><strong>{L('主持人','Host')}</strong><span>{host.model||(live?L('正在准备模型','Preparing model'):L('模型信息未记录','Model not recorded'))}</span></div><Badge variant={host.status==='failed'?'destructive':'secondary'}>{host.task?.restarted&&host.status==='completed'?L('新引导已开始','New guide started'):labels[host.status]||host.status}</Badge></header>
+ return <Message role="region" className="wf-response wf-host-response" aria-label={L('主持人回复','Host response')}>
+  <MessageContent><MessageHeader className="wf-speaker-header"><Avatar aria-hidden="true"><AvatarFallback><MessageCircle className="size-4"/></AvatarFallback></Avatar><div className="wf-speaker-name"><strong>{L('主持人','Host')}</strong><span>{host.model||(live?L('正在准备模型','Preparing model'):L('模型信息未记录','Model not recorded'))}</span></div><Badge variant={host.status==='failed'?'destructive':'secondary'}>{host.task?.restarted&&host.status==='completed'?L('新引导已开始','New guide started'):labels[host.status]||host.status}</Badge></MessageHeader>
   {live&&<div className="wf-host-activity" aria-label={L('主持人运行状态','Host activity')}>
    {activity?.reasoning&&activity.phase==='reasoning'?<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live/>:<ProcessIndicator title={host.status==='preparing'?L('正在准备','Preparing'):host.status==='stopping'?L('正在停止','Stopping'):activity?.phase==='planning'?L('正在规划任务与检查项目关系','Planning tasks and checking project relationships'):activity?.phase==='experts'?L('等待专家完成分析','Waiting for expert analysis'):activity?.phase==='responding'?L('正在整理回复','Preparing a response'):L('等待模型响应','Waiting for the model')}/>}
   </div>}
-  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<details key={`${activity.id}:${live}`} className="wf-host-trace" open={reasoningOpen} onToggle={event=>setReasoningOpen(event.currentTarget.open)}><summary>{L('查看模型思考','View model reasoning')}</summary>{reasoningOpen&&<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/>}</details>}
-  {host.steps.length>1&&<details className="wf-host-trace" open={stepsOpen} onToggle={event=>setStepsOpen(event.currentTarget.open)}><summary>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</summary>{stepsOpen&&host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</details>}
+  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<ChatDisclosure key={`${activity.id}:${live}`} className="wf-host-trace" open={reasoningOpen} onOpenChange={setReasoningOpen} heading={L('查看模型思考','View model reasoning')}>{reasoningOpen&&<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live={false}/>}</ChatDisclosure>}
+  {host.steps.length>1&&<ChatDisclosure className="wf-host-trace" open={stepsOpen} onOpenChange={setStepsOpen} heading={<>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</>}>{stepsOpen&&host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</ChatDisclosure>}
   {host.steps.at(-1)&&<Markdown text={host.steps.at(-1)!.text}/>}
   {host.error&&<Alert variant="destructive"><AlertDescription>{host.error}</AlertDescription></Alert>}
   {['failed','interrupted'].includes(host.status)&&<p className="wf-muted">{L('已保留本轮结果。在输入框补充或发送“继续”，主持人会重新评估下一步。','Results are preserved. Add a message or send “continue” to reassess the next step.')}</p>}
   {host.task&&!host.task.restarted&&<p className="wf-muted">{L('计划草稿','Plan draft')} · v{host.task.draftRevision}{host.task.changes&&<> · {L('新增','Added')} {host.task.changes.added.length} · {L('调整','Changed')} {host.task.changes.changed.length} · {L('移除','Removed')} {host.task.changes.removed.length}</>}</p>}
   {host.progress&&<p className="wf-muted">{L('状态查询时间：','Status checked: ')}{new Date(host.progress.observedAt).toLocaleString()} · {L('已验收','Accepted')} {host.progress.nodes.filter(n=>n.accepted).length}/{host.progress.nodes.length}</p>}
   {children}
- </section>;
+ </MessageContent></Message>;
 }
 export function DiscussionQuestions({request,disabled,submit}:{request:SpaceRequest;disabled:boolean;submit(text:string,answers:FormValues):Promise<boolean>}){
  const L=useCopy(),q=request.host!.question!,key='workforce-host-answer:'+request.id+':'+q.requestKey;

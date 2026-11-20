@@ -111,17 +111,13 @@ test('empty request surface disappears and a fresh batch opens automatically',as
 for(const kind of ['question','form'] as const)test(`existing async ${kind} is input-needed, not a three-hour model call`,async({page})=>{
  const detail=await setup(page,kind);
  await page.evaluate(()=>{const w=window as any,run=w.__taskRun;run.status='running';run.createdAt=new Date(Date.now()-3*60*60*1000).toISOString();run.lastEventAt=new Date(Date.now()-2*60*60*1000).toISOString();if(run.questions?.length)run.questions[0].blocking=false;w.__taskEmit();});
- const activity=detail.getByLabel('当前运行状态');
- await expect(activity).toContainText('有待补充信息');await expect(activity).not.toContainText('等待新的响应');
- await expect(activity.locator('.activity-clock')).toHaveCount(0);await expect(activity.locator('[data-slot=spinner]')).toHaveCount(0);
+ await expect(detail.locator('.run-activity')).toHaveCount(0);
  await expect(detail.locator('.wf-node-summary')).toContainText('待补充信息');
  await expect(detail.getByText('等待模型响应',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>['start','control','answer','input','approve'].includes(c.action)))).toEqual([]);
  if(kind==='question'){
   await detail.screenshot({path:test.info().outputPath('task-async-input-status.png')});
   await page.getByLabel('使用哪个测试环境？').fill('隔离测试环境');await page.getByRole('button',{name:'提交回答'}).click();
-  await expect(activity).not.toContainText('有待补充信息');
-  await expect(activity.locator('.activity-clock')).toBeVisible();
-  await expect(activity.locator('.activity-clock')).toHaveAttribute('title','包含等待与工具执行时间，不代表模型调用时长');
+  await expect(page.getByLabel('使用哪个测试环境？')).toHaveCount(0);
  }
 });

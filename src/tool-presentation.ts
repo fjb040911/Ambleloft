@@ -1,3 +1,4 @@
+import {inputToolTitle} from './InputToolRecord';
 import type {AgentRun} from './types';
 import {t} from './i18n';
 type Tool=AgentRun['tools'][number];
@@ -21,4 +22,19 @@ export function commandPresentation(tool:Tool) {
   if(/^(?:npm|pnpm|yarn|bun) (?:run )?test(?:\s|$)|^npx (?:playwright test|vitest)(?:\s|$)/.test(command))return {kind:'unknown',title:'运行测试',summary:''};
  }
  return {kind:'unknown',title:actions.length>1?'执行多项操作':'运行命令',summary:t('终端操作')};
+}
+
+export const toolBusy=(status:string)=>['inProgress','running','pending'].includes(status);
+export function toolSummary(tool:AgentRun['tools'][number]):string {
+ if(tool.type==='commandExecution')return commandPresentation(tool).summary;
+ if(tool.type==='contextCompaction')return '';
+ const inputTitle=inputToolTitle(tool.label);if(inputTitle)return t(inputTitle);
+ if(tool.progress)return tool.progress;
+ try {
+  const data=JSON.parse(tool.detail);
+  if(tool.type==='webSearch')return data.action?.url||data.query||data.action?.query||'';
+  if(tool.type==='fileChange'&&Array.isArray(data))return data.map(item=>item.path?.split('/').pop()).filter(Boolean).join(' · ');
+  if(tool.type==='mcpToolCall')return String(data.arguments?.query||data.arguments?.path||data.arguments?.url||tool.label);
+ }catch{/* Command output is plain text. */}
+ return tool.label;
 }

@@ -27,7 +27,7 @@ export interface FileChange {id:string;path:string;status:'added'|'modified'|'de
 export interface TurnFileChanges {turnKey:string;files:FileChange[];notice?:string}
 export interface TaskApp {id:string;turnKey:string;title:string;extensionName:string;extensionId:string;resourceUri:string}
 export type ModelChoice={providerId?:string;model:string};
-export interface ModelChange {id:string;requested:ModelChoice;previous:ModelChoice;state:'switching'|'configured'|'applied'|'failed';effective:ModelChoice|null;error?:string;startedAt?:string;finishedAt?:string}
+export interface ModelChange {id:string;turnKey?:string;requested:ModelChoice;previous:ModelChoice;state:'switching'|'configured'|'applied'|'failed';effective:ModelChoice|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface PermissionChange {id:string;requested:'default'|'full';previous:'default'|'full';state:'switching'|'applied'|'configured'|'failed';effective:'default'|'full'|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface AgentRun {
   originHandoff?:{id:string;originConversationId:string;mode:'investigate'|'implement'};

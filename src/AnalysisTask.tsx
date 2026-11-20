@@ -1,3 +1,5 @@
+import ChatDisclosure from './ChatDisclosure';
+import {CodeBlock,CodeBlockContent} from './components/ui/code-block';
 import {useToolText} from './ToolText';
 import {useProcessDisclosure} from './process-disclosure';
 import {useState} from 'react';
@@ -61,5 +63,8 @@ export default function AnalysisTask({tool}:{tool:Tool}) {
 function ActivityDetails({activity,label,disclosureKey,toolId}:{toolId:string;disclosureKey:string;activity:{id:string;title:string;text:string;textPreview?:boolean;textVersion?:string};label:string}){
  const [open,setOpen]=useProcessDisclosure(disclosureKey);
  const detail=useToolText({toolId,activityId:activity.id,text:activity.text,preview:activity.textPreview,version:activity.textVersion},open);
- return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)}><summary className="cursor-pointer break-words">{activity.title} · {label}</summary>{open&&<pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{detail.text||t('等待输出…')}</pre>}{detail.controls}</details>;
+ return <ChatDisclosure open={open} onOpenChange={setOpen} heading={activity.title+' · '+label}>
+  {open&&<CodeBlock size="sm"><CodeBlockContent wrap className="max-h-64">{detail.text||t('等待输出…')}</CodeBlockContent></CodeBlock>}
+  {detail.controls}
+ </ChatDisclosure>;
 }

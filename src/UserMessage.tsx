@@ -4,11 +4,11 @@ import MessageBody from './MessageBody';
 import type {AgentRun} from './types';
 import type {ReactNode} from 'react';
 import {Message,MessageContent} from './components/ui/message';
-import {Bubble,BubbleContent} from './components/ui/bubble';
+import ChatBubble from './ChatBubble';
 import {t} from './i18n';
 
 /** Shared user surface for persisted, pending and collaboration messages. */
 export default function UserMessage({text,context,label,message,attachments}:{attachments?:ChatAttachment[];message?:AgentRun['messages'][number];text:string;context?:ReactNode;label?:string}){
  const content=messageAttachments(text,attachments||message?.attachments);
- return <Message align="end" role="article" aria-label={label||t('你的消息')} data-message-role="user" className="my-[18px]"><MessageContent><ChatAttachments files={content.attachments}/><Bubble align="end" variant="user"><BubbleContent>{context}<div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message?.textPreview?<MessageBody message={message} plain/>:content.text}</div></BubbleContent></Bubble></MessageContent></Message>;
+ return <Message align="end" role="article" aria-label={label||t('你的消息')} data-message-role="user" className="my-[18px]"><MessageContent><ChatAttachments files={content.attachments}/><ChatBubble user>{context}<div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{message?.textPreview?<MessageBody message={message} plain/>:content.text}</div></ChatBubble></MessageContent></Message>;
 }

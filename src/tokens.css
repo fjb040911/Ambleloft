@@ -21,9 +21,11 @@
 
   color-scheme: light;
   --surface: #fafbfc;
+  --chat-canvas: light-dark(#fff, var(--surface));
+  --inline-code-background: light-dark(#f0f0f0, #363636);
   --raised: #ffffff;
   --raised-translucent: #ffffff80;
-  --sidebar: #f2f4f7;
+  --sidebar: #f6f6f6;
   --activity-rail: #e9ecf0;
   --text: #262c35;
   --primary: #000000;

@@ -1,3 +1,4 @@
+import {Alert,AlertDescription} from '../components/ui/alert';
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart, ScatterChart, RadarChart } from 'echarts/charts';
@@ -23,5 +24,5 @@ export default function Chart({ source }: { source: string }) {
     const observer = new ResizeObserver(() => chart?.resize()); if (ref.current) observer.observe(ref.current);
     return () => { clearTimeout(timer); observer.disconnect(); chart?.dispose(); };
   }, [source]);
-  return <>{error && <p className="artifact-error">{error}</p>}<div className="chart-canvas" ref={ref} aria-label="数据图表" style={{ display: error ? 'none' : undefined }} /></>;
+  return <>{error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<div className="chart-canvas" ref={ref} aria-label="数据图表" style={{ display: error ? 'none' : undefined }} /></>;
 }

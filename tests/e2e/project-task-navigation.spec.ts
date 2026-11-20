@@ -55,7 +55,7 @@ for(const submit of ['enter','button'])test(`standalone creation after a project
  const groups=page.getByRole('navigation',{name:'分组导航'});
  await page.locator('.tree-task > button:first-child').filter({hasText:'项目内任务'}).click();
  await expect(page.getByText('项目内任务的结果',{exact:true})).toBeVisible();
- await groups.getByRole('button',{name:'任务',exact:true}).click();await page.locator('.new-task').click();
+ await groups.getByRole('button',{name:'任务',exact:true}).click();await page.locator('#workspace-sidebar').getByRole('button',{name:/^新建任务/}).click();
  await expect(page.getByRole('combobox',{name:'当前项目'})).toHaveText('不关联项目');
  await page.getByRole('textbox',{name:'任务内容'}).fill('全新的独立任务');
  if(submit==='enter')await page.getByRole('textbox',{name:'任务内容'}).press('Enter');

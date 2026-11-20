@@ -21,7 +21,7 @@ export default function DiscussionTopics({topics,selectedId,open,openPlan,create
    {matches.length?<ItemGroup aria-label={L('话题列表','Topic list')}>{matches.map(({root,context})=>{
     const selected=selectedId===root.id,task=topicTask(context),historyCount=task.history.length+task.discarded.length;
     return <Item role="listitem" key={root.id} size="xs" className="wf-topic-item" data-selected={selected} data-topic-id={root.id}><ItemContent className="min-w-0">
-     <button type="button" className="wf-topic-title" aria-current={selected?'true':undefined} onClick={()=>open(root.id,'list')}>{root.prompt}</button>
+     <Button type="button" variant="ghost" className="wf-topic-title" aria-current={selected?'true':undefined} onClick={()=>open(root.id,'list')}>{root.prompt}</Button>
      <div className="wf-topic-meta"><TaskStatusBadge state={topicTaskVisualState(task)} className="wf-topic-status">{task.conflict?L('待处理','Needs attention'):topicTaskLabel(topicTaskDisplayStatus(task),L)}</TaskStatusBadge></div>
      {!!historyCount&&<Collapsible className="wf-topic-records"><CollapsibleTrigger render={<Button className="max-w-full justify-start px-0" variant="ghost" size="sm"/>}>{L('任务记录','Task records')} · {historyCount}<ChevronDown data-icon="inline-end"/></CollapsibleTrigger><CollapsibleContent><ul aria-label={L('历史任务','Task history')}>
       {task.history.map(p=><li key={p.id}><Button className="wf-topic-record-link h-auto min-w-0 w-full justify-start whitespace-normal p-0 text-left" variant="ghost" size="sm" title={p.name} onClick={()=>openPlan(root.id,p.id)}><span className="min-w-0 flex-1 line-clamp-2 [overflow-wrap:anywhere]">{p.name}</span></Button><TaskStatusBadge state={p.status}>{executionState(p.status,L)}</TaskStatusBadge></li>)}

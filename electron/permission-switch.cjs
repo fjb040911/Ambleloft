@@ -15,7 +15,7 @@ async function switchPermission(input,change){
  // Recheck after authorization: only one transition may own this context.
  if(context.permissionTransition||context.done||context.cancelled)throw Error('任务状态已变化，请重试');
  const transition={phase:'pausing',completed:new Map(),controller:new AbortController()};context.permissionTransition=transition;
- const record={id:randomUUID(),requested:change?.requested||input.permission,previous:change?.previous||run.permission||'default',state:'switching',effective:null,startedAt:new Date().toISOString()};run[change?'modelChange':'permissionChange']=record;
+ const record={id:randomUUID(),...(change?{turnKey:context.turnKey}:{}),requested:change?.requested||input.permission,previous:change?.previous||run.permission||'default',state:'switching',effective:null,startedAt:new Date().toISOString()};run[change?'modelChange':'permissionChange']=record;
  const check=()=>{transition.controller.signal.throwIfAborted();if(context.cancelled||context.done||this.closing)throw Error('权限切换已停止');};
  const archived=new Set();
  const deadline=Date.now()+(this.permissionTimeoutMs||30000);
@@ -99,7 +99,8 @@ async function switchPermission(input,change){
   for(const threadId of archived)try{await context.rpc.call('thread/unarchive',{threadId},5000);}catch{}
   context.permissionTransition=null;
   // Never silently resume with a mixture of old and new child policies.
-  await this.stop(run.id);this.changed(run);await this.persist(undefined,run);
+  if(!context.done)await this.stop(run.id);
+  this.changed(run);await this.persist(undefined,run);
   return structuredClone(record);
  }finally{clearTimeout(timer);}
 }

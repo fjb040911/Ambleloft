@@ -56,7 +56,7 @@ test('activity task date groups and navigation labels follow interface language'
  await expect(page.locator('.composer textarea')).toHaveAccessibleDescription('Enter to save draft · Shift+Enter for a new line');
  await rail.getByRole('button',{name:'Tasks',exact:true}).click();
  await expect(page.locator('.nav-date-heading')).toHaveText(['Today','Yesterday','Previous 7 days','Earlier']);
- await expect(page.locator('.tree-task .task-status-label')).toHaveText(['Draft','Draft','Draft','Draft']);
+ await expect(page.locator('.tree-task').getByRole('img',{name:'Draft',exact:true})).toHaveCount(4);
  expect(await page.locator('.tree-task [data-slot="sidebar-menu-button"]').evaluateAll(elements=>elements.map(el=>el.getAttribute('title')))).toEqual(['Task 0','Task 1','Task 3','Task 10']);
  await expect(page.getByRole('button',{name:'Manage task: Task 0',exact:true})).toHaveCount(1);
  await rail.getByRole('button',{name:'Settings',exact:true}).click();

@@ -13,7 +13,7 @@ for(const expert of [false,true])test(`native subagent progress and individual s
  await page.locator('[data-slot=trace-collapsible-trigger]').filter({hasText:'交互审查'}).click();await expect(page.getByText('检查交互',{exact:true})).toBeVisible();await expect(page.locator('[data-agent-id="analysis-test"]').getByText('继承当前任务权限',{exact:true})).toBeVisible();
  await expect(page.locator('[data-agent-id="analysis-test"] details')).toHaveCount(0);
  await expect(page.locator('[data-agent-id="analysis-test"] > [data-slot=trace-collapsible]')).toHaveCount(1);
- const agent=page.locator('[data-agent-id="analysis-test"]');const trigger=agent.locator('[data-slot=trace-collapsible-trigger]');
+ const agent=page.locator('[data-agent-id="analysis-test"]');const trigger=agent.locator(':scope > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]');
  await expect(agent.locator('[data-slot=trace-line]').first()).toHaveAttribute('data-status','running');await expect(agent.locator('[data-slot=trace-collapsible-content] [data-slot=trace-line]')).toHaveCount(2);
  await trigger.focus();await page.keyboard.press('Enter');await expect(trigger).toHaveAttribute('aria-expanded','false');
  await page.evaluate(()=>{const w=window as any;w.__analysisRun.tools[0].detail='新的分析输出';w.__analysisEmit();});await expect(trigger).toHaveAttribute('aria-expanded','false');
@@ -24,7 +24,7 @@ for(const expert of [false,true])test(`native subagent progress and individual s
  await page.screenshot({path:expert?test.info().outputPath('amble-analysis-expert.png'):test.info().outputPath('amble-analysis-chat.png')});
  await page.evaluate(()=>{const w=window as any,t=w.__analysisRun.tools[0];t.analysisTitle='Composer layout review';t.nativeLifecycle=[{status:'running',at:new Date().toISOString()}];t.nativeActivity=[{id:'inspect',title:'检查布局',status:'running',text:'第一段输出'}];w.__analysisEmit();});
  await expect(trigger).toContainText('开始工作');
- await expect(trigger).toContainText('Composer layout review');await agent.locator('summary').filter({hasText:'检查布局'}).click();await expect(agent.getByText('第一段输出',{exact:true})).toBeVisible();
+ await expect(trigger).toContainText('Composer layout review');await agent.getByRole('button').filter({hasText:'检查布局'}).click();await expect(agent.getByText('第一段输出',{exact:true})).toBeVisible();
  await page.evaluate(()=>{const w=window as any;w.__analysisRun.tools[0].nativeActivity[0].text+='，第二段输出';w.__analysisEmit();});await expect(agent.getByText('第一段输出，第二段输出',{exact:true})).toBeVisible();
  await expect(trigger).toHaveAttribute('aria-expanded','true');
  // Moving the agent out of the folded process must retain its disclosure choices.
