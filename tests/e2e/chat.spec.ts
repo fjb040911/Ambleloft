@@ -783,6 +783,37 @@ test('sidebar peer categories toggle without changing the current chat',async({p
  await expect(page.locator('.tree-task.selected')).toContainText('任务体验验收');
 });
 
+test('latest commentary shimmers in place without a running label above the composer',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  document.documentElement.dataset.theme='dark';
+  const w=window as any, run=w.__demoRun;
+  run.status='running';run.approvals=[];run.messages=run.messages.slice(0,1);
+  run.tools=Array.from({length:60},(_,i)=>({id:'read-'+i,turnKey:'u',type:'commandExecution',label:'read file',status:'completed',detail:'done',order:i+1}));
+  run.messages.push({id:'progress',role:'assistant',phase:'commentary',text:'正在汇总审查结果。'.repeat(30),turnKey:'u',order:61});
+  w.__emit();
+ });
+ const dockLabel=page.locator('.conversation-dock').getByText('执行中',{exact:true});
+ await expect(dockLabel).toHaveCount(0);
+ const progress=page.locator('.process-milestone').filter({hasText:'正在汇总审查结果'});
+ const prose=progress.locator('p');
+ const animation=()=>prose.evaluate(el=>getComputedStyle(el).animationName);
+ await expect.poll(animation).toBe('progress-commentary-sweep');
+ await expect(prose).toHaveCSS('background-clip','text');
+ expect(await prose.evaluate(el=>el.getBoundingClientRect().height/parseFloat(getComputedStyle(el).lineHeight))).toBeGreaterThan(1);
+ const atPhase=async(ms:number)=>{
+  await prose.evaluate((el,time)=>{const sweep=el.getAnimations()[0];sweep.pause();sweep.currentTime=time;},ms);
+  return prose.screenshot();
+ };
+ const first=await atPhase(250),middle=await atPhase(1200);
+ expect(first.equals(middle)).toBe(false);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect.poll(animation).toBe('none');
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__emit();});
+ await expect.poll(animation).toBe('none');
+});
+
 test('activity and thinking sweeps preserve text, stop on attention and respect reduced motion',async({page})=>{
  await prepare(page,'完成');
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.lastEventAt=new Date().toISOString();r.messages=r.messages.slice(0,1);w.__emit();});
@@ -1565,4 +1596,27 @@ for (const sample of [
  });
  await page.keyboard.press('ControlOrMeta+c');
  await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe(sample.value);
+});
+
+test('standalone file links download, show one dismissible error and can be retried with a draft',async({page})=>{
+ await prepare(page,'[下载配置表](</fixture/配置 表.xlsx>)');
+ await page.evaluate(()=>{
+  const w=window as any;
+  w.__downloads=[];
+  w.desktop.downloadArtifact=async(input:any)=>{
+   w.__downloads.push(input);
+   if(w.__downloads.length===1)throw Error("Error invoking remote method 'artifact:download': Error: 文件已移动");
+  };
+  w.__demoRun.status='completed';w.__demoRun.approvals=[];w.__emit();
+ });
+ const draft=page.getByRole('textbox',{name:'继续对话',exact:true});
+ await draft.fill('未发送的草稿');
+ const link=page.getByRole('link',{name:'下载配置表'});
+ await link.click();
+ const notice=page.getByRole('alert').filter({hasText:'文件已移动'});
+ await expect(notice).toBeVisible();await expect(notice).not.toContainText('remote method');
+ await notice.getByRole('button',{name:'关闭提示'}).click();await expect(notice).toHaveCount(0);
+ await link.click();
+ expect(await page.evaluate(()=>(window as any).__downloads)).toEqual(Array(2).fill({runId:'demo',path:'/fixture/配置 表.xlsx'}));
+ await expect(notice).toHaveCount(0);await expect(draft).toHaveValue('未发送的草稿');
 });

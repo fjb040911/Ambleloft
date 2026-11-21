@@ -32,3 +32,27 @@
 @media (prefers-reduced-motion: reduce) {
   .composite-shimmer > [data-shimmer-layer] { display: none; animation: none; will-change: auto; }
 }
+
+/* Paint the sweep on the latest prose block only, even in long transcripts. */
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .process-entry.progress.is-live:last-child .process-milestone .trace-markdown > :is(p, ul, ol, blockquote, h1, h2, h3):last-child {
+    width: fit-content;
+    max-width: 100%;
+    background-image: linear-gradient(105deg, currentColor 30%, var(--text) 48%, var(--text) 52%, currentColor 70%);
+    background-size: 230% 100%;
+    background-repeat: no-repeat;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: progress-commentary-sweep 2.4s linear infinite;
+  }
+
+  /* Inline controls and code keep their own foreground and background. */
+  .process-entry.progress.is-live:last-child .process-milestone :is(a, code, button, .katex) {
+    -webkit-text-fill-color: currentColor;
+  }
+}
+@keyframes progress-commentary-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}

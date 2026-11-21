@@ -1,4 +1,9 @@
 {
+  "此链接未对应到当前任务的交付文件": "This link does not match a file delivered by this task.",
+  "文件已变更，请重新下载": "The file has changed. Try downloading it again.",
+  "文件或保存目录已移动或删除，请重新选择": "The file or destination folder has moved or been deleted. Check the file and try again.",
+  "无法读写文件，请检查文件权限或更换保存位置": "Check file permissions or choose a different save location.",
+  "保存位置空间不足，请更换位置后重试": "There is not enough space. Choose another save location and try again.",
   "个思考步骤": "reasoning steps",
   "正在保存输出 · 暂缓接收，保存后自动继续": "Saving output · Receiving paused; resumes automatically after saving",
   "显示异常": "Display error",
@@ -309,7 +314,7 @@
   "服务名称": "Service name",
   "模型 ID": "Model ID",
   "填写服务提供的准确模型名称": "Enter the exact model ID provided by the service",
-  "可选模型（每行一个 ID）": "Available models (one ID per line)",
+  "其他可选模型（每行一个 ID）": "Additional models (one ID per line)",
   "可选模型": "Available models",
   "已加密保存 · 留空保持不变": "Encrypted · Leave empty to keep",
   "本机无鉴权服务可留空": "Leave empty for local services without authentication",
