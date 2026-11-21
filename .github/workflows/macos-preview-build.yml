@@ -21,7 +21,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install chromium
-      - run: npx playwright test tests/e2e/chat.spec.ts --grep 'rolling history snapshots' --workers=2 --repeat-each=8 --reporter=line --trace retain-on-failure
+      - run: npx playwright test tests/e2e/chat.spec.ts tests/e2e/composer.spec.ts --grep 'rolling history snapshots|long history preserves|background updates and switching|existing task confirms' --workers=2 --repeat-each=5 --reporter=line --trace retain-on-failure
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
