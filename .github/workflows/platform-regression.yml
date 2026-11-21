@@ -189,8 +189,8 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           cd artifacts
-          for file in "Ambleloft-$VERSION-windows-x64.exe" "Ambleloft-$VERSION-windows-x64.exe.blockmap" "Ambleloft-$VERSION-windows-x64.zip" "Ambleloft-$VERSION-mac-arm64.dmg" "Ambleloft-$VERSION-mac-arm64.zip" "Ambleloft-$VERSION-linux-x64.AppImage" "Ambleloft-$VERSION-linux-x64.deb" latest.yml; do
-            test -s "$file"
+          for file in "Ambleloft-$VERSION-windows-x64.exe" "Ambleloft-$VERSION-windows-x64.exe.blockmap" "Ambleloft-$VERSION-windows-x64.zip" "Ambleloft-$VERSION-mac-arm64.dmg" "Ambleloft-$VERSION-mac-arm64.zip" "Ambleloft-$VERSION-linux-x86_64.AppImage" "Ambleloft-$VERSION-linux-amd64.deb" latest.yml; do
+            test -s "$file" || { printf "Expected artifact missing: %s\n" "$file" >&2; ls -l >&2; exit 1; }
           done
           sha256sum -- * > ../SHA256SUMS.txt
           cp ../SHA256SUMS.txt .
