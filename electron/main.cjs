@@ -3,7 +3,7 @@ const {createRunPublication}=require('./run-publication.cjs');
 const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
 const { app, BrowserWindow, ipcMain, Menu, dialog, session, safeStorage, shell, clipboard, protocol, nativeTheme, Notification, powerMonitor } = require('electron');
-const {accessArtifact} = require('./artifacts.cjs');
+const {accessArtifact,downloadArtifact} = require('./artifacts.cjs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -466,6 +466,13 @@ app.whenReady().then(async () => {
   ipcMain.handle('agent:list', event => { authorize(event); checkRuntime(); return runtime.runs.map(summary); });
   ipcMain.handle('agent:composer-status',(event,input)=>{authorize(event);checkRuntime();return input?.kind==='discussion'?require('./composer-discussion.cjs').status(spaceService,input):require('./composer-start.cjs').status(runtime,input);});
   ipcMain.handle('agent:start', (event, input) => { authorize(event); checkRuntime(); if (configBusy) throw new Error('正在更新或测试模型配置'); return runtime.start(input,{owner:authorize(event),userAuthored:true}).then(async run=>{if(input?.draftId){const state=await store.read();windows.broadcast(profileId,'workspace:event',state);}return pageRun(run);}); });
+  ipcMain.handle('artifact:download', async(event,input)=>{
+    const owner=authorize(event).window;checkRuntime();
+    return downloadArtifact(runtime.runs.find(run=>run.id===input?.runId),input?.path,async name=>{
+      const result=await hostDialog('showSaveDialog',owner,{defaultPath:name});
+      return result.canceled ? null : result.filePath;
+    });
+  });
   ipcMain.handle('artifact:access', async(event,input)=>{
     authorize(event);checkRuntime();
     const file=await accessArtifact(runtime.runs.find(run=>run.id===input?.runId),input?.id,input?.preview===true);

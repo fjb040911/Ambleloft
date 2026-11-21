@@ -1,4 +1,4 @@
-import {Alert,AlertDescription} from './components/ui/alert';
+import ComposerErrorNotice from './ComposerErrorNotice';
 import {useEffect,useId,useRef,useState,type ReactNode,type RefObject} from 'react';
 import {ArrowUp,Square,Save} from 'lucide-react';
 import {InputGroup,InputGroupAddon,InputGroupButton,InputGroupTextarea} from './components/ui/input-group';
@@ -45,7 +45,7 @@ export default function ChatComposer({value,onChange,onSubmit,disabled,sending=f
   </InputGroup>
   {mentions.menu}
   {pasting&&<p role="status" className="composer-notice">{t('正在添加附件…')}</p>}
-  {pasteError&&<Alert variant="destructive"><AlertDescription>{pasteError}</AlertDescription></Alert>}
+  {pasteError&&<ComposerErrorNotice message={pasteError} dismiss={()=>setPasteError('')}/>}
   {footer&&<div className="composer-footer">{footer}</div>}
   <p id={hintId} className={active&&!allowActiveSend&&draftNotice?"composer-notice":"sr-only"} role="status">{disabled?t(saveDraft?'正在保存…':'正在发送…'):active&&!allowActiveSend?t(draftNotice?'草稿尚未发送，请在本轮结束后发送。':'可先编辑草稿，本轮结束后发送'):t(active?'Enter 发送补充 · Shift+Enter 换行':saveDraft?'Enter 保存草稿 · Shift+Enter 换行':'Enter 发送 · Shift+Enter 换行')}</p>
  </form>;

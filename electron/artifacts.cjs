@@ -36,4 +36,45 @@ async function accessArtifact(run, id, preview=false) {
   if(file.size>previewPolicy.maxBytes)throw new Error('文件超过 1 MB，请在访达中查看');
   return {...file,text:await fs.readFile(file.path,'utf8')};
 }
-module.exports={collectArtifacts,accessArtifact,verifiedFile};
+// Resolve message links against the host's complete run, including deliveries
+// registered during a turn that has not been committed to run.artifacts yet.
+async function downloadArtifact(run, reference, chooseDestination) {
+  if (!run || run.projectId || typeof reference !== 'string' || !reference || reference.includes('\0')) {
+    throw new Error('此链接未对应到当前任务的交付文件');
+  }
+  const target = path.resolve(run.cwd, reference);
+  const matches = file => typeof file === 'string' && path.relative(target, path.resolve(run.cwd, file)) === '';
+  const registered = run.artifacts?.some(file => file.kind !== 'change' && matches(file.path))
+    || run.tools?.some(tool => {
+      if (tool.type !== 'deliverable' || tool.status !== 'completed') return false;
+      try { const args = JSON.parse(tool.detail); return validDelivery(args) && matches(args.path); }
+      catch { return false; }
+    });
+  if (!registered) throw new Error('此链接未对应到当前任务的交付文件');
+
+  let source, temporary;
+  try {
+    const file = await verifiedFile(run.cwd, target);
+    const destination = await chooseDestination(file.name);
+    if (!destination) return;
+    const verified = await verifiedFile(run.cwd, target);
+    source = await fs.open(verified.path, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const opened = await source.stat();
+    const current = await fs.stat((await verifiedFile(run.cwd, target)).path);
+    if (!opened.isFile() || opened.dev !== current.dev || opened.ino !== current.ino) throw new Error('文件已变更，请重新下载');
+    if (path.relative(verified.path, destination) === '') return;
+    temporary = await fs.mkdtemp(path.join(path.dirname(destination), '.amble-download-'));
+    const staged = path.join(temporary, 'download');
+    await require('node:stream/promises').pipeline(source.createReadStream(), require('node:fs').createWriteStream(staged, {flags:'wx', mode:0o600}));
+    await fs.rename(staged, destination);
+  } catch (error) {
+    if (error.code === 'ENOENT') throw new Error('文件或保存目录已移动或删除，请重新选择');
+    if (error.code === 'EACCES' || error.code === 'EPERM') throw new Error('无法读写文件，请检查文件权限或更换保存位置');
+    if (error.code === 'ENOSPC') throw new Error('保存位置空间不足，请更换位置后重试');
+    throw error;
+  } finally {
+    await source?.close();
+    if (temporary) await fs.rm(temporary, {recursive:true, force:true});
+  }
+}
+module.exports={collectArtifacts,accessArtifact,downloadArtifact,verifiedFile};

@@ -1,7 +1,6 @@
 import {useConfirm} from './Confirmation';
 import {composerError,modelServiceConfirmation} from './model-service-feedback';
 import ComposerErrorNotice from './ComposerErrorNotice';
-import {Alert,AlertDescription} from './components/ui/alert';
 import {readReading,saveReading} from './conversation-view-state';
 import {useComposerReceipt} from './useComposerReceipt';
 import {useDraftState,restoreComposerOptions} from './useDraftState';
@@ -102,8 +101,15 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     setReferenceError('');
     if(openReference){openReference(href);return;}
     let path=href.split('#')[0];try{path=decodeURIComponent(path);}catch{}
-    if(window.desktop?.projectFiles)void window.desktop.projectFiles.open({runId:run.id,path}).catch(error=>setReferenceError((error as Error).message));
-  },[openReference,run.id]);
+    const desktop=window.desktop;
+    if(!run.projectId && desktop?.downloadArtifact){
+      void desktop.downloadArtifact({runId:run.id,path}).catch(error=>setReferenceError(composerError(error)));
+    }else if(run.projectId && desktop?.projectFiles){
+      const root=(run.remote?.path||run.cwd||'').replace(/\\/g,'/').replace(/\/$/,'')+'/';
+      const normalized=path.replace(/\\/g,'/');
+      void desktop.projectFiles.open({projectId:run.projectId,runId:run.id,path:normalized.startsWith(root)?normalized.slice(root.length):normalized}).catch(error=>setReferenceError(composerError(error)));
+    }else setReferenceError(t('请在桌面应用中查看文件'));
+  },[openReference,run.id,run.projectId,run.cwd,run.remote?.path]);
   const scroll = useRef<HTMLDivElement>(null);
   const {scrollToEnd,scrollToMessage,scrollToStart}=useMessageScroller();
   const readingRecovery=useRef(readReading(run.id));
@@ -286,15 +292,15 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
           {active&&(run.storageBackpressure||run.queued)&&<p role="status" className="text-sm text-muted-foreground">{t(run.storageBackpressure?'正在保存输出 · 暂缓接收，保存后自动继续':'排队中 · 等待执行名额或工作目录释放')}</p>}
           {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><div key={r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={openInput}/></div>)}
           {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage attachments={pendingMessage.attachments} text={pendingMessage.text}/>}
-          {referenceError&&<Alert variant="destructive"><AlertDescription>{referenceError}</AlertDescription></Alert>}
-          {run.error && <Alert variant="destructive"><AlertDescription>{run.retrying&&<strong>{t('连接出现问题，正在重试')} · </strong>}{t(run.error)}{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</AlertDescription></Alert>}
+          {referenceError&&<ComposerErrorNotice message={referenceError} dismiss={()=>setReferenceError('')}/>}
+          {run.error && <ComposerErrorNotice key={latestUser?.id} message={(run.retrying?t('连接出现问题，正在重试')+' · ':'')+composerError(run.error)}>{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</ComposerErrorNotice>}
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
   // The enclosing discussion already renders its prompt. Omit only the matching
   // first prompt; later turns and paged history must retain their user messages.
   const toggleProcess=useCallback(()=>{following.current=false;onFollowingChange(false);},[onFollowingChange]);
-  const fileActions=useRef({openFile,openReference:openReference||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges});
-  fileActions.current={openFile,openReference:openReference||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges};
+  const fileActions=useRef({openFile,openReference:openReference||window.desktop?.downloadArtifact||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges});
+  fileActions.current={openFile,openReference:openReference||window.desktop?.downloadArtifact||window.desktop?.projectFiles?openReferenceFile:undefined,openChanges};
   const stableFiles=useMemo(()=>({openFile:(file:import('./types').DeliveredFile)=>fileActions.current.openFile?.(file),openReference:(path:string)=>fileActions.current.openReference?.(path),openChanges:(changes:import('./types').TurnFileChanges)=>fileActions.current.openChanges(changes)}),[]);
   const renderTurn=(turn:ConversationTurn)=>{
    const requests=(deliveries.snapshot?.requests||[]).filter(r=>r.turnKey?r.turnKey===turn.user.id:turns.length===1||turn===turns.filter(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt).at(-1));
@@ -303,7 +309,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
    // content can wait until it nears the viewport, including inside that window.
    // The latest/live and actionable turns stay measured.
    return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={windowed&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
-    <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||!!run.queued)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
+    <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||run.status==='stopping'||!!run.queued||!!run.storageBackpressure||!!run.retrying)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.downloadArtifact||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
    </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
   const actionableApprovals=active&&run.status!=='stopping'&&!run.archivedAt?[...new Map(run.approvals.map(a=>[a.id,a])).values()]:[];
@@ -358,7 +364,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     return <section className="wf-run-actions" aria-label={t('需要你处理')}>
       {hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
       {inlineInputs}{outboxPanel}{pendingSurface}
-      {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
+      {(draftStorageError||optionsStorageError)&&<ComposerErrorNotice message={draftStorageError||optionsStorageError}/>}
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       {sendNotice}
       {run.status==='waiting'&&!hasRequest&&!deliveries.error&&<div role="status"><p>{t('正在等待操作，但尚未读取到具体请求。可以刷新或打开完整任务查看。')}</p><div className="settings-actions"><Button variant="outline" onClick={()=>{void deliveries.refresh();refreshRun?.();}}>{t('刷新待处理请求')}</Button><Button variant="ghost" onClick={()=>openSettings('task')}>{t('打开完整任务')}</Button></div></div>}
@@ -366,7 +372,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   }
   if(embedded)return <div className="discussion-expert-transcript" data-run-id={run.id}>
     <PermissionStatus value={run.permissionChange}/><ModelStatus value={modelChange}/>
-    {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<Alert variant="destructive"><AlertDescription>{historyError}</AlertDescription></Alert>}
+    {before&&<Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button>}{historyError&&<ComposerErrorNotice message={historyError} dismiss={()=>setHistoryError('')}/>}
     {turns.map(turn=><div className="conversation-turn" key={turn.user.id}>{renderTurn(turn)}{turn===turns.at(-1)&&statusContent}</div>)}
     {!turns.length&&statusContent}
 
@@ -378,7 +384,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}
       navigation={windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
       beforeViewport={(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
-          {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<Alert variant="destructive"><AlertDescription>{historyError}</AlertDescription></Alert>}
+          {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<ComposerErrorNotice message={historyError} dismiss={()=>setHistoryError('')}/>}
         </div>}
       scrollButton={<MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
         // Enable following before the primitive handles this click. Waiting for
@@ -396,7 +402,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
       {inlineInputs}{outboxPanel}{pendingSurface}
-      {(draftStorageError||optionsStorageError)&&<Alert variant="destructive"><AlertDescription>{t(draftStorageError||optionsStorageError)}</AlertDescription></Alert>}
+      {(draftStorageError||optionsStorageError)&&<ComposerErrorNotice message={draftStorageError||optionsStorageError}/>}
       {sendNotice}
 
       {modelPending&&<p className="m-0 px-3.5 text-xs text-muted-foreground" role="status">{t('所选模型将在下一轮生效；本轮及补充消息仍使用：')}{run.model}</p>}

@@ -80,3 +80,24 @@ test('delivery tool exposes structured intent and rejects invalid registrations'
  for(const args of [{path:'a'},{path:'../a',title:''},null])assert.equal(handle({id:2,method:'tools/call',params:{name:'register_deliverable',arguments:args}}).result.isError,true);
  assert.equal(handle({id:3,method:'tools/call',params:{name:'register_deliverable',arguments:{path:'report.md',title:'Report'}}}).result.isError,undefined);
 });
+
+test('standalone downloads accept registered absolute or relative links, cancellation and retry',async t=>{
+ const {downloadArtifact}=require('../electron/artifacts.cjs');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'download-task-'));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const cwd=path.join(root,'task');await fs.mkdir(cwd);
+ const name='配置 表.xlsx',file=path.join(cwd,name),destination=path.join(root,'saved.xlsx');
+ const bytes=Buffer.from([80,75,3,4,0,255]);await fs.writeFile(file,bytes);
+ const run={cwd,artifacts:[{kind:'delivery',path:file}]};
+ await downloadArtifact(run,file,async suggested=>{assert.equal(suggested,name);return null;});
+ await assert.rejects(fs.stat(destination),{code:'ENOENT'});
+ await downloadArtifact(run,name,async()=>destination);
+ assert.deepEqual(await fs.readFile(destination),bytes);
+ const inProgress={cwd,tools:[{type:'deliverable',status:'completed',detail:JSON.stringify({path:name,title:'配置表'})}]};
+ await downloadArtifact(inProgress,file,async()=>destination);
+ await assert.rejects(downloadArtifact(run,'other.xlsx',()=>assert.fail()),/当前任务/);
+ await fs.unlink(file);
+ await assert.rejects(downloadArtifact(run,name,()=>assert.fail()),/移动或删除/);
+ await fs.symlink(destination,file);
+ await assert.rejects(downloadArtifact(run,name,()=>assert.fail()),/工作目录/);
+});
