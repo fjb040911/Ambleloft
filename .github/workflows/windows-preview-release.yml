@@ -1,40 +1,54 @@
-name: Publish Windows update
+name: Windows preview release
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing version tag (vX.Y.Z)
-        required: true
-permissions:
-  contents: write
-concurrency:
-  group: windows-update-publish
-  cancel-in-progress: false
+permissions: {}
 jobs:
-  publish:
-    runs-on: windows-latest
-    timeout-minutes: 40
+  draft:
+    name: Verify artifacts and stage release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          ref: ${{ inputs.tag }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - name: Verify version
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: node -e "if(process.env.RELEASE_TAG!=='v'+require('./package.json').version)process.exit(1)"
-      - run: npm ci
-      - run: node --test tests/updates.test.cjs tests/windows-release.test.cjs
-      - name: Build Windows preview
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run dist:win
-      - run: node scripts/test-packaged-windows.mjs
-      - name: Verify, upload and publish complete release
+          pattern: package-*
+          run-id: 44918112042
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: artifacts
+      - name: Verify package set and create or complete draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: npm run release:win
+          GH_REPO: ${{ github.repository }}
+          SOURCE_COMMIT: 5b8901b7d3c5bcc1160c623f012b2f3e8b823757
+          VERSION: 0.9.16
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          cd artifacts
+          for file in "Ambleloft-$VERSION-windows-x64.exe" "Ambleloft-$VERSION-windows-x64.exe.blockmap" "Ambleloft-$VERSION-windows-x64.zip" "Ambleloft-$VERSION-mac-arm64.dmg" "Ambleloft-$VERSION-mac-arm64.zip" "Ambleloft-$VERSION-linux-x86_64.AppImage" "Ambleloft-$VERSION-linux-amd64.deb" latest.yml; do
+            test -s "$file" || { printf "Expected artifact missing: %s\n" "$file" >&2; ls -l >&2; exit 1; }
+          done
+          sha256sum -- * > ../SHA256SUMS.txt
+          cp ../SHA256SUMS.txt .
+          existing=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha)
+          if [ "$existing" != "$SOURCE_COMMIT" ]; then
+            printf 'Unexpected tag target: %s\n' "$existing" >&2
+            exit 1
+          fi
+          if gh release view "$tag" --json isDraft --jq '.isDraft' > ../is-draft 2>/dev/null; then
+            test "$(cat ../is-draft)" = true
+          else
+            gh release create "$tag" --verify-tag --draft --title "Ambleloft $tag" --notes "Cross-platform release candidate."
+          fi
+          gh release upload "$tag" --clobber ./*
+          gh release view "$tag" --json isDraft,assets > ../draft.json
+          test "$(jq -r .isDraft ../draft.json)" = true
+          for file in *; do
+            digest="sha256:$(sha256sum "$file" | cut -d' ' -f1)"
+            size=$(stat -c %s "$file")
+            jq -e --arg name "$file" --arg digest "$digest" --argjson size "$size" '.assets[] | select(.name == $name and .digest == $digest and .size == $size and .state == "uploaded")' ../draft.json > /dev/null
+            printf 'Verified %s (%s bytes)\n' "$file" "$size"
+          done
