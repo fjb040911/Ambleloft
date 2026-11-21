@@ -93,6 +93,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   listRuns: () => ipcRenderer.invoke('agent:list'),
   startRun: input => ipcRenderer.invoke('agent:start', input),
   composerSendStatus: input => ipcRenderer.invoke('agent:composer-status', input),
+  downloadArtifact: input => ipcRenderer.invoke('artifact:download', input),
   accessArtifact: input => ipcRenderer.invoke('artifact:access', input),
   switchRunModel: input => ipcRenderer.invoke('agent:model',input),
   switchRunPermission: input => ipcRenderer.invoke('agent:permission',input),
