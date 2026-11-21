@@ -114,6 +114,8 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const {scrollToEnd,scrollToMessage,scrollToStart}=useMessageScroller();
   const readingRecovery=useRef(readReading(run.id));
   const following=useRef(readingRecovery.current?.following!==false);
+  const returnToLatestUntil=useRef(0);
+  const cancelReturnToLatest=()=>{returnToLatestUntil.current=0;};
   const visibleRef=useRef(visible);visibleRef.current=visible;
   useLayoutEffect(()=>{visibleRef.current=visible;return()=>{visibleRef.current=false;};},[visible]);
   const savedTop=useRef(readingRecovery.current?.top||0);
@@ -167,7 +169,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     if(readingRecovery.current)return;
     // A delayed scroll event after content growth must not cancel following.
     if(el.scrollHeight-el.scrollTop-el.clientHeight<60)following.current=true;
-    else if(!el.hasAttribute('data-autoscrolling')&&el.scrollTop<savedTop.current-.5)following.current=false;
+    else if(performance.now()>=returnToLatestUntil.current&&el.scrollTop<savedTop.current)following.current=false;
     savedTop.current=el.scrollTop;
     onFollowingChange(following.current);
     if(following.current){
@@ -186,6 +188,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const trackScrollRef=useRef(trackScroll);trackScrollRef.current=trackScroll;
   const windowChanged=useCallback(()=>trackScrollRef.current(),[]);
   const jumpTurn=(id:string)=>{
+    cancelReturnToLatest();
     readingRecovery.current=null;following.current=false;onFollowingChange(false);
     if(windowed){
       scrollToStart({behavior:'instant'});
@@ -405,6 +408,8 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<Button variant="ghost" className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp data-icon="inline-end" aria-hidden="true"/></Button>}
     <ConversationViewport inert={!!floatingHost&&!recentOpen} busy={active} ref={scroll} onScroll={trackScroll}
+      onWheel={cancelReturnToLatest} onTouchMove={cancelReturnToLatest} onPointerDown={cancelReturnToLatest}
+      onKeyDown={event=>{if(["ArrowDown","ArrowUp","End","Home","PageDown","PageUp"," "].includes(event.key))cancelReturnToLatest();}}
       preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}
       navigation={windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
       beforeViewport={(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
@@ -413,9 +418,10 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       scrollButton={<MessageScrollerButton aria-label={t("回到最新消息")} behavior="instant" onClick={()=>{
         // Enable following before the primitive handles this click. Waiting for
         // the resulting scroll event can miss the next streamed content resize.
+        returnToLatestUntil.current=performance.now()+250;
         readingRecovery.current=null;following.current=true;flushSync(()=>onFollowingChange(true));
       }}/>}>
-          {windowed?<WindowedTurns handle={windowRef} viewport={scroll} following={following} ids={turnIds} turns={turns} visible={visible} selection={selection} onRangeChange={windowChanged} renderTurn={renderTurn} status={statusContent}/>:(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
+          {windowed?<WindowedTurns handle={windowRef} viewport={scroll} returnToLatestUntil={returnToLatestUntil} ids={turnIds} turns={turns} visible={visible} selection={selection} onRangeChange={windowChanged} renderTurn={renderTurn} status={statusContent}/>:(floatingHost?turns.slice(-3):turns).map(turn => <ConversationScrollItem following={following.current} messageId={turn.user.id} className="conversation-turn [content-visibility:visible]" key={turn.user.id} data-turn-id={turn.user.id} aria-label={`对话：${turn.user.text.slice(0,60)}`}>
             {renderTurn(turn)}
             {turn===turns.at(-1)&&statusContent}
           </ConversationScrollItem>)}
@@ -461,8 +467,8 @@ function WindowedNavigation({selection,...props}:Omit<ComponentProps<typeof Turn
  const selected=useSyncExternalStore(selection.subscribe,selection.get);
  return <TurnNavigation {...props} selected={selected||props.turns[0]?.user.id||''}/>;
 }
-function WindowedTurns({handle,viewport,following,ids,turns,visible,selection,onRangeChange,renderTurn,status}:{
- handle:RefObject<TurnWindowHandle|null>;viewport:RefObject<HTMLDivElement|null>;following:RefObject<boolean>;
+function WindowedTurns({handle,viewport,returnToLatestUntil,ids,turns,visible,selection,onRangeChange,renderTurn,status}:{
+ handle:RefObject<TurnWindowHandle|null>;viewport:RefObject<HTMLDivElement|null>;returnToLatestUntil:RefObject<number>;
  ids:string[];turns:ConversationTurn[];visible:boolean;selection:TurnSelection;onRangeChange():void;
  renderTurn(turn:ConversationTurn):ReactNode;status:ReactNode;
 }){
@@ -471,7 +477,7 @@ function WindowedTurns({handle,viewport,following,ids,turns,visible,selection,on
  useLayoutEffect(()=>{
   if(visible){selection.set(window.selected);onRangeChange();}
  },[visible,window.start,window.end,window.selected,selection,onRangeChange]);
- return <AnchoredTurnRange viewport={viewport} following={following} firstId={ids[window.start]} lastId={ids[window.end-1]} before={window.before}>
+ return <AnchoredTurnRange viewport={viewport} returnToLatestUntil={returnToLatestUntil} firstId={ids[window.start]} lastId={ids[window.end-1]} before={window.before}>
   <div aria-hidden="true" style={{height:window.before,overflowAnchor:'none'}}/>
   {turns.slice(window.start,window.end).map(turn=><WindowTurn key={turn.user.id} id={turn.user.id} prompt={turn.user.text} observe={window.observe}>
    {renderTurn(turn)}
@@ -480,16 +486,16 @@ function WindowedTurns({handle,viewport,following,ids,turns,visible,selection,on
   <div aria-hidden="true" style={{height:window.after,overflowAnchor:'none'}}/>
  </AnchoredTurnRange>;
 }
-type AnchoredRangeProps={viewport:RefObject<HTMLDivElement|null>;following:RefObject<boolean>;firstId?:string;lastId?:string;before:number;children:ReactNode};
+type AnchoredRangeProps={viewport:RefObject<HTMLDivElement|null>;returnToLatestUntil:RefObject<number>;firstId?:string;lastId?:string;before:number;children:ReactNode};
 class AnchoredTurnRange extends Component<AnchoredRangeProps>{
  getSnapshotBeforeUpdate(previous:AnchoredRangeProps){
-  const {viewport,following,firstId,lastId,before}=this.props;
-  // Keep a historical anchor only while reading. The scroller owns the live edge.
-  if(following.current||(previous.firstId===firstId&&previous.lastId===lastId&&previous.before===before))return null;
+  const {viewport,returnToLatestUntil,firstId,lastId,before}=this.props;
+  // Replacing the virtualized rows during an explicit jump must not restore the old reading anchor.
+  if(performance.now()<returnToLatestUntil.current||(previous.firstId===firstId&&previous.lastId===lastId&&previous.before===before))return null;
   return captureTurnScrollAnchor(viewport.current);
  }
  componentDidUpdate(_previous:AnchoredRangeProps,_state:unknown,anchor:ReturnType<typeof captureTurnScrollAnchor>){
-  if(!this.props.following.current)restoreTurnScrollAnchor(anchor);
+  if(performance.now()>=this.props.returnToLatestUntil.current)restoreTurnScrollAnchor(anchor);
  }
  render(){return <div className="flex flex-col">{this.props.children}</div>;}
 }
