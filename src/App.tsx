@@ -106,7 +106,22 @@ function WorkspaceApp() {
   const [composerOptions,setComposerOptions,optionsStorageError]=useDraftState<ComposerOptions>('new-chat:options',{permission:'default'},restoreComposerOptions);
   const [choice,setChoice]=useState<{providerId:string;model:string}|null>(null);
   const settingsFocus=useRef<HTMLElement|null>(null),restoreSettingsFocus=useRef(false);
-  useLayoutEffect(()=>{if(!settingsOpen&&restoreSettingsFocus.current){restoreSettingsFocus.current=false;const target=settingsFocus.current;const frame=requestAnimationFrame(()=>target?.focus({preventScroll:true}));return()=>cancelAnimationFrame(frame);}},[settingsOpen]);
+  useLayoutEffect(()=>{
+    if(settingsOpen||!restoreSettingsFocus.current)return;
+    restoreSettingsFocus.current=false;
+    const target=settingsFocus.current;
+    if(!target?.isConnected)return;
+    let frame=0;
+    const deadline=performance.now()+500;
+    const restore=()=>{
+      if(document.activeElement!==document.body||!target.isConnected)return;
+      target.focus({preventScroll:true});
+      // Chromium can briefly reject focus while removing the settings view.
+      if(document.activeElement===document.body&&performance.now()<deadline)frame=requestAnimationFrame(restore);
+    };
+    restore();
+    return()=>cancelAnimationFrame(frame);
+  },[settingsOpen]);
   const [provider, setProvider] = useState<ProviderConfig | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [runId, setRunId] = useState<string | null>(typeof resumeView.runId==='string'?resumeView.runId:null);
