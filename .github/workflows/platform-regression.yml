@@ -1,19 +1,38 @@
 name: Platform compatibility
 on:
-  pull_request:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Commit to test and package
+        required: true
+      version:
+        description: Release version
+        required: true
+
 permissions:
   contents: read
+
 jobs:
   compatibility:
+    name: Validate and package ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: macos-15
+            platform: macos-arm64
+          - os: ubuntu-latest
+            platform: linux-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 45
+    env:
+      CANDIDATE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -21,8 +40,177 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Extension, skill, file application and terminal regressions
-        run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/docker.test.cjs tests/creation.test.cjs
-      - name: Plan acceptance and recovery regressions
-        run: node --test --test-concurrency=2 tests/workforce-acceptance.test.cjs tests/workforce-complex-acceptance.test.cjs tests/workforce-plans.test.cjs tests/workforce-task-guide.test.cjs tests/native-subagents.test.cjs tests/conversation-data.test.cjs
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify source identity
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.target }}
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          node -e 'const assert=require("node:assert/strict"); assert.equal(require("./package.json").version,process.env.CANDIDATE_VERSION); const os={win32:"windows",darwin:"macos",linux:"linux"}; assert.equal(os[process.platform]+"-"+process.arch,process.env.EXPECTED_PLATFORM)'
+      - name: Validate artifacts, model switching, permissions and workspace portability
+        run: node --test --test-concurrency=2 tests/artifacts.test.cjs tests/runtime.test.cjs tests/model-switch.test.cjs tests/permission-switch.test.cjs tests/model-engine.test.cjs tests/permission-engine.test.cjs tests/updates.test.cjs tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/workforce-plans.test.cjs tests/conversation-data.test.cjs
+      - name: Prepare browser
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then npx playwright install --with-deps chromium; else npx playwright install chromium; fi
+      - name: Test chat, runtime switches, artifact download and project navigation
+        run: npx playwright test tests/e2e/chat.spec.ts tests/e2e/composer.spec.ts tests/e2e/model-capabilities.spec.ts tests/e2e/project-sidebar-info.spec.ts --workers=2 --retries=1 --reporter=line
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        run: npm run dist:win
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_FOR_PULL_REQUEST: 'true'
+        run: npm run dist:mac
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          npm run engine:prepare
+          npm run build
+          mkdir -p .cache
+          node -e 'const fs=require("node:fs"); fs.writeFileSync(".cache/release-linux.cjs", "const base=require(\"../build/electron-builder.linux.cjs\"); module.exports={...base,deb:{maintainer:\"Ambleloft <8717555+fjb040911@users.noreply.github.com>\"}};")'
+          npx electron-builder --config .cache/release-linux.cjs --linux AppImage deb --x64 --publish never
+      - name: Check Windows package and bundled engine
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference=$true
+          New-Item -ItemType Directory -Force .cache/dev | Out-Null
+          node scripts/check-release-content.cjs release/win-unpacked/resources/app.asar
+          node -e "console.log(require('./scripts/publish-windows-release.cjs').validate('release'))"
+          node scripts/test-packaged-windows.mjs
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          node scripts/test-terminal.mjs release/win-unpacked/Ambleloft.exe
+      - name: Check macOS app, archives, signature and runtime
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          node scripts/check-release-content.cjs release/mac-arm64/Ambleloft.app/Contents/Resources/app.asar
+          node scripts/verify-update-assets.cjs
+          codesign --verify --deep --strict release/mac-arm64/Ambleloft.app
+          hdiutil verify release/*.dmg
+          unzip -t release/*.zip > /dev/null
+          mkdir -p test-results
+          node scripts/test-packaged.mjs
+      - name: Check Linux app, package metadata and bundled engine
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          node scripts/check-release-content.cjs release/linux-unpacked/resources/app.asar
+          node scripts/verify-update-assets.cjs
+          dpkg-deb --info release/*.deb
+          ./release/linux-unpacked/resources/engine/bin/codex --version
+          xvfb-run -a node --input-type=module <<'JS'
+          import { _electron } from '@playwright/test';
+          import assert from 'node:assert/strict';
+          import { createRequire } from 'node:module';
+          import { createHash } from 'node:crypto';
+          import { mkdtemp, readFile } from 'node:fs/promises';
+          import { tmpdir } from 'node:os';
+          import path from 'node:path';
+          const { CodexRPC } = createRequire(import.meta.url)('./electron/codex-rpc.cjs');
+          const appDir = path.resolve('release/linux-unpacked');
+          const engine = path.join(appDir,'resources/engine');
+          const manifest = JSON.parse(await readFile(path.join(engine,'manifest.json'),'utf8'));
+          assert.equal(manifest.platform,'linux');
+          assert.equal(manifest.arch,'x64');
+          for(const [file,hash] of Object.entries(manifest.files)){
+            assert.equal(createHash('sha256').update(await readFile(path.join(engine,file))).digest('hex'),hash,file);
+          }
+          const profile = await mkdtemp(path.join(tmpdir(),'amble-linux-package-'));
+          const home = await mkdtemp(path.join(tmpdir(),'amble-linux-engine-'));
+          const rpc = new CodexRPC({executable:path.join(engine,'bin/codex'),config:{baseUrl:'http://127.0.0.1:1/v1',model:'packaging-test',apiKey:''},home,cwd:profile,notification(){},request(){},exit(){}});
+          let app;
+          try {
+            assert.ok(await rpc.call('initialize',{clientInfo:{name:'amble_linux_package_test',version:'1.0.0'}}));
+            rpc.send({method:'initialized',params:{}});
+            app=await _electron.launch({executablePath:path.join(appDir,'ambleloft'),args:['--no-sandbox','--user-data-dir='+profile],timeout:45000});
+            const page=await app.firstWindow();
+            await page.getByRole('textbox',{name:'任务内容'}).waitFor({timeout:30000});
+            assert.ok(page.url().startsWith('file:'));
+            assert.deepEqual(await app.evaluate(({app})=>({packaged:app.isPackaged,version:app.getVersion()})),{packaged:true,version:process.env.CANDIDATE_VERSION});
+            console.log('PASS Linux packaged desktop and bundled Codex handshake',manifest.version);
+          } finally {
+            await app?.close();
+            rpc.close();
+          }
+          JS
+          mkdir -p .cache/appimage-check
+          cd .cache/appimage-check
+          ../../release/*.AppImage --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.platform }}
+          compression-level: 0
+          retention-days: 5
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.blockmap
+            release/latest*.yml
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failure-${{ matrix.platform }}
+          retention-days: 5
+          path: test-results/
+
+  draft:
+    name: Verify artifacts and stage release
+    needs: compatibility
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: artifacts
+      - name: Verify package set and create or complete draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ inputs.target }}
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          cd artifacts
+          for file in "Ambleloft-$VERSION-windows-x64.exe" "Ambleloft-$VERSION-windows-x64.exe.blockmap" "Ambleloft-$VERSION-windows-x64.zip" "Ambleloft-$VERSION-mac-arm64.dmg" "Ambleloft-$VERSION-mac-arm64.zip" "Ambleloft-$VERSION-linux-x64.AppImage" "Ambleloft-$VERSION-linux-x64.deb" latest.yml; do
+            test -s "$file"
+          done
+          sha256sum -- * > ../SHA256SUMS.txt
+          cp ../SHA256SUMS.txt .
+          existing=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)
+          if [ -z "$existing" ]; then
+            gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$SOURCE_COMMIT" --jq .ref
+          else
+            test "$existing" = "$SOURCE_COMMIT"
+          fi
+          if gh release view "$tag" --json isDraft --jq '.isDraft' > ../is-draft 2>/dev/null; then
+            test "$(cat ../is-draft)" = true
+          else
+            gh release create "$tag" --verify-tag --draft --title "Ambleloft $tag" --notes "Cross-platform release candidate."
+          fi
+          gh release upload "$tag" --clobber ./*
+          gh release view "$tag" --json isDraft,assets > ../draft.json
+          test "$(jq -r .isDraft ../draft.json)" = true
+          for file in *; do
+            digest="sha256:$(sha256sum "$file" | cut -d' ' -f1)"
+            size=$(stat -c %s "$file")
+            jq -e --arg name "$file" --arg digest "$digest" --argjson size "$size" '.assets[] | select(.name == $name and .digest == $digest and .size == $size and .state == "uploaded")' ../draft.json > /dev/null
+            printf 'Verified %s (%s bytes)\n' "$file" "$size"
+          done
