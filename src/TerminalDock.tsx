@@ -5,10 +5,21 @@ import {t} from './i18n';
 import type TerminalPanel from './TerminalPanel';
 import type {TerminalRequest} from './TerminalPanel';
 
+let terminalImportFailed = false;
+
+async function loadTerminalPanel() {
+  try {
+    // Chromium retains rejected imports by URL for the lifetime of the page.
+    if (terminalImportFailed) return await import('./TerminalPanel.tsx?terminal-retry');
+    return await import('./TerminalPanel');
+  } catch (error) {
+    terminalImportFailed = true;
+    throw error;
+  }
+}
+
 function ScopedTerminal({dismissError, ...props}: ComponentProps<typeof TerminalPanel> & {dismissError: () => void}) {
-  // A rejected React.lazy import is cached. Dismissing a failed dock lets the
-  // next open attempt load it again, without remounting the conversation.
-  const [Panel] = useState(() => lazy(() => import('./TerminalPanel')));
+  const [Panel] = useState(() => lazy(loadTerminalPanel));
   return <RenderErrorBoundary fallback={
     <div hidden={!props.open} className="flex items-center justify-between gap-3 border-t px-4 py-2">
       <span role="alert">{t('终端界面未能打开。可以收起后重试。')}</span>
