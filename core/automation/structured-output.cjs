@@ -37,7 +37,7 @@ function structuredErrorMessage(error,locale='zh-CN'){
   return en?'The model returned an unreadable response. Your submitted choices and saved tasks are preserved. Please retry.':'模型返回内容无法解析。已提交的选择和已保存任务均保留，请重试本轮。';
  }
  if(error.message==='OUTPUT_LIMIT')return (en?'The model response reached its output limit. Saved content is preserved. Reduce the scope or raise the output limit, then retry.':'模型输出达到上限，已保存内容保留。请缩小本轮范围或提高输出限制后重试。')+outputLimitDetails(error,locale);
- if(error.message==='INCOMPLETE_STREAM')return en?'The model response was interrupted before completion. Saved content is preserved. Please retry.':'模型响应在完成前中断，已保存内容保留，请重试本轮。';
+ if(error.message==='INCOMPLETE_STREAM')return en?'The model response was interrupted before completion. Saved content is preserved. Please retry.':'模型连接中断，本轮回复未完成。已收到的内容已保留。';
  return error.message;
 }
 function localizeStructuredError(error,locale){

@@ -155,3 +155,27 @@ test('collapsed expert histories keep approvals and supplemental drafts outside 
  await experts.getByRole('button',{name:'提交回答',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='answer').length)).toBe(1);
 });
+
+test('retry a failed reply in place while keeping the conversation and draft',async({page})=>{
+ await prepare(page);
+ const composer=page.getByLabel('这次想推进什么？');
+ await composer.fill('整理现有交付');await composer.press('Enter');
+ await expect(page.getByRole('combobox',{name:'谁来使用？'})).toBeVisible();
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((v:any)=>v.host);
+  Object.assign(r.host,{status:'failed',revision:7,retryPass:0,error:'模型连接中断，本轮回复未完成。',question:null});
+  window.desktop!.spaces!.retryDiscussionHost=async(input)=>{
+   if(input.requestId!==r.id||input.expectedRevision!==7)throw Error('Wrong round');
+   q.calls.push({action:'retry',input});
+   Object.assign(r.host,{status:'completed',revision:8,error:null,retryPass:undefined,steps:[{id:'reply',text:'交付已汇总',action:'reply'}]});
+   q.emit();return structuredClone(q.snapshot);
+  };
+  q.emit();
+ });
+ await composer.fill('尚未发送');
+ const retry=page.getByRole('button',{name:'重试本轮回复'});
+ await retry.click();await expect(retry).toHaveCount(0);
+ await expect(page.getByText('交付已汇总',{exact:true})).toHaveCount(1);
+ await expect(composer).toHaveValue('尚未发送');
+ expect(await page.evaluate(()=>(window as any).spaceQA.calls.filter((c:any)=>c.action==='host').length)).toBe(1);
+});

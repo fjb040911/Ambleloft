@@ -196,6 +196,18 @@ body { font-optical-sizing: auto; }
 .archive-row strong { font-size: var(--text-body); }
 
 /* Readable conversation measure; the stationary dock has a soft scroll edge. */
+.conversation-form-panel {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(36%, 36vh);
+  width: 100%;
+  max-width: 840px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 1.75rem);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.conversation-form-panel > [data-slot="card"] { margin-block: .375rem; }
 .conversation-content, .conversation-dock { max-width: 840px; }
 .conversation-content { padding: .5rem 1.75rem 1.5rem; }
 .conversation-content .markdown { font-size: .9375rem; line-height: calc(25 / 15); }

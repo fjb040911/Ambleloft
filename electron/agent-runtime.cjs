@@ -18,6 +18,7 @@ const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 class AgentRuntime {
   constructor({ directory, provider, workspace, publish, publishChanges, projectRun = run => run, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
     this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.publishChanges=publishChanges;this.projectRun=projectRun;this.publications=new WeakMap();
+    this.pendingRecords = new Map();
     this.native = new (require('./native-subagents.cjs').NativeSubagents)(this);
     this.conversation = new (require('./conversation-agent.cjs').ConversationAgent)(this,conversationOptions);
     this.rpcFactory = rpcFactory; this.runs = []; this.contexts = new Map(); this.pendingStarts = []; this.maxConcurrent = 2; this.writes = Promise.resolve(); this.saveTimer = null; this.dirtyRuns=new Map();this.pendingSave=null;this.dirtyItems=new Map();
@@ -62,9 +63,11 @@ class AgentRuntime {
   }
   list() { return structuredClone(this.runs); }
   async edit(input) {
+    if(this.historyMaintenance)await this.historyMaintenance;
     if (!input || typeof input.id !== 'string') throw new Error('任务无效');
     const run = this.runs.find(item => item.id === input.id);
     if (!run) throw new Error('任务不存在');
+    if(this.pendingRecords.has(run.id))throw Error('请先重试保存任务记录');
     if(run.originHandoff)throw Error('受限调查记录请从原专家讨论中查看和停止');
     if (this.editing) throw new Error('请等待当前操作结束');
     if (BUSY.includes(run.status) || [...this.contexts.values()].some(context => context.run?.id === run.id)) throw new Error('请等待此任务结束后再操作');
@@ -103,15 +106,43 @@ class AgentRuntime {
     }
     finally { this.editing = false; }
   }
-  persist(terminal,dirtyRun) {
+  holdRecord(run,final,turnId){
+    const entry={run,final,turnId};
+    Object.defineProperty(run,'pendingRecord',{value:entry,configurable:true});
+    this.pendingRecords.set(run.id,entry);
+  }
+  retrySave(id) {
+    const entry=this.pendingRecords.get(id);
+    if (!entry) return Promise.resolve(); // A second window may already have saved it.
+    if (entry.saving) return entry.saving;
+    const {run,final,turnId}=entry;
+    entry.saving=this.persist(turnId?{runId:id,turnId}:undefined,run,final).then(()=>{
+      Object.assign(run,final);
+      delete run.pendingRecord;
+      this.pendingRecords.delete(id);
+      this.publishRun(run);
+    }).catch(error=>{
+      const sqlite=Number(error.errcode)&255;
+      const kind=sqlite===13||['ENOSPC','EDQUOT','SQLITE_FULL'].includes(error.code)?'space':
+        sqlite===8||['EPERM','EROFS','EACCES','SQLITE_READONLY'].includes(error.code)?'permission':
+        error.code==='DATABASE_BACKPRESSURE'?'queue':'write';
+      entry.issue={kind,outcome:final.status};
+      if(turnId)final.recoveredSaveTurnId=turnId;
+      this.publishRun(run);
+      throw error;
+    }).finally(()=>{entry.saving=null;});
+    return entry.saving;
+  }
+  persist(terminal,dirtyRun,final) {
     const partial=!!terminal||!!dirtyRun;
     if(dirtyRun)this.dirtyRuns.set(dirtyRun.id,(this.dirtyRuns.get(dirtyRun.id)||0)+1);
     const operation=this.writes.then(async()=>{
       const runs=partial?this.runs.filter(run=>run.id===(dirtyRun?.id||terminal?.runId)):this.runs;
       const ids=new Set(runs.map(run=>run.id)),versions=new Map([...this.dirtyRuns].filter(([id])=>ids.has(id))),streamSnapshot=new Map([...this.streamBytes].filter(([id])=>ids.has(id)));
-      const snapshot=this.database?.incrementalRuns?runs:structuredClone(runs);
+      const values=final?runs.map(run=>({...run,...final})):runs;
+      const snapshot=this.database?.incrementalRuns?values:structuredClone(values);
       if(this.database)await this.database.call(terminal?'commitTurn':partial?'saveRunUpdates':'saveRuns',terminal?{runs:snapshot,...terminal,partial}:snapshot);
-      else await writeJSON(this.file,structuredClone(this.runs));
+      else await writeJSON(this.file,this.runs.map(run=>final&&run===dirtyRun?{...run,...final}:run));
       this.acknowledgeBytes(streamSnapshot);
       for(const [id,version] of versions)if(this.dirtyRuns.get(id)===version){this.dirtyRuns.delete(id);this.dirtyItems.delete(id);}
     });
@@ -124,7 +155,7 @@ class AgentRuntime {
     const operation=this.writes.then(async()=>{
       this.pendingSave=null;
       const versions=new Map(this.dirtyRuns),streamSnapshot=new Map(this.streamBytes);
-      const runs=this.runs.filter(run=>versions.has(run.id));
+      const runs=this.runs.filter(run=>versions.has(run.id)&&!this.pendingRecords.has(run.id));
       if(!runs.length)return;
       if(this.database){
         const errors=[];
@@ -146,7 +177,7 @@ class AgentRuntime {
   publishRun(run, changedItems) {
     if(this.database?.closed)return;
     if(this.publishChanges)return this.publishChanges(run,changedItems);
-    const {modelRequests,...view}=run;
+    const {modelRequests,...view}=require('./history-pages.cjs').saveView(run);
     const projected=this.projectRun(view);
     // The versioned publisher already owns an immutable snapshot/delta. Plain
     // projections still need isolation from subsequent runtime mutations.
@@ -183,7 +214,19 @@ class AgentRuntime {
     this.updateStoragePressure();
     if (!this.saveTimer) this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.persistChanged().catch(error => {for(const id of error.runIds||[run.id]){const failed=this.runs.find(item=>item.id===id)||run;failed.error=error.code==='DATABASE_BACKPRESSURE'?'待保存输出超过缓冲上限，任务已停止接收。已有已保存记录保留，请检查诊断后继续。':'对话保存失败，请检查磁盘空间。';this.publishRun(failed);for(const context of this.contexts.values())if(context.run===failed&&!context.done)void this.finish(context,'failed',failed.error);}});
+      this.persistChanged().catch(error=>{
+        for(const id of error.runIds||[run.id]){
+          const failed=this.runs.find(item=>item.id===id);
+          if(!failed||this.pendingRecords.has(id))continue;
+          const context=[...this.contexts.values()].find(c=>c.run===failed);
+          if(context){
+            if(!context.done)void this.finish(context,'interrupted','记录写入失败，执行已中断。请核对已完成的操作。');
+          }else if(this.dirtyRuns.has(id)){
+            this.holdRecord(failed,{status:failed.status,error:failed.error});
+            void this.retrySave(id).catch(()=>{});
+          }
+        }
+      });
     }, urgent?0:250);
   }
   async patchWorkspace(input) {
@@ -191,6 +234,7 @@ class AgentRuntime {
     for(const change of input?.changes||[]){const before=projects.find(p=>p.id===change.id);if(change.kind==='project'&&change.action==='put'&&before&&!sameTarget(before,change.value)&&[...this.contexts.values()].some(c=>c.run?.projectId===change.id||c.requestProjectId===change.id||c.remoteProject?.id===change.id))throw Error('请等待此项目任务结束后再修改工作环境');}
     const deleted=(input?.changes||[]).filter(c=>c.kind==='project'&&c.action==='delete').map(c=>c.id);
     if(!deleted.length)return this.workspace.patch(input);
+    if(this.historyMaintenance)await this.historyMaintenance;
     if(this.contexts.size||this.editing)throw new Error('BUSY: 请等待任务结束后再删除项目');
     this.editing=true;
     const operation=this.writes.then(async()=>{
@@ -297,6 +341,7 @@ class AgentRuntime {
     return require('./composer-start.cjs').start(this,input,hostContext);
   }
   async startOnce(input, hostContext={}) {
+    if(this.pendingRecords.has(input?.runId))throw Error('请先重试保存任务记录');
     if (this.closing || this.editing) throw new Error('请等待当前操作结束');
     if((input.runId||input.draftId)&&[...this.contexts.values()].some(c=>input.runId?(c.requestRunId===input.runId||c.run?.id===input.runId):c.draftId===input.draftId))throw new Error('该任务正在执行或排队');
     if (!input || typeof input.prompt !== 'string' || (!input.prompt.trim() && !input.selectedSkillIds?.length) || input.prompt.length > 20000) throw new Error('请输入 1–20000 字的任务内容');
@@ -478,6 +523,15 @@ class AgentRuntime {
   }
   modelDiagnostic(context, diagnostic) {
     const run=context.run;
+    if(diagnostic.stage==='retrying_stream'){
+      if(!diagnostic.parentThreadId&&!context.done&&!context.cancelled){
+        run.retrying=true;run.error='模型连接中断';this.changed(run);
+      }
+      return;
+    }
+    if(diagnostic.streamRetried&&!diagnostic.parentThreadId&&run.retrying&&run.error==='模型连接中断'){
+      run.retrying=false;run.error='';
+    }
     run.modelRequests=[...(run.modelRequests||[]),{...diagnostic,turnKey:context.turnKey}].slice(-100);
     if(!diagnostic.parentThreadId)context.lastModelDiagnostic=diagnostic;
     if(diagnostic.timedOut&&!context.done&&!context.modelTimeoutReason){
@@ -673,7 +727,7 @@ class AgentRuntime {
     if(await this.native.stop(id))return;
     if(pause&&this.chatInputs&&this.runs.some(r=>r.id===id))await this.chatInputs.pause(id);
     const context = [...this.contexts.values()].find(c=>c.run?.id===id);
-    if (!context || context.run?.id !== id) return;
+    if (!context || context.done || context.run?.id !== id) return;
     context.permissionTransition?.controller.abort();
     context.cancelled = true;context.extensionChannel?.close(); context.run.status = 'stopping'; this.changed(context.run);
     this.conversation.stop(context);
@@ -693,7 +747,9 @@ class AgentRuntime {
     for(const finish of context.remoteApprovals?.values()||[])finish(false);
     context.extensionChannel?.close();this.closeEngine(context.rpc); context.bridge?.close();
     const diagnostic=context.lastModelDiagnostic;
-    if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
+    if(status==='failed'&&diagnostic?.streamInterrupted&&!diagnostic.cancelled){
+      error=diagnostic.reason;
+    }else if(status==='failed'&&/stream disconnected/.test(error)&&diagnostic?.failed&&!diagnostic.cancelled){
       error = (diagnostic.stage==='translate_tools'?'模型响应已接收，但工具调用解析失败。':error)+'\n模型请求诊断：'+diagnostic.reason+'；阶段：'+diagnostic.stage+
         (diagnostic.causeCode?'；原因代码：'+diagnostic.causeCode:'')+
         '；Request ID：'+diagnostic.requestId;
@@ -718,8 +774,15 @@ class AgentRuntime {
       if(evidence)try{evidence.output=context.remoteProject?(context.run.collaboration?.acceptancePolicy?.mode==='auto'?await require('../core/workforce/remote-evidence.cjs').capture(this.ssh,context.remoteProject):{complete:false,notice:'Remote revision must be checked from recorded remote commands'}):await require('../core/workforce/evidence.cjs').capture(context.run.cwd);}catch{evidence.output={complete:false,notice:'Output fingerprint unavailable'};}
       try { if(!context.remoteProject)context.run.artifacts=[...(context.run.artifacts||[]),...await collectArtifacts(context.run,context.turnKey)]; } catch { /* Artifact inspection must not prevent turn completion. */ }
     }
-    if (context.run) { if(context.turnKey)context.run.terminalTurnId=context.turnKey; context.run.queued=false;context.run.storageBackpressure=false; context.run.status = status; context.run.error = error; context.run.retrying=false; context.run.questions=[]; context.run.approvals = []; this.changed(context.run); }
-    try { await this.persist(context.run&&context.turnKey?{runId:context.run.id,turnId:context.turnKey}:undefined); } catch { if (context.run) { context.run.error = '执行已结束，但记录保存失败。'; this.publishRun(context.run); } }
+    if (context.run) {
+      const run=context.run;
+      const final={status,error,...(context.turnKey?{terminalTurnId:context.turnKey}:{})};
+      Object.assign(run,{queued:false,storageBackpressure:false,retrying:false,questions:[],approvals:[],updatedAt:new Date().toISOString()});
+      // The UI can finish immediately. Runtime observers receive the final status after commit.
+      this.holdRecord(run,final,context.turnKey);
+      this.publishRun(run);
+      try { await this.retrySave(run.id); } catch { /* Keep the turn in memory for save-only recovery. */ }
+    }
     this.contexts.delete(context.key);this.pendingStarts=this.pendingStarts.filter(c=>c!==context);if(context.run)this.streamBytes.delete(context.run.id);this.updateStoragePressure();this.drain();
   }
   closeEngine(rpc) {
@@ -727,6 +790,6 @@ class AgentRuntime {
     const pending=Promise.resolve().then(()=>rpc.close()).catch(error=>{this.engineCleanupError=error;console.error('ENGINE_CLEANUP_FAILED',error.code||'unknown');}).finally(()=>this.engineClosures.delete(pending));
     this.engineClosures.add(pending);
   }
-  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await this.persist();await this.chatInputs?.shutdown();await Promise.all(this.engineClosures||[]);this.unsubscribePressure?.();if(this.engineCleanupError)throw this.engineCleanupError; }
+  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await Promise.all([...this.pendingRecords.keys()].map(id=>this.retrySave(id)));await this.persist();await this.chatInputs?.shutdown();await Promise.all(this.engineClosures||[]);this.unsubscribePressure?.();if(this.engineCleanupError)throw this.engineCleanupError; }
 }
 module.exports = { AgentRuntime };

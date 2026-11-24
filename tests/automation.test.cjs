@@ -122,3 +122,11 @@ test('steered user answers remain inside the completed turn snapshot',async t=>{
  const f=await fixture(t);f.run.messages.splice(1,0,{id:'form-answer',role:'user',turnKey:'turn',text:'Amount: 12.30'});await f.commit();
  const snapshot=await f.automation.forExtension(f.context,'getTurn',f.ref);assert.deepEqual(snapshot.messages.map(m=>m.text),['Expense report','Amount: 12.30','Approved']);
 });
+
+test('save-only recovery retains a readable snapshot without queuing a completion hook',async t=>{
+ const f=await fixture(t);
+ f.run.terminalTurnId='turn';f.run.recoveredSaveTurnId='turn';
+ await f.commit();await f.commit();await f.restart();
+ assert.equal((await f.state()).events.length,0);
+ assert.equal((await f.automation.forExtension(f.context,'getTurn',f.ref)).messages.at(-1).text,'Approved');
+});

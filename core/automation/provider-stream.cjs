@@ -23,7 +23,7 @@ async function readStructuredStream(response,{chat,signal,onProgress,onUsage,rea
   if(raw==='[DONE]')break;
   let event;try{event=JSON.parse(raw);}catch{throw outputError('invalid-event',raw.length,'transport');}
   if(!event||typeof event!=='object')throw outputError('invalid-event',raw.length,'transport');
-  if(event.usage||event.response?.usage)onUsage?.(event.usage||event.response.usage,event.id||event.response?.id);
+  if(event.id||event.response?.id||event.usage||event.response?.usage)onUsage?.(event.usage||event.response?.usage,event.id||event.response?.id);
   if(event.error||['error','response.failed'].includes(event.type))throw invalid('PROVIDER_REJECTED');
   if(chat){
    const choice=event.choices?.[0],delta=choice?.delta||{};

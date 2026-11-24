@@ -29,15 +29,24 @@ const legacyRunEvent=(_event,value)=>{
 if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   // Immutable local metadata must be available before the first renderer layout.
   platform: process.platform,
+  storage:{
+    reasoningPreview:()=>ipcRenderer.invoke('storage:reasoning-preview'),
+    cleanReasoning:tokens=>ipcRenderer.invoke('storage:reasoning-clean',tokens),
+    snapshot:()=>ipcRenderer.invoke('storage:snapshot'),
+    clean:input=>ipcRenderer.invoke('storage:clean',input),
+    open:()=>ipcRenderer.invoke('storage:open'),
+  },
+  retrySave:id=>ipcRenderer.invoke('agent:retry-save',id),
   updates:{...Object.fromEntries(['snapshot','check','download','update','cancel','preferences','restart','schedule','cancelSchedule'].map(action=>[action,input=>ipcRenderer.invoke('update:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('update:event',h);return()=>ipcRenderer.removeListener('update:event',h);}},
   growth:Object.fromEntries(['status','jobs','policy','dismiss'].map(action=>[action,input=>ipcRenderer.invoke('growth:'+action,input)])),
   investigation:Object.fromEntries(['start','read','list','cancel','revokeWrite','resume','revokeResume','open'].map(action=>[action,input=>ipcRenderer.invoke('investigation:'+action,input)])),
   expertChat:{...Object.fromEntries(['directory','read','submit','retry','cancel','exclude','revokeTaskContext','source','export'].map(action=>[action,input=>ipcRenderer.invoke('expert-chat:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('expert-chat:event',h);return()=>ipcRenderer.removeListener('expert-chat:event',h);}},
-  spaces:Object.fromEntries(['changeDiscussionModel','changeDiscussionPermission','followupDiscussion','coordinateDiscussion','stopDiscussionHost','exportDocument','snapshot','outputs','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','discardTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','controlPlan','knowledge','start'].map(action=>[action,input=>ipcRenderer.invoke('spaces:'+action,input)])),
+  spaces:Object.fromEntries(['changeDiscussionModel','changeDiscussionPermission','followupDiscussion','coordinateDiscussion','retryDiscussionHost','stopDiscussionHost','exportDocument','snapshot','outputs','save','lifecycle','discussionLifecycle','submitDocumentReview','saveDocument','adoptDocument','withdrawDocument','restoreDocument','document','savePlan','suggestPlan','createTaskDraft','discardTaskDraft','saveTaskDraft','checkTaskDraft','answerTaskRelations','saveProjectContext','guideTask','cancelTaskGuide','createGuidedPlan','reviewPlan','controlPlan','knowledge','start'].map(action=>[action,input=>ipcRenderer.invoke('spaces:'+action,input)])),
   workforce:{...Object.fromEntries(['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion','importLocal','importRepository'].map(action=>[action,input=>ipcRenderer.invoke('workforce:'+action,input)])),onChanged:listener=>{const h=()=>listener();ipcRenderer.on('workforce:event',h);return()=>ipcRenderer.removeListener('workforce:event',h);}},
   creation:{...Object.fromEntries(['read','install','trial'].map(action=>[action,input=>ipcRenderer.invoke('creation:'+action,input)])),onChanged:listener=>{const h=(_,value)=>listener(value);ipcRenderer.on('creation:event',h);return()=>ipcRenderer.removeListener('creation:event',h);}},
   ssh:{...Object.fromEntries(['list','save','connect','disconnect','browse','validate','key','dockerList','dockerEnter','dockerStart'].map(action=>[action,input=>ipcRenderer.invoke('ssh:'+action,input)])),onChanged:listener=>{const h=()=>listener();ipcRenderer.on('ssh:event',h);return()=>ipcRenderer.removeListener('ssh:event',h);}},
-  terminal:Object.fromEntries(['focus','profiles','list','create','read','write','resize','close'].map(action=>[action,input=>ipcRenderer.invoke('terminal:'+action,input)])),
+  terminal:{...Object.fromEntries(['focus','profiles','list','create','attach','detach','read','write','resize','clear','close'].map(action=>[action,input=>ipcRenderer.invoke('terminal:'+action,input)])),
+    onExit:listener=>{const h=(_,session)=>listener(session);ipcRenderer.on('terminal:exit',h);return()=>ipcRenderer.removeListener('terminal:exit',h);}},
   inputs:{list:input=>ipcRenderer.invoke('input:list',input),append:input=>ipcRenderer.invoke('input:append',input),action:input=>ipcRenderer.invoke('input:action',input),onChanged:listener=>{const h=(_event,value)=>listener(value);ipcRenderer.on('input:event',h);return()=>ipcRenderer.removeListener('input:event',h);}},
   forms:{list:input=>ipcRenderer.invoke('forms:list',input),action:async input=>{const value=await ipcRenderer.invoke('forms:action',input);if(value?.uiValidationError)throw Object.assign(new Error(value.uiValidationError.message),{fields:value.uiValidationError.fields});return value;},onChanged:listener=>{const h=()=>listener();ipcRenderer.on('forms:event',h);return()=>ipcRenderer.removeListener('forms:event',h);}},
   taskApps:{onContextChanged:listener=>{const handler=(_event,value)=>listener(value);ipcRenderer.on('task-app:context',handler);return()=>ipcRenderer.removeListener('task-app:context',handler);},...Object.fromEntries(['open','close','rpc'].map(method=>[method,input=>ipcRenderer.invoke('task-app:'+method,input)])),onClosed:listener=>{const handler=(_event,value)=>listener(value);ipcRenderer.on('task-app:closed',handler);return()=>ipcRenderer.removeListener('task-app:closed',handler);}},
@@ -58,6 +67,8 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   projectFiles: Object.fromEntries(['context','list','search','read','office','apps','open'].map(action=>[action,input=>ipcRenderer.invoke('files:'+action,input)])),
   selectAttachments: () => ipcRenderer.invoke('attachments:select'),
   readAttachmentImage: input => ipcRenderer.invoke('attachments:image',input),
+  readAttachmentSpreadsheet: input => ipcRenderer.invoke('attachments:spreadsheet',input),
+  readAttachmentPdf: input => ipcRenderer.invoke('attachments:pdf',input),
   importAttachments: async files => {
     if(!Array.isArray(files)||!files.length||files.length>50)throw Error('最多添加 50 个文件或文件夹');
     let total=0;const items=[];
@@ -95,6 +106,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('desktop', {
   composerSendStatus: input => ipcRenderer.invoke('agent:composer-status', input),
   downloadArtifact: input => ipcRenderer.invoke('artifact:download', input),
   accessArtifact: input => ipcRenderer.invoke('artifact:access', input),
+  artifactAvailability: input => ipcRenderer.invoke('artifact:availability',input),
   switchRunModel: input => ipcRenderer.invoke('agent:model',input),
   switchRunPermission: input => ipcRenderer.invoke('agent:permission',input),
   stopRun: id => ipcRenderer.invoke('agent:stop', id),

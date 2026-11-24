@@ -36,6 +36,20 @@ async function accessArtifact(run, id, preview=false) {
   if(file.size>previewPolicy.maxBytes)throw new Error('文件超过 1 MB，请在访达中查看');
   return {...file,text:await fs.readFile(file.path,'utf8')};
 }
+async function artifactAvailability(run,ids){
+  if(!run || !Array.isArray(ids) || ids.some(id=>typeof id!=='string'))throw new Error('无效的交付文件记录');
+  const wanted=new Set(ids),statuses={};
+  for(const file of run.artifacts||[]){
+    if(!wanted.has(file.id))continue;
+    try{
+      await verifiedFile(run.cwd,file.path);
+      statuses[file.id]='available';
+    }catch(error){
+      statuses[file.id]=['ENOENT','ENOTDIR'].includes(error.code)?'missing':'unavailable';
+    }
+  }
+  return statuses;
+}
 // Resolve message links against the host's complete run, including deliveries
 // registered during a turn that has not been committed to run.artifacts yet.
 async function downloadArtifact(run, reference, chooseDestination) {
@@ -77,4 +91,4 @@ async function downloadArtifact(run, reference, chooseDestination) {
     if (temporary) await fs.rm(temporary, {recursive:true, force:true});
   }
 }
-module.exports={collectArtifacts,accessArtifact,downloadArtifact,verifiedFile};
+module.exports={collectArtifacts,accessArtifact,downloadArtifact,verifiedFile,artifactAvailability};

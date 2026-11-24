@@ -1,6 +1,17 @@
 const {randomUUID}=require('node:crypto');
 const collections=['messages','tools','plans','fileChanges','artifacts','taskApps','approvals','questions','modelRequests'];
 const threshold=8192;
+const reasoningFields=['text','summary','content'];
+function clearedReasoning(message){
+ // Copy descriptors so other lazy text fields keep their original references.
+ const next={};
+ for(const key of Object.keys(message)){
+  if(key==='text')next.text='';
+  else if(!reasoningFields.includes(key))Object.defineProperty(next,key,Object.getOwnPropertyDescriptor(message,key));
+ }
+ next.reasoningCleared=true;
+ return next;
+}
 const {reference,digest}=require('./runtime-text-cache.cjs');
 // Keep strings by reference, not a second serialized copy of the complete run.
 function splitItem(item){
@@ -77,7 +88,20 @@ function createRunPatches(){
    saved.clear();
    for(const run of this.capture(runs.filter(run=>!legacy.includes(run.id)))){if(run.managed)continue;const items=new Map();for(const entry of run.entries)items.set(entry.lookup,{data:entry.value.data,position:entry.position,turnKey:entry.turnKey,texts:new Map([...entry.value.texts].map(([field,text])=>[field,typeof text==='string'?{length:text.length,hash:digest(text)}:{length:text.length,revision:text.revision,hash:text.hash}]))});saved.set(run.id,{meta:run.metadata,items});}
   },
+  acknowledgeReasoning(updates){
+   for(const {id,messages,evidence} of updates){
+    const record=saved.get(id);
+    if(!record)continue;
+    for(const key of messages){
+     const item=record.items.get(JSON.stringify(['messages',key]));
+     if(!item)continue;
+     item.data=JSON.stringify(clearedReasoning(JSON.parse(item.data)));
+     for(const field of item.texts.keys())if(reasoningFields.includes(JSON.parse(field)[0]))item.texts.delete(field);
+    }
+    if(evidence)record.meta=JSON.stringify({...JSON.parse(record.meta),reasoningEvidence:evidence});
+   }
+  },
   clear(){saved.clear();},
  };
 }
-module.exports={createRunPatches,collections,splitItem};
+module.exports={createRunPatches,collections,splitItem,reasoningFields,clearedReasoning};

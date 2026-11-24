@@ -36,13 +36,19 @@ function createOfficePreview({directory,convert,parseFile=parse}={}){
   for(const entry of entries)if(entry.isDirectory()&&!entry.name.startsWith('.')){const full=path.join(cache,entry.name);values.push({full,time:(await fs.stat(full)).mtimeMs});}
   for(const item of values.sort((a,b)=>b.time-a.time).slice(12))await fs.rm(item.full,{recursive:true,force:true});
  }
- async function build(full,expected){
+ async function build(full,expected,attachment){
   const stat=await fs.stat(full);if(!stat.isFile()||stat.size>LIMIT)throw new Error('Office 文件超过 32 MiB，请使用外部应用打开。');
   if(expected&&version(stat)!==expected)throw new Error('文件正在变化，等待下一次更新。');
   const ext=path.extname(full).toLowerCase();if(!['.xlsx','.xls','.pptx','.ppt'].includes(ext))throw new Error('不支持此 Office 格式');
   const handle=await fs.open(full,'r');let data;
   try{const buffer=Buffer.alloc(stat.size+1);const read=await handle.read(buffer,0,buffer.length,0);if(read.bytesRead!==stat.size)throw new Error('文件正在变化，等待下一次更新。');data=buffer.subarray(0,read.bytesRead);}finally{await handle.close();}
   if(version(await fs.stat(full))!==version(stat))throw new Error('文件正在变化，等待下一次更新。');
+  if(attachment){
+   // The workbook parser also accepts plain text. Only expose Excel containers through attachment previews.
+   const zip=data.subarray(0,4).equals(Buffer.from([0x50,0x4b,0x03,0x04]));
+   const ole=data.subarray(0,8).equals(Buffer.from([0xd0,0xcf,0x11,0xe0,0xa1,0xb1,0x1a,0xe1]));
+   if(!zip&&!ole)throw new Error('无法预览此 Excel 文件');
+  }
   const id=createHash('sha256').update('office-v1'+ext).update(data).digest('hex'),target=path.join(cache,id);
   await fs.mkdir(cache,{recursive:true,mode:0o700});
   let result;
@@ -68,12 +74,21 @@ function createOfficePreview({directory,convert,parseFile=parse}={}){
   void prune().catch(()=>{});
   return {...result,version:version(stat),asset:id};
  }
- function preview(full,expected){
-  const key=full+'\0'+(expected||'');if(pending.has(key))return pending.get(key);
-  const job=queue.then(()=>build(full,expected));queue=job.catch(()=>{});pending.set(key,job);
+ function preview(full,expected,attachment=false){
+  const key=full+'\0'+(expected||'')+'\0'+attachment;if(pending.has(key))return pending.get(key);
+  const job=queue.then(()=>build(full,expected,attachment));queue=job.catch(()=>{});pending.set(key,job);
   void job.finally(()=>pending.delete(key)).catch(()=>{});return job;
  }
  async function resource(full,id){if(!/^[a-f0-9]{64}$/.test(id)||grants.get(full)!==id)throw new Error('预览已失效');return fs.readFile(path.join(cache,id,'source.pdf'));}
- return {preview,resource};
+ async function spreadsheetAttachment(input){
+  const file=input?.path;
+  if(typeof file!=='string'||file.includes('\0')||file.length>4096||!path.isAbsolute(file)||!/^\.xlsx?$/i.test(path.extname(file)))throw new Error('附件路径无效');
+  try{return await preview(file,undefined,true);}
+  catch(error){
+   if(['ENOENT','ENOTDIR','EACCES','EPERM'].includes(error.code))throw new Error('Excel 文件不可访问，可能已移动或删除');
+   throw error;
+  }
+ }
+ return {preview,resource,spreadsheetAttachment};
 }
 module.exports={createOfficePreview,converter};

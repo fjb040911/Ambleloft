@@ -38,6 +38,6 @@ test('large reply leases can be released and invalid scalar replies reject the w
 
 test('runtime shutdown waits for engine cleanup after completed contexts were removed',async()=>{
  const {AgentRuntime}=require('../electron/agent-runtime.cjs'),gate=deferred();
- const runtime=Object.create(AgentRuntime.prototype);Object.assign(runtime,{initialized:true,contexts:new Map(),persist:async()=>{}});
+ const runtime=new AgentRuntime({directory:'/unused',publish(){}});runtime.initialized=true;runtime.persist=async()=>{};
  runtime.closeEngine({close:()=>gate.promise});let finished=false;const closing=runtime.shutdown().then(()=>{finished=true;});await new Promise(r=>setImmediate(r));assert.equal(finished,false);gate.resolve();await closing;assert.equal(finished,true);assert.equal(runtime.engineClosures.size,0);
 });

@@ -120,7 +120,7 @@ class PlanService {
    if(plan)this.spaces.writable(s,plan.spaceId);
    if(!attempt||attempt.id!==input.attemptId||p.status!=='review'||attempt.resultHash!==input.resultHash)throw Error('结果已变更，请重新审阅');
    if(p.stale||p.definition.documentRefs.some(r=>p.definition.mode==='work'&&s.documents.find(d=>d.id===r.id)?.adoptedRevision!==r.revision))throw Error('依据已变更，请先修订计划');
-   const run=this.runtime.runs.find(r=>r.id===attempt.runId);if(!run||run.status!=='completed'||hash({messages:run.messages,tools:run.tools,fileChanges:run.fileChanges,workEvidence:run.workEvidence})!==attempt.resultHash)throw Error('任务结果已改变，请刷新后重审');
+   const run=this.runtime.runs.find(r=>r.id===attempt.runId);if(!run||run.status!=='completed'||acceptance.resultHash(run)!==attempt.resultHash)throw Error('任务结果已改变，请刷新后重审');
    if(attempt.automaticReview?.state==='checking'){attempt.automaticReview={...attempt.automaticReview,state:'done',outcome:'indeterminate',reason:'用户已完成人工验收，自动评审未应用'};}p.status=input.accepted===true?'accepted':'rejected';p.acceptance={attemptId:attempt.id,resultHash:attempt.resultHash,note,accepted:input.accepted===true,at:stamp(),source:'user-review'};
    attempt.review=structuredClone(p.acceptance);event(plan,p.status,note,p.id);this.dirty=true;return plan;
   });
@@ -143,7 +143,7 @@ class PlanService {
    const attempt=p.attempts.at(-1);if(!attempt||!['starting','running','waiting','stopping'].includes(p.status))continue;
    const request=state.requests.find(r=>r.id===attempt.requestId),run=this.runtime.runs.find(r=>r.collaboration?.requestId===attempt.requestId);
    if(run){attempt.runId=run.id;p.status=busy.has(run.status)?run.status==='waiting'?'waiting':run.status==='stopping'?'stopping':'running':run.status==='completed'?'review':'interrupted';
-    if(!busy.has(run.status)){attempt.status=run.status;attempt.finishedAt=run.updatedAt||stamp();attempt.codeEvidence=run.workEvidence?.at(-1);attempt.resultHash=hash({messages:run.messages,tools:run.tools,fileChanges:run.fileChanges,workEvidence:run.workEvidence});p.reason=run.error||'';if(run.status==='failed')p.status='failed';if(p.stale)p.status='stale';}
+    if(!busy.has(run.status)){attempt.status=run.status;attempt.finishedAt=run.updatedAt||stamp();attempt.codeEvidence=run.workEvidence?.at(-1);attempt.resultHash=acceptance.resultHash(run);p.reason=run.error||(run.recoveredSaveTurnId&&run.recoveredSaveTurnId===run.terminalTurnId?'记录已恢复，请人工核对交付。':'');if(run.status==='failed')p.status='failed';if(p.stale)p.status='stale';}
    }else if(request?.participants[0]?.status==='failed'){p.status='failed';p.reason=request.participants[0].error;attempt.status='failed';}
    else if(p.status!=='starting'||!this.active.has(planId)){p.status='interrupted';p.reason='执行结果待核对，不会自动重放';attempt.status='interrupted';}
   }

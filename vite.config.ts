@@ -12,6 +12,8 @@ export default defineConfig({
   define: {__AMBLE_BUILD__:JSON.stringify(buildInfo)},
   resolve: {alias: {'@':fileURLToPath(new URL('./src',import.meta.url))}},
   plugins: [react(),tailwindcss(),{name:'ambleloft-build-info',generateBundle(){this.emitFile({type:'asset',fileName:'build-info.json',source:JSON.stringify(buildInfo)});}}],
-  optimizeDeps: { entries: ['index.html'] },
+  // These packages ship standalone ESM. Lazy-opening the terminal should not
+  // require a versioned copy of them from Vite's development prebundle cache.
+  optimizeDeps: { entries: ['index.html'], exclude: ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-search'] },
   server: { host: '127.0.0.1', port: 5173, strictPort: true },
 });

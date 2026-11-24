@@ -1,3 +1,4 @@
+import StorageSettings from './StorageSettings';
 import GrowthSettings from './GrowthSettings';
 import {UpdateCard} from './Updates';
 import SidebarResizeHandle from './SidebarResizeHandle';
@@ -27,7 +28,7 @@ import type {Workspace, ProviderConfig, ProviderCatalog} from './types';
 import type {NavTask} from './WorkspaceNavigation';
 import ProviderSettings from './ProviderSettings';
 export const settingsGroups=[
- {name:'设置',items:[{id:'general',label:'通用',icon:Settings},{id:'conversations',label:'任务',icon:MessageCircle},{id:'notifications',label:'通知',icon:NotificationSettingsIcon},{id:'accounts',label:'账号',icon:ShieldCheck},{id:'updates',label:'版本与更新',icon:Settings}]},
+ {name:'设置',items:[{id:'general',label:'通用',icon:Settings},{id:'conversations',label:'任务',icon:MessageCircle},{id:'notifications',label:'通知',icon:NotificationSettingsIcon},{id:'accounts',label:'账号',icon:ShieldCheck},{id:'updates',label:'版本与更新',icon:Settings},{id:'storage',label:'存储空间',icon:Database}]},
  {name:'集成',items:[{id:'apps',label:'连接',icon:PlugZap}]},
  {name:'模型服务',items:[{id:'providers',label:'模型提供商',icon:Cloud}]},
 ];
@@ -59,6 +60,7 @@ export default function SettingsWorkspace({openLibrary,windowsDesktop=false,init
  {section==='accounts'&&<AccountSettings onStateChange={onEditorState} onCancel={change}/>}
  {section==='conversations'&&<ArchivedConversations tasks={archived} projects={workspace.projects} restore={restore} remove={remove}/>}
  {section==='providers'&&<><div className="section-heading"><h1>{t("模型提供商")}</h1>{(catalog.providers.length>0||editor!==undefined)&&<Button variant="default" disabled={!window.desktop||pending} onClick={()=>change(()=>setEditor(null))}><Plus size={16}/>{t("添加服务")}</Button>}</div><p className="page-description">{t("连接多个模型服务。默认设置用于新任务，已有任务保留原来的服务和模型。")}</p>{editor!==undefined?<><Button variant="ghost" onClick={()=>change(()=>{})}>{t("返回服务列表")}</Button><ProviderSettings key={editor?.id||'new'} config={editor} onStateChange={onEditorState} onSaved={()=>{setEditState({dirty:false,busy:false});setNotice(t('配置已保存'));setEditor(undefined);setResult({});void act(refresh);}}/></>:<>{!catalog.providers.length&&<SettingsEmpty spacious icon={<Cloud/>} title={t("尚未配置模型服务。")} description={t(window.desktop?"添加你的模型服务，连接后即可开始对话。请准备好服务地址、模型名称和 API 密钥。":"请在桌面版中添加服务。")} action={<Button disabled={!window.desktop||pending} onClick={()=>change(()=>setEditor(null))}><Plus/>{t("添加服务")}</Button>}/>}{catalog.providers.map(provider=><SettingsCard key={provider.id} title={provider.name||provider.model}><div className="section-heading">{provider.id===catalog.defaultId&&<Badge variant="secondary">{t("默认服务")}</Badge>}</div><p className="provider-url">{provider.baseUrl}</p><p>{(provider.models||[provider.model]).join(' · ')}</p><small>{provider.hasKey?t("密钥已加密保存"):t("未设置密钥")}{t("· 默认模型：")}{provider.model}</small><div className="settings-actions"><Button variant="outline" onClick={()=>setEditor(provider)}>{t("编辑")}</Button><Button variant="outline" disabled={pending} onClick={()=>void act(async()=>{setResult(current=>({...current,[provider.id!]:''}));const response=await window.desktop!.testProvider(provider.id);setResult({...result,[provider.id!]:response.message});})}>{t("测试连接")}</Button>{provider.id!==catalog.defaultId&&<Button variant="ghost" disabled={pending} onClick={()=>void act(async()=>{await window.desktop!.setDefaultProvider(provider.id!);await refresh();})}>{t("设为默认")}</Button>}<Button variant="destructive" disabled={pending} onClick={()=>{setError('');setDeleting(provider.id!);}}>{t("删除服务")}</Button></div>{result[provider.id!]&&<p role="status">{result[provider.id!]}</p>}{deleting===provider.id&&<ManagementDialog title={t('删除服务')} busy={pending} close={dismissDelete}><p>{t("删除此服务配置和已保存密钥？仍被任务引用的服务不能删除。")}</p>{error&&<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}<Button variant="outline" disabled={pending} onClick={dismissDelete}>{t("取消")}</Button><Button variant="destructive" disabled={pending} onClick={()=>void act(async()=>{await window.desktop!.removeProvider(provider.id!);await refresh();setDeleting(null);})}>{t("确认删除服务")}</Button></ManagementDialog>}</SettingsCard>)}</>}</>}
+ {section==='storage'&&<StorageSettings/>}
  {section==='updates'&&<UpdateCard preferences/>}
  {section==='apps'&&<IntegrationPage kind="连接"/>}
 

@@ -1,3 +1,4 @@
+const {streamInterruption,streamRecovery}=require('../core/models/stream-recovery.cjs');
 const {TextSpool,append:appendText,spoolObject}=require('./text-spool.cjs');
 const {packets}=require('./stream-json.cjs');
 const {writeChunk}=require('./byte-stream.cjs');
@@ -112,7 +113,7 @@ async function* readSSE(body) {
     while((end=buffer.indexOf('\n\n'))>=0){const block=buffer.slice(0,end);buffer=buffer.slice(end+2);const data=block.split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');if(data)yield data;}
     if(buffer.length>8*1024*1024)throw new Error('模型流事件过大');
   }
-  if(buffer.trim())throw new Error('模型流在事件结束前断开');
+  if(buffer.trim())throw Object.assign(new Error('模型流在事件结束前断开'),{code:'INCOMPLETE_STREAM'});
 }
 // Never retain the raw error body: gateways can echo credentials or image data.
 function sanitizeError(value,key){
@@ -190,19 +191,67 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         diagnostic.imageCount=body.messages.reduce((n,m)=>n+(Array.isArray(m.content)?m.content.filter(c=>c.type==='image_url').length:0),0);
       }
       if(config.effectiveLimits)diagnostic.limits={...config.effectiveLimits};
-      await usageBegin(0);
-      let upstream=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId,...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:requestBody,redirect:'error',signal:deadline.signal});
-      diagnostic.httpStatus=upstream.status;diagnostic.stage='upstream_stream';
-      if(!upstream.ok){
-        const detail=await readUpstreamError(upstream,config.apiKey);
-        Object.assign(diagnostic,detail);
-        const error=new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);
-        error.httpStatus=upstream.status;error.code=detail.upstreamCode;throw error;
+      const recovery=streamRecovery();
+      let requestAttempt=0;
+      async function openUpstream(payload,suffix=''){
+        deadline.signal.throwIfAborted();
+        await usageBegin(requestAttempt++);
+        const result=await fetch(config.baseUrl+(passthrough?'/responses':'/chat/completions'),{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+suffix,...(config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},body:payload,redirect:'error',signal:deadline.signal});
+        diagnostic.httpStatus=result.status;diagnostic.stage='upstream_stream';
+        if(!result.ok){
+          const detail=await readUpstreamError(result,config.apiKey);
+          Object.assign(diagnostic,detail);
+          throw Object.assign(Error(`模型服务返回 HTTP ${result.status}：${detail.upstreamMessage}`),{httpStatus:result.status,code:detail.upstreamCode});
+        }
+        usageAttempt.providerRequestId=result.headers.get('x-request-id')||undefined;
+        return result;
+      }
+      let upstream=await openUpstream(requestBody);
+      async function reconnect(error,safe){
+        deadline.signal.throwIfAborted();
+        const interruption=streamInterruption(error,deadline.signal,{model:config.model,requestId:usageAttempt?.providerRequestId||diagnostic.requestId});
+        if(!interruption)throw error;
+        diagnostic.interruption=interruption;
+        if(!recovery.claim(interruption,safe,deadline.signal)){
+          diagnostic.streamInterrupted=true;
+          throw Object.assign(Error('模型连接中断，本轮回复未完成。请核对已有结果后继续。'),{code:'INCOMPLETE_STREAM',cause:error});
+        }
+        diagnostic.streamRetried=true;diagnostic.stage='retrying_stream';report();
+        await usageNotify('unknown');
+        upstream=await openUpstream(JSON.stringify(body),'-stream-retry');
       }
       if(passthrough){
         res.writeHead(upstream.status,{'Content-Type':upstream.headers.get('content-type')||'application/json','Cache-Control':'no-cache'});
-        const observe=responseObserver(diagnostic,fingerprint,(usage,id)=>{usageAttempt.usage=usage;usageAttempt.providerRequestId=id;});
-        for await(const chunk of upstream.body){if(res.destroyed)break;const before=diagnostic.progressEvents||0;observe(chunk);if(diagnostic.progressEvents>before)deadline.touch();await forward(chunk);}
+        const onResponseUsage=(usage,id)=>{usageAttempt.usage=usage;usageAttempt.providerRequestId=id||usageAttempt.providerRequestId;};
+        let forwarded=false;
+        const isStream=upstream.headers.get('content-type')?.includes('text/event-stream');
+        const clientTools=tools=>(tools||[]).every(tool=>tool.type==='namespace'?clientTools(tool.tools):['function','custom'].includes(tool.type));
+        while(true){
+          // Hold only the initial SSE envelope. Once a delta, tool event or
+          // bounded prefix is forwarded the downstream decoder owns this stream.
+          const observe=responseObserver(diagnostic,fingerprint,onResponseUsage);
+          const prefix=[];let prefixBytes=0;
+          try{
+            for await(const chunk of upstream.body){
+              if(res.destroyed)break;
+              const before=diagnostic.progressEvents||0;
+              observe(chunk);if(diagnostic.progressEvents>before)deadline.touch();
+              if(isStream&&!forwarded){
+                prefixBytes+=chunk.length;
+                if(!diagnostic.progressEvents&&prefixBytes<=16384){prefix.push(chunk);continue;}
+                forwarded=true;
+                for(const part of prefix)await forward(part);
+                prefix.length=0;
+              }
+              forwarded=true;await forward(chunk);
+            }
+            if(isStream&&!diagnostic.done&&!diagnostic.metadataTruncated)throw Error('INCOMPLETE_STREAM');
+            break;
+          }catch(error){
+            if(diagnostic.done)break;
+            await reconnect(error,!forwarded&&clientTools(data.tools));
+          }
+        }
         await usageNotify(diagnostic.done&&diagnostic.finishReason==='completed'?'succeeded':'unknown');usageAttempt=null;
         diagnostic.stage='forwarded';res.end();return;
       }
@@ -232,37 +281,46 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
         return activeItem;
       };
       let calls,finish,outputRetried=false,correctionUsed=false;
+      let keepEarlierReasoning=false;
       for(let attempt=0;attempt<3;attempt++){
         calls=new Map();finish=undefined;let done=false,attemptUsage;
-        for await(const rawEvent of readSSE(upstream.body)){
-          if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
-          diagnostic.events++;diagnostic.lastEventAt=new Date().toISOString();
-          const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage){attemptUsage=chunk.usage;usageAttempt.usage=chunk.usage;}if(chunk.id)usageAttempt.providerRequestId=chunk.id;
-          const choice=chunk.choices?.[0];if(!choice)continue;
-          if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
-          const delta=choice.delta||{};
-          if(choice.finish_reason||delta.content||delta.reasoning_content||delta.reasoning||delta.reasoning_text||delta.tool_calls?.some(call=>call.function?.name||call.function?.arguments))deadline.touch();
-          const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
-          if(thought){
-            reasoningItem=await segment('reasoning');
-            reasoningItem.content[0]||={type:'reasoning_text',text:''};appendText(reasoningItem.content[0],'text',thought,textSpool);
-            await emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
+        try{
+          for await(const rawEvent of readSSE(upstream.body)){
+            if(rawEvent==='[DONE]'){done=true;diagnostic.done=true;break;}
+            diagnostic.events++;diagnostic.lastEventAt=new Date().toISOString();
+            const chunk=JSON.parse(rawEvent);if(chunk.error)throw new Error('模型返回流式错误');if(chunk.usage){attemptUsage=chunk.usage;usageAttempt.usage=chunk.usage;}if(chunk.id)usageAttempt.providerRequestId=chunk.id;
+            const choice=chunk.choices?.[0];if(!choice)continue;
+            if(choice.finish_reason){finish=choice.finish_reason;diagnostic.finishReason=finish;}
+            const delta=choice.delta||{};
+            if(choice.finish_reason||delta.content||delta.reasoning_content||delta.reasoning||delta.reasoning_text||delta.tool_calls?.some(call=>call.function?.name||call.function?.arguments))deadline.touch();
+            const thought=[delta.reasoning_content,delta.reasoning,delta.reasoning_text].find(v=>typeof v==='string'&&v.length);
+            if(thought&&!keepEarlierReasoning){
+              reasoningItem=await segment('reasoning');
+              reasoningItem.content[0]||={type:'reasoning_text',text:''};appendText(reasoningItem.content[0],'text',thought,textSpool);
+              await emit('response.reasoning_text.delta',{item_id:reasoningItem.id,output_index:reasoningItem.index,content_index:0,delta:thought});
+            }
+            if(delta.content){
+              textItem=await segment('message');
+              textItem.content[0]||={type:'output_text',text:'',annotations:[]};appendText(textItem.content[0],'text',delta.content,textSpool);
+              await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
+            }
+            for(const call of delta.tool_calls||[]){
+              const acc=calls.get(call.index)||{name:'',nameParts:[],args:'',id:''};
+              if(call.function?.name){acc.name+=call.function.name;acc.nameParts.push(call.function.name);}
+              appendText(acc,'args',call.function?.arguments||'',textSpool);if(call.id&&call.id!==acc.id)acc.id+=call.id;calls.set(call.index,acc);
+            }
           }
-          if(delta.content){
-            textItem=await segment('message');
-            textItem.content[0]||={type:'output_text',text:'',annotations:[]};appendText(textItem.content[0],'text',delta.content,textSpool);
-            await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:delta.content});
-          }
-          for(const call of delta.tool_calls||[]){
-            const acc=calls.get(call.index)||{name:'',nameParts:[],args:'',id:''};
-            if(call.function?.name){acc.name+=call.function.name;acc.nameParts.push(call.function.name);}
-            appendText(acc,'args',call.function?.arguments||'',textSpool);if(call.id&&call.id!==acc.id)acc.id+=call.id;calls.set(call.index,acc);
-          }
+          diagnostic.stage='validate_completion';
+          if(!done||!finish)throw Error('INCOMPLETE_STREAM');
+        }catch(error){
+          await reconnect(error,!textItem);
+          keepEarlierReasoning=!!reasoningItem;
+          diagnostic.done=false;diagnostic.finishReason=null;
+          attempt--;continue;
         }
         await usageNotify(done&&finish?(finish==='length'?'failed':'succeeded'):'unknown');usageAttempt=null;
         if(attemptUsage){usage||={prompt_tokens:0,completion_tokens:0,total_tokens:0};for(const key of Object.keys(usage))usage[key]+=attemptUsage[key]||0;}
         diagnostic.stage='validate_completion';
-        if(!done||!finish)throw new Error('模型流未完整结束，请重试');
         if(!['stop','tool_calls','length'].includes(finish))throw new Error(`模型未正常完成：${finish}`);
         if(finish==='length'){
           // Tool calls are buffered below. Retry only while no answer text or
@@ -272,10 +330,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
             outputRetried=true;budget=next;body.max_tokens=next.maxOutputTokens;
             diagnostic.outputLimitRetried=true;diagnostic.budget=next;diagnostic.outputBudgets.push(next.maxOutputTokens);
             diagnostic.stage='recover_output';diagnostic.done=false;diagnostic.finishReason=null;
-            controller.signal.throwIfAborted();await usageBegin(attempt+1);
-            upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-output-recovery',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(body),redirect:'error',signal:deadline.signal});
-            diagnostic.httpStatus=upstream.status;
-            if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
+            upstream=await openUpstream(JSON.stringify(body),'-output-recovery');
             continue;
           }
           diagnostic.outputRecovery= textItem?'visible-output-preserved':'budget-exhausted';
@@ -295,10 +350,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
           // Separate any streamed narration from the corrected response.
           if(textItem){textItem=await segment('message');appendText(textItem.content[0],'text','\n\n',textSpool);await emit('response.output_text.delta',{item_id:textItem.id,output_index:textItem.index,content_index:0,delta:'\n\n'});}
           diagnostic.stage='correct_tools';diagnostic.done=false;diagnostic.finishReason=null;
-          await usageBegin(attempt+1);
-          upstream=await fetch(config.baseUrl+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','X-Model-Client':'atelier-codex','X-Model-Session-Id':sessionId,'X-Request-Id':diagnostic.requestId+'-tool-correction',...(config.apiKey?{Authorization:`Bearer ${config.apiKey}`}:{})},body:JSON.stringify(correction),redirect:'error',signal:deadline.signal});
-          diagnostic.httpStatus=upstream.status;
-          if(!upstream.ok){const detail=await readUpstreamError(upstream,config.apiKey);Object.assign(diagnostic,detail);throw new Error(`模型服务返回 HTTP ${upstream.status}：${detail.upstreamMessage}`);}
+          upstream=await openUpstream(JSON.stringify(correction),'-tool-correction');
           continue;
         }
         break;
@@ -336,7 +388,7 @@ async function startChatBridge(config, sessionId = randomUUID(), passthrough = f
       diagnostic.timedOut=deadline.signal.reason?.code==='MODEL_RESPONSE_TIMEOUT';
       if(diagnostic.timedOut)error=Error('模型服务长时间未返回有效内容，已停止等待。请检查服务后继续任务。');
       diagnostic.errorType=error.name;
-      diagnostic.causeCode=typeof error.cause?.code==='string'?error.cause.code:undefined;
+      diagnostic.causeCode=diagnostic.streamInterrupted?diagnostic.interruption?.causeCode:error.cause?.code;
       // Error details are bounded and sanitized before they reach diagnostics.
       diagnostic.reason=error.message==='CONTEXT_LIMIT'?'模型上下文容量不足，请减少参考内容或压缩对话':error instanceof SyntaxError?'JSON 格式解析失败':/^(模型|工具|此协议|请求过大)/.test(error.message)?error.message:'连接读取或转发失败';
       report();

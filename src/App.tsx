@@ -48,7 +48,7 @@ const SkillExtensionCenter=lazy(()=>import('./SkillExtensionCenter'));
 const Workforce=lazy(()=>import('./Workforce'));
 const SettingsWorkspace=lazy(()=>import('./SettingsWorkspace'));
 const Conversation=lazy(()=>import('./Conversation'));
-const TerminalPanel=lazy(()=>import('./TerminalPanel'));
+import TerminalDock from './TerminalDock';
 import { ArrowRight, Check, ChevronDown, ChevronRight, Info, Cloud, Cpu, FileText, Folder, FolderPlus, HardDrive, Laptop, LayoutGrid, Monitor, Moon, PanelRight, PanelLeft, Plus, Puzzle, Settings, ShieldCheck, Sun, Trash2, X } from 'lucide-react';
 import Modal from './Modal';
 import { bridge, emptyWorkspace } from './storage';
@@ -91,9 +91,6 @@ function WorkspaceApp() {
   const nativeExtension=extensions.installed.find(item=>item.manifest.id===extensionViewId);
   const extensionView=extensionViews.find(view=>view.id===extensionViewId);
   useEffect(()=>{const open=(event:Event)=>{setExtensionViewId((event as CustomEvent<string>).detail);setSettingsOpen(false);messageTrigger.current=null;setMessagesOpen(false);setActiveGroup('extensions');setPage('extension-view');};window.addEventListener('extensions:open',open);return()=>window.removeEventListener('extensions:open',open);},[]);
-  const [terminalOpen,setTerminalOpen]=useState(false);
-  const [terminalRequest,setTerminalRequest]=useState<{serial:number;directory?:string}|null>(null);
-  useEffect(()=>{const open=(event:Event)=>{setSettingsOpen(false);setTerminalOpen(true);setTerminalRequest(old=>({serial:(old?.serial||0)+1,directory:(event as CustomEvent).detail?.directory}));};window.addEventListener('terminal:open',open);return()=>window.removeEventListener('terminal:open',open);},[]);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [settingsSection,setSettingsSection]=useState('general');
   const [centerVisited,setCenterVisited]=useState(resumeView.page==='plugins');
@@ -257,6 +254,11 @@ function WorkspaceApp() {
 
   // State setters are batched: callers opening a task must pass its destination project.
   const navigate = (next: Page, destinationProjectId = projectId, settingsTrigger?: HTMLElement) => { if(next==='messages'){openMessages();return;}messageTrigger.current=null;setMessagesOpen(false); if(next==='settings'){settingsFocus.current=settingsTrigger??(document.activeElement instanceof HTMLElement?document.activeElement:null);setSettingsOpen(true);return;}setSettingsOpen(false);if(next!=='workforce')setWorkforceConversation(null);if(next==='workforce'){setWorkforceVisited(true);setActiveGroup('workforce');}if(next==='home'||next==='projects')setActiveGroup(next==='projects'||destinationProjectId?'projects':'chats');setPage(next); };
+  useEffect(()=>{
+    const open=()=>{settingsFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setSettingsSection('storage');setSettingsOpen(true);};
+    window.addEventListener('ambleloft:storage',open);
+    return ()=>window.removeEventListener('ambleloft:storage',open);
+  },[]);
   const enterGroup=(group:WorkspaceGroup)=>{
     const nextOpen=activeGroup!==group||!sidebar;
     if(group==='workforce')navigate('workforce');
@@ -421,6 +423,10 @@ function WorkspaceApp() {
   const statusProject=(!activityLayout||activeGroup==='projects')
     ? page==='home'?fileProject:page==='projects'?currentProject:undefined
     : undefined;
+  const taskTerminal = page==='home'||(page==='workforce'&&!!workforceConversation);
+  const terminalRunId = taskTerminal ? currentRun?.id : undefined;
+  const terminalViewId = (terminalRunId||page==='projects') ? undefined
+    : page==='home' ? (continuingDraft ? 'draft:'+continuingDraft.id : 'new-task') : page;
   const fileRoot=currentRun?.remote?.path||currentRun?.cwd||fileProject?.path||'';
   const fileScope=JSON.stringify([currentRun?.id||'new',fileProject?.id||'',fileRoot]);
   const [changeView,setChangeView]=useState<{scope:string;changes:import('./types').TurnFileChanges}|null>(null);
@@ -429,8 +435,8 @@ function WorkspaceApp() {
   const [expandedFileScope,setExpandedFileScope]=useState<string|null>(null);
   const [fileChatHost,setFileChatHost]=useState<HTMLDivElement|null>(null);
   const canBrowseFiles=(page==='home'||page==='projects'||page==='workforce'&&!!workforceConversation)&&!!fileProject;
-  const [fileRequest,setFileRequest]=useState<{scope:string;path:string;id:number}|null>(null);
-  const openDeliveredFile=(file:import('./types').DeliveredFile)=>{setFileRequest(previous=>({scope:fileScope,path:file.path,id:(previous?.id||0)+1}));setChangeView(null);setFilesOpen(true);};
+  const [fileRequest,setFileRequest]=useState<{scope:string;path:string;id:number;artifactId?:string}|null>(null);
+  const openDeliveredFile=(file:import('./types').DeliveredFile)=>{setFileRequest(previous=>({scope:fileScope,path:file.path,artifactId:file.id,id:(previous?.id||0)+1}));setChangeView(null);setFilesOpen(true);};
 
   const windowsDesktop=!!window.desktop&&(window.desktop.platform??device?.platform)==='win32';
   const windowToolbar=(<header className="toolbar"><div className="toolbar-left">{!windowsDesktop&&<><SidebarTrigger aria-controls="workspace-sidebar" aria-expanded={sidebar} aria-label={sidebar ? t("隐藏侧栏") : t("显示侧栏")}/><span className="toolbar-divider" /></>}{page==='home'&&currentRun&&currentRun.collaboration?.mode!=='discussion'&&<TaskProjectInfo connection={sshState.connections.find(c=>c.id===workspace.projects.find(p=>p.id===currentRun.projectId)?.connectionId)} loading={sshState.loading} unavailable={!!sshState.error} key={currentRun.id} project={workspace.projects.find(p=>p.id===currentRun.projectId)} cwd={currentRun.remote?.path||currentRun.cwd||''} permission={currentRun.permission||'default'} count={navTasks.filter(task=>task.projectId===currentRun.projectId).length} edit={project=>{setProjectEditor({...project});}}/>}<span className="toolbar-title" title={pageLabel}>{page==='home'&&currentRun?currentRun.title:t(pageLabel||'')}</span></div><div className="toolbar-right">{!windowsDesktop&&(activityLayout||!sidebar)&&<><button className="icon-button" aria-label={t("新建任务")} onClick={()=>newTask()}><Plus size={18}/></button><GlobalSidebarActions/></>}{canBrowseFiles&&!filesOpen&&!activeChanges&&<button className="icon-button" onClick={() => {setChangeView(null);setFilesOpen(!filesOpen);}} aria-label={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} title={t(filesOpen?"隐藏侧边面板":"显示侧边面板")} aria-pressed={filesOpen}><PanelRight size={20} /></button>}</div></header>);
@@ -502,7 +508,8 @@ function WorkspaceApp() {
       {activeChanges&&<FileChangesPanel key={activeChanges.turnKey} changes={activeChanges} close={()=>setChangeView(null)}/>}
       {canBrowseFiles&&fileProject&&!activeChanges&&<ProjectFilePanel full={expandedFileScope===fileScope} setFull={value=>setExpandedFileScope(value?fileScope:null)} request={fileRequest?.scope===fileScope?fileRequest:null} key={fileScope} scope={fileScope} context={{projectId:fileProject.id,runId:currentRun?.id}} rootHint={fileRoot} open={filesOpen} close={()=>{setFilesOpen(false);requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.toolbar-right button')?.focus());}} paused={settingsOpen}/>}
       </div>
-      {terminalRequest&&<Suspense fallback={null}><TerminalPanel context={{projectId:(page==='home'?fileProject:currentProject)?.id||'',runId:page==='home'?currentRun?.id:undefined}} request={terminalRequest} open={terminalOpen} hide={()=>setTerminalOpen(false)}/></Suspense>}
+      <TerminalDock projectId={taskTerminal ? fileProject?.id||'' : page==='projects' ? currentProject?.id||'' : ''}
+        runId={terminalRunId} viewId={terminalViewId} setSettingsOpen={setSettingsOpen}/>
     </div>
     {notice && <div className="toast" role="status"><Info size={16} />{notice}</div>}
     {projectEditor && <ProjectEditor key={projectEditor.id} project={projectEditor} change={project=>{setManagementError('');setProjectEditor(project);}} existing={workspace.projects.some(p=>p.id===projectEditor.id)} busy={managing} error={managementError} close={()=>setProjectEditor(null)} save={()=>void saveProject()} remove={()=>void removeProject()} newTask={()=>{newTask(projectEditor.id);setProjectEditor(null);}}/>}

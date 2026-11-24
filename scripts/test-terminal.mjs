@@ -13,7 +13,7 @@ try{
  await page.evaluate(async root=>{await window.desktop.patchWorkspace({changes:[{kind:'project',action:'put',id:'terminal-test',expectedRevision:null,value:{id:'terminal-test',name:'Terminal test',path:root,createdAt:new Date().toISOString()}}]});},root);
  await page.reload();await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'Terminal test',exact:true}).click();
  const open=()=>app.evaluate(({Menu})=>{const view=Menu.getApplicationMenu().items.find(i=>i.label==='视图');assertMenu(view);function assertMenu(v){if(!v)throw Error('View menu missing');}view.submenu.items.find(i=>i.label==='打开终端').click();});
- await open();try{await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);}catch(e){console.error(await page.locator('.terminal-panel').innerText(),errors);throw e;}
+ await open();try{await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(1);}catch(e){console.error(await page.locator('.terminal-panel').innerText(),errors);throw e;}
  await expect(page.locator('.terminal-error')).toHaveCount(0);
  const first=(await page.evaluate(()=>window.desktop.terminal.list()))[0];assert.equal(first.cwd,await realpath(root));
  await page.locator('.terminal-screen:visible .xterm-helper-textarea').fill('');
@@ -55,29 +55,29 @@ try{
  await waitForPowerShellPrompt();
  await page.keyboard.type('echo INTERRUPT_""OK');await page.keyboard.press('Enter');
  await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('INTERRUPT_OK');
- await open();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);
+ await open();await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(1);
  await page.getByRole('button',{name:'收起终端',exact:true}).click();await expect(page.locator('.terminal-panel')).toBeHidden();
  assert.equal((await page.evaluate(()=>window.desktop.terminal.list())).length,1);
  await page.evaluate(id=>window.desktop.terminal.write({id,data:'echo HIDDEN_STILL_RUNNING\r'}),first.id);
  await open();await expect(page.locator('.terminal-screen:visible .xterm-rows')).toContainText('HIDDEN_STILL_RUNNING');
- await page.getByRole('button',{name:'新建终端',exact:true}).click();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(2);
+ await page.getByRole('button',{name:'新建终端',exact:true}).click();await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(2);
  await page.getByRole('button',{name:'最大化终端',exact:true}).click();await expect(page.locator('.workspace-content')).toBeHidden();
  await page.getByRole('button',{name:'还原终端',exact:true}).click();await expect(page.locator('.workspace-content')).toBeVisible();
  const running=(await page.evaluate(()=>window.desktop.terminal.list())).at(-1);
  await page.evaluate(id=>window.desktop.terminal.write({id,data:`node -e "require('fs').writeFileSync('child.pid',String(process.pid));setInterval(()=>{},1000)"\r`}),running.id);
  await expect.poll(async()=>{try{return Number(await readFile(path.join(root,'child.pid'),'utf8'))>0;}catch{return false;}}).toBe(true);
  const childPid=Number(await readFile(path.join(root,'child.pid'),'utf8'));
- await page.getByRole('button',{name:'结束终端',exact:true}).click();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);
+ await page.getByRole('button',{name:'结束终端',exact:true}).click();await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(1);
  await expect.poll(()=>{try{process.kill(childPid,0);return false;}catch{return true;}}).toBe(true);
  await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'不关联项目',exact:true}).click();
- await open();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);
+ await open();await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(1);
  assert.equal((await page.evaluate(()=>window.desktop.terminal.list())).length,2);
  await page.getByRole('combobox',{name:'当前项目',exact:true}).click();await page.getByRole('option',{name:'Terminal test',exact:true}).click();
- await open();await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(1);
+ await open();await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(1);
  await page.getByRole('button',{name:'显示侧边面板',exact:true}).click();
  await page.getByRole('complementary',{name:'项目文件树'}).getByRole('treeitem',{name:'folder',exact:true}).click({button:'right'});
  await page.getByRole('menuitem',{name:'在此处打开终端',exact:true}).click();
- await expect(page.locator('.terminal-tabs [role=tab]')).toHaveCount(2);
+ await expect(page.getByRole('tablist',{name:'终端会话'}).getByRole('tab')).toHaveCount(2);
  assert.equal((await page.evaluate(()=>window.desktop.terminal.list())).at(-1).cwd,path.join(await realpath(root),'folder'));
  await page.getByRole('button',{name:'结束终端',exact:true}).click();
  // Invalid directory escape and unknown shell must never reach process spawning.

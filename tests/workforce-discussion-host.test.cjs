@@ -643,3 +643,63 @@ test('host recovers without configured output capacity and applies only the comp
  await f.start({prompt:'本地测试通过后到远端构建 Docker 镜像再测试。检查三个项目的功能缺陷和流程。'});const result=await f.finish();
  assert.deepEqual(budgets,[8192,16384]);assert.equal(result.host.status,'completed',result.host.error);assert.equal(result.host.steps.length,1);assert.equal(f.runtime.starts.length,0);assert.equal((await f.service.read()).taskDrafts.length,0);
 });
+
+test('host retries a severed reasoning stream without duplicating the message or applying partial decisions',async t=>{
+ const f=await fixture(t);
+ let calls=0;
+ const server=require('node:http').createServer(async(req,res)=>{
+  for await(const chunk of req)void chunk;
+  if(++calls===1){
+   res.writeHead(200,{'Content-Type':'text/event-stream'});
+   res.write('data: '+JSON.stringify({choices:[{delta:{reasoning_content:'Partial reasoning'}}]})+'\n\n');
+   setTimeout(()=>res.destroy(),30);
+  }else{
+   res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(response())}}]}));
+  }
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();}));
+ f.service.workforce.providers.secret=async()=>({model:'deepseek-test',protocol:'chat',baseUrl:'http://127.0.0.1:'+server.address().port});
+ await f.start();const r=await f.finish();
+ assert.equal(calls,2,JSON.stringify(r.host));assert.equal(r.host.status,'completed');assert.equal(r.host.steps.length,1);
+ assert.equal(f.runtime.starts.length,0);
+ assert.equal(r.host.activity.interruption.causeCode,'UND_ERR_SOCKET');
+});
+function brokenHostStream(){
+ return new Response(new ReadableStream({start(controller){
+  controller.enqueue(Buffer.from('data: '+JSON.stringify({id:'req-test',choices:[{delta:{reasoning_content:'Partial reasoning'}}]})+'\n\n'));
+  setImmediate(()=>controller.error(Object.assign(new TypeError('terminated'),{cause:{code:'UND_ERR_SOCKET'}})));
+ }}),{headers:{'content-type':'text/event-stream'}});
+}
+test('retry after delegation resumes the same round and keeps an expert that was still running at disconnect',async t=>{
+ const f=await fixture(t),original=global.fetch;t.after(()=>{global.fetch=original;});
+ f.service.workforce.providers.secret=async()=>({model:'deepseek-test',protocol:'chat',baseUrl:'http://fixture.invalid/v1'});
+ let calls=0;
+ global.fetch=async(_url,options)=>{
+  calls++;
+  if(calls===2||calls===3){
+   // A follow-up can resume an expert while its host summary is streaming.
+   f.runtime.runs[0].status='running';return brokenHostStream();
+  }
+  const input=JSON.parse(JSON.parse(options.body).messages.at(-1).content);
+  if(calls===4)assert.deepEqual(input.usedExperts,['product']);
+  return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(calls===1?delegate('product'):response())}}]}));
+ };
+ await f.start();
+ await until(()=>f.runtime.starts.length===1);
+ f.runtime.runs[0].status='completed';
+ const failed=await f.finish();
+ assert.equal(calls,3,JSON.stringify(failed.host));assert.equal(failed.host.status,'failed');assert.equal(failed.host.retryPass,1);
+ assert.match(failed.host.error,/模型连接中断/);
+ assert.match(failed.host.activity.reasoning,/Partial reasoning/);
+ assert.equal(failed.host.outputDiagnostics.interruption.requestId,'req-test');
+ assert.equal(f.runtime.runs[0].status,'running');
+ f.runtime.runs[0].status='completed';
+ const retry={requestId:failed.id,expectedRevision:failed.host.revision,locale:'zh-CN'};
+ const results=await Promise.allSettled([f.service.retryDiscussionHost(retry),f.service.retryDiscussionHost(retry)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const completed=await f.finish();
+ assert.equal(calls,4);assert.equal(completed.id,failed.id);assert.equal(completed.host.status,'completed');
+ assert.equal(completed.host.steps.length,2);assert.equal(f.runtime.starts.length,1);
+ assert.equal((await f.service.snapshot()).requests.length,1);
+});

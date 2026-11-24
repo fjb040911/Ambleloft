@@ -1,16 +1,17 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {ChevronLeft,ChevronRight,ZoomIn,ZoomOut} from 'lucide-react';
 import {getDocument,GlobalWorkerOptions,type PDFDocumentProxy} from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {t} from './i18n';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const assets=new URL('./pdfjs/',window.document.baseURI).href;
-export default function FilePdf({url}:{url:string}) {
+type PdfSource = {url:string;data?:never} | {data:Uint8Array;url?:never};
+export default function FilePdf({url,data}:PdfSource) {
  const canvas=useRef<HTMLCanvasElement>(null),host=useRef<HTMLDivElement>(null);
  const [document,setDocument]=useState<PDFDocumentProxy|null>(null),[page,setPage]=useState(1),[zoom,setZoom]=useState(1),[width,setWidth]=useState(400),[error,setError]=useState(''),[loading,setLoading]=useState(true);
- useEffect(()=>{let cancelled=false;setDocument(null);setPage(1);setError('');setLoading(true);const task=getDocument({url,enableXfa:false,useSystemFonts:true,cMapUrl:assets+'cmaps/',standardFontDataUrl:assets+'standard_fonts/',wasmUrl:assets+'wasm/',iccUrl:assets+'iccs/'});task.promise.then(value=>{if(!cancelled)setDocument(value);}).catch(e=>{if(!cancelled){setError(e.message);setLoading(false);}});return()=>{cancelled=true;void task.destroy();};},[url]);
+ useEffect(()=>{let cancelled=false;setDocument(null);setPage(1);setError('');setLoading(true);const task=getDocument({...(data ? {data:data.slice()} : {url}),enableXfa:false,useSystemFonts:true,cMapUrl:assets+'cmaps/',standardFontDataUrl:assets+'standard_fonts/',wasmUrl:assets+'wasm/',iccUrl:assets+'iccs/'});task.promise.then(value=>{if(!cancelled)setDocument(value);}).catch(e=>{if(!cancelled){setError(e.message);setLoading(false);}});return()=>{cancelled=true;void task.destroy();};},[url,data]);
  useEffect(()=>{if(!host.current)return;const observer=new ResizeObserver(entries=>setWidth(entries[0].contentRect.width));observer.observe(host.current);return()=>observer.disconnect();},[]);
- useEffect(()=>{
+ useLayoutEffect(()=>{
   if(!document||!canvas.current||width<=0)return;
   let cancelled=false,render:ReturnType<Awaited<ReturnType<PDFDocumentProxy['getPage']>>['render']>|undefined;
   setLoading(true);setError('');

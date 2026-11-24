@@ -62,3 +62,48 @@ test('ongoing reasoning resets the idle deadline without imposing a total task t
  const f=await fixture(t,(_body,_n,signal)=>{let count=0,ended=false;return new Response(new ReadableStream({start(controller){signal.addEventListener('abort',()=>{if(!ended){ended=true;controller.error(signal.reason);}},{once:true});},async pull(controller){await new Promise(resolve=>setTimeout(resolve,20));if(ended)return;count++;if(count<=6)controller.enqueue(new TextEncoder().encode(frame({choices:[{delta:{reasoning_content:'Still making progress'},finish_reason:null}]})));else{ended=true;controller.enqueue(new TextEncoder().encode(frame({choices:[{delta:{content:'Done'},finish_reason:'stop'}]})+'data: [DONE]\n\n'));controller.close();}}}),{headers:{'content-type':'text/event-stream'}});},{idleTimeoutMs:80});
  const result=await f.send();assert.match(result.text,/response.completed/);assert.notEqual(f.diagnostics.at(-1).timedOut,true);
 });
+
+for(const profile of ['chat','expert'])test(profile+' retries a disconnected inference without publishing its partial tool call',async t=>{
+ const partial={id:'partial',index:0,function:{name:'check',arguments:'{'}};
+ const complete={id:'complete',index:0,function:{name:'check',arguments:'{}'}};
+ const f=await fixture(t,(_b,n)=>n===1?new Response(frame({choices:[{delta:{reasoning_content:'review',tool_calls:[partial]}}]})):answer({tool_calls:[complete]},'tool_calls'),{profile});
+ const result=await f.send({tools:[{type:'function',name:'check'}]});
+ assert.equal(f.requests.length,2);
+ assert.doesNotMatch(result.text,/"call_id":"partial"/);
+ const events=result.text.split('\n').filter(s=>s.startsWith('data: ')).map(s=>JSON.parse(s.slice(6)));
+ assert.deepEqual(events.filter(e=>e.type==='response.output_item.done'&&e.item.type==='function_call').map(e=>e.item.call_id),['complete']);
+ assert.equal(events.filter(e=>e.type==='response.completed').length,1);
+ assert.equal(f.diagnostics.at(-1).streamRetried,true);
+});
+test('disconnect after visible answer is actionable and does not replay text',async t=>{
+ const f=await fixture(t,()=>new Response(frame({choices:[{delta:{content:'partial answer'}}]})));
+ const result=await f.send();
+ assert.equal(f.requests.length,1);
+ assert.match(result.text,/模型连接中断/);
+ assert.equal(f.diagnostics.at(-1).streamInterrupted,true);
+});
+test('Responses disconnect after an executable item is never replayed',async t=>{
+ const f=await fixture(t,()=>new Response(frame({type:'response.output_item.done',item:{type:'function_call',id:'one',name:'check',arguments:'{}'}}),{headers:{'content-type':'text/event-stream'}}),{passthrough:true});
+ const result=await f.send();
+ assert.equal(f.requests.length,1);assert.match(result.text,/模型连接中断/);
+});
+test('Responses can replace an interrupted envelope before forwarding any item',async t=>{
+ const f=await fixture(t,(_b,n)=>new Response(n===1?
+  frame({type:'response.created',response:{id:'discarded'}}):
+  frame({type:'response.completed',response:{id:'replacement',status:'completed',output:[]}}),{headers:{'content-type':'text/event-stream'}}),{passthrough:true});
+ const result=await f.send();
+ assert.equal(f.requests.length,2);
+ assert.doesNotMatch(result.text,/discarded/);
+ assert.match(result.text,/replacement/);
+});
+test('Responses never retries an uncertain service-side operation',async t=>{
+ const f=await fixture(t,()=>new Response(frame({type:'response.created',response:{id:'started'}}),{headers:{'content-type':'text/event-stream'}}),{passthrough:true});
+ const result=await f.send({tools:[{type:'web_search_preview'}]});
+ assert.equal(f.requests.length,1);
+ assert.match(result.text,/模型连接中断/);
+});
+test('a provider SSE error passes through unchanged without a transport retry',async t=>{
+ const data=frame({type:'error',code:'invalid_request',message:'Request rejected'});
+ const f=await fixture(t,()=>new Response(data,{headers:{'content-type':'text/event-stream'}}),{passthrough:true});
+ const result=await f.send();assert.equal(result.text,data);assert.equal(f.requests.length,1);
+});

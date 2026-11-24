@@ -27,7 +27,7 @@ function checks(values){
 const str={type:'string'};
 const policySchema={type:'object',additionalProperties:false,required:['mode','maxRepairs','maxRetries'],properties:{mode:{type:'string',enum:['auto','manual','complete']},maxRepairs:{type:'integer',minimum:0,maximum:3},maxRetries:{type:'integer',minimum:0,maximum:3}}};
 const checksSchema={type:'array',maxItems:12,items:{type:'object',additionalProperties:false,required:['id','kind','requirement','evidence','target','expected','operator'],properties:{id:str,kind:{type:'string',enum:['rubric','output-equals','tool-exit','metric']},requirement:str,evidence:str,target:str,expected:str,operator:{type:'string',enum:['eq','gte','lte']}}}};
-const resultHash=run=>hash({messages:run.messages,tools:run.tools,fileChanges:run.fileChanges,workEvidence:run.workEvidence});
+const rawResultHash=run=>hash({messages:run.messages,tools:run.tools,fileChanges:run.fileChanges,workEvidence:run.workEvidence});
 function commandMatches(recorded,target){
  if(recorded===target)return true;
  // The engine may display an argv wrapper rather than the submitted script.
@@ -114,4 +114,8 @@ async function evaluate(service,plan,p,run,signal){
  return {outcome,results,reason:results.map(r=>`${rules.find(c=>c.id===r.id)?.requirement||r.id}：${r.reason}`).join('\n').slice(0,4000)};
 }
 function descendants(plan,id){const ids=new Set([id]);let changed=true;while(changed){changed=false;for(const p of plan.packages)if(!ids.has(p.id)&&p.definition.dependencies.some(d=>ids.has(d))){ids.add(p.id);changed=true;}}return [...ids];}
-module.exports={DEFAULT_POLICY,policy,effective,checks,policySchema,checksSchema,resultHash,hash,evaluate,verifyWorkspace,deterministic,descendants};
+function resultHash(run){
+ const current=rawResultHash(run);
+ return run.reasoningEvidence?.after===current?run.reasoningEvidence.before:current;
+}
+module.exports={rawResultHash,DEFAULT_POLICY,policy,effective,checks,policySchema,checksSchema,resultHash,hash,evaluate,verifyWorkspace,deterministic,descendants};

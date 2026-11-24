@@ -44,3 +44,23 @@ test('Office endpoints retain project/run boundaries and reject ungranted genera
  await assert.rejects(api.office({projectId:'p',path:'../outside.xlsx'}));await assert.rejects(api.office({projectId:'p',runId:'r',path:'deck.pptx'}));
  const context=await api.context({runId:'r',artifactId:'a'});const response=await api.resource({url:context.baseUrl+'deck.pptx?office='+'a'.repeat(64)});assert.equal(response.status,404);
 });
+
+test('chat spreadsheet attachments use the delivery workbook parser without a project',async t=>{
+ const root=await fixture(t),book=XLSX.utils.book_new();
+ for(const name of ['Overview','GPU','Power','Acceptance'])
+  XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet([[name],['Test',42]]),name);
+ const api=createOfficePreview({directory:path.join(root,'cache')});
+ for(const [extension,bookType] of [['XLSX','xlsx'],['xls','biff8']]){
+  const file=path.join(root,'attachment.'+extension);
+  await fs.writeFile(file,XLSX.write(book,{type:'buffer',bookType}));
+  const preview=await api.spreadsheetAttachment({path:file});
+  assert.deepEqual(preview.sheets.map(sheet=>sheet.rows[0][0]),book.SheetNames);
+  assert.deepEqual(preview,await api.preview(file));
+ }
+ await assert.rejects(api.spreadsheetAttachment({path:'relative.xlsx'}),/路径无效/);
+ await assert.rejects(api.spreadsheetAttachment({path:path.join(root,'slides.pptx')}),/路径无效/);
+ const file=path.join(root,'missing.xlsx');
+ await assert.rejects(api.spreadsheetAttachment({path:file}),/不可访问/);
+ await fs.writeFile(file,'unrelated text');
+ await assert.rejects(api.spreadsheetAttachment({path:file}),/无法预览/);
+});
