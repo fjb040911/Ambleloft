@@ -24,20 +24,25 @@ function Spreadsheet({data}:{data:Extract<OfficeData,{kind:'spreadsheet'}>}){
   </div><div className="office-footnote">{t('显示单元格保存的结果；不重新计算公式，不展示图表和完整排版。')}</div>
  </div>;
 }
-export default function OfficePreview({context,path,version,reload=0,baseUrl,showRefresh=false}:{context:FileContext;path:string;version?:string;reload?:number;baseUrl:string;showRefresh?:boolean}){
+type OfficePreviewProps={path:string;version?:string;reload?:number;showRefresh?:boolean}&(
+ {attachment?:false;context:FileContext;baseUrl:string}|{attachment:true;context?:never;baseUrl?:never}
+);
+export default function OfficePreview({context,path,version,reload=0,baseUrl,showRefresh=false,attachment=false}:OfficePreviewProps){
  const [data,setData]=useState<OfficeData|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  const initial=useRef(true);
  useEffect(()=>{
   let cancelled=false;setBusy(true);setError('');
   const timer=setTimeout(()=>{
-   const api=window.desktop?.projectFiles;
-   if(!api?.office){setError(t('请在桌面应用中查看文件'));setBusy(false);return;}
-   api.office({...context,path,version}).then(value=>{if(!cancelled)setData(value);}).catch(e=>{if(!cancelled)setError(e.message);}).finally(()=>{if(!cancelled)setBusy(false);});
+   const request=attachment ? window.desktop?.readAttachmentSpreadsheet?.({path}) : window.desktop?.projectFiles?.office({...context,path,version});
+   if(!request){setError(t('请在桌面应用中查看文件'));setBusy(false);return;}
+   request.then(value=>{if(!cancelled)setData(value);}).catch(e=>{
+    if(!cancelled)setError(e.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/,''));
+   }).finally(()=>{if(!cancelled)setBusy(false);});
   },initial.current?0:1500);initial.current=false;
   return()=>{cancelled=true;clearTimeout(timer);};
- },[context.projectId,context.runId,context.artifactId,path,version,reload,retry]);
+ },[attachment,context?.projectId,context?.runId,context?.artifactId,path,version,reload,retry]);
  return <div className="office-preview">{showRefresh&&<div className="office-inline-toolbar"><Button variant="outline" aria-label={t('刷新文件')} onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('刷新文件')}</Button></div>}
   {(busy||error)&&<div className={error?'file-warning office-status':'file-notice office-status'} role={error?'alert':'status'}><span>{error?t(error):t(data?'正在更新预览…':'正在准备文档预览…')}{error&&data?' '+t('当前显示上次成功的预览。'):''}</span>{error&&<Button variant="outline" onClick={()=>setRetry(n=>n+1)}><RefreshCw size={14}/>{t('重试')}</Button>}</div>}
-  {data?.kind==='spreadsheet'?<Spreadsheet data={data}/>:data?.kind==='presentation'?<Suspense fallback={<p>{t('正在加载…')}</p>}><Slides url={baseUrl+path.split('/').map(encodeURIComponent).join('/')+'?office='+data.asset} slides={data.slides} legacy={data.legacy}/></Suspense>:!busy&&!error?<p>{t('没有可预览的内容')}</p>:null}
+  {data?.kind==='spreadsheet'?<Spreadsheet data={data}/>:data?.kind==='presentation'&&baseUrl?<Suspense fallback={<p>{t('正在加载…')}</p>}><Slides url={baseUrl+path.split('/').map(encodeURIComponent).join('/')+'?office='+data.asset} slides={data.slides} legacy={data.legacy}/></Suspense>:!busy&&!error?<p>{t('没有可预览的内容')}</p>:null}
  </div>;
 }

@@ -51,7 +51,7 @@ function automationPersistence(db,transaction,check){
    const data=require('../../electron/stored-json.cjs').boundedJSON(snapshot,256*1024)??JSON.stringify({conversationId,turnId,version:1,projectId:run.projectId,status:run.status,oversized:true});
    db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,data);
    require('../project-insights/persistence.cjs').captureActivity(db,snapshot,now);
-   if(run.status==='completed')for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
+   if(run.status==='completed'&&run.recoveredSaveTurnId!==turnId)for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
   });},
   handlers:{
    automationRead({context,input}){

@@ -1620,3 +1620,48 @@ test('standalone file links download, show one dismissible error and can be retr
  expect(await page.evaluate(()=>(window as any).__downloads)).toEqual(Array(2).fill({runId:'demo',path:'/fixture/配置 表.xlsx'}));
  await expect(notice).toHaveCount(0);await expect(draft).toHaveValue('未发送的草稿');
 });
+
+test('a guide stays in place with its focused field while the final answer streams',async({page})=>{
+ await prepare(page,'正在整理结论。');
+ await page.evaluate(()=>{
+  const w=window as any, run=w.__demoRun;
+  run.status='running';run.approvals=[];w.__emit();
+  const flow={id:'stream-guide',runId:'demo',turnKey:'u',revision:1,status:'editing',step:0,drafts:{},
+   template:{title:'配置引导',steps:[{id:'stack',title:'确认环境',fields:[{name:'stack',type:'text',label:'技术栈'}]},
+   {id:'scope',title:'确认范围',fields:[{name:'scope',type:'text',label:'扫描范围'}]}],submit:{label:'提交'} }};
+  w.desktop.forms.list=async()=>[structuredClone(flow)];
+  w.desktop.forms.action=async(input:any)=>{
+   if(input.action==='save')Object.assign(flow.drafts,{[flow.template.steps[flow.step].id]:input.values});
+   if(input.action==='next'){
+    if(flow.step===flow.template.steps.length-1)flow.status='completed';
+    else flow.step++;
+   }
+   flow.revision++;w.__formsChanged();return structuredClone(flow);
+  };
+  w.__formsChanged();
+ });
+ const card=page.getByLabel('配置引导',{exact:true}),field=card.getByRole('textbox');
+ await field.fill('C / C++');
+ // Sample painted frames, including the transition from a short to an overflowing transcript.
+ const drift=await field.evaluate(async input=>{
+  const w=window as any, run=w.__demoRun,top=input.getBoundingClientRect().top;
+  let max=0;
+  for(let i=0;i<24;i++){
+   run.messages.at(-1).text+='\n\n'+'逐项核对项目配置。'.repeat(10);
+   w.__emit();
+   await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+   max=Math.max(max,Math.abs(input.getBoundingClientRect().top-top));
+  }
+  return max;
+ });
+ expect(drift).toBeLessThanOrEqual(1);
+ await expect(field).toBeFocused();await expect(field).toHaveValue('C / C++');
+ await card.getByRole('button',{name:'下一步'}).click();
+ await expect(card.getByText('第 2 / 2 步 · 确认范围')).toBeVisible();
+ await page.setViewportSize({width:760,height:560});
+ await field.fill('src/');
+ await card.getByRole('button',{name:'提交',exact:true}).click();
+ await expect(page.locator('[data-turn-id="u"]').getByLabel('配置引导',{exact:true})).toContainText('已提交');
+ await expect(card).toHaveCount(1);
+ await expect(page.getByRole('textbox',{name:'继续对话',exact:true})).toBeInViewport();
+});

@@ -101,3 +101,16 @@ test('standalone downloads accept registered absolute or relative links, cancell
  await fs.symlink(destination,file);
  await assert.rejects(downloadArtifact(run,name,()=>assert.fail()),/工作目录/);
 });
+
+test('delivery availability distinguishes missing files from inaccessible targets and can be rechecked',async t=>{
+ const {artifactAvailability}=require('../electron/artifacts.cjs');
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'atelier-availability-'));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const cwd=path.join(root,'workspace');await fs.mkdir(cwd);
+ await fs.writeFile(path.join(root,'private'),'protected');
+ const run={cwd,artifacts:[{id:'old',path:'old.xlsx'},{id:'outside',path:'../private'}]};
+ assert.deepEqual(await artifactAvailability(run,['old','outside','unknown']),{old:'missing',outside:'unavailable'});
+ await fs.writeFile(path.join(cwd,'old.xlsx'),'restored');
+ assert.deepEqual(await artifactAvailability(run,['old']),{old:'available'});
+ assert.equal(run.artifacts.length,2);
+});

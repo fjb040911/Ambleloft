@@ -56,7 +56,7 @@ try{
  try {for(const [kind,table] of [['draft','drafts'],['run','runs']])for(const row of db.prepare(`SELECT id,data FROM ${table}`).all()){const item=JSON.parse(row.data);resources.identify(kind,row.id,item.projectId);}db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
 }catch(e){parentPort.postMessage({fatal:e.message});try{db?.close();}catch{};db=null;parentPort.close();process.exitCode=1;}
 const {collections}=require('./run-patches.cjs');
-function transaction(fn){if(db.isTransaction)return fn();require('./storage-timing.cjs').measure('databaseLockMs',()=>db.exec('BEGIN IMMEDIATE'));try{const value=fn();require('./storage-timing.cjs').measure('databaseCommitMs',()=>db.exec('COMMIT'));return value;}catch(e){db.exec('ROLLBACK');throw e;}}
+function transaction(fn){if(db.isTransaction)return fn();require('./storage-timing.cjs').measure('databaseLockMs',()=>db.exec('BEGIN IMMEDIATE'));try{const value=fn();require('./storage-timing.cjs').measure('databaseCommitMs',()=>db.exec('COMMIT'));return value;}catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}}
 function syncTable(table,values){
  const existing=new Map(db.prepare(`SELECT id,data FROM ${table}`).all().map(r=>[r.id,r.data]));
  const put=db.prepare(`INSERT INTO ${table}(id,data) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`);
@@ -148,7 +148,10 @@ if(continuity)transaction(()=>continuity.syncSources());
 function patchResources(input){const value=resources.patch(input);if(input.changes?.some(c=>c.kind==='project')){continuity.invalidate('workspace');for(const row of db.prepare("SELECT id,data FROM task_context_projections WHERE status='active'").all()){const p=JSON.parse(row.data),a=db.prepare('SELECT project_id FROM conversation_identities WHERE id=?').get(p.conversationId);const project=p.projectId?db.prepare('SELECT data FROM projects WHERE id=?').get(p.projectId):null;if(!a||(a.project_id||null)!==p.projectId||p.items.some(i=>i.fileTarget&&(!project||JSON.parse(project.data).type==='ssh'||JSON.parse(project.data).path!==i.fileTarget.configuredPath)))db.prepare("UPDATE task_context_projections SET status='invalidated' WHERE id=?").run(row.id);}continuity.syncSources();}return value;}
 const expertChat=expertChatModule.createStore(db,transaction,resources,continuity);
 const investigation=investigationModule.createStore(db,transaction,expertChat,continuity,resources);
+const historicalReasoning=require('./historical-reasoning.cjs');
 const handlers={
+ previewHistoricalReasoning:input=>historicalReasoning.scan(db,input),
+ cleanHistoricalReasoning:input=>transaction(()=>historicalReasoning.scan(db,input,input.tokens)),
  saveRunPatches,
  readRuntimeState(){
   const texts=require('./run-text-store.cjs'),{splitItem}=require('./run-patches.cjs');
@@ -241,4 +244,4 @@ const handlers={
  saveRuns,
  close(){db.exec('PRAGMA wal_checkpoint(TRUNCATE)');db.close();return true;}
 };
-if(db)parentPort.on('message',({id,method,args})=>{const timing=require('./storage-timing.cjs');timing.begin();try{if(!Object.hasOwn(handlers,method))throw new Error('未知数据库操作');const value=handlers[method](args);parentPort.postMessage({id,value,timings:timing.take()});if(method==='close')parentPort.close();}catch(e){parentPort.postMessage({id,error:e.message,code:e.code,timings:timing.take()});}});
+if(db)parentPort.on('message',({id,method,args})=>{const timing=require('./storage-timing.cjs');timing.begin();try{if(!Object.hasOwn(handlers,method))throw new Error('未知数据库操作');const value=handlers[method](args);parentPort.postMessage({id,value,timings:timing.take()});if(method==='close')parentPort.close();}catch(e){parentPort.postMessage({id,error:e.message,code:e.code,errcode:e.errcode,timings:timing.take()});}});

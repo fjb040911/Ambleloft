@@ -126,3 +126,13 @@ test('direct retry is limited to finished automatic fallback and preserves the a
  const before=(await f.read()).packages[0].definition;await f.control('retry','first');const p=(await f.read()).packages[0];
  assert.deepEqual(p.definition,before);assert.equal(p.attempts.length,2);assert.match(p.rework,/缺少测试证据/);assert.equal(p.attempts[0].review,undefined);
 });
+
+test('a recovered save stays in human review across scheduler ticks until explicit acceptance',async t=>{
+ const f=await fixture(t);await f.save([node('first'),node('next',['first'])]);await f.control('start');
+ const run=f.runtime.runs[0];run.recoveredSaveTurnId='turn';run.terminalTurnId='turn';
+ await f.finish('first');await f.flush();await f.flush();
+ const plan=await f.read(),p=plan.packages[0],attempt=p.attempts[0];
+ assert.equal(p.status,'review');assert.equal(plan.packages[1].attempts.length,0);assert.equal(f.runtime.runs.length,1);
+ await f.service.plans.review({planId:plan.id,packageId:p.id,attemptId:attempt.id,resultHash:attempt.resultHash,accepted:true,note:'Verified'});
+ await f.flush();await f.flush();assert.equal(f.runtime.runs.length,2);
+});

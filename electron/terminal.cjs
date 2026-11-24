@@ -22,10 +22,10 @@ function dimensions(input) {
   return { cols: input.cols, rows: input.rows };
 }
 class TerminalService {
-  constructor({ resolveContext, spawnRemote, spawn = (...args) => require('node-pty').spawn(...args), profiles = shellProfiles() }) {
-    this.resolveContext = resolveContext; this.spawnRemote=spawnRemote; this.spawn = spawn; this.profiles = profiles; this.sessions = new Map(); this.closedOwners = new Set(); this.closed = false;
+  constructor({ resolveContext, spawnRemote, onExit = () => {}, spawn = (...args) => require('node-pty').spawn(...args), profiles = shellProfiles() }) {
+    this.onExit = onExit; this.resolveContext = resolveContext; this.spawnRemote=spawnRemote; this.spawn = spawn; this.profiles = profiles; this.sessions = new Map(); this.closedOwners = new Set(); this.closed = false;
   }
-  info(s) { return { id: s.id, projectId: s.projectId, runId: s.runId, cwd: s.cwd, shell: s.shell, remote:!!s.connectionId, exited: s.exited, exitCode: s.exitCode }; }
+  info(s) { return { id: s.id, projectId: s.projectId, runId: s.runId, viewId: s.viewId, cwd: s.cwd, shell: s.shell, remote:!!s.connectionId, exited: s.exited, exitCode: s.exitCode }; }
   get(owner, id) { const s = this.sessions.get(id); if (!s || s.owner !== owner.id) throw Error('Terminal not found'); return s; }
   list(owner) { return [...this.sessions.values()].filter(s => s.owner === owner.id).map(s => this.info(s)); }
   async create(owner, input = {}) {
@@ -40,33 +40,37 @@ class TerminalService {
     const pty = context.connectionId ? await this.spawnRemote(context,size) : this.spawn(profile.id, profile.args, {name:'xterm-256color', ...size, cwd:context.cwd, env});
     if(this.closed||this.closedOwners.has(owner.id)){pty.kill();throw Error('Terminal owner closed');}
     if(this.list(owner).length>=16){pty.kill();throw Error('最多同时保留 16 个终端');}
-    const s = {id:randomUUID(), owner:owner.id, ...context, shell:context.environment?.kind==='docker'?'Docker · '+context.environment.containerName:context.connectionId?'SSH bash':profile.name, pty, output:'', paused:false, exited:false, exitCode:null};
+    const s = {id:randomUUID(), owner:owner.id, ...context, viewId:!context.runId && typeof input.viewId==='string' ? input.viewId : undefined, shell:context.environment?.kind==='docker'?'Docker · '+context.environment.containerName:context.connectionId?'SSH bash':profile.name, pty, exited:false, exitCode:null};
+    try {
+      const {TerminalScreen} = require('./terminal-screen.cjs');
+      s.screen = new TerminalScreen(pty,size,exitCode=>{
+        s.exited = true;
+        s.exitCode = exitCode;
+        this.onExit(owner,this.info(s));
+      });
+    } catch (error) { pty.kill(); throw error; }
     this.sessions.set(s.id, s);
-    s.data = pty.onData(data => {
-      s.output += data;
-      if (s.output.length >= 262144 && !s.paused) { s.paused = true; pty.pause(); }
-      // Bound memory even if a platform delivers data already queued before pause.
-      if (s.output.length > 1048576) s.output = '\r\n[输出过多，部分内容已截断]\r\n' + s.output.slice(-524288);
-    });
-    s.exit = pty.onExit(({exitCode}) => {s.exited = true; s.exitCode = exitCode;});
     return this.info(s);
   }
-  read(owner, input) {
-    const s = this.get(owner, input?.id);
-    const data = s.output; s.output = '';
-    if (s.paused && !s.exited) {s.paused = false; s.pty.resume();}
-    return {data, exited:s.exited, exitCode:s.exitCode};
-  }
+  attach(owner,input) { return this.get(owner,input?.id).screen.attach(input.token); }
+  detach(owner,input) { this.get(owner,input?.id).screen.detach(input.token); }
+  read(owner,input) { return this.get(owner,input?.id).screen.read(input.token); }
+  clear(owner,input) { this.get(owner,input?.id).screen.clear(); }
   write(owner, input) {
     const s = this.get(owner, input?.id);
     if (typeof input.data !== 'string' || input.data.length > 65536) throw Error('Invalid terminal input');
-    if (s.exited) throw Error('终端已退出');
+    if (s.screen.ended) throw Error('终端已退出');
     s.pty.write(input.data);
   }
-  resize(owner, input) {const s = this.get(owner, input?.id); const size = dimensions(input); if (!s.exited) s.pty.resize(size.cols, size.rows);}
+  resize(owner, input) {const s = this.get(owner, input?.id); s.screen.resize(dimensions(input));}
   close(owner, input) {
     const s = this.get(owner, input?.id);
-    try {if (!s.exited) s.pty.kill();} finally {s.data.dispose(); s.exit.dispose(); this.sessions.delete(s.id);}
+    try {if (!s.screen.ended) s.pty.kill();} finally {s.screen.dispose(); this.sessions.delete(s.id);}
+  }
+  detachOwner(owner) {
+    for (const session of this.sessions.values()) {
+      if (session.owner === owner.id) session.screen.detach();
+    }
   }
   closeOwner(owner) {this.closedOwners.add(owner.id); for (const s of this.list(owner)) {try {this.close(owner, s);} catch {}}}
   shutdown() {this.closed = true; for (const s of [...this.sessions.values()]) this.closeOwner({id:s.owner});}

@@ -117,7 +117,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const visibleRef=useRef(visible);visibleRef.current=visible;
   useLayoutEffect(()=>{visibleRef.current=visible;return()=>{visibleRef.current=false;};},[visible]);
   const savedTop=useRef(readingRecovery.current?.top||0);
-  const active = isRunning(run);
+  const active = !run.saveIssue && isRunning(run);
   const currentProviderId=run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id;
   const modelPending=active&&!window.desktop?.switchRunModel&&(options.model!==run.model||options.providerId!==currentProviderId);
   const [older,setOlder]=useState<AgentRun|null>(null);
@@ -143,6 +143,11 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const [selection]=useState(createTurnSelection);
   const forms=useTaskForms(run.id);
   const formsByTurn=useMemo(()=>groupByTurn(forms),[forms]);
+  const latestTurnId=turns.at(-1)?.user.id;
+  const dockedForms=useMemo(()=>{
+    if(!latestTurnId||embedded||run.archivedAt)return [];
+    return (formsByTurn.get(latestTurnId)||[]).filter(flow=>flow.status==='editing' && 'steps' in flow.template);
+  },[latestTurnId,embedded,run.archivedAt,formsByTurn]);
   const appsByTurn=useMemo(()=>groupByTurn(merged.taskApps),[merged.taskApps]);
   const before=older?older.historyBefore:run.historyBefore;
   const loadOlder=async()=>{
@@ -233,6 +238,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const continueSelected=async()=>{if(sending.current||submitting||!selectedInputs.length)return;sending.current=true;setInputSending(true);setSendError('');try{await resumeInputs();}catch(error){setSendError((error as Error).message);await deliveries.refresh();}finally{sending.current=false;setInputSending(false);}};
   const expertChat=useExpertChat(run.conversationId,run.projectId,visible&&!embedded&&!run.collaboration);
   const submit = async () => {
+    if(run.recordSaving)return;
     if(expertChat.busy)return;
     if(expertChat.selected){if(active||run.archivedAt)return;if(options.attachments?.length||options.selectedSkillIds?.length){setSendError('专家讨论暂只支持文字，请移除附件和技能');return;}const sentText=prompt;const result=await expertChat.submit(sentText);if(result)setPrompt(current=>current===sentText?'':current);return;}
     if((!prompt.trim()&&!options.selectedSkillIds?.length&&!options.attachments?.length)||submitting||sending.current||receipt.pending||run.status==='stopping'||run.archivedAt)return;
@@ -288,12 +294,30 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const fromOlderTurn=change?.turnKey ? !!latestUser && change.turnKey!==latestUser.id
     : !!(change?.startedAt && latestUser?.timing?.startedAt && Date.parse(change.startedAt)<Date.parse(latestUser.timing.startedAt));
   const modelChange=fromOlderTurn ? undefined : change;
+  const [savingRecord,setSavingRecord]=useState(false);
+  const [retryFailed,setRetryFailed]=useState(false);
+  const [collapsedSave,setCollapsedSave]=useState<string>();
+  const saveKey=run.id+'-'+(latestUser?.id||'');
+  const saveLabels={space:'磁盘空间不足。请释放空间，再保存本轮记录。',permission:'无法写入数据目录。请检查写入权限后重试。',queue:'保存队列已满，请稍后重试保存。',write:'本轮记录未保存，请检查数据目录后重试。'};
+  const saveNotice=run.saveIssue&&(collapsedSave===saveKey
+    ? <Button variant="ghost" onClick={()=>setCollapsedSave(undefined)}>{t('记录待保存')}</Button>
+    : <ComposerErrorNotice dismiss={()=>setCollapsedSave(saveKey)} message={t(saveLabels[run.saveIssue.kind])+' '+t('关闭应用前请重试保存。')}>
+    {retryFailed&&<p>{t('仍未保存，请处理后重试。')}</p>}
+    <div className="settings-actions"><Button variant="outline" disabled={savingRecord} onClick={async()=>{
+      setRetryFailed(false);setSavingRecord(true);
+      try{await window.desktop!.retrySave!(run.id);}catch{setRetryFailed(true);}finally{setSavingRecord(false);}
+    }}>{t(savingRecord?'正在保存…':'重试保存记录')}</Button>
+    <Button variant="ghost" onClick={()=>openSettings('storage')}>{t('管理存储空间')}</Button></div>
+  </ComposerErrorNotice>);
+  const historicalSaveError=['执行已结束，但记录保存失败。','对话保存失败，请检查磁盘空间。','记录写入失败，执行已中断。请核对已完成的操作。'].includes(run.error||'');
   const statusContent=<>
           {active&&(run.storageBackpressure||run.queued)&&<p role="status" className="text-sm text-muted-foreground">{t(run.storageBackpressure?'正在保存输出 · 暂缓接收，保存后自动继续':'排队中 · 等待执行名额或工作目录释放')}</p>}
           {(deliveries.snapshot?.requests||[]).filter(r=>!r.turnKey&&turns.length>1&&!turns.some(candidate=>candidate.user.timing?.startedAt&&candidate.user.timing.startedAt<=r.createdAt)).map(r=><div key={r.id}><p className="text-xs text-muted-foreground">{t('早期补充记录')}</p><PersistentInputRecord request={r} deliveries={deliveries.snapshot?.deliveries||[]} onOpen={openInput}/></div>)}
           {pendingMessage&&!run.messages.some(message=>message.role==='user'&&!pendingMessage.ids.has(message.id))&&<PendingMessage attachments={pendingMessage.attachments} text={pendingMessage.text}/>}
           {referenceError&&<ComposerErrorNotice message={referenceError} dismiss={()=>setReferenceError('')}/>}
-          {run.error && <ComposerErrorNotice key={latestUser?.id} message={(run.retrying?t('连接出现问题，正在重试')+' · ':'')+composerError(run.error)}>{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</ComposerErrorNotice>}
+          {saveNotice}
+          {!run.saveIssue && historicalSaveError && <ComposerErrorNotice message={t('这次执行遇到了保存问题。请核对当前可见的记录和交付文件。')}><Button variant="ghost" onClick={()=>openSettings('storage')}>{t('管理存储空间')}</Button></ComposerErrorNotice>}
+          {!run.saveIssue && !historicalSaveError && run.error && <ComposerErrorNotice key={latestUser?.id} message={(run.retrying?t('连接出现问题，正在重试')+' · ':'')+composerError(run.error)}>{['failed','interrupted'].includes(run.status)&&<div className="settings-actions">{run.status==='failed'&&<Button type="button" variant="outline" onClick={()=>openSettings('providers')}>{t('检查模型服务')}</Button>}<RunDiagnosticsButton runId={run.id}/><Button type="button" variant="outline" onClick={()=>{setPrompt(t('请核实当前任务已完成的操作，并从未完成的步骤继续。'));jump();}}>{t('准备继续任务')}</Button></div>}</ComposerErrorNotice>}
   </>;
   // Draft edits must not rebuild rich history or retained tool panels.
   // The enclosing discussion already renders its prompt. Omit only the matching
@@ -310,7 +334,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
    // The latest/live and actionable turns stay measured.
    return <ProcessDisclosureScope storageKey={'run:'+run.id+':turn:'+turn.user.id}><VirtualBlock enabled={windowed&&turn!==turns.at(-1)&&!turn.active&&!requests.some(r=>r.state==='pending')}>
     <TurnTranscript turn={turn} run={{...merged,messages:[],tools:turn.tools,artifacts:turn.artifacts,fileChanges:merged.fileChanges?.filter(batch=>batch.turnKey===turn.user.id)}} requests={requests} allRequests={deliveries.snapshot?.requests||[]} deliveries={deliveries.snapshot?.deliveries||[]} nativePending={(run.questions||[]).map(q=>q.id)} onOpenInput={openInput} onToggle={toggleProcess} paused={turn.active&&(run.status==='waiting'||run.status==='stopping'||!!run.queued||!!run.storageBackpressure||!!run.retrying)} status={turn.active?runStatus[run.status]:''} hidePrompt={!!(embedded&&!before&&turn===turns[0]&&turn.user.text===embeddedPrompt)} language={language} {...stableFiles} openFile={openFile?stableFiles.openFile:undefined} openReference={openReference||window.desktop?.downloadArtifact||window.desktop?.projectFiles?stableFiles.openReference:undefined}/>
-   </VirtualBlock><TaskForms flows={flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
+   </VirtualBlock><TaskForms flows={dockedForms.length && turn.user.id===latestTurnId ? flows.filter(flow=>!dockedForms.includes(flow)) : flows} archived={!!run.archivedAt}/>{apps.map(app=><TaskAppCard key={app.id} app={app} runId={run.id} visible={visible&&!floatingHost} archived={!!run.archivedAt}/>)}</ProcessDisclosureScope>;
   };
   const actionableApprovals=active&&run.status!=='stopping'&&!run.archivedAt?[...new Map(run.approvals.map(a=>[a.id,a])).values()]:[];
   const requestKeys=[...actionableApprovals.map(r=>'approval:'+r.id),...(inputsInPanel?(run.questions||[]).map(r=>'question:'+r.id):[]),...(inputsInPanel?(deliveries.snapshot?.requests||[]).filter(r=>r.state==='pending').map(r=>'input:'+r.id):[])];
@@ -362,7 +386,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   if(actionsOnly){
     const hasRequest=!!run.approvals.length||!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending');
     return <section className="wf-run-actions" aria-label={t('需要你处理')}>
-      {hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
+      {saveNotice}{hasRequest&&<h3>{t(run.approvals.length?'请处理下方授权，任务将继续':'请在下方补充信息')}</h3>}
       {inlineInputs}{outboxPanel}{pendingSurface}
       {(draftStorageError||optionsStorageError)&&<ComposerErrorNotice message={draftStorageError||optionsStorageError}/>}
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
@@ -398,6 +422,9 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
           {!turns.length&&<MessageScrollerItem messageId="conversation-status" className="[content-visibility:visible]">{statusContent}</MessageScrollerItem>}
           {(!!expertChat.state?.turns.length||!!expertChat.error)&&<MessageScrollerItem messageId="expert-discussion"><ExpertTranscript chat={expertChat}/></MessageScrollerItem>}
     </ConversationViewport>
+    {dockedForms.length>0&&<div className="conversation-form-panel" hidden={!!floatingHost&&!recentOpen}>
+      <TaskForms flows={dockedForms} archived={false}/>
+    </div>}
     <div className="conversation-dock">
       {receipt.pending&&<p role="status">{t('正在确认发送结果…')}</p>}
       <CreationGuide hasPendingInput={!!run.questions?.length||!!deliveries.snapshot?.requests?.some(r=>r.state==='pending')} run={run} active={active||submitting} openSettings={openSettings} onPrompt={(text,skillId)=>{changePrompt(prompt.trim()?prompt+'\n\n'+text:text);setOptions(current=>({...current,selectedSkillIds:skillId?[skillId]:[]}));}}/>
@@ -410,7 +437,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
       <ChatComposer expertMentions={expertChat.mentions} onPasteAttachments={files=>setOptions(current=>({...current,attachments:[...(current.attachments||[]),...files].filter((file,index,all)=>all.findIndex(other=>other.path===file.path)===index)}))} attachments={<ComposerAttachments value={options} onChange={setOptions} disabled={active||submitting||inputSending}/>} selectedSkillIds={options.selectedSkillIds} onSelectSkill={id=>setOptions(current=>({...current,selectedSkillIds:[...new Set([...(current.selectedSkillIds||[]),id])].slice(0,20)}))} followup keepEditable allowActiveSend={!!inputAPI} showSendLabel={!!deliveries.snapshot?.policy.paused} value={prompt} onChange={changePrompt} onSubmit={()=>void submit()} disabled={submitting||inputSending||expertChat.busy} sending={submitting||inputSending||expertChat.busy}
         label={reworkMode?t('修改要求'):t('继续对话')} placeholder={reworkMode?t('说明需要修改的内容，提交后重新执行并验收'):run.approvals.length?t('请先处理上方授权…'):t('继续这个任务…')}
         active={active} stopping={run.status==='stopping'} onStop={stop}
-        canSend={run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length||!!options.attachments?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
+        canSend={!run.recordSaving&&run.status!=='stopping'&&!run.archivedAt&&(!!prompt.trim()||!!options.selectedSkillIds?.length||!!options.attachments?.length)} sendLabel={expertChat.selected?'发送给专家':reworkMode?t('提交修改要求'):t(deliveries.snapshot?.policy.paused?'发送并继续':active?'发送补充':'发送后续消息')}
         skills={<SkillTags ids={options.selectedSkillIds} disabled={active||submitting||inputSending} onRemove={id=>setOptions(current=>({...current,selectedSkillIds:current.selectedSkillIds?.filter(value=>value!==id)}))}/>}
         controls={expertChat.selected?<span className="px-2 text-xs text-muted-foreground">使用专家默认模型</span>:<ComposerControls permissionChange={run.permissionChange} modelChange={modelChange} catalog={catalog} permissionDisabled={modelBusy||run.modelChange?.state==='switching'||reworkMode||submitting||inputSending||!!run.archivedAt||permissionBusy||run.permissionChange?.state==='switching'||run.status==='stopping'||active&&!window.desktop?.switchRunPermission} onPermissionChange={active?changePermission:undefined} value={active?{...options,permission:run.permission||'default'}:options} onChange={setOptions} disabled={reworkMode||active||submitting||inputSending||!!run.archivedAt} onModelChange={active&&window.desktop?.switchRunModel?changeModel:undefined} modelDisabled={modelBusy||permissionBusy||run.modelChange?.state==='switching'||run.permissionChange?.state==='switching'||submitting||inputSending||run.status==='stopping'||!!run.archivedAt} modelPending={modelPending} previousBaseUrl={run.baseUrl} previousProviderId={run.providerId||catalog.providers.find(p=>p.baseUrl===run.baseUrl)?.id} openSettings={openSettings}/>}/>
 

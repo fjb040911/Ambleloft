@@ -164,3 +164,12 @@ for(const initial of [16384,24000,40000])test('unknown ceiling recovery stays bo
  await assert.rejects(generate(config,{...job,maxOutputTokens:initial,retryOutputLimit:true},undefined,()=>{}),e=>e.message==='OUTPUT_LIMIT'&&e.diagnostics.attempts===2&&e.diagnostics.outputLimitRetried===true&&!JSON.stringify(e.diagnostics).includes('PRIVATE'));
  assert.deepEqual(budgets,[initial,Math.max(initial,Math.min(initial*2,65536))]);
 });
+
+test('user cancellation at the stream retry notification prevents a second model request',async t=>{
+ const controller=new AbortController();let calls=0;
+ mock(t,async()=>{calls++;return stream([chat({reasoning_content:'partial'})]);});
+ await assert.rejects(generate(config,{...job,retryInterruptedStream:true},controller.signal,p=>{
+  if(p.phase==='retrying')controller.abort();
+ }),/abort/i);
+ assert.equal(calls,1);
+});

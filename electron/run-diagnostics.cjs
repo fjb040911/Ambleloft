@@ -31,7 +31,8 @@ function diagnosticReport(run, appVersion) {
       ...(d.usage ? {usage: pick(d.usage, ['input_tokens', 'output_tokens', 'total_tokens'])} : {}),
       ...(d.budget ? {budget:pick(d.budget,['profile','maxOutputTokens','requestedTokens','outputCeiling','contextWindow','inputTokens','contextReserve','availableOutputTokens','estimated','source','reasoning'])} : {}),
       ...(Array.isArray(d.outputBudgets)?{outputBudgets:d.outputBudgets.filter(n=>Number.isSafeInteger(n)&&n>0).slice(0,3)}:{}),
-      ...pick(d,['outputLimitRetried','outputRecovery']),
+      ...pick(d,['outputLimitRetried','outputRecovery','streamRetried']),
+      ...(d.interruption?{interruption:pick(d.interruption,['at','model','requestId','causeCode'])}:{}),
       tools: (d.tools || []).slice(0, 256).map(t => ({...pick(t, ['name', 'namespace', 'type', 'schemaType', 'schemaFingerprint']), parameters: (t.parameters || []).slice(0, 80).map(p => pick(p, ['name', 'type', 'required']))})),
       calls: (d.calls || []).slice(0, 64).map(c => ({...pick(c, ['returnedName', 'mappedName', 'argumentFingerprint', 'argumentBytes', 'attempt']), argumentKeys: (c.argumentKeys || []).slice(0, 80).map(safeName)})),
       observations: (d.observations || []).slice(0, 32).map(o => pick(o, ['tool', 'signature', 'resultFingerprint', 'polling', 'noop'])),
@@ -60,6 +61,10 @@ function responseObserver(diagnostic, fingerprint, onUsage) {
         if (!raw || raw === '[DONE]') continue;
         const event = JSON.parse(raw); diagnostic.events++;
         if(typeof event.delta==='string'&&event.delta.length||['response.output_item.added','response.output_item.done','response.completed','response.incomplete','response.failed'].includes(event.type))diagnostic.progressEvents=(diagnostic.progressEvents||0)+1;
+        if (event.type === 'error') {
+          diagnostic.done = true; diagnostic.finishReason = 'failed';
+          diagnostic.progressEvents = (diagnostic.progressEvents || 0) + 1;
+        }
         if (event.type === 'response.output_item.done') item(event.item);
         if (['response.completed', 'response.incomplete', 'response.failed'].includes(event.type)) {
           diagnostic.done = true; diagnostic.finishReason = event.response?.status;

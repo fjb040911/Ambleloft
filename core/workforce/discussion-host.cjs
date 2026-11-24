@@ -99,27 +99,34 @@ const methods={
     previous.host.question.answers=checked.values;
    }
    if(input.intent!=='explain-node'&&previous?.host?.question&&!previous.host.question.answeredBy)previous.host.question.answeredBy=input.clientRequestId;
-   const r={id:input.clientRequestId,spaceId:space.id,prompt,mode:'discussion',projectId:null,replyTo:previous?.id||null,round:(previous?.round||0)+1,createdAt:new Date().toISOString(),documentRefs:documents,participants:[],discussion:{schemaVersion:1,id:root,mode:'host',provenance:'recorded'},host:{providerId:input.providerId,model:input.model,status:'preparing',ruleVersion,revision:1,steps:[],brief:prior?.host.brief||null}};
+   const r={id:input.clientRequestId,spaceId:space.id,prompt,mode:'discussion',projectId:null,replyTo:previous?.id||null,round:(previous?.round||0)+1,createdAt:new Date().toISOString(),documentRefs:documents,participants:[],discussion:{schemaVersion:1,id:root,mode:'host',provenance:'recorded'},host:{locale:input.locale,providerId:input.providerId,model:input.model,status:'preparing',ruleVersion,revision:1,steps:[],brief:prior?.host.brief||null}};
    r.composer=composer;if(input.intent)r.intent=input.intent;if(input.taskContext)r.taskContext=input.taskContext;s.requests.unshift(r);return {request:r,space};
   });
   if(!prepared)return this.snapshot({output:'preview'});
-  const controller=new AbortController(),job={controller,requestId:input.clientRequestId,spaceId:input.spaceId,promise:null};
-  this.hostJobs.set(input.clientRequestId,job);this.spaceLocks.set(input.spaceId,(this.spaceLocks.get(input.spaceId)||0)+1);
-  job.promise=coordinate.call(this,prepared,input,hostContext,controller.signal).catch(async error=>{
-   controller.abort();
-   const current=(await this.snapshot({output:'status'})).requests.find(r=>r.id===input.clientRequestId);
-   await Promise.allSettled((current?.participants||[]).filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
-   await this.change(s=>{const r=s.requests.find(r=>r.id===input.clientRequestId);if(r?.host){r.host.status=job.stopped?'interrupted':'failed';r.host.error=require('../automation/structured-output.cjs').structuredErrorMessage(error,input.locale);r.host.errorCode=typeof error.code==='string'?error.code:error.message;r.host.finishedAt=new Date().toISOString();if(error.diagnostics)r.host.outputDiagnostics=error.diagnostics;r.host.revision++;
-    for(const p of r.participants){
-     // A coordination failure is not an expert failure. Keep finished results
-     // and errors from the execution itself, including after a user stop.
-     const run=this.runtime.runs.find(run=>run.id===p.runId);
-     if(run){p.status=run.status;p.error=run.error||undefined;}
-     else if(live.has(p.status)){p.status=r.host.status;p.error ||= r.host.error;}
-    }
-   }});
-  }).finally(()=>{this.discussionModelControllers?.delete(input.clientRequestId);this.hostJobs.delete(input.clientRequestId);const n=this.spaceLocks.get(input.spaceId)-1;if(n)this.spaceLocks.set(input.spaceId,n);else this.spaceLocks.delete(input.spaceId);this.publish();});
-  return this.snapshot({output:'preview'});
+  return startHostJob.call(this,prepared,input,hostContext);
+ },
+ async retryDiscussionHost({requestId,expectedRevision,locale},hostContext={}){
+  if(this.closing)throw Error('应用正在关闭');
+  this.hostJobs ||= new Map();
+  const prepared=await this.change(s=>{
+   this.assertDiscussionAvailable(s,requestId);
+   const r=s.requests.find(r=>r.id===requestId);
+   if(!r?.host||r.host.status!=='failed'||r.host.revision!==expectedRevision||r.liveStopped||this.hostJobs.has(requestId))throw Error('本轮状态已变化，请重新查看');
+   const root=rootOf(s.requests,r),space=this.writable(s,r.spaceId);
+   if(s.discussionStates[root]?.status==='closed'||s.requests.find(other=>rootOf(s.requests,other)===root)?.id!==requestId)throw Error('讨论已关闭或已进入下一轮');
+   const unresolved=r.participants.some(p=>{
+    const run=this.runtime.runs.find(run=>run.id===p.runId);
+    return !p.runId||(!live.has(run?.status)&&((run?.status||p.status)!=='completed'));
+   });
+   if(!Number.isInteger(r.host.retryPass)||unresolved)throw Error('请先核对已有操作的执行结果');
+   if(s.requests.some(other=>rootOf(s.requests,other)===root&&other.documentRefs.some(ref=>s.documents.find(d=>d.id===ref.id)?.deletedAt)))throw Error('本讨论包含已撤回资料');
+   const resumePass=r.host.retryPass;
+   r.host.status='preparing';r.host.revision++;
+   delete r.host.retryPass;delete r.host.error;delete r.host.errorCode;delete r.host.finishedAt;
+   return {request:r,space,resumePass};
+  });
+  const r=prepared.request;
+  return startHostJob.call(this,prepared,{clientRequestId:r.id,spaceId:r.spaceId,model:r.host.model,providerId:r.host.providerId,locale:r.host.locale||locale},hostContext);
  },
  async stopDiscussionHost({requestId}){
   await this.stopDiscussionFollowups(requestId);
@@ -130,7 +137,31 @@ const methods={
   return {stopped:!!job||r.participants.length>0};
  }
 };
-async function coordinate({request,space},input,hostContext,signal){
+async function startHostJob(prepared,input,hostContext){
+  const controller=new AbortController(),job={controller,requestId:input.clientRequestId,spaceId:input.spaceId,promise:null};
+  this.hostJobs.set(input.clientRequestId,job);this.spaceLocks.set(input.spaceId,(this.spaceLocks.get(input.spaceId)||0)+1);
+  job.promise=coordinate.call(this,prepared,input,hostContext,controller.signal).catch(async error=>{
+   const interruptedStream=error.code==='INCOMPLETE_STREAM' && !job.stopped;
+   if(!interruptedStream){
+    controller.abort();
+    const current=(await this.snapshot({output:'status'})).requests.find(r=>r.id===input.clientRequestId);
+    await Promise.allSettled((current?.participants||[]).filter(p=>p.runId&&live.has(p.status)).map(p=>this.runtime.stop(p.runId)));
+   }
+   await this.change(s=>{const r=s.requests.find(r=>r.id===input.clientRequestId);if(r?.host){
+    if(interruptedStream && Number.isInteger(error.hostRetryPass))r.host.retryPass=error.hostRetryPass;
+    r.host.status=job.stopped?'interrupted':'failed';r.host.error=require('../automation/structured-output.cjs').structuredErrorMessage(error,input.locale);r.host.errorCode=typeof error.code==='string'?error.code:error.message;r.host.finishedAt=new Date().toISOString();if(error.diagnostics)r.host.outputDiagnostics=error.diagnostics;r.host.revision++;
+    for(const p of r.participants){
+     // A coordination failure is not an expert failure. Keep finished results
+     // and errors from the execution itself, including after a user stop.
+     const run=this.runtime.runs.find(run=>run.id===p.runId);
+     if(run){p.status=run.status;p.error=run.error||undefined;}
+     else if(!interruptedStream&&live.has(p.status)){p.status=r.host.status;p.error ||= r.host.error;}
+    }
+   }});
+  }).finally(()=>{this.discussionModelControllers?.delete(input.clientRequestId);this.hostJobs.delete(input.clientRequestId);const n=this.spaceLocks.get(input.spaceId)-1;if(n)this.spaceLocks.set(input.spaceId,n);else this.spaceLocks.delete(input.spaceId);this.publish();});
+  return this.snapshot({output:'preview'});
+}
+async function coordinate({request,space,resumePass=0},input,hostContext,signal){
  const composer=request.composer;
  const selectedSkills=composer.skills.map(({id,name,description,body})=>({id,name,description,instructions:body}));
  const update=fn=>this.change(s=>{signal.throwIfAborted();const current=this.writable(s,space.id);if(current.revision!==space.revision)throw Error('空间分工已变化，请继续讨论以重新协调');if(s.discussionStates[request.discussion.id]?.status==='closed')throw Error('讨论已关闭');if(request.documentRefs.some(ref=>s.documents.find(d=>d.id===ref.id)?.deletedAt))throw Error('引用资料已撤回，请重新选择');const r=s.requests.find(r=>r.id===request.id);const applied=fn(r);r.host.revision++;return applied===false?false:r;});
@@ -141,8 +172,8 @@ async function coordinate({request,space},input,hostContext,signal){
  const roster=space.members.flatMap(m=>{const e=employees.find(e=>e.id===m.employeeId);return e?[{id:e.id,name:e.name,responsibilities:e.responsibilities,methods:e.methods,deliverables:e.deliverables,skills:(e.skills||[]).map(s=>({name:s.name,purpose:s.purpose})),assignment:m.assignment,projectIds:m.projectIds}]:[];});
  let config=await abortable(this.workforce.providers.secret(input.providerId,input.model),AbortSignal.any([signal,AbortSignal.timeout(this.hostTimeoutMs||90000)]));
  await update(r=>{r.host.status='running';r.host.model=config.model||input.model||null;r.host.providerId=config.id||input.providerId||null;});
- const used=new Set();
- for(let pass=0;pass<5;pass++){
+ const used=new Set(request.participants.map(p=>p.employeeId));
+ for(let pass=resumePass;pass<5;pass++){
   signal.throwIfAborted();
   await this.settleDiscussionFollowups(request.id,signal);
   // A follow-up can resume an expert while the coordinator was synthesizing.
@@ -154,6 +185,10 @@ async function coordinate({request,space},input,hostContext,signal){
   }
   const snapshot=await this.snapshot({topicRequestId:request.id}),current=snapshot.requests.find(r=>r.id===request.id);
   if((current.followups||[]).some(f=>f.state==='failed'||f.deliveries?.some(d=>['failed','unknown','unconfirmed','interrupted'].includes(d.state)))){await update(r=>{r.host.status='needs-input';r.host.error='有更新尚未得到专家确认，请核对投递记录后继续 / Some updates were not confirmed by experts; review before continuing';});return;}
+  if(resumePass>0&&current.participants.some(p=>p.status!=='completed')){
+   await update(r=>{r.host.status='needs-input';r.host.error=input.locale==='zh-CN'?'请先核对未完成专家的执行记录。':'Review the unfinished expert runs before continuing.';});
+   return;
+  }
   const requirementRevision=current.requirementsRevision||0,modelRevision=current.modelRevision||0;
   if(current.executionModel){config=await abortable(this.workforce.providers.secret(current.executionModel.providerId,current.executionModel.model),signal);await update(r=>{r.host.model=config.model;r.host.providerId=config.id;});}
   const modelController=new AbortController();this.discussionModelControllers ||= new Map();this.discussionModelControllers.set(request.id,modelController);
@@ -172,15 +207,17 @@ async function coordinate({request,space},input,hostContext,signal){
    if(changed){deadline.touch();latestProgress.lastProgressAt=new Date().toISOString();}
    receivedCharacters=progress.receivedCharacters??0;
    const {receivedCharacters:_characters,...displayProgress}=progress;
+   // Keep the first attempt visible until its replacement has actual content.
+   if(!displayProgress.reasoning && latestProgress.interruption)delete displayProgress.reasoning;
    latestProgress={...latestProgress,...displayProgress};
-   const now=Date.now();if(now-lastPublished<120)return;lastPublished=now;
+   const now=Date.now();if(now-lastPublished<120&&progress.phase!=='retrying')return;lastPublished=now;
    await update(r=>{if(accepting&&!callSignal.aborted&&r.host.activity?.id===activityId)r.host.activity={...latestProgress};});
   };
   let output;
   try{
    await update(r=>{r.host.activity=latestProgress;});
-   output=await abortable((this.generateDiscussionHost||generate)(config,{prompt:rules+'\n'+require('./task-guide.cjs').rules+(request.intent==='restart-guide'?'\nThe user clicked Restart guide. Return restart-guide. Preserve history, ask one short question about the new goal in message. Empty questions and delegates. Do not reuse unconfirmed old scope.':'')+(request.intent==='explain-node'?'\nREAD-ONLY NODE EXPLANATION: Explain the selected node from taskContext: responsibility, prerequisites, handoffs and acceptance method. Return action reply, empty questions and delegates. Missing facts may be described as unknown; never require forms, relationship confirmation, planning, editing or execution to provide this explanation. Do not claim to have modified anything.':''),input:{locale:input.locale==='zh-CN'?'zh-CN':'en',purpose:space.purpose,projectContext:space.projectContext||{roles:[],relations:[]},knownBindings:require('./relation-guide.cjs').knownBindings(snapshot,space),roster,projects,sources,documents,selectedSkills,brief:current.host.brief,taskContext,latestUserRequest:request.prompt,taskUpdates:require('./discussion-live.cjs').requirements(current),usedExperts:[...used],remainingDelegations:pass===4?0:4-used.size},outputSchema:schemaForSources(sources,request.intent),budgetProfile:'discussion-host',retryOutputLimit:true,repairInvalidOutput:true,timeoutMs:deadline.timeoutMs},callSignal,onProgress),callSignal);}
-  catch(e){if(modelController.signal.aborted&&!signal.aborted){pass--;continue;}throw e;}
+   output=await abortable((this.generateDiscussionHost||generate)(config,{prompt:rules+'\n'+require('./task-guide.cjs').rules+(request.intent==='restart-guide'?'\nThe user clicked Restart guide. Return restart-guide. Preserve history, ask one short question about the new goal in message. Empty questions and delegates. Do not reuse unconfirmed old scope.':'')+(request.intent==='explain-node'?'\nREAD-ONLY NODE EXPLANATION: Explain the selected node from taskContext: responsibility, prerequisites, handoffs and acceptance method. Return action reply, empty questions and delegates. Missing facts may be described as unknown; never require forms, relationship confirmation, planning, editing or execution to provide this explanation. Do not claim to have modified anything.':''),input:{locale:input.locale==='zh-CN'?'zh-CN':'en',purpose:space.purpose,projectContext:space.projectContext||{roles:[],relations:[]},knownBindings:require('./relation-guide.cjs').knownBindings(snapshot,space),roster,projects,sources,documents,selectedSkills,brief:current.host.brief,taskContext,latestUserRequest:request.prompt,taskUpdates:require('./discussion-live.cjs').requirements(current),usedExperts:[...used],remainingDelegations:pass===4?0:4-used.size},outputSchema:schemaForSources(sources,request.intent),budgetProfile:'discussion-host',retryInterruptedStream:true,retryOutputLimit:true,repairInvalidOutput:true,timeoutMs:deadline.timeoutMs},callSignal,onProgress),callSignal);}
+  catch(e){if(modelController.signal.aborted&&!signal.aborted){pass--;continue;}if(e.code==='INCOMPLETE_STREAM')e.hostRetryPass=pass;throw e;}
   finally{
    accepting=false;deadline.dispose();latestProgress.finishedAt=new Date().toISOString();
    // Flush throttled progress even on failure/cancellation, without applying a decision.

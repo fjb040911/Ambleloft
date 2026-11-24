@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import {File,ImageOff,X,ZoomIn,Minimize} from 'lucide-react';
 import {Attachment,AttachmentMedia,AttachmentContent,AttachmentTitle,AttachmentDescription,AttachmentActions,AttachmentAction,AttachmentTrigger} from './components/ui/attachment';
 import {Dialog,DialogTrigger,DialogContent,DialogTitle,DialogHeader} from './components/ui/dialog';
@@ -7,6 +7,9 @@ import {Alert,AlertDescription} from './components/ui/alert';
 import {Spinner} from './components/ui/spinner';
 import {t} from './i18n';
 import {isImageAttachment,type ChatAttachment} from './message-attachments';
+
+const OfficePreview = lazy(() => import('./OfficePreview'));
+const AttachmentPdfPreview = lazy(() => import('./AttachmentPdfPreview'));
 
 // Cache only small thumbnails, never full image data or failed reads.
 const thumbnails=new Map<string,Promise<string>>();
@@ -42,7 +45,25 @@ function ImageAttachment({file,compact,onRemove,disabled}:{file:ChatAttachment;c
   {onRemove&&<AttachmentActions><AttachmentAction variant="secondary" aria-label={`${t('移除附件')} ${file.name}`} disabled={disabled} onClick={onRemove}><X/></AttachmentAction></AttachmentActions>}
  </Attachment><DialogContent className="sm:max-w-[min(960px,calc(100vw-2rem))]" aria-describedby={undefined}><ImagePreview file={file}/></DialogContent></Dialog>;
 }
+function FileAttachment({file,onRemove,disabled}:{file:ChatAttachment;onRemove?:()=>void;disabled?:boolean}){
+ const pdf=/\.pdf$/i.test(file.path);
+ const spreadsheet=/\.xlsx?$/i.test(file.path);
+ const previewLabel=pdf?t('预览 PDF'):spreadsheet?t('预览 Excel'):null;
+ const chip=<Attachment size="sm" title={file.path}>
+  <AttachmentMedia variant="icon"><File/></AttachmentMedia>
+  <AttachmentContent><AttachmentTitle>{file.name}</AttachmentTitle></AttachmentContent>
+  {previewLabel&&<DialogTrigger render={<AttachmentTrigger aria-label={`${previewLabel} ${file.name}`}/>}/>}
+  {onRemove&&<AttachmentActions><AttachmentAction aria-label={`${t('移除附件')} ${file.name}`} disabled={disabled} onClick={onRemove}><X/></AttachmentAction></AttachmentActions>}
+ </Attachment>;
+ if(!previewLabel)return chip;
+ return <Dialog>{chip}<DialogContent aria-describedby={undefined} className="flex h-[min(85dvh,900px)] min-w-0 flex-col sm:max-w-[min(960px,calc(100vw-2rem))]">
+  <DialogHeader className="min-w-0 pr-10"><DialogTitle className="truncate" title={file.name}>{file.name}</DialogTitle></DialogHeader>
+  <Suspense fallback={<Spinner aria-label={t('正在加载…')}/>}>
+   {spreadsheet?<OfficePreview key={file.path} attachment path={file.path}/>:<AttachmentPdfPreview path={file.path}/>}
+  </Suspense>
+ </DialogContent></Dialog>;
+}
 export default function ChatAttachments({files,compact=false,onRemove,disabled}:{files:ChatAttachment[];compact?:boolean;onRemove?:(path:string)=>void;disabled?:boolean}){
  if(!files.length)return null;
- return <div data-slot="chat-attachments" className="flex min-w-0 max-w-full flex-wrap items-start gap-2" aria-label={t('附件')}>{files.map(file=>isImageAttachment(file)?<ImageAttachment key={file.path} file={file} compact={compact} disabled={disabled} onRemove={onRemove?()=>onRemove(file.path):undefined}/>:<Attachment size="sm" key={file.path} title={file.path}><AttachmentMedia variant="icon"><File/></AttachmentMedia><AttachmentContent><AttachmentTitle>{file.name}</AttachmentTitle></AttachmentContent>{onRemove&&<AttachmentActions><AttachmentAction aria-label={`${t('移除附件')} ${file.name}`} disabled={disabled} onClick={()=>onRemove(file.path)}><X/></AttachmentAction></AttachmentActions>}</Attachment>)}</div>;
+ return <div data-slot="chat-attachments" className="flex min-w-0 max-w-full flex-wrap items-start gap-2" aria-label={t('附件')}>{files.map(file=>isImageAttachment(file)?<ImageAttachment key={file.path} file={file} compact={compact} disabled={disabled} onRemove={onRemove?()=>onRemove(file.path):undefined}/>:<FileAttachment key={file.path} file={file} disabled={disabled} onRemove={onRemove?()=>onRemove(file.path):undefined}/>)}</div>;
 }

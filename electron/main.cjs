@@ -3,7 +3,7 @@ const {createRunPublication}=require('./run-publication.cjs');
 const {sameTarget}=require('../core/ssh/environment.cjs');
 const {summary,pageRun}=require('./history-pages.cjs');
 const { app, BrowserWindow, ipcMain, Menu, dialog, session, safeStorage, shell, clipboard, protocol, nativeTheme, Notification, powerMonitor } = require('electron');
-const {accessArtifact,downloadArtifact} = require('./artifacts.cjs');
+const {accessArtifact,downloadArtifact,artifactAvailability} = require('./artifacts.cjs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -73,7 +73,8 @@ function createWindow() {
     // Preserve shell control keys (interrupt, suspend, readline) on Windows/Linux.
     window.webContents.setIgnoreMenuShortcuts(!!record.terminalFocused&&input.control&&!input.meta&&['a','c','x','z','y'].includes(input.key.toLowerCase()));
   });
-  window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){runPublication?.subscribe(record,[]);pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
+  window.webContents.on('did-start-navigation',(_event,_url,inPlace,isMainFrame)=>{if(isMainFrame&&!inPlace){terminals?.detachOwner(record);runPublication?.subscribe(record,[]);pageHost?.resetOwner(record);taskApps?.closeOwner(record);}});
+  window.webContents.on('render-process-gone',()=>terminals?.detachOwner(record));
   window.once('closed',()=>{terminals?.closeOwner(record);pageHost?.resetOwner(record);taskApps?.closeOwner(record);});
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-frame-navigate', event => {
@@ -98,6 +99,25 @@ app.whenReady().then(async () => {
   });
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, '../public/brand/icon-512.png'));
   if (!primaryInstance) return;
+  const dataRoot=app.getPath('userData');
+  const storage=require('./storage-management.cjs');
+  let storageWork=Promise.resolve();
+  function serializeStorage(work){
+    const result=storageWork.then(work);
+    storageWork=result.catch(()=>{});
+    return result;
+  }
+  ipcMain.handle('storage:snapshot',event=>{authorize(event);return serializeStorage(()=>storage.snapshot(dataRoot));});
+  ipcMain.handle('storage:clean',async(event,{kind,backups}={})=>{
+    const {window}=authorize(event);
+    return serializeStorage(async()=>{
+      if(updateGate)throw Error('正在准备更新，请稍后重试');
+      if(kind==='cache')return storage.clearCache(dataRoot,window.webContents.session);
+      if(kind==='backups'&&Array.isArray(backups)&&backups.every(b=>typeof b?.id==='string'&&typeof b.fingerprint==='string'))return storage.prune(dataRoot,backups);
+      throw Error('无效的清理请求');
+    });
+  });
+  ipcMain.handle('storage:open',event=>{authorize(event);return shell.openPath(dataRoot);});
   let updateTransaction=null;
   const updateTransactionPath=path.join(app.getPath('userData'),'updates','transaction.json');
   try{updateTransaction=JSON.parse(await require('node:fs/promises').readFile(updateTransactionPath,'utf8'));}catch{}
@@ -204,7 +224,7 @@ app.whenReady().then(async () => {
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
   services.extensions.options.pageChanged=async(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
-  terminals = new (require('./terminal.cjs').TerminalService)({spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size,context.environment),resolveContext:async input=>{
+  terminals = new (require('./terminal.cjs').TerminalService)({onExit:(owner,session)=>{if(!owner.window.isDestroyed())owner.window.webContents.send('terminal:exit',session);},spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size,context.environment),resolveContext:async input=>{
     const project = input.projectId ? (await store.read()).projects.find(p=>p.id===input.projectId) : null;
     if(input.projectId&&!project)throw Error('项目不存在');
     const run = input.runId ? runtime.runs.find(r=>r.id===input.runId) : null;
@@ -220,7 +240,7 @@ app.whenReady().then(async () => {
   }});
   ipcMain.handle('terminal:focus',(event,input)=>{const owner=authorize(event);owner.terminalFocused=input?.active===true;if(!owner.terminalFocused)owner.window.webContents.setIgnoreMenuShortcuts(false);});
   ipcMain.handle('terminal:profiles',async(event,input)=>{authorize(event);const project=(await store.read()).projects.find(p=>p.id===input?.projectId);return project?.type==='ssh'?[{id:'remote-login',name:'远端登录 Shell'}]:terminals.profiles.map(({id,name})=>({id,name}));});
-  for(const action of ['list','create','read','write','resize','close'])ipcMain.handle('terminal:'+action,(event,input)=>terminals[action](authorize(event),input));
+  for(const action of ['list','create','attach','detach','read','write','resize','clear','close'])ipcMain.handle('terminal:'+action,(event,input)=>terminals[action](authorize(event),input));
   ipcMain.handle('window:menu',event=>{const owner=authorize(event);if(process.platform==='win32')Menu.getApplicationMenu()?.popup({window:owner.window,x:12,y:38});});
   ipcMain.handle('window:chrome',(event,input)=>{const owner=authorize(event);if(process.platform!=='win32')return;if(!/^#[0-9a-f]{6}$/i.test(input?.color)||!/^#[0-9a-f]{6}$/i.test(input?.symbolColor))throw new Error('Invalid chrome colors');owner.window.setTitleBarOverlay({color:input.color,symbolColor:input.symbolColor,height:38});});
   ipcMain.handle('window:new',event=>{authorize(event);createWindow();return true;});
@@ -280,6 +300,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('spaces:changeDiscussionModel',(event,input)=>{authorize(event);checkRuntime();if(configBusy)throw Error('正在更新模型配置');return spaceService.changeDiscussionModel(input);});
   ipcMain.handle('spaces:changeDiscussionPermission',(event,input)=>{authorize(event);checkRuntime();return spaceService.changeDiscussionPermission(input);});
   ipcMain.handle('spaces:followupDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return require('./composer-discussion.cjs').invoke(spaceService,'followupDiscussion',input,{owner});});
+  ipcMain.handle('spaces:retryDiscussionHost',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return spaceService.retryDiscussionHost(input,{owner});});
   ipcMain.handle('spaces:coordinateDiscussion',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return require('./composer-discussion.cjs').invoke(spaceService,'coordinateDiscussion',input,{owner});});
   ipcMain.handle('spaces:start',(event,input)=>{const owner=authorize(event);checkRuntime();if(configBusy)throw Error('正在更新或测试模型配置');return require('./composer-discussion.cjs').invoke(spaceService,'start',input,{owner});});
   for(const action of ['snapshot','save','submit','controlPreparation','remove','activate','roles','createDraft','saveDraft','discardDraft','suggestRole','guideRole','cancelRoleSuggestion','suggestExpertSkills','cancelExpertSkillSuggestion','resolveExpertSkillSuggestion'])ipcMain.handle('workforce:'+action,(event,input)=>{authorize(event);return workforceService[action](input);});
@@ -463,6 +484,13 @@ app.whenReady().then(async () => {
     }
     return {items:snapshot.items.slice(offset,offset+20),total:snapshot.items.length,next:offset+20<snapshot.items.length?snapshot.token+':'+(offset+20):null};
   });
+  const historicalReasoning=require('./historical-reasoning.cjs');
+  ipcMain.handle('storage:reasoning-preview',event=>{
+    authorize(event);checkRuntime();return database.call('previewHistoricalReasoning',{exclude:historicalReasoning.exclude(runtime)});
+  });
+  ipcMain.handle('storage:reasoning-clean',(event,tokens)=>{
+    authorize(event);checkRuntime();return serializeStorage(()=>historicalReasoning.clean(runtime,spaceService,database,tokens));
+  });
   ipcMain.handle('agent:list', event => { authorize(event); checkRuntime(); return runtime.runs.map(summary); });
   ipcMain.handle('agent:composer-status',(event,input)=>{authorize(event);checkRuntime();return input?.kind==='discussion'?require('./composer-discussion.cjs').status(spaceService,input):require('./composer-start.cjs').status(runtime,input);});
   ipcMain.handle('agent:start', (event, input) => { authorize(event); checkRuntime(); if (configBusy) throw new Error('正在更新或测试模型配置'); return runtime.start(input,{owner:authorize(event),userAuthored:true}).then(async run=>{if(input?.draftId){const state=await store.read();windows.broadcast(profileId,'workspace:event',state);}return pageRun(run);}); });
@@ -473,6 +501,10 @@ app.whenReady().then(async () => {
       return result.canceled ? null : result.filePath;
     });
   });
+  ipcMain.handle('artifact:availability',(event,input)=>{
+    authorize(event);checkRuntime();
+    return artifactAvailability(runtime.runs.find(run=>run.id===input?.runId),input?.ids);
+  });
   ipcMain.handle('artifact:access', async(event,input)=>{
     authorize(event);checkRuntime();
     const file=await accessArtifact(runtime.runs.find(run=>run.id===input?.runId),input?.id,input?.preview===true);
@@ -481,6 +513,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('agent:model',(event,input)=>{authorize(event);checkRuntime();if(configBusy)throw Error('正在更新模型配置');return runtime.switchModel(input);});
   ipcMain.handle('agent:permission', (event,input)=>{authorize(event);checkRuntime();return runtime.switchPermission(input);});
+  ipcMain.handle('agent:retry-save',(event,id)=>{authorize(event);checkRuntime();return runtime.retrySave(id);});
   ipcMain.handle('agent:stop', (event, id) => { authorize(event); checkRuntime(); return runtime.stop(id); });
   ipcMain.handle('agent:answer', (event,input)=>{authorize(event);checkRuntime();return runtime.answer(input);});
   ipcMain.handle('agent:approve', (event, input) => { authorize(event); checkRuntime(); return runtime.approve(input); });
@@ -504,6 +537,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('attachments:import',async(event,items)=>{authorize(event);return require('./pasted-attachments.cjs').importPastedAttachments(items,path.join(app.getPath('userData'),'attachments','pasted'));});
   ipcMain.handle('attachments:image',async(event,input)=>{authorize(event);return require('./attachment-images.cjs').readAttachmentImage(input,require('electron').nativeImage);});
+  ipcMain.handle('attachments:spreadsheet',(event,input)=>{authorize(event);return files.spreadsheetAttachment({path:input?.path});});
+  ipcMain.handle('attachments:pdf',async(event,input)=>{authorize(event);return require('./attachment-pdf.cjs').readAttachmentPdf(input);});
   ipcMain.handle('attachments:select', async event => {
     const window=authorize(event).window;
     const result = await hostDialog('showOpenDialog',window, { title: '添加文件和文件夹', properties: ['openFile', 'openDirectory', 'multiSelections'] });
@@ -527,6 +562,7 @@ app.whenReady().then(async () => {
   updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&process.platform==='win32',publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
     const blockers=()=>{
       const reasons=[];
+      if(runtime.pendingRecords.size)reasons.push('请先重试保存任务记录');
       if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
       if(runtime.growth?.active)reasons.push('合作内容正在提炼');
       if(runtime.investigation?.active?.size||runtime.investigation?.resuming?.size)reasons.push('受限调查正在进行');
@@ -542,6 +578,7 @@ app.whenReady().then(async () => {
     let reasons=blockers();if(reasons.length)throw Error(reasons.join('；'));
     const result=scheduled?{response:1}:await hostDialog('showMessageBox',windows.focused(),{type:'question',title:'重启并更新',message:'重启并安装 '+updateService.state.version+'？',detail:'请先保存所有编辑。应用将关闭并安装更新。',buttons:['取消','重启并更新'],defaultId:0,cancelId:0});
     if(result.response!==1)return;
+    await serializeStorage(()=>storage.preflight(dataRoot,updateService.downloadSize));
     let shuttingDown=false;
     updateGate=true;runtime.closing=true;spaceService.closing=true;workforceService.closing=true;extensionHosts.suspended=true;extensionHosts.updateGate=true;services.automation.closed=true;spaceService.plans.closed=true;
     try{
@@ -553,12 +590,12 @@ app.whenReady().then(async () => {
       if(reasons.length)throw Error(reasons.join('；'));
       await Promise.all([services.automation.eventWork,services.automation.jobWork]);
       await runtime.persist();
-      const fs=require('node:fs/promises');const dir=path.join(app.getPath('userData'),'updates');await fs.mkdir(dir,{recursive:true});await fs.writeFile(path.join(dir,'transaction.json.tmp'),JSON.stringify({from:app.getVersion(),target:updateService.state.version,status:'installing',at:new Date().toISOString()}));await fs.rename(path.join(dir,'transaction.json.tmp'),path.join(dir,'transaction.json'));
+      const backupId='backup-'+Date.now();
+      await require('./provider.cjs').writeJSON(updateTransactionPath,{backupId,from:app.getVersion(),target:updateService.state.version,status:'installing',at:new Date().toISOString()});
       updateService.set({status:'installing',error:''});
       shuttingDown=true;
       await runtime.investigation?.shutdown();await runtime.growth?.shutdown();await runtime.expertChat?.shutdown();await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
-      const backup=path.join(dir,'backup-'+Date.now());await fs.mkdir(backup);
-      for(const name of ['atelier.sqlite','atelier.sqlite-wal','atelier.sqlite-shm','codex-home']){const source=path.join(app.getPath('userData'),name);try{await fs.lstat(source);}catch(error){if(error.code==='ENOENT')continue;throw error;}await fs.cp(source,path.join(backup,name),{recursive:true,dereference:false});}
+      await storage.createBackup(dataRoot,backupId,{from:app.getVersion(),target:updateService.state.version});
       messageServiceForShutdown?.close();authenticationForShutdown?.close();terminals?.shutdown();ssh?.shutdown();
       quitting=true;updateModule.updater.quitAndInstall(false,true);
     }catch(error){
@@ -569,9 +606,10 @@ app.whenReady().then(async () => {
   }});
   await updateService.initialize();
   if(updateTransaction?.status==='installing'&&updateTransaction.target===app.getVersion()&&!runtimeError){
-    await require('node:fs/promises').writeFile(updateTransactionPath,JSON.stringify({...updateTransaction,status:'healthy',completedAt:new Date().toISOString()}));
+    await require('./provider.cjs').writeJSON(updateTransactionPath,{...updateTransaction,status:'healthy',completedAt:new Date().toISOString()});
     updateService.set({error:''});
   }
+  if(app.isPackaged && !runtimeError && !extensionError)void serializeStorage(()=>storage.prune(dataRoot,undefined,true)).catch(error=>console.warn('Backup retention:',error.code||error.message));
   for(const action of ['snapshot','check','download','update','cancel','preferences','restart','schedule','cancelSchedule'])ipcMain.handle('update:'+action,(event,input)=>{authorize(event);return updateService[action](input);});
   createWindow();
   if(!extensionError)for(const item of services.extensions.items)extensionHosts.reconcile(item.id);
@@ -579,6 +617,12 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', event => {
+  if(!quitting && runtime && [...runtime.pendingRecords.values()].some(entry=>entry.issue)){
+    const choice=dialog.showMessageBoxSync({type:'warning',title:'仍有未保存的任务记录',
+      message:'退出后可能丢失本轮尚未保存的内容。可以返回应用，释放空间后重试保存。',
+      buttons:['返回应用','仍要退出'],defaultId:0,cancelId:0});
+    if(choice!==1){event.preventDefault();return;}
+  }
   terminals?.shutdown();ssh?.shutdown();
   if (!runtime || quitting) return;
   event.preventDefault(); quitting = true;runtime.closing=true;if(runtime.chatInputs){runtime.chatInputs.closed=true;clearInterval(runtime.chatInputs.timer);}

@@ -19,7 +19,7 @@ async function run(planId,signal){
   if(!eligiblePlan(this,snapshot,current))return;
   if(!attempt||p.stale)continue;
   const policy=acceptance.effective(current,p),execution=this.runtime.runs.find(r=>r.id===attempt.runId);
-  if(policy.mode==='manual')continue;
+  if(policy.mode==='manual'||execution?.recoveredSaveTurnId && execution.recoveredSaveTurnId===execution.terminalTurnId)continue;
   if(p.status==='failed'&&!attempt.autoRetryChecked){
    await this.spaces.change(s=>{
     const plan=s.plans.find(v=>v.id===planId),node=plan?.packages.find(v=>v.id===p.id),a=node?.attempts.at(-1);

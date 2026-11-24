@@ -82,3 +82,19 @@ test('platform adapter opens opaque native IDs and custom choices are listed onl
  chosen='C:\\Editor.exe';await api.open({...input,path:'docs/readme.md',application:'choose'},{});
  assert.deepEqual(approved,[{id:chosen,extensions:['md']}]);assert.ok((await api.apps({...input,path:'docs/readme.md'})).some(a=>a.id===chosen));assert.ok(!(await api.apps({...input,path:'image.png'})).some(a=>a.id===chosen));
 });
+
+test('registered deliverables resolve to the same relative path through either workspace alias',async t=>{
+ const {root,temp,runs,api}=await fixture(t);
+ const alias=path.join(temp,'alias');await fs.symlink(root,alias,process.platform==='win32'?'junction':'dir');
+ await fs.writeFile(path.join(root,'report.xlsx'),'workbook');
+ for(const [cwd,recorded] of [[alias,root],[root,alias]]){
+  runs[0].cwd=cwd;runs[0].artifacts=[{id:'book',path:path.join(recorded,'report.xlsx')}];
+  const input={runId:runs[0].id,artifactId:'book'};
+  for(const scope of [input,{...input,projectId:'p'}]){
+   const context=await api.context(scope);
+   assert.equal(context.artifactPath,'report.xlsx');
+   assert.equal((await api.read({...scope,path:context.artifactPath})).name,'report.xlsx');
+  }
+  await assert.rejects(api.read({...input,path:'docs/readme.md'}),/所选交付文件/);
+ }
+});

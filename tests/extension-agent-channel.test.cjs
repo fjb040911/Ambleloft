@@ -40,3 +40,40 @@ test('permission pause drains aborted host work, rejects new calls and resumes t
   release();await pausing;abort.abort();await assert.rejects(first);channel.resume();assert.equal((await (await call()).json()).result.isError,false);assert.equal(calls,2);
  }finally{release();abort.abort();channel.close();}
 });
+
+test('ai-rule review card advertises result states and returns an actionable MCP error for completed',async t=>{
+ const {validateData}=require('../core/ui/template.cjs');
+ const template={fields:[],rows:{key:'issue-id',fields:[]},actions:[]};
+ // Minimized from the five-finding ai-rule request. Keep finding severity separate from card state.
+ const rows=['FATAL','FATAL','FATAL','WARN','WARN'].map((severity,i)=>({'issue-id':String(i+1),severity}));
+ const channel=await createAgentChannel({ui:{present:({data})=>{
+  assert.deepEqual(validateData(template,data),{});
+  return {rows:data.rows};
+ }}});
+ t.after(()=>channel.close());
+ async function request(method,params){
+  const response=await fetch(channel.config.url,{method:'POST',headers:channel.config.http_headers,
+   body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});
+  assert.equal(response.status,200);
+  return (await response.json()).result;
+ }
+ const {tools}=await request('tools/list');
+ const expected=require('../specs/extensions/contracts/ui.schema.json').$defs.data.properties.state.enum;
+ for(const name of ['ui_present','ui_update']){
+  const schema=tools.find(tool=>tool.name===name).inputSchema.properties.data;
+  assert.deepEqual(schema.properties.state.enum,expected);
+  assert.ok(!schema.required.includes('state'));
+ }
+ const present=data=>request('tools/call',{name:'ui_present',arguments:{key:'ai-rules-review',data}});
+ const rejected=await present({state:'completed',rows});
+ assert.equal(rejected.isError,true);
+ const error=JSON.parse(rejected.content[0].text);
+ assert.equal(error.code,'INVALID_ARGUMENT');
+ assert.match(error.message,/data\.state.*"completed"/);
+ assert.match(error.fields['data.state'],/请传 "ready" 或省略 data\.state/);
+ for(const data of [...expected.map(state=>({rows,state})),{rows}]){
+  const result=await present(data);
+  assert.equal(result.isError,false);
+  assert.deepEqual(JSON.parse(result.content[0].text).rows,rows);
+ }
+});

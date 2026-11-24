@@ -19,6 +19,7 @@ test('late lifecycle events cannot stop the active turn or close its MCP connect
   assert.deepEqual((await response.json()).result,{});
   runtime.notification(context,{method:'turn/completed',params:{threadId:'thread',turn:{id:'current',status:'completed'}}});
   assert.equal(context.done,true);
+  await runtime.pendingRecords.get(context.run.id)?.saving;
   assert.equal(context.run.status,'completed');
  }finally{channel.close();}
 });
@@ -324,7 +325,7 @@ test('new unassociated tasks use isolated scratch storage even after an SSH Dock
 });
 
 test('terminal save wait does not retain engine pipes or delay the published terminal state',async()=>{
- const runtime=new AgentRuntime({directory:'/unused',publish(){}});let release,closed=0;const states=[];runtime.changed=run=>states.push(run.status);runtime.persist=()=>new Promise(resolve=>release=resolve);
+ const states=[];const runtime=new AgentRuntime({directory:'/unused',publish:run=>states.push(run.status)});let release,closed=0;runtime.persist=()=>new Promise(resolve=>release=resolve);
  const context={key:'pending-save',config:{},run:{id:'r',status:'running',messages:[],tools:[],approvals:[]},rpc:{close(){closed++;}},bridge:{close(){closed++;}}};runtime.contexts.set(context.key,context);
  const ending=runtime.finish(context,'interrupted');await new Promise(r=>setImmediate(r));assert.equal(closed,2);assert.equal(states.at(-1),'interrupted');assert.equal(context.done,true);assert.equal(runtime.contexts.has(context.key),true);release();await ending;assert.equal(runtime.contexts.has(context.key),false);
 });

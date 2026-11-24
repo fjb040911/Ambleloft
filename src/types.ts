@@ -39,12 +39,14 @@ export interface AgentRun {
   conversationId?:string;draftId?:string;
   fileChanges?:TurnFileChanges[];
   queued?:boolean;
+  recordSaving?:boolean;
+  saveIssue?:{kind:'space'|'permission'|'queue'|'write';outcome:string};
   storageBackpressure?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];
   id: string; remote?:{connectionId:string;path:string;environment?:RemoteEnvironment}; permission?:'default'|'full'; archivedAt?:string|null; providerId?:string; title: string; projectId: string | null; cwd: string; model: string; baseUrl: string;
   createdAt: string; updatedAt?: string; status: 'preparing' | 'running' | 'waiting' | 'stopping' | 'completed' | 'failed' | 'interrupted'; error: string;
-  messages: { attachments?:{name:string;path:string}[]; textPreview?:boolean;textVersion?:string;textChars?:number; userInputId?:string; inputSource?:'user'; inputDeliveryState?:'queued'|'delivered'; agentRole?:'conversation'; inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
+  messages: { attachments?:{name:string;path:string}[]; textPreview?:boolean;textVersion?:string;textChars?:number; userInputId?:string; inputSource?:'user'; inputDeliveryState?:'queued'|'delivered'; agentRole?:'conversation'; inputRecord?:{requestId:string;state:'pending'|'answered';questions:{id:string;label:string;answer?:string}[]};formSubmissionId?:string; model?:string; skills?:SkillSnapshot[]; id: string; role: 'user' | 'assistant'; modelChange?:string|null; text: string; kind?: 'reasoning'; reasoningCleared?:boolean; reasoningFormat?: 'summary'|'text'; status?: string; timing?: TurnTiming; phase?: 'commentary' | 'final_answer'; turnKey?: string; order?: number }[];
   tools: { analysisTitle?:string; nativeLifecycle?:{status:string;at:string}[]; detailPreview?:boolean;detailVersion?:string;nativeActivity?:{textPreview?:boolean;textVersion?:string;id:string;title:string;text:string;status:string}[]; nativeThreadId?:string; nativeIdentityError?:string; analysisAgent?:{id:string;name:string;avatar:number}; analysisTask?:string; analysisReads?:string[]; commandActions?: {type:'read'|'listFiles'|'search'|'unknown';name?:string;path?:string;query?:string}[]; id: string; type: string; label: string; status: string; detail: string; progress?:string; turnKey?: string; order?: number }[];
   retrying?:boolean;
   questions?:{id:string;blocking:boolean;questions:{id:string;header:string;question:string;isSecret?:boolean;options?:{label:string;description:string}[]|null}[]}[];
@@ -62,6 +64,8 @@ declare global {
   interface Window {
     desktop?: {
       readonly platform?: string;
+      storage?:{reasoningPreview():Promise<import('./ReasoningStorage').ReasoningPreview>;cleanReasoning(tokens:string[]):Promise<{bytes:number;skipped:number}>;snapshot():Promise<import('./StorageSettings').StorageSnapshot>;clean(input:import('./StorageSettings').Cleanup):Promise<{freed:number;skipped:number}>;open():Promise<string>};
+      retrySave?(id:string):Promise<void>;
       updates?: {update():Promise<import('./Updates').UpdateState>;schedule(version:string):Promise<import('./Updates').UpdateState>;cancelSchedule():Promise<import('./Updates').UpdateState>;snapshot():Promise<import('./Updates').UpdateState>;check():Promise<import('./Updates').UpdateState>;download():Promise<import('./Updates').UpdateState>;cancel():Promise<import('./Updates').UpdateState>;restart(version:string):Promise<import('./Updates').UpdateState>;preferences(input:{autoCheck?:boolean;autoDownload?:boolean}):Promise<import('./Updates').UpdateState>;onChanged(listener:(state:import('./Updates').UpdateState)=>void):()=>void};
       workforce?:import('./workforce-types').WorkforceAPI;
       growth?:{status():Promise<{policy:{enabled:number;dailyLimit:number};counts:{state:string;count:number}[]}>;jobs():Promise<{id:string;state:string;employeeId:string;domainId:string;error?:string}[]>;policy(input:{enabled:boolean;dailyLimit:number}):Promise<unknown>;dismiss(input:{id:string}):Promise<void>};
@@ -115,6 +119,8 @@ declare global {
       terminal?: import('./TerminalPanel').TerminalAPI;
       projectFiles?: ProjectFilesAPI;
       readAttachmentImage?(input:{path:string;thumbnail?:boolean}):Promise<{dataUrl:string}>;
+      readAttachmentSpreadsheet?(input:{path:string}):Promise<Extract<OfficePreview,{kind:'spreadsheet'}>>;
+      readAttachmentPdf?(input:{path:string}):Promise<{data:Uint8Array}|{error:string}>;
       importAttachments?(files:File[]): Promise<{name:string;path:string}[]>;
       selectAttachments(): Promise<{name:string;path:string}[]>;
       getAppInfo?(): Promise<AppInfo>;
@@ -143,6 +149,7 @@ declare global {
       startRun(input: { clientMutationId?:string; employeeId?:string; draftId?:string;draftRevision?:number; selectedSkillIds?:string[]; permission?:'default'|'full'; attachments?:{name:string;path:string}[]; confirmedProviderBaseUrl?:string;confirmProviderChange?:boolean; providerId?:string; model?:string; prompt: string; projectId?: string | null; runId?: string }): Promise<AgentRun>;
       downloadArtifact(input:{runId:string;path:string}):Promise<void>;
       accessArtifact(input:{runId:string;id:string;preview?:boolean}):Promise<(DeliveredFile&{text:string})|null>;
+      artifactAvailability(input:{runId:string;ids:string[]}):Promise<Record<string,'available'|'missing'|'unavailable'>>;
       switchRunModel?(input:{runId:string;providerId:string;model:string;confirmedProviderBaseUrl?:string;confirmProviderChange?:boolean}):Promise<ModelChange>;
       switchRunPermission?(input:{runId:string;permission:'default'|'full';confirmed?:boolean}):Promise<PermissionChange>;
       stopRun(id: string): Promise<void>;
@@ -171,7 +178,7 @@ export interface FileApplication {id:string;name:string;icon?:string;isDefault?:
 export type OfficePreview = {version:string;asset:string}&({kind:'spreadsheet';sheets:{name:string;rows:string[][];columns:number;truncated:boolean}[];truncated:boolean}|{kind:'presentation';slides:{number:number;notes:string}[];legacy?:boolean});
 export interface ProjectFilesAPI {
  office(input:FileContext&{path:string;version?:string}):Promise<OfficePreview>;
- context(input:FileContext):Promise<{root:string;baseUrl:string}>;
+ context(input:FileContext):Promise<{root:string;baseUrl:string;artifactPath?:string}>;
  list(input:FileContext&{path:string;hidden:boolean}):Promise<FileListing>;
  search(input:FileContext&{query:string;hidden:boolean}):Promise<FileListing>;
  read(input:FileContext&{path:string;version?:string}):Promise<FilePreview|{unchanged:true;version:string}>;

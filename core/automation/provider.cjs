@@ -1,6 +1,7 @@
 const {usesChat}=require('../../electron/chat-bridge.cjs');
 const {parseStructuredOutput,outputError}=require('./structured-output.cjs');
 const capabilities=require('./output-capabilities.cjs');
+const {streamInterruption,streamRecovery}=require('../models/stream-recovery.cjs');
 const Ajv=require('ajv');
 const {inferenceDeadline,abortable}=require('./inference-deadline.cjs');
 const {resolveBudget,recoverBudget,estimateInput,thinking}=require('../models/budget.cjs');
@@ -21,6 +22,7 @@ async function generateWithinDeadline(config,job,signal,onProgress){
  let unsupported=[];
  const choose=()=>{unsupported=capabilities.profile(config,protocol,!!onProgress)?.unsupported||[];const found=available.findIndex(mode=>!unsupported.includes(mode));return found<0?available.length-1:found;};
  let index=choose(),repair='',repaired=false,switched=false,outputRetried=false;
+ const recovery=streamRecovery();
  for(let attempt=0;attempt<4;attempt++){
   signal.throwIfAborted();const mode=available[index];
   job={...job,usageAttempt:attempt};
@@ -36,6 +38,10 @@ async function generateWithinDeadline(config,job,signal,onProgress){
   }catch(error){
    error.diagnostics={...error.diagnostics,attempts:attempt+1,protocol,mode,budget:job.outputBudget,...(error.message==='OUTPUT_LIMIT'?{maxOutputTokens:outputBudget(config,job),outputLimitRetried:outputRetried}: {})};
    signal.throwIfAborted();if(attempt===3)throw error;
+   if(recovery.claim(error.diagnostics.interruption,job.retryInterruptedStream,signal)){
+    await onProgress?.({phase:'retrying',interruption:error.diagnostics.interruption});
+    continue;
+   }
    const probeRoute=job.probeProtocol&&error.message==='PROVIDER_REJECTED'&&error.diagnostics?.httpStatus===404;
    if((error.message==='PROTOCOL_UNSUPPORTED'||probeRoute)&&(!config.protocol||config.protocol==='auto')&&!switched){protocol=protocol==='chat'?'responses':'chat';switched=true;index=choose();}
    else if(['FORMAT_UNSUPPORTED','SCHEMA_UNSUPPORTED'].includes(error.message)&&index<available.length-1){if(error.message==='FORMAT_UNSUPPORTED')unsupported=[...new Set([...unsupported,mode])];index++;}
@@ -61,7 +67,7 @@ async function request(config,job,signal,onProgress,mode){
  const id=require('node:crypto').randomUUID(),startedAt=new Date().toISOString();let usage=null,providerRequestId=null,status='unknown',dispatched=false;
  const observed=()=>({id,hostRequestId:job.usageRequestId,attempt:job.usageAttempt||0,startedAt,finishedAt:status==='running'?null:new Date().toISOString(),status,usage,providerRequestId});
  const notify=async()=>{try{await job.observeUsage?.(observed());}catch{}};
- const onUsage=(value,requestId)=>{usage=value;providerRequestId=requestId||providerRequestId;};
+ const onUsage=(value,requestId)=>{usage=value??usage;providerRequestId=requestId||providerRequestId;};
  try{
  const chat=usesChat(config),instruction='Return only JSON matching this schema: '+JSON.stringify(job.outputSchema)+'\n'+job.prompt;
  const maximum=outputBudget(config,job);
@@ -74,7 +80,8 @@ async function request(config,job,signal,onProgress,mode){
  }
  signal.throwIfAborted();
  dispatched=true;status='running';await notify();
- const response=await fetch(config.baseUrl+(chat?'/chat/completions':'/responses'),{method:'POST',headers:{'Content-Type':'application/json',...(config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},body:JSON.stringify(body),signal,redirect:'error'});
+ const response=await fetch(config.baseUrl+(chat?'/chat/completions':'/responses'),{method:'POST',headers:{'Content-Type':'application/json','X-Request-Id':id,...(config.apiKey?{Authorization:'Bearer '+config.apiKey}:{})},body:JSON.stringify(body),signal,redirect:'error'});
+ providerRequestId=response.headers.get('x-request-id')||null;
  if(!response.ok)throw await capabilities.httpError(response);
  if(onProgress&&response.headers.get('content-type')?.includes('text/event-stream')){const result=await require('./provider-stream.cjs').readStructuredStream(response,{chat,signal,onProgress,onUsage,reasoning:config.reasoningSummary!==false});status='succeeded';return result;}
  const reader=response.body.getReader();let bytes=0;const chunks=[];
@@ -92,7 +99,13 @@ async function request(config,job,signal,onProgress,mode){
   if(reasoning)await onProgress({phase:'responding',reasoning,reasoningFormat:chat?'text':'summary'});
  }
  const result=parseStructuredOutput(text);status='succeeded';return result;
- }catch(error){status=signal?.aborted?'unknown':error.definitive?'failed':'unknown';throw error;}
+ }catch(error){
+  const interruption=streamInterruption(error,signal,{model:config.model,requestId:providerRequestId||id});
+  if(interruption){
+   status=error.definitive?'failed':'unknown';
+   throw Object.assign(Error('INCOMPLETE_STREAM',{cause:error}),{definitive:error.definitive,code:'INCOMPLETE_STREAM',diagnostics:{interruption}});
+  }
+  status=signal?.aborted?'unknown':error.definitive?'failed':'unknown';throw error;}
  finally{if(dispatched)await notify();}
 }
 module.exports={generate};

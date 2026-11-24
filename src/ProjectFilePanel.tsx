@@ -27,7 +27,7 @@ type Reading={mode?:'preview'|'code';top?:number;codeTop?:number};
 type PanelState={tabs:Tab[];active:string;expanded:string[];reading:Record<string,Reading>;tree:boolean;hidden:boolean};
 const initial:PanelState={tabs:[],active:'',expanded:[],reading:{},tree:true,hidden:false};
 const icon=(entry:FileEntry)=><FileTypeIcon name={entry.name} directory={entry.directory}/>;
-export default function ProjectFilePanel({context,scope,open,close,rootHint,paused,request,full,setFull}:{full:boolean;setFull(value:boolean):void;request?:{path:string;id:number}|null;context:FileContext;scope:string;open:boolean;close:()=>void;rootHint:string;paused:boolean}) {
+export default function ProjectFilePanel({context,scope,open,close,rootHint,paused,request,full,setFull}:{full:boolean;setFull(value:boolean):void;request?:{path:string;id:number;artifactId?:string}|null;context:FileContext;scope:string;open:boolean;close:()=>void;rootHint:string;paused:boolean}) {
  const api=window.desktop?.projectFiles;
  const [state,setState]=useState<PanelState>(()=>{const value=load<PanelState>(scope,initial);return value&&Array.isArray(value.tabs)&&Array.isArray(value.expanded)&&value.reading?value:initial;});
  const [width,setWidth]=useState(()=>load<number>('width',680));
@@ -115,10 +115,10 @@ export default function ProjectFilePanel({context,scope,open,close,rootHint,paus
  useEffect(()=>{
   if(!request||!open||paused||!api||handledRequest.current===request.id)return;
   let cancelled=false;
-  api.context(context).then(value=>{
+  api.context({...context,artifactId:request.artifactId}).then(value=>{
    if(cancelled)return;
    const prefix=value.root.replace(/\/$/,'')+'/';
-   const path=request.path.startsWith('/')?(request.path.startsWith(prefix)?request.path.slice(prefix.length):null):request.path;
+   const path=value.artifactPath??(request.path.startsWith('/')?(request.path.startsWith(prefix)?request.path.slice(prefix.length):null):request.path);
    if(!path||path.split('/').includes('..'))throw new Error(t('文件不在项目目录内'));
    setRoot(value.root);setBase(value.baseUrl);setQuery('');openFile(path,true);
    const parts=path.split('/');const ancestors=parts.slice(0,-1).map((_,index)=>parts.slice(0,index+1).join('/'));

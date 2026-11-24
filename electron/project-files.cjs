@@ -34,16 +34,22 @@ function createProjectFiles({cacheDirectory,getWorkspace,getRuns,getApprovedApps
   if(!inside(root,requested))throw new Error('文件不在项目目录内');
   const full=await fs.realpath(requested);
   if(!inside(root,full))throw new Error('不能访问项目外的符号链接');
-  if(!input.projectId){const run=(await getRuns()).find(r=>r.id===input.runId);const artifact=run?.artifacts?.find(file=>file.id===input.artifactId);if(!artifact||await fs.realpath(artifact.path)!==full)throw new Error('只能访问所选交付文件');}
+  if(!input.projectId){const run=(await getRuns()).find(r=>r.id===input.runId);const artifact=run?.artifacts?.find(file=>file.id===input.artifactId);if(!artifact||await fs.realpath(path.resolve(root,artifact.path))!==full)throw new Error('只能访问所选交付文件');}
   return {root,full,relative:path.relative(root,requested).split(path.sep).join('/'),stat:await fs.stat(full)};
  }
  async function context(input) {
   const root=await rootFor(input);
+  let artifactPath;
+  if(input.artifactId){
+   const run=(await getRuns()).find(r=>r.id===input.runId);
+   const file=await require('./artifacts.cjs').accessArtifact(run,input.artifactId);
+   artifactPath=path.relative(root,file.path).split(path.sep).join('/');
+  }
   const key=JSON.stringify([input.projectId,input.runId||'',input.artifactId||'',root]);
   let token;
   for(const [id,value] of contexts)if(value.key===key)token=id;
   if(!token){token=crypto.randomBytes(24).toString('hex');contexts.set(token,{key,root,input:{projectId:input.projectId,runId:input.runId,artifactId:input.artifactId}});}
-  return {root,baseUrl:`atelier-preview://${token}/`};
+  return {root,baseUrl:`atelier-preview://${token}/`,...(artifactPath?{artifactPath}:{})};
  }
  async function list(input) {
   if(!input?.projectId)throw new Error('请选择项目');
@@ -132,6 +138,6 @@ function createProjectFiles({cacheDirectory,getWorkspace,getRuns,getApprovedApps
   if(application&&application!=='default')return applications.open(full,application);
   const error=await shell.openPath(full);if(error)throw new Error(error);return (await applications.list(full)).find(app=>app.id==='default')||{id:'default',name:'系统默认应用'};
  }
- return {context,list,search,read,office,resolve,resource,apps,open};
+ return {context,list,search,read,office,resolve,resource,apps,open,spreadsheetAttachment:officeService.spreadsheetAttachment};
 }
 module.exports={createProjectFiles,TEXT_LIMIT,MEDIA_LIMIT};
