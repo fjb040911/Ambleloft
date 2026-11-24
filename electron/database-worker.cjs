@@ -92,8 +92,13 @@ function saveRunRows(runs,{replace=true}={}){
   const del=db.prepare('DELETE FROM run_items WHERE run_id=? AND collection=? AND item_key=?');for(const item of old.values())del.run(run.id,item.collection,item.item_key);
  }
  if(!replace)existing.clear();
- const del=db.prepare('DELETE FROM runs WHERE id=?');for(const id of existing.keys()){if(JSON.parse(existing.get(id)).originHandoff)continue;del.run(id);db.prepare('DELETE FROM task_context_heads WHERE run_id=?').run(id);db.prepare("DELETE FROM form_instances WHERE run_id=?").run(id);db.prepare("DELETE FROM chat_inputs WHERE run_id=?").run(id);db.prepare('DELETE FROM chat_input_policies WHERE run_id=?').run(id);db.prepare('DELETE FROM input_requests WHERE run_id=?').run(id);db.prepare('DELETE FROM input_mutations WHERE run_id=?').run(id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(id);}
+ for(const [id,data] of existing)if(!JSON.parse(data).originHandoff)deleteRunRows(id);
  if(continuityDirty||existing.size)continuity.syncSources();
+}
+function deleteRunRows(id){
+ db.prepare('DELETE FROM runs WHERE id=?').run(id);
+ for(const table of ['task_context_heads','form_instances','chat_inputs','chat_input_policies','input_requests','input_mutations'])db.prepare('DELETE FROM '+table+' WHERE run_id=?').run(id);
+ db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(id);
 }
 function saveRunPatches(input){return transaction(()=>{
  const digest=require('node:crypto').createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -130,7 +135,7 @@ function saveRunPatches(input){return transaction(()=>{
   }
   if(meta.terminalTurnId&&meta.terminalTurnId!==previous?.terminalTurnId)automation.capture(texts.readRunReferences(db,patch.id),meta.terminalTurnId);
  }
- if(input.keep){const keep=new Set(input.keep);for(const row of db.prepare('SELECT id,data FROM runs').all())if(!keep.has(row.id)&&!JSON.parse(row.data).originHandoff){db.prepare('DELETE FROM runs WHERE id=?').run(row.id);db.prepare('DELETE FROM task_context_heads WHERE run_id=?').run(row.id);for(const table of ['form_instances','chat_inputs','chat_input_policies','input_requests','input_mutations'])db.prepare('DELETE FROM '+table+' WHERE run_id=?').run(row.id);db.prepare("UPDATE conversation_identities SET kind='deleted-run' WHERE kind='run' AND record_id=?").run(row.id);continuityDirty=true;}}
+ if(input.keep){const keep=new Set(input.keep);for(const row of db.prepare('SELECT id,data FROM runs').all())if(!keep.has(row.id)&&!JSON.parse(row.data).originHandoff){deleteRunRows(row.id);continuityDirty=true;}}
  if(input.terminal){const run=texts.readRunReferences(db,input.terminal.runId);if(run)automation.capture(run,input.terminal.turnId);}
  if(continuityDirty)continuity.syncSources();
  const result=identities;db.prepare('INSERT INTO run_patch_receipts VALUES(?,?,?)').run(input.mutationId,new Date().toISOString(),JSON.stringify({digest,result}));
@@ -153,6 +158,14 @@ const handlers={
  previewHistoricalReasoning:input=>historicalReasoning.scan(db,input),
  cleanHistoricalReasoning:input=>transaction(()=>historicalReasoning.scan(db,input,input.tokens)),
  saveRunPatches,
+ deleteRun({id}){return transaction(()=>{
+  const row=db.prepare('SELECT data,archived_at FROM runs WHERE id=?').get(id);
+  if(!row)return;
+  if(JSON.parse(row.data).originHandoff)throw Error('HOST_MANAGED_RUN');
+  if(!row.archived_at)throw Error('请先归档会话，再永久删除');
+  deleteRunRows(id);
+  continuity.syncSources();
+ });},
  readRuntimeState(){
   const texts=require('./run-text-store.cjs'),{splitItem}=require('./run-patches.cjs');
   // Migrate legacy inline bodies one item at a time, without a full-history copy.

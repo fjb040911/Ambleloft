@@ -48,17 +48,49 @@ class AgentRuntime {
   }
   acknowledgeBytes(snapshot){for(const [id,bytes] of snapshot){const remaining=(this.streamBytes.get(id)||0)-bytes;if(remaining>0)this.streamBytes.set(id,remaining);else this.streamBytes.delete(id);}this.updateStoragePressure();}
   async init() {
+    let recovering=false;
     try {
       this.runs = this.database ? await this.database.call(this.database.incrementalRuns?'readRuntimeRuns':'readRuns') : JSON.parse(await fs.readFile(this.file, 'utf8'));
       if (!Array.isArray(this.runs)) throw new Error('invalid conversations');
-      for (const run of this.runs) if (BUSY.includes(run.status)) {
-        run.queued=false; run.status = 'interrupted'; run.error = '上次应用退出时任务未完成。请核实工具结果后再继续，不会自动重试。'; run.approvals = []; run.questions=[]; run.retrying=false;
-        const timing = run.messages?.findLast(message => message.role === 'user'&&!message.turnKey)?.timing;
-        if (timing && !timing.outcome) timing.outcome = 'interrupted';
+      recovering=true;
+      for (const run of this.runs) {
+        const items=new Set();
+        const include=(collection,item,index)=>items.add(JSON.stringify([collection,String(item.id||item.turnKey||index)]));
+        const clear=collection=>{
+          run[collection]?.forEach((item,index)=>include(collection,item,index));
+          run[collection]=[];
+        };
+        let changed=!!run.storageBackpressure;
+        if (BUSY.includes(run.status)) {
+          run.queued=false; run.status = 'interrupted'; run.error = '上次应用退出时任务未完成。请核实工具结果后再继续，不会自动重试。'; run.retrying=false;
+          clear('approvals');changed=true;
+          const index=run.messages?.findLastIndex(message=>message.role==='user'&&!message.turnKey)??-1;
+          const message=run.messages?.[index];
+          if (message?.timing && !message.timing.outcome) {message.timing.outcome='interrupted';include('messages',message,index);}
+        }
+        for(const [key,error] of [['modelChange','应用已重启，模型切换未确认生效。'],['permissionChange','应用已重启，权限切换未确认生效。']]){
+          const transition=run[key];
+          if(transition?.state!=='switching'&&(key!=='modelChange'||transition?.state!=='configured'))continue;
+          Object.assign(transition,{state:'failed',effective:null,error});
+          await this.chatInputs?.pause(run.id);
+          changed=true;
+        }
+        clear('questions');run.storageBackpressure=false;
+        this.native.recover(run,key=>items.add(JSON.stringify(['tools',key])));
+        if(this.database?.incrementalRuns&&!run.originHandoff&&(changed||items.size)){
+          await this.database.call('saveRunUpdates',[run],{hints:new Map([[run.id,items]])});
+        }
       }
-      for(const run of this.runs){if(['switching','configured'].includes(run.modelChange?.state)){run.modelChange.state='failed';run.modelChange.effective=null;run.modelChange.error='应用已重启，模型切换未确认生效。';await this.chatInputs?.pause(run.id);}if(run.permissionChange?.state==='switching'){run.permissionChange.state='failed';run.permissionChange.effective=null;run.permissionChange.error='应用已重启，权限切换未确认生效。';await this.chatInputs?.pause(run.id);}run.questions=[];run.storageBackpressure=false;this.native.recover(run);} // Old RPC requests never survive a process restart.
-      await this.persist();
-    } catch (error) { if (error.code !== 'ENOENT') throw new Error('对话记录无法读取，未覆盖原始数据'); }
+      if(!this.database?.incrementalRuns)await this.persist();
+    } catch (cause) {
+      if (recovering) {
+        const message=cause.code==='DATABASE_BACKPRESSURE'
+          ? `启动时未能保存恢复后的任务状态。${cause.message}`
+          : '启动时未能保存恢复后的任务状态，请保留本地数据并重试。';
+        throw new Error(message,{cause});
+      }
+      if (this.database||cause.code!=='ENOENT') throw new Error('对话记录无法读取，未覆盖原始数据',{cause});
+    }
     this.initialized = true;
   }
   list() { return structuredClone(this.runs); }
@@ -94,7 +126,18 @@ class AgentRuntime {
           run.projectId = input.projectId;
         }
       }
-      await this.persist();
+      if(this.database?.incrementalRuns){
+        const operation=this.writes.then(async()=>{
+          if(input.remove){
+            await this.database.call('deleteRun',{id:run.id});
+            this.dirtyRuns.delete(run.id);this.dirtyItems.delete(run.id);
+            return;
+          }
+          await this.database.call('saveRunUpdates',[run],{hints:new Map([[run.id,new Set()]])});
+        });
+        this.writes=operation.catch(()=>{});
+        await operation;
+      }else await this.persist();
       if (!input.remove) this.publish(structuredClone(run));
       return this.list();
     } catch (error) {
@@ -173,6 +216,19 @@ class AgentRuntime {
     });
     this.pendingSave=operation;this.writes=operation.catch(()=>{});
     return operation;
+  }
+  flushPendingWrites() {
+    if(this.flushingWrites)return this.flushingWrites;
+    this.flushingWrites=(async()=>{
+      do {
+        clearTimeout(this.saveTimer);this.saveTimer=null;
+        await this.writes;
+        await this.database?.waitForWrites?.();
+        for(const id of this.pendingRecords.keys())await this.retrySave(id);
+        await this.persistChanged();
+      } while(this.pendingRecords.size||this.runs.some(run=>this.dirtyRuns.has(run.id)));
+    })().finally(()=>{this.flushingWrites=null;});
+    return this.flushingWrites;
   }
   publishRun(run, changedItems) {
     if(this.database?.closed)return;
@@ -735,7 +791,11 @@ class AgentRuntime {
     try { if (context.run.turnId && context.rpc && !context.rpc.closed) await context.rpc.call('turn/interrupt', { threadId: context.run.threadId, turnId: context.run.turnId }, 5000); } catch {}
     if (!context.done) await this.finish(context, 'interrupted', '已停止。若工具已执行，请核实结果后继续。');
   }
-  async finish(context, status, error = '') {
+  finish(context, status, error = '') {
+    context.finishing??=this.finishContext(context,status,error);
+    return context.finishing;
+  }
+  async finishContext(context, status, error) {
     if (context.done) return;
     if(context.cancelled)status='interrupted';
     if(context.switchFailureReason){status='interrupted';error=context.switchFailureReason;}
@@ -790,6 +850,19 @@ class AgentRuntime {
     const pending=Promise.resolve().then(()=>rpc.close()).catch(error=>{this.engineCleanupError=error;console.error('ENGINE_CLEANUP_FAILED',error.code||'unknown');}).finally(()=>this.engineClosures.delete(pending));
     this.engineClosures.add(pending);
   }
-  async shutdown() { this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);if (!this.initialized) return; this.closing=true;for(const context of this.contexts.values())context.cancelled=true;await Promise.all([...this.contexts.values()].filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));if(this.saveTimer)clearTimeout(this.saveTimer);await Promise.all([...this.pendingRecords.keys()].map(id=>this.retrySave(id)));await this.persist();await this.chatInputs?.shutdown();await Promise.all(this.engineClosures||[]);this.unsubscribePressure?.();if(this.engineCleanupError)throw this.engineCleanupError; }
+  async shutdown() {
+    this.chatInputs&&(this.chatInputs.closed=true);clearInterval(this.chatInputs?.timer);
+    if (!this.initialized) return;
+    this.closing=true;
+    const contexts=[...this.contexts.values()];
+    for(const context of contexts)context.cancelled=true;
+    await Promise.all(contexts.filter(c=>c.run).map(c=>this.stop(c.run.id,{pause:false})));
+    await Promise.all(contexts.map(context=>context.finishing));
+    await this.chatInputs?.shutdown();
+    await Promise.all(this.engineClosures||[]);
+    await this.flushPendingWrites();
+    this.unsubscribePressure?.();
+    if(this.engineCleanupError)throw this.engineCleanupError;
+  }
 }
 module.exports = { AgentRuntime };

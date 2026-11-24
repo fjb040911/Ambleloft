@@ -120,6 +120,6 @@ class NativeSubagents {
   }));
  }
  finish(context){streamFields(context).finish(true);for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';this.changed(context);context.nativeThreads?.clear();}
- recover(run){for(const tool of run.tools||[])if(tool.type==='analysis'&&live(tool.status))tool.status='interrupted';}
+ recover(run,onChange){for(const [index,tool] of (run.tools||[]).entries())if(tool.type==='analysis'&&live(tool.status)){tool.status='interrupted';onChange?.(String(tool.id||tool.turnKey||index));}}
 }
 module.exports={NativeSubagents};

@@ -39,7 +39,7 @@ function createRunPatches(){
      if(partial&&!hint.has(lookup))continue;
      entries.push({collection,key,lookup,position,turnKey:item.turnKey||(collection==='messages'?turnKey:null),value:splitItem(item),source:item});
     }
-    return {id:run.id,metadata:JSON.stringify(meta),partial,entries,seen,source:run};
+    return {id:run.id,metadata:JSON.stringify(meta),partial,entries,seen,hintedKeys:partial?[...hint]:[],source:run};
    });
   },
   prepare(runs,options={}){return this.prepareCaptured(this.capture(runs,options.hints),options);},
@@ -74,7 +74,7 @@ function createRunPatches(){
      if(!before||before.data!==value.data||before.position!==position||before.turnKey!==itemTurn||texts.length||removed.length)upserts.push({collection,key,position,turnKey:itemTurn,data:value.data,texts,removed,resetTexts:!before});
      inventory.set(lookup,{data:value.data,texts:signatures,position,turnKey:itemTurn});
     }
-    if(!partial)for(const key of inventory.keys())if(!seen.has(key)){deletes.push(JSON.parse(key));inventory.delete(key);}
+    for(const key of partial?run.hintedKeys:inventory.keys())if(!seen.has(key)&&inventory.delete(key))deletes.push(JSON.parse(key));
     if(!previous||previous.meta!==metadata||upserts.length||deletes.length){
      patches.push({id:run.id,meta:metadata,upserts,deletes,...(!previous?{keepItems:[...seen]}:{})});next.set(run.id,{meta:metadata,items:inventory});
     }
@@ -101,6 +101,7 @@ function createRunPatches(){
     if(evidence)record.meta=JSON.stringify({...JSON.parse(record.meta),reasoningEvidence:evidence});
    }
   },
+  forget(id){saved.delete(id);},
   clear(){saved.clear();},
  };
 }
