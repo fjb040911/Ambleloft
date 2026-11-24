@@ -51,13 +51,13 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
           node -e 'const assert=require("node:assert/strict"); assert.equal(require("./package.json").version,process.env.CANDIDATE_VERSION); const os={win32:"windows",darwin:"macos",linux:"linux"}; assert.equal(os[process.platform]+"-"+process.arch,process.env.EXPECTED_PLATFORM)'
       - name: Validate artifacts, model switching, permissions and workspace portability
-        run: node --test --test-concurrency=2 tests/artifacts.test.cjs tests/runtime.test.cjs tests/model-switch.test.cjs tests/permission-switch.test.cjs tests/model-engine.test.cjs tests/permission-engine.test.cjs tests/updates.test.cjs tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/workforce-plans.test.cjs tests/conversation-data.test.cjs
+        run: node --test --test-concurrency=2 tests/artifacts.test.cjs tests/runtime.test.cjs tests/model-switch.test.cjs tests/permission-switch.test.cjs tests/model-engine.test.cjs tests/permission-engine.test.cjs tests/updates.test.cjs tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/storage-management.test.cjs tests/historical-reasoning.test.cjs tests/save-recovery.test.cjs tests/attachment-pdf.test.cjs tests/office-preview.test.cjs tests/chat-budget.test.cjs tests/provider-stream.test.cjs tests/workforce-discussion-host.test.cjs tests/workforce-plans.test.cjs tests/conversation-data.test.cjs
       - name: Prepare browser
         shell: bash
         run: |
           if [ "$RUNNER_OS" = Linux ]; then npx playwright install --with-deps chromium; else npx playwright install chromium; fi
       - name: Test chat, runtime switches, artifact download and project navigation
-        run: npx playwright test tests/e2e/chat.spec.ts tests/e2e/composer.spec.ts tests/e2e/model-capabilities.spec.ts tests/e2e/project-sidebar-info.spec.ts --workers=2 --retries=1 --reporter=line
+        run: npx playwright test tests/e2e/chat.spec.ts tests/e2e/composer.spec.ts tests/e2e/model-capabilities.spec.ts tests/e2e/project-sidebar-info.spec.ts tests/e2e/discussion-host.spec.ts tests/e2e/docker-terminal.spec.ts --workers=2 --retries=1 --reporter=line
       - name: Package Windows
         if: runner.os == 'Windows'
         run: npm run dist:win
@@ -194,8 +194,7 @@ jobs:
           done
           sha256sum -- * > ../SHA256SUMS.txt
           cp ../SHA256SUMS.txt .
-          existing=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null || true)
-          if [ -z "$existing" ]; then
+          if ! existing=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq .object.sha 2>/dev/null); then
             gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$SOURCE_COMMIT" --jq .ref
           else
             test "$existing" = "$SOURCE_COMMIT"
