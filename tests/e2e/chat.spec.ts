@@ -279,6 +279,51 @@ test('Mermaid instruction example renders quoted placeholders and literal quotes
  expect(labels).toContain('workforce.spaces.v1');expect(labels).toContain('“引用”');expect(labels).toContain('完成');
 });
 
+async function clickTurn(nav:import('@playwright/test').Locator,number:number){
+ const turn=nav.getByRole('button',{name:new RegExp('^第 '+number+' 轮：')});
+ for(let step=0;step<20 && !await turn.count();step++){
+  const first=Number(await nav.locator('.turn-anchor').first().getAttribute('data-turn-number'))+1;
+  await nav.getByRole('button',{name:number<first?'上一组轮次':'下一组轮次'}).click();
+ }
+ await turn.click();
+}
+
+test('compact turn navigation pages without scrollbars or moving the transcript',async({page})=>{
+ await page.setViewportSize({width:830,height:610});
+ await prepare(page,'初始回答');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.tools=[];
+  r.messages=Array.from({length:90},(_,i)=>[{id:'u'+i,role:'user',text:'轮次问题 '+i},
+   {id:'a'+i,role:'assistant',phase:'final_answer',text:('回答 '+i+'\n\n').repeat(12)}]).flat();w.__emit();
+ });
+ const nav=page.getByRole('navigation',{name:'对话轮次导航'});
+ const viewport=page.getByRole('region',{name:'任务消息'});
+ const marker=nav.locator('.turn-anchor'),earlier=nav.getByRole('button',{name:'上一组轮次'});
+ await expect(marker.last()).toHaveAttribute('data-turn-number','89');
+ await clickTurn(nav,82);
+ await expect.poll(()=>page.locator('[data-turn-id=u81]').evaluate(el=>Math.round(el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top))).toBe(14);
+ const top=await viewport.evaluate(el=>el.scrollTop);
+ await earlier.click();
+ const firstNumber=Number(await marker.first().getAttribute('data-turn-number'));
+ const lastNumber=Number(await marker.last().getAttribute('data-turn-number'));
+ expect(lastNumber).toBeLessThan(89);
+ await marker.first().hover({position:{x:29,y:2}});
+ await expect(page.getByRole('tooltip')).toContainText('回答 '+firstNumber);
+ await marker.nth(1).hover({position:{x:29,y:2}});
+ await expect(page.getByRole('tooltip')).toContainText('轮次问题 '+(firstNumber+1));
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='running';w.__demoRun.messages.at(-1).text+='追加';w.__emit();});
+ await expect(marker.last()).toHaveAttribute('data-turn-number',String(lastNumber));
+ expect(await viewport.evaluate(el=>el.scrollTop)).toBeCloseTo(top,0);
+ for(const size of [{width:830,height:610},{width:1050,height:780}]){
+  await page.setViewportSize(size);
+  await expect.poll(()=>nav.evaluate(el=>[getComputedStyle(el).overflowX,getComputedStyle(el).overflowY,el.scrollWidth-el.clientWidth,el.scrollHeight-el.clientHeight])).toEqual(['clip','clip',0,0]);
+ }
+ const id=Number(await marker.nth(2).getAttribute('data-turn-number'));
+ await nav.locator('[data-turn-number="'+id+'"]').focus();await page.keyboard.press('ArrowDown');
+ await expect(nav.locator('[data-turn-number="'+(id+1)+'"]')).toBeFocused();await page.keyboard.press('Enter');
+ await expect(page.locator('[data-turn-id=u'+(Number(id)+1)+']')).toBeVisible();
+});
+
 test('turn anchors preview the question and jump without moving the composer',async({page})=>{
  await prepare(page);
  await page.evaluate(()=>{
@@ -408,28 +453,29 @@ test('clarification collects explicit answers and retry state offers recovery wi
 });
 
 
-test('older turns load by cursor and long history mounts only the visible window',async({page})=>{
+for(const end of [50,60])test(`older turns load by cursor and preserve the reader with ${end-30} initial turns`,async({page})=>{
  await prepare(page,'');
- await page.evaluate(()=>{
+ await page.evaluate(end=>{
   const run=(window as any).__demoRun;run.status='completed';run.approvals=[];
   const messages=(start:number,end:number)=>Array.from({length:end-start},(_,j)=>{const i=j+start;return [{id:'u'+i,role:'user',text:'问题 '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('回答 '+i+'\n\n').repeat(15)}];}).flat();
-  run.messages=messages(30,60);run.tools=[];run.historyBefore='u30';run.turnOffset=30;
+  run.messages=messages(30,end);run.tools=[];run.historyBefore='u30';run.turnOffset=30;
   (window as any).desktop.getRunPage=async(input:any)=>{(window as any).__historyInput=input;return {...run,messages:messages(0,30),historyBefore:null,turnOffset:0};};
   (window as any).__emit();
- });
- await expect(page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first()).toHaveAttribute('aria-label',/第 31 轮/);
- await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first().click();
+ },end);
+ const nav=page.getByRole('navigation',{name:'对话轮次导航'});
+ await expect(nav.locator('.turn-anchor').first()).toHaveAttribute('aria-label',/第 31 轮/);
+ await clickTurn(nav,31);
  const anchorTop=()=>page.locator('[data-turn-id="u30"]').evaluate(el=>el.getBoundingClientRect().top-el.closest('.conversation-scroll')!.getBoundingClientRect().top);
  await expect.poll(async()=>Math.abs(await anchorTop()-14)).toBeLessThan(1);
- await page.getByRole('button',{name:'加载更早的对话'}).click();
+ await nav.getByRole('button',{name:'上一组轮次'}).click();
  await expect.poll(async()=>Math.abs(await anchorTop()-14)).toBeLessThan(1);
  expect(await page.evaluate(()=>(window as any).__historyInput.before)).toBe('u30');
  await expect.poll(()=>page.locator('.conversation-turn').count()).toBeLessThan(20);
  await expect(page.locator('[data-turn-id="u0"]')).toHaveCount(0);
- await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button').first().click();
+ await clickTurn(nav,1);
  await expect(page.locator('[data-turn-id="u0"] [data-slot=message][data-align=start]')).toBeVisible();
  await page.getByRole('button',{name:'回到最新消息'}).click();
- await expect(page.locator('[data-turn-id="u59"] [data-slot=message][data-align=start]')).toBeVisible();
+ await expect(page.locator(`[data-turn-id="u${end-1}"] [data-slot=message][data-align=start]`)).toBeVisible();
 });
 
 
@@ -881,13 +927,91 @@ test('tool summaries describe actions while commands and output remain expandabl
  await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).not.toContainText('/bin/zsh');
  await expect(rows.nth(0).locator('pre').first()).not.toBeVisible();
  await rows.nth(0).locator('[data-slot=trace-collapsible-trigger]').click();
- await expect(rows.nth(0).getByLabel('执行命令')).toHaveText("/bin/zsh -lc 'cat docs/design.md'");
+ await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger] [data-slot=trace-line]')).toHaveAttribute('title',"/bin/zsh -lc 'cat docs/design.md'");
  await expect(rows.nth(0).locator('pre').last()).toHaveText('file contents');
  await expect(rows.nth(1).locator('[data-slot=trace-collapsible-trigger]')).toContainText('读取文件');
- await expect(rows.nth(2).locator('[data-slot=trace-collapsible-trigger]')).toContainText('运行命令');
+ await expect(rows.nth(2).locator('[data-slot=trace-collapsible-trigger]')).toContainText('cat a.md && rm b.md');
  await expect(page.locator('.process-entry.contextCompaction')).toContainText('正在压缩上下文');
  await page.evaluate(()=>{(window as any).__demoRun.tools.at(-1).status='completed';(window as any).__emit();});
  await expect(page.locator('.process-entry.contextCompaction')).toContainText('上下文已压缩');
+});
+
+test('subagent replay shares reasoning, terminal, stack and MCP details with the main transcript',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.tools=[{id:'child',type:'analysis',label:'Reviewer',status:'completed',turnKey:'u',detail:'Review complete',nativeActivity:[
+   {id:'thought',title:'Reasoning',status:'completed',text:'Preview',textPreview:true,textVersion:'saved'},
+   {id:'cmd',title:'/bin/zsh -lc "npm test"',status:'completed',text:'All passed'},
+   {id:'error',type:'commandExecution',title:'npm lint',status:'failed',text:'TypeError: bad input\n    at lint (/src/check.js:1:3)'},
+   {id:'lookup',type:'mcpToolCall',title:'lookup',status:'completed',text:JSON.stringify({arguments:{query:'index'},result:'found'})},
+  ]}];
+  w.__activityReads=[];
+  w.desktop.getToolText=async(input:any)=>{w.__activityReads.push(input);return {text:'Saved child reasoning',offset:0,total:21,version:'saved'};};
+  w.__emit();
+ });
+ const panel=page.locator('.analysis-agent').first();
+ await panel.getByRole('button',{name:/Reviewer/}).click();
+ expect(await page.evaluate(()=>(window as any).__activityReads)).toHaveLength(0);
+ await panel.getByRole('button',{name:'思考过程'}).click();
+ const reasoning=panel.getByRole('region',{name:'思考过程'});
+ await expect(reasoning).toHaveText('Saved child reasoning');
+ await expect(reasoning).toHaveCSS('overscroll-behavior-y','auto');
+ expect(await page.evaluate(()=>(window as any).__activityReads[0])).toMatchObject({id:'demo',toolId:'child',activityId:'thought'});
+ await panel.getByRole('button',{name:/已运行.*npm test/}).click();
+ await expect(panel.locator('[data-slot=terminal] [aria-label="工具输出"]')).toHaveText('All passed');
+ await panel.getByRole('button',{name:/npm lint/}).click();
+ await panel.getByRole('button',{name:/错误调用栈/}).click();
+ await expect(panel.locator('pre[aria-label="错误调用栈"]')).toContainText('/src/check.js:1:3');
+ await panel.getByRole('button',{name:/lookup/}).click();
+ await expect(panel.getByLabel('工具输入')).toContainText('index');
+ await expect(panel.getByText('found',{exact:true})).toBeVisible();
+});
+
+test('wheel over reasoning scrolls the chat for short text and at both boundaries of long text',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  const paragraph='Reading the conversation.\n\n'.repeat(100);
+  r.status='running';r.approvals=[];r.tools=[];
+  r.messages=[
+   {id:'u',role:'user',text:'Check progress'},
+   {id:'before',role:'assistant',phase:'commentary',text:paragraph,order:1},
+   {id:'thought',role:'assistant',kind:'reasoning',text:'Short thought',order:2},
+   {id:'after',role:'assistant',phase:'commentary',text:paragraph,order:3},
+  ];
+  w.__emit();
+ });
+ await page.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
+ const thought=page.locator('.thinking-window'),chat=page.locator('.conversation-scroll:visible');
+ const chatTop=()=>chat.evaluate(el=>el.scrollTop);
+ const centerThought=async()=>{
+  await thought.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
+  await thought.hover();
+ };
+ await centerThought();
+ const start=await chatTop();
+ await page.mouse.wheel(0,100);
+ await expect.poll(chatTop).toBeGreaterThan(start+50);
+ await page.evaluate(()=>{
+  const w=window as any;w.__demoRun.messages[2].text='Long thought\n'.repeat(100);w.__emit();
+ });
+ await expect.poll(()=>thought.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(300);
+ await centerThought();
+ const baseline=await chatTop();
+ await thought.evaluate(el=>{el.scrollTop=200;});
+ await page.mouse.wheel(0,-80);
+ await expect.poll(()=>thought.evaluate(el=>el.scrollTop)).toBeLessThan(190);
+ expect(await chatTop()).toBe(baseline);
+ await thought.evaluate(el=>{el.scrollTop=0;});
+ await page.mouse.wheel(0,-100);
+ await expect.poll(chatTop).toBeLessThan(baseline-50);
+ await centerThought();
+ await thought.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const end=await chatTop();
+ await page.mouse.wheel(0,100);
+ await expect.poll(chatTop).toBeGreaterThan(end+50);
 });
 
 test('thinking follows rapid output and hidden updates, but respects reading older lines',async({page})=>{
@@ -961,17 +1085,17 @@ test('long history shares one forms subscription and preserves expanded state of
   r.messages=Array.from({length:60},(_,i)=>[{id:`u${i}`,role:'user',text:`历史问题 ${i}`},{id:`r${i}`,role:'assistant',kind:'reasoning',status:'completed',text:'保留展开内容'},{id:`a${i}`,role:'assistant',phase:'final_answer',text:'回答内容。'.repeat(50)}]).flat();w.__emit();
  });
  const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
- await expect(navigation.getByRole('button')).toHaveCount(60);
+ await expect(navigation.getByRole('button',{name:/^第 60 轮：/})).toBeVisible();
  await expect.poll(()=>page.locator('[data-turn-id]').count()).toBeLessThan(24);
  const first=page.locator('[data-turn-id="u0"]'),toggle=first.locator('.turn-progress-toggle');
- await navigation.getByRole('button',{name:/^第 1 轮：/}).click();await toggle.click();await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await clickTurn(navigation,1);await toggle.click();await expect(toggle).toHaveAttribute('aria-expanded','true');
  const before=await page.evaluate(()=>(window as any).__formReads);
- await navigation.getByRole('button',{name:/^第 60 轮：/}).click();
+ await clickTurn(navigation,60);
  await expect(first).toHaveCount(0);
  await page.evaluate(()=>(window as any).__formsChanged());
  await expect.poll(()=>page.evaluate(()=>(window as any).__formReads)).toBe(before+1);
  expect(await page.evaluate(()=>(window as any).__formSubscriptions)).toBe(1);
- await navigation.getByRole('button',{name:/^第 1 轮：/}).click();await expect(toggle).toHaveAttribute('aria-expanded','true');
+ await clickTurn(navigation,1);await expect(toggle).toHaveAttribute('aria-expanded','true');
 });
 
 test('terminal approval copies exact commands and retains failed decisions for retry',async({page})=>{
@@ -1084,11 +1208,11 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
  await expect(entry.getByLabel('工具输出')).toHaveCount(0);
  await entry.locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(entry.getByLabel('工具输出')).toBeVisible();
- await expect(entry.locator('[data-slot=code-block]')).toHaveCount(2);
- await entry.getByRole('button').click();
+ await expect(entry.locator('[data-slot=code-block]')).toHaveCount(1);
+ await entry.locator('[data-slot=trace-collapsible-trigger]').click();
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].detail+='\nnext output';(window as any).__emit();});
  await expect(entry.getByLabel('工具输出')).toBeHidden();
- await entry.getByRole('button').click();
+ await entry.locator('[data-slot=trace-collapsible-trigger]').click();
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeHidden();
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
  await expect(page.locator('.process-panel .markdown')).toHaveCount(0);
@@ -1098,6 +1222,116 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
  await expect.poll(()=>page.locator('.turn-progress > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-content]').evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(100);
  await page.screenshot({path:'test-results/trace-history.png',animations:'disabled'});
+});
+
+test('chat tool details render MCP inputs, terminal commands and collapsible error stacks',async({page})=>{
+ await prepare(page,'');
+ const stack='TypeError: Invalid value\n    at build (/project/build.js:12:4)\n    at run (/project/node_modules/runner.js:1:2)';
+ await page.evaluate(stack=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.tools=[
+   {id:'lookup',turnKey:'u',type:'mcpToolCall',label:'lookup',status:'completed',detail:JSON.stringify({arguments:{query:'docs'},result:{count:2}})},
+   {id:'command',turnKey:'u',type:'commandExecution',label:'node build.js',status:'failed',detail:stack},
+   {id:'failure',turnKey:'u',type:'mcpToolCall',label:'check',status:'failed',detail:JSON.stringify({arguments:{},error:{code:123,stack}})},
+  ];
+  w.__emit();
+ },stack);
+ const tools=page.locator('.process-entry [data-slot=tool]');
+ await tools.nth(0).getByRole('button').click();
+ await expect(tools.nth(0).getByLabel('工具输入')).toContainText('docs');
+ await expect(tools.nth(0).getByLabel('工具输出')).toContainText('"count": 2');
+ for(const index of [1,2]){
+  const row=tools.nth(index);
+  await row.getByRole('button').click();
+  if(index===1)await expect(row.locator('[data-slot=trace-line]').first()).toHaveAttribute('title','node build.js');
+  const toggle=row.getByRole('button',{name:'错误调用栈 · TypeError: Invalid value'});
+  await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await toggle.click();
+  const frames=row.locator('pre[aria-label="错误调用栈"]');
+  await expect(frames).toContainText(stack);
+  if(index===2)await expect(frames).toContainText('"code": 123');
+  await toggle.click();
+  await expect(frames).toHaveCount(0);
+ }
+});
+
+test('saved shell command uses one muted output surface without a redundant pager',async({page,context})=>{
+ await context.grantPermissions(['clipboard-read','clipboard-write']);
+ await prepare(page,'');
+ const command='/bin/zsh -lc "curl -s https://example.org/ | head -c 6000"';
+ const output='\n\n\n  Overview\n'+'log line\n'.repeat(650);
+ await page.evaluate(({command,output})=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.tools=[{id:'saved',turnKey:'u',type:'commandExecution',label:command,status:'completed',detail:output.slice(-2048),detailPreview:true,detailVersion:'v1'}];
+  w.desktop.getToolText=async()=>({text:output,offset:0,total:output.length,version:'v1'});
+  w.__emit();
+ },{command,output});
+ await page.locator('.turn-progress-toggle').click();
+ const row=page.locator('.process-entry.commandExecution'),toggle=row.getByRole('button');
+ await expect(toggle).toContainText('已运行');
+ await expect(toggle).toContainText('curl -s https://example.org/');
+ await expect(toggle).not.toContainText('终端操作');
+ await expect(row.locator('.activity-tool-status')).toHaveCount(0);
+ await toggle.click();
+ const block=row.locator('[data-slot=code-block]');
+ await expect(block).toHaveCount(1);
+ await expect(block).toHaveCSS('border-top-width','0px');
+ expect(await block.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+ await expect(row.getByLabel('工具输出')).toHaveText(/^  Overview/);
+ await expect(row.getByRole('button',{name:'上一页'})).toHaveCount(0);
+ await block.hover();
+ await row.getByRole('button',{name:'复制命令'}).click();
+ expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(command);
+ await row.getByRole('button',{name:'复制输出'}).click();
+ expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(output);
+});
+
+test('streaming terminal output follows the tail until the reader scrolls up',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.tools=[{id:'log',turnKey:'u',type:'commandExecution',label:'node build.js',status:'inProgress',detail:'build started'}];
+  w.__emit();
+ });
+ const row=page.locator('.process-entry.commandExecution');
+ await row.getByRole('button').click();
+ const output=row.getByLabel('工具输出');
+ const append=()=>page.evaluate(()=>{
+  const w=window as any;w.__demoRun.tools[0].detail+='\n'+Array.from({length:60},(_,i)=>'line '+i).join('\n');w.__emit();
+ });
+ await append();
+ await expect.poll(()=>output.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+ await output.evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
+ await append();
+ await expect.poll(()=>output.evaluate(el=>el.textContent?.split('line 59').length)).toBe(3);
+ expect(await output.evaluate(el=>el.scrollTop)).toBe(0);
+});
+
+test('completed history shows a styled tool status and decodes a fully loaded detail preview',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  const full=JSON.stringify({arguments:{query:'historical search'},result:{text:'payload '.repeat(1800)}});
+  r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.tools=[{id:'saved',turnKey:'u',type:'mcpToolCall',label:'lookup',status:'completed',detail:full.slice(-2048),detailPreview:true,detailVersion:'v1'}];
+  w.__reads=0;
+  w.desktop.getToolText=async()=>{w.__reads++;return {text:full,offset:0,total:full.length,version:'v1'};};
+  w.__emit();
+ });
+ await page.locator('.turn-progress-toggle').click();
+ const tool=page.locator('.process-entry.mcpToolCall');
+ const badge=tool.locator('.activity-tool-status');
+ await expect(badge).toHaveText('已完成');
+ expect(await badge.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+ expect(await page.evaluate(()=>(window as any).__reads)).toBe(0);
+ await tool.getByRole('button').click();
+ await expect(tool.getByLabel('工具输入')).toContainText('historical search');
+ await expect(tool.getByLabel('工具输出')).toContainText('payload');
+ expect(await tool.locator('[data-slot=code-block]').first().evaluate(el=>getComputedStyle(el).borderTopWidth)).toBe('1px');
+ expect(await page.evaluate(()=>(window as any).__reads)).toBe(1);
 });
 
 test('Trace tools distinguish denied, pending and unfinished historical calls',async({page})=>{
@@ -1306,12 +1540,12 @@ test('visited history is actually unmounted and disclosure state survives remoun
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:120},(_,i)=>[{id:'u'+i,role:'user',text:'Question '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(20)}]).flat();w.__emit();});
  const first=page.locator('[data-turn-id=u0]'),last=page.locator('[data-turn-id=u119]');
  const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
- await navigation.getByRole('button').first().click();await first.locator('.turn-progress-toggle').click();
+ await clickTurn(navigation,1);await first.locator('.turn-progress-toggle').click();
  await page.getByRole('textbox',{name:'继续对话'}).focus();
  await page.getByRole('button',{name:'回到最新消息'}).click();await expect(last).toBeVisible();
  await expect(first.locator('.turn-progress-toggle')).toHaveCount(0);
  expect(await page.locator('[data-turn-id] [data-message-role=user]').count()).toBeLessThan(25);
- await navigation.getByRole('button').first().click();await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
+ await clickTurn(navigation,1);await expect(first.locator('.turn-progress-toggle')).toHaveAttribute('aria-expanded','true');
 });
 
 test('evicted conversations restore the same reading turn and draft',async({page})=>{
@@ -1331,7 +1565,7 @@ test('evicted conversations restore the same reading turn and draft',async({page
   const row=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(item=>item.getBoundingClientRect().bottom>top);
   return {id:row?.dataset.turnId,offset:row?row.getBoundingClientRect().top-top:0};
  });
- await page.getByRole('navigation',{name:'对话轮次导航'}).getByRole('button',{name:/^第 25 轮：/}).click();
+ await clickTurn(page.getByRole('navigation',{name:'对话轮次导航'}),25);
  await viewport.evaluate(el=>{el.scrollTop+=55;});
  await expect.poll(async()=>(await reading()).id).toBe('read-u24');
  await page.getByRole('textbox',{name:'继续对话'}).fill('Keep this draft');

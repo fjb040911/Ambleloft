@@ -60,6 +60,6 @@ test('native child segments retain one answer and one reasoning activity, ignori
  for(let n=0;n<10;n++)native.notification(context,message('item/completed',n,{turnId:'current',item:{type:'agentMessage',text:String(n)}}));
  assert.equal(child.detail,'0123456789');assert.equal(Object.keys(child.nativeMessages).length,1);
  const reasoning=message('item/reasoning/textDelta',0,{delta:'thought',turnId:'current'});reasoning.params.itemId=reasoning.params.itemId.replace('msg_','rs_');native.notification(context,reasoning);
- assert.equal(child.nativeActivity.length,1);assert.equal(child.nativeActivity[0].text,'thought');
+ assert.equal(child.nativeActivity.length,1);assert.equal(child.nativeActivity[0].text,'thought');assert.equal(child.nativeActivity[0].type,'reasoning');
  native.notification(context,message('item/agentMessage/delta',99,{turnId:'old',delta:'stale'}));assert.equal(child.detail,'0123456789');
 });

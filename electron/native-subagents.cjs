@@ -65,7 +65,7 @@ class NativeSubagents {
    if(child.status==='pending')child.status='running';
    if(segment.reasoning){
     child.nativeActivity??=[];let activity=child.nativeActivity.find(a=>a.id===segment.group);
-    if(!activity){activity={id:segment.group,title:'Reasoning',text:'',status:'running'};child.nativeActivity.push(activity);child.nativeActivity=child.nativeActivity.slice(-100);}
+    if(!activity){activity={id:segment.group,type:'reasoning',title:'Reasoning',text:'',status:'running'};child.nativeActivity.push(activity);child.nativeActivity=child.nativeActivity.slice(-100);}
     require('./bridge-segments.cjs').apply(context,{method,params},activity,'text');activity.status=method==='item/completed'?'completed':'running';
    }else{
     child.nativeMessages??={};require('./bridge-segments.cjs').apply(context,{method,params},child.nativeMessages,segment.group);
@@ -84,11 +84,13 @@ class NativeSubagents {
   }else if(['item/started','item/completed'].includes(method)&&item&&!['agentMessage','reasoning'].includes(item.type)){
    child.nativeActivity ||= [];let activity=child.nativeActivity.find(a=>a.id===item.id);
    if(!activity){activity={id:item.id,title:rpcText.length(item,'command')?rpcText.preview(context,item,'command',1000):clean(item.tool||item.type).slice(0,1000),text:'',status:'running'};child.nativeActivity.push(activity);child.nativeActivity=child.nativeActivity.slice(-100);}
+   activity.type=item.type;
    if(method==='item/completed')streamFields(context).flush(activity,'text');
    activity.status=method==='item/completed'?(item.status||'completed'):'running';
    if(rpcText.length(item,'aggregatedOutput'))rpcText.copy(context,activity,'text',item,'aggregatedOutput');
    else if(require('./text-spool.cjs').reference(item,'output')||typeof item.output==='string')rpcText.copy(context,activity,'text',item,'output');
    else if(item.output)rpcText.replace(context,activity,'text',rpcText.json(context,item.output));
+   else if(item.type==='mcpToolCall' && (item.arguments!=null || item.result!=null || item.error!=null))rpcText.replace(context,activity,'text',rpcText.json(context,{arguments:item.arguments,result:item.result,error:item.error}));
   }else if(method==='item/commandExecution/outputDelta'){
    const activity=child.nativeActivity?.find(a=>a.id===params.itemId);if(activity)for(const part of rpcText.parts(params,'delta'))streamFields(context).append(activity,'text',part,streamSecrets(context),{limit:50000,scope:params.threadId});
   }

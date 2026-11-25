@@ -13,6 +13,7 @@ const codeBlockVariants = cva(
       variant: {
         default:
           "border border-input text-foreground has-[>[data-slot=code-block-content]:focus-visible]:border-ring dark:bg-input/30",
+        muted: "rounded-xl border-0 bg-muted text-foreground",
         destructive:
           "border border-destructive/30 text-destructive dark:border-destructive/40",
       },
@@ -85,6 +86,7 @@ function CodeBlockActions({
 
 function CodeBlockCopyButton({
   value,
+  children,
   variant = "ghost",
   size = "icon-xs",
   className,
@@ -120,13 +122,7 @@ function CodeBlockCopyButton({
         }}
         {...props}
       >
-        {copied ? (
-          <CheckIcon
-          />
-        ) : (
-          <CopyIcon
-          />
-        )}
+        {copied ? <CheckIcon /> : children ?? <CopyIcon />}
       </Button>
       <span aria-live="polite" className="sr-only">
         {copied ? t("已复制") : ""}

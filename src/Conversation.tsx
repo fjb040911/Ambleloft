@@ -405,13 +405,14 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
 
     {!hidePendingActions&&<>{inlineInputs}{outboxPanel}{pendingSurface}</>}
   </div>;
+  const historyNavigation={loadEarlier:before?loadOlder:undefined,loadingEarlier:loadingHistory};
   const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<Button variant="ghost" className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp data-icon="inline-end" aria-hidden="true"/></Button>}
     <ConversationViewport inert={!!floatingHost&&!recentOpen} busy={active} ref={scroll} onScroll={trackScroll}
       onWheel={cancelReturnToLatest} onTouchMove={cancelReturnToLatest} onPointerDown={cancelReturnToLatest}
       onKeyDown={event=>{if(["ArrowDown","ArrowUp","End","Home","PageDown","PageUp"," "].includes(event.key))cancelReturnToLatest();}}
       preserveScrollOnPrepend={!windowed} data-turn-window={windowed?'':undefined} style={windowed?{overflowAnchor:'none'}:undefined}
-      navigation={windowed?<WindowedNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>:<ScrollerNavigation offset={older?.turnOffset??run.turnOffset??0} turns={turns} jump={jumpTurn}/>}
+      navigation={<><TurnRail {...historyNavigation} offset={older?.turnOffset??run.turnOffset??0} turns={turns} selection={selection} jump={jumpTurn}/>{!windowed&&<ScrollerSelection selection={selection}/>}</>}
       beforeViewport={(before||historyError)&&<div className="conversation-content w-full shrink-0 py-2 my-0">
           {before&&<div><Button variant="outline" disabled={loadingHistory} onClick={()=>void loadOlder()}>{t(loadingHistory?'正在加载…':'加载更早的对话')}</Button></div>}{historyError&&<ComposerErrorNotice message={historyError} dismiss={()=>setHistoryError('')}/>}
         </div>}
@@ -463,7 +464,7 @@ function createTurnSelection(){
  };
 }
 type TurnSelection=ReturnType<typeof createTurnSelection>;
-function WindowedNavigation({selection,...props}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>&{selection:TurnSelection}){
+function TurnRail({selection,...props}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>&{selection:TurnSelection}){
  const selected=useSyncExternalStore(selection.subscribe,selection.get);
  return <TurnNavigation {...props} selected={selected||props.turns[0]?.user.id||''}/>;
 }
@@ -510,9 +511,10 @@ function ConversationScrollItem({following,...props}:ComponentProps<typeof Messa
  if(following&&!anchor)setAnchor(true);
  return <MessageScrollerItem {...props} scrollAnchor={anchor||following}/>;
 }
-function ScrollerNavigation({turns,offset,jump}:Omit<ComponentProps<typeof TurnNavigation>,'selected'>){
+function ScrollerSelection({selection}:{selection:TurnSelection}){
  const {currentAnchorId}=useMessageScrollerVisibility();
- return <TurnNavigation turns={turns} offset={offset} selected={currentAnchorId||turns[0]?.user.id||''} jump={jump}/>;
+ useLayoutEffect(()=>selection.set(currentAnchorId||''),[currentAnchorId,selection]);
+ return null;
 }
 function RetainedConversation(props:Omit<ComponentProps<typeof ConversationBody>,'onFollowingChange'>){
  const [following,setFollowing]=useState(()=>readReading(props.run.id)?.following!==false);

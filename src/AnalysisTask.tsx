@@ -1,9 +1,10 @@
-import ChatDisclosure from './ChatDisclosure';
-import {CodeBlock,CodeBlockContent} from './components/ui/code-block';
+import {ThinkingWindow} from './ThinkingWindow';
+import ProcessTool from './ProcessTool';
+import {commandPresentation,toolBusy} from './tool-presentation';
 import {useToolText} from './ToolText';
 import {useProcessDisclosure} from './process-disclosure';
 import {useState} from 'react';
-import {BookOpen,Play} from 'lucide-react';
+import {BookOpen,Play,Terminal,Folder,Search,Wrench} from 'lucide-react';
 import {Trace,TraceLine,TraceIcon,TraceTitle,TraceDescription,TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent} from './components/ui/trace';
 import {Badge} from './components/ui/badge';
 import {Button} from './components/ui/button';
@@ -48,7 +49,7 @@ export default function AnalysisTask({tool}:{tool:Tool}) {
     <div className="flex flex-wrap gap-2"><Badge variant="secondary">{t('子代理')}</Badge><Badge variant="outline">{t(tool.nativeThreadId?'继承当前任务权限':'只读分析')}</Badge></div>
     {tool.analysisTask&&<p>{tool.analysisTask}</p>}
     {!!tool.nativeLifecycle?.length&&<ol className="m-0 list-none p-0 text-xs text-muted-foreground" aria-label={t('执行记录')}>{tool.nativeLifecycle.map((event,index)=><li key={index}>{new Date(event.at).toLocaleTimeString()} · {t(event.status==='running'?'开始工作':labels[event.status]||event.status)}</li>)}</ol>}
-    {!!tool.nativeActivity?.length&&<div className="flex min-w-0 flex-col gap-2" aria-label={t('执行详情')}>{tool.nativeActivity.map(activity=><ActivityDetails key={activity.id} activity={activity} toolId={tool.id} disclosureKey={'agent-'+tool.id+'-activity-'+activity.id} label={t(labels[activity.status]||activity.status)}/>)}</div>}
+    {!!tool.nativeActivity?.length&&<div className="flex min-w-0 flex-col gap-2" aria-label={t('执行详情')}>{tool.nativeActivity.map(activity=><ActivityDetails key={activity.id} activity={activity} toolId={tool.id} disclosureKey={'agent-'+tool.id+'-activity-'+activity.id} parentStatus={tool.status}/>)}</div>}
     {tool.nativeIdentityError&&<Alert><AlertDescription>{t('子代理名称读取失败')}: {tool.nativeIdentityError}</AlertDescription></Alert>}
     {!!tool.analysisReads?.length&&<Trace>{tool.analysisReads.map((read,index)=><TraceLine key={index}><TraceIcon><BookOpen/></TraceIcon><TraceTitle title={read}>{read}</TraceTitle></TraceLine>)}</Trace>}
     <Markdown context="trace" text={detail.text}/>{detail.controls}
@@ -60,11 +61,27 @@ export default function AnalysisTask({tool}:{tool:Tool}) {
  </Trace>;
 }
 
-function ActivityDetails({activity,label,disclosureKey,toolId}:{toolId:string;disclosureKey:string;activity:{id:string;title:string;text:string;textPreview?:boolean;textVersion?:string};label:string}){
- const [open,setOpen]=useProcessDisclosure(disclosureKey);
- const detail=useToolText({toolId,activityId:activity.id,text:activity.text,preview:activity.textPreview,version:activity.textVersion},open);
- return <ChatDisclosure open={open} onOpenChange={setOpen} heading={activity.title+' · '+label}>
-  {open&&<CodeBlock size="sm"><CodeBlockContent wrap className="max-h-64">{detail.text||t('等待输出…')}</CodeBlockContent></CodeBlock>}
-  {detail.controls}
- </ChatDisclosure>;
+type Activity=NonNullable<Tool['nativeActivity']>[number];
+
+function activityType(activity:Activity){
+ if(activity.type)return activity.type;
+ // Older native records kept the tool name or shell invocation as their title.
+ if(activity.title==='Reasoning')return 'reasoning';
+ if(/^(?:(?:[^\s]*[/\\])?(?:zsh|bash|sh)\s+-[a-z]*c\s|.*?\b(?:powershell|pwsh|cmd)(?:\.exe)?\s+(?:-|\/c\b))/i.test(activity.title))return 'commandExecution';
+ return 'tool';
+}
+
+function ActivityDetails({activity,disclosureKey,toolId,parentStatus}:{toolId:string;disclosureKey:string;activity:Activity;parentStatus:string}){
+ const type=activityType(activity);
+ const busy=toolBusy(activity.status);
+ const finished=['completed','failed','interrupted'].includes(parentStatus);
+ const live=busy&&!finished;
+ const status=busy&&finished?(parentStatus==='completed'?'未确认完成':'已停止'):activity.status;
+ const source={toolId,activityId:activity.id,preview:activity.textPreview,version:activity.textVersion};
+ if(type==='reasoning')return <ThinkingWindow source={source} text={activity.text} disclosureKey={disclosureKey} title="思考过程" live={live}/>;
+ const command=type==='commandExecution'?activity.title:'';
+ const presentation=command?commandPresentation({label:command,status}):null;
+ const icon=presentation?.kind==='read'?<BookOpen/>:presentation?.kind==='listFiles'?<Folder/>:presentation?.kind==='search'?<Search/>:command?<Terminal/>:<Wrench/>;
+ return <ProcessTool type={type} source={source} disclosureKey={disclosureKey} title={presentation?.title||activity.title}
+  summary={presentation?.summary||''} status={status} live={live} command={command} output={activity.text} icon={icon}/>;
 }

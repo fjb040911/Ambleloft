@@ -64,6 +64,10 @@ test('functional title and streaming tool details retain lifecycle and original 
  emit('item/started',{item:{id:'cmd',type:'commandExecution',command:'inspect layout'}});
  emit('item/commandExecution/outputDelta',{itemId:'cmd',delta:'partial secret'});assert.equal(tool.nativeActivity[0].text,'partial [REDACTED]');
  emit('item/completed',{item:{id:'cmd',type:'commandExecution',command:'inspect layout',status:'completed',aggregatedOutput:'verified'}});
+ assert.equal(tool.nativeActivity[0].type,'commandExecution');
+ emit('item/completed',{item:{id:'lookup',type:'mcpToolCall',tool:'lookup',status:'completed',arguments:{token:'secret'},result:{content:[]}}});
+ assert.equal(tool.nativeActivity[1].type,'mcpToolCall');
+ assert.deepEqual(JSON.parse(tool.nativeActivity[1].text),{arguments:{token:'[REDACTED]'},result:{content:[]}});
  emit('turn/completed',{turn:{id:'child-turn',status:'completed'}});
  assert.deepEqual(tool.nativeLifecycle.map(e=>e.status),['pending','running','completed']);assert.equal(tool.nativeActivity[0].text,'verified');assert.equal(tool.nativeActivity[0].status,'completed');
  runtime.notification(context,{method:'item/completed',params:{threadId:'parent',turnId:'turn',item:{type:'collabAgentToolCall',tool:'wait',receiverThreadIds:['child'],agentsStates:{child:{status:'running'}}}}});assert.equal(tool.status,'completed');

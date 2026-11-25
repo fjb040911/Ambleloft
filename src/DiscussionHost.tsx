@@ -10,7 +10,7 @@ import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 import FormFields,{type FormValues} from './FormFields';
 import Markdown from './Markdown';
-import {ThinkingWindow,ProcessIndicator} from './ProcessPanel';
+import {ThinkingWindow,ProcessIndicator} from './ThinkingWindow';
 import {useCopy} from './WorkforceInputs';
 import {revealContribution} from './DiscussionIdentity';
 import UserMessage from './UserMessage';

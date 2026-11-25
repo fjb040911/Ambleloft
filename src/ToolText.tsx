@@ -3,8 +3,8 @@ import {useDraftState} from './useDraftState';
 import {Button} from './components/ui/button';
 import {t} from './i18n';
 export const RunDetailsContext=createContext('');
-type Source={toolId?:string;messageId?:string;activityId?:string;preview?:boolean;version?:string;text:string};
-export function useToolText(source:Source,open:boolean){
+export type TextSource={toolId?:string;messageId?:string;activityId?:string;preview?:boolean;version?:string};
+export function useToolText(source:TextSource & {text:string},open:boolean,hideSinglePage=false){
  const id=useContext(RunDetailsContext),[offset,setOffset]=useDraftState<number|undefined>('text-page:'+JSON.stringify([id,source.messageId,source.toolId,source.activityId]),undefined,value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:undefined),[page,setPage]=useState<{text:string;offset:number;total:number;version:string}>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  const latest=useRef(source);latest.current=source;
  useEffect(()=>{
@@ -22,7 +22,8 @@ export function useToolText(source:Source,open:boolean){
   void load();const timer=setInterval(()=>void load(),150);
   return()=>{live=false;clearInterval(timer);};
  },[id,source.messageId,source.toolId,source.activityId,source.preview,open,offset,retry]);
- return {text:source.preview?page?.text??source.text:source.text,controls:source.preview&&open?<div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+ const completePage=!!page && page.offset===0 && page.text.length===page.total;
+ return {completePage,text:source.preview?page?.text??source.text:source.text,controls:source.preview&&open&&(!hideSinglePage||!completePage||error)?<div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
   {error?<><span role="alert">{error}</span><Button size="sm" variant="ghost" onClick={()=>setRetry(n=>n+1)}>{t('重试')}</Button></>:page?<><span>{page.total?page.offset+1:0}–{Math.min(page.total,page.offset+page.text.length)} / {page.total}</span><Button size="sm" variant="ghost" disabled={!page.offset} onClick={()=>setOffset(Math.max(0,page.offset-64000))}>{t('上一页')}</Button><Button size="sm" variant="ghost" disabled={page.offset+page.text.length>=page.total} onClick={()=>setOffset(page.offset+page.text.length)}>{t('下一页')}</Button></>:<span role="status">{t('正在加载…')}</span>}
  </div>:null};
 }

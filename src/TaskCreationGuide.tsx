@@ -20,7 +20,7 @@ import FormFields,{type FormValues} from './FormFields';
 import ChatComposer from './ChatComposer';
 import Markdown from './Markdown';
 import {ModelPicker} from './ComposerControls';
-import {ProcessIndicator} from './ProcessPanel';
+import {ProcessIndicator} from './ThinkingWindow';
 import type {Space,TaskDraft,PlanValue,Employee,WorkPlan} from './workforce-types';
 import type {ProviderCatalog,Project} from './types';
 
