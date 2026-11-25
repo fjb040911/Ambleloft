@@ -562,8 +562,7 @@ app.whenReady().then(async () => {
   updateService=new updateModule.UpdateService({updater:updateModule.updater,version:app.getVersion(),directory:path.join(app.getPath('userData'),'updates'),supported:app.isPackaged&&process.platform==='win32',publish:state=>windows.broadcast(profileId,'update:event',state),install:async(scheduled=false)=>{
     const blockers=()=>{
       const reasons=[];
-      if(runtime.pendingRecords.size)reasons.push('请先重试保存任务记录');
-      if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
+      if(runtime.contexts.size||runtime.editing||runtime.runs.some(run=>!runtime.pendingRecords.has(run.id)&&['running','preparing','waiting','stopping'].includes(run.status)))reasons.push('Agent 任务仍在运行');
       if(runtime.growth?.active)reasons.push('合作内容正在提炼');
       if(runtime.investigation?.active?.size||runtime.investigation?.resuming?.size)reasons.push('受限调查正在进行');
       if(runtime.expertChat?.active?.size)reasons.push('专家正在回复');
@@ -580,7 +579,9 @@ app.whenReady().then(async () => {
     if(result.response!==1)return;
     await serializeStorage(()=>storage.preflight(dataRoot,updateService.downloadSize));
     let shuttingDown=false;
+    const chatInputs=runtime.chatInputs,chatInputsWereClosed=chatInputs?.closed;
     updateGate=true;runtime.closing=true;spaceService.closing=true;workforceService.closing=true;extensionHosts.suspended=true;extensionHosts.updateGate=true;services.automation.closed=true;spaceService.plans.closed=true;
+    if(chatInputs)chatInputs.closed=true;
     try{
       reasons=blockers();
       for(const record of windows.records.values()){
@@ -589,19 +590,27 @@ app.whenReady().then(async () => {
       }
       if(reasons.length)throw Error(reasons.join('；'));
       await Promise.all([services.automation.eventWork,services.automation.jobWork]);
-      await runtime.persist();
-      const backupId='backup-'+Date.now();
-      await require('./provider.cjs').writeJSON(updateTransactionPath,{backupId,from:app.getVersion(),target:updateService.state.version,status:'installing',at:new Date().toISOString()});
+      await require('./update-preparation.cjs').prepareUpdate({
+        flush:()=>runtime.flushPendingWrites(),
+        async shutdown(){
+          shuttingDown=true;
+          await runtime.investigation?.shutdown();await runtime.growth?.shutdown();await runtime.expertChat?.shutdown();await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
+        },
+        async backup(){
+          const backupId='backup-'+Date.now(),from=app.getVersion(),target=updateService.state.version;
+          await storage.createBackup(dataRoot,backupId,{from,target});
+          await require('./provider.cjs').writeJSON(updateTransactionPath,{backupId,from,target,status:'installing',at:new Date().toISOString()});
+        },
+      });
       updateService.set({status:'installing',error:''});
-      shuttingDown=true;
-      await runtime.investigation?.shutdown();await runtime.growth?.shutdown();await runtime.expertChat?.shutdown();await spaceService.shutdown();await workforceService.shutdown();await catalogService?.shutdown();await pageHost?.shutdown();await extensionServiceForShutdown?.shutdown();await runtime.shutdown();await database.close();
-      await storage.createBackup(dataRoot,backupId,{from:app.getVersion(),target:updateService.state.version});
       messageServiceForShutdown?.close();authenticationForShutdown?.close();terminals?.shutdown();ssh?.shutdown();
       quitting=true;updateModule.updater.quitAndInstall(false,true);
     }catch(error){
       // Never continue installing after a save/shutdown failure.
       if(shuttingDown){dialog.showErrorBox('更新准备失败','部分服务已关闭，未安装更新。请退出并重新打开应用。'+error.message);updateGate=false;throw Object.assign(Error('更新准备失败，请退出并重新打开应用。'),{recoveryRequired:true});}
-      updateGate=false;runtime.closing=false;spaceService.closing=false;workforceService.closing=false;extensionHosts.suspended=false;extensionHosts.updateGate=false;services.automation.closed=false;spaceService.plans.closed=false;throw error;
+      updateGate=false;runtime.closing=false;spaceService.closing=false;workforceService.closing=false;extensionHosts.suspended=false;extensionHosts.updateGate=false;services.automation.closed=false;spaceService.plans.closed=false;
+      if(chatInputs)chatInputs.closed=chatInputsWereClosed;
+      throw error;
     }
   }});
   await updateService.initialize();

@@ -17,6 +17,20 @@ test('disabled platforms never schedule checks or contact the updater',async()=>
 test('checking does not download or install, and normal quit cannot install',async()=>{const {updater,service}=setup();await service.check();assert.equal(service.state.status,'available');assert.equal(updater.autoDownload,false);assert.equal(updater.autoInstallOnAppQuit,false);});
 test('download reaches ready and installation binds the target version',async()=>{let installed=0;const {service}=setup(async()=>installed++);await service.check();await service.download();assert.equal(service.state.status,'ready');await assert.rejects(()=>service.restart('0.9.0'));assert.equal(installed,0);await service.restart('1.1.0');assert.equal(installed,1);});
 test('failed preparation preserves ready state and surfaces blockers',async()=>{const {service}=setup(async()=>{throw Error('busy');});await service.check();await service.download();await service.restart('1.1.0');assert.equal(service.state.status,'ready');assert.equal(service.state.error,'busy');});
+test('installation preparation stops on a failed save, an unconfirmed save or a failed backup',async()=>{
+ const {prepareUpdate}=require('../electron/update-preparation.cjs');
+ const calls=[];
+ const shutdown=async()=>{calls.push('shutdown');};
+ const backup=async()=>{calls.push('backup');throw Error('backup failed');};
+ await assert.rejects(prepareUpdate({flush:async()=>{throw Error('write failed');},shutdown,backup}),/write failed/);
+ let confirmWrite;
+ const pending=new Promise(resolve=>{confirmWrite=resolve;});
+ await assert.rejects(prepareUpdate({flush:()=>pending,shutdown,backup,saveTimeoutMs:1}),/超时/);
+ confirmWrite();await pending;
+ assert.deepEqual(calls,[]);
+ await assert.rejects(prepareUpdate({flush:()=>pending,shutdown,backup}),/backup failed/);
+ assert.deepEqual(calls,['shutdown','backup']);
+});
 test('download failure cannot install',async()=>{const {service,updater}=setup();updater.downloadUpdate=async()=>{throw Error('checksum');};await service.check();await service.download();assert.equal(service.state.status,'download-failed');await assert.rejects(()=>service.restart('1.1.0'));});
 test('concurrent checks coalesce',async()=>{const {service,updater}=setup();let resolve;let count=0;updater.checkForUpdates=()=>{count++;return new Promise(r=>resolve=r);};const first=service.check();await service.check();assert.equal(count,1);resolve({updateInfo:{version:'1.0.0'}});await first;assert.equal(service.state.status,'current');});
 test('cancellation does not start another download',async()=>{const {service,updater}=setup();let count=0;updater.downloadUpdate=token=>{count++;return new Promise((_,reject)=>token.onCancel(()=>reject(Error('cancel'))));};await service.check();const pending=service.download();service.cancel();await pending;assert.equal(service.state.status,'available');assert.equal(count,1);});
