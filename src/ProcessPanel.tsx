@@ -1,5 +1,5 @@
 import MessageBody from './MessageBody';
-import {useToolText} from './ToolText';
+import {ThinkingWindow} from './ThinkingWindow';
 import type {AgentRun} from './types';
 import ProcessPlan from './ProcessPlan';
 import {isConversationMessage,isCompletedPlan} from './conversation-message';
@@ -17,7 +17,7 @@ import {Marker,MarkerIcon,MarkerContent} from './components/ui/marker';
 import {Spinner} from './components/ui/spinner';
 import Markdown from './Markdown';
 import { t } from './i18n';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { BookOpen, Folder, Search, ListCollapse, Brain, Terminal, Globe, FilePenLine } from 'lucide-react';
 import type { ConversationTurn } from './conversation-turns';
 export function TurnProgress(props:Parameters<typeof TurnProgressContent>[0]) {
@@ -58,46 +58,6 @@ function TurnProgressContent({turn,status,duration,onToggle,paused=false,...inpu
 function PendingProcessInputs({turn,requests=[],deliveries=[],nativePending=[],onOpenInput=()=>{}}:{turn:ConversationTurn}&InputProps){
  return <>{requests.filter(request=>request.state==='pending').map(request=><PersistentInputRecord key={request.id} request={request} deliveries={deliveries} onOpen={onOpenInput}/>)}{turn.messages.filter(message=>message.inputRecord?.state==='pending'&&nativePending.includes(message.inputRecord.requestId)).map(message=>{const record=message.inputRecord!;return <InputProcessRecord key={message.id} title={t('补充信息')} status="等待补充" questions={record.questions} onOpen={()=>onOpenInput('native:'+record.requestId)}/>;})}</>;
 }
-export function ProcessIndicator({title,live=true}:{title:string;live?:boolean}){
- return <TraceLine className="process-entry-title" status={live?'running':undefined} role={live?'status':undefined}><TraceIcon>{live?<Spinner aria-hidden="true" role="presentation" className="motion-reduce:animate-none"/>:<Brain/>}</TraceIcon><TraceTitle>{title}</TraceTitle></TraceLine>;
-
-}
-export function ThinkingWindow({text,title,live,disclosureKey,message,collapsible=true}:{message?:AgentRun['messages'][number];text:string;title:string;live:boolean;disclosureKey?:string;collapsible?:boolean}) {
- const [expanded,setOpen]=useProcessDisclosure(disclosureKey);
- const open=!collapsible||expanded;
- const body=useToolText({messageId:message?.id,text,preview:message?.textPreview,version:message?.textVersion},open);
- const viewport=useRef<HTMLDivElement>(null);
- const content=useRef<HTMLPreElement>(null);
- const follow=useRef(true);
- const lastTop=useRef(0);
- const scrollToLatest=()=>{
-  const el=viewport.current;
-  // Hidden task panels have zero geometry; retain the user's follow preference.
-  if(!el?.clientHeight||!follow.current)return;
-  el.scrollTop=el.scrollHeight;
-  lastTop.current=el.scrollTop;
- };
- useLayoutEffect(scrollToLatest,[body.text,open]);
- useLayoutEffect(()=>{
-  const el=viewport.current;const body=content.current;
-  if(!el||!body)return;
-  const observer=new ResizeObserver(scrollToLatest);
-  observer.observe(el);observer.observe(body);
-  return()=>observer.disconnect();
- },[open]);
- const trackScroll=()=>{
-  const el=viewport.current;
-  if(!el?.clientHeight)return;
-  const atEnd=el.scrollHeight-el.scrollTop-el.clientHeight<24;
-  // Content growth and delayed programmatic scroll events must not cancel following.
-  if(atEnd)follow.current=true;
-  else if(el.scrollTop<lastTop.current)follow.current=false;
-  lastTop.current=el.scrollTop;
- };
- const contentBody=open&&<>{body.controls}<div className="thinking-window scroll-fade-y max-h-[180px] overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:outline-ring" ref={viewport} tabIndex={0} role="region" aria-label={t('思考过程')} onScroll={trackScroll} onWheel={event=>{if(event.deltaY<0)follow.current=false;}} onKeyDown={event=>{if(['ArrowUp','PageUp','Home'].includes(event.key))follow.current=false;}}><pre className="m-0 whitespace-pre-wrap break-words font-sans text-sm" ref={content}>{body.text||t('等待输出…')}</pre></div></>;
- if(!collapsible)return <><ProcessIndicator title={t(title)} live={live}/>{contentBody}</>;
- return <TraceCollapsible open={open} onOpenChange={setOpen}><TraceCollapsibleTrigger aria-label={t(title)}><ProcessIndicator title={t(title)} live={live}/></TraceCollapsibleTrigger><TraceCollapsibleContent>{contentBody}</TraceCollapsibleContent></TraceCollapsible>;
-}
 export default function ProcessPanel({ turn, showAnalysis=true, paused=false,requests=[],allRequests=requests,deliveries=[],onOpenInput=()=>{},nativePending=[] }: { turn: ConversationTurn; paused?:boolean; showAnalysis?:boolean }&InputProps) {
  const hasPendingInput=!!nativePending.length||allRequests.some(request=>request.state==='pending');
  const toolsByEntry=new Map(turn.tools.map(tool=>['tool-'+tool.id,tool]));
@@ -113,6 +73,6 @@ export default function ProcessPanel({ turn, showAnalysis=true, paused=false,req
  {turn.plan&&<ProcessPlan plan={turn.plan} active={turn.active} paused={paused} outcome={turn.outcome}/>}
  <Trace aria-label={t('过程输出')}>
  {!entries.length&&!turn.final&&turn.active&&!paused&&!hasPendingInput&&<div className="process-entry"><Marker className="process-entry-title" role="status"><MarkerIcon><Spinner className="motion-reduce:animate-none"/></MarkerIcon><MarkerContent shimmer>{t(turn.final?'正在生成回答':'等待模型响应')}</MarkerContent></Marker><p className="text-sm text-muted-foreground">{t(turn.final?'正在接收回答内容。':'尚未收到模型的过程内容，收到后会在这里实时展示。')}</p></div>}
- {entries.map(entry=>{if(messagesByEntry.get(entry.id)?.reasoningCleared)return <small className="process-entry" key={entry.id}>{t('本轮思考记录已清理')}</small>;const analysis=(toolsByEntry.get(entry.id)?.type==='analysis'?toolsByEntry.get(entry.id):undefined);if(analysis)return showAnalysis?<AnalysisTask key={entry.id} tool={analysis}/>:null;const inputTool=(toolsByEntry.get(entry.id)?.type!=='commandExecution'&&inputToolName(toolsByEntry.get(entry.id)?.label||'')?toolsByEntry.get(entry.id):undefined);if(inputTool)return <div className="process-entry" key={entry.id}><InputToolRecord tool={inputTool} requests={allRequests}/></div>;const request=requestsByEntry.get(entry.id);const native=messagesByEntry.get(entry.id)?.inputRecord;if(request)return <div className="process-entry" key={entry.id}><PersistentInputRecord request={request} deliveries={deliveries} onOpen={onOpenInput}/></div>;if(native)return <div className="process-entry" key={entry.id}><InputProcessRecord title={t('补充信息')} status={native.state==='answered'?'已提交 · 已送达':nativePending.includes(native.requestId)?'等待补充':'已失效'} questions={native.questions} onOpen={native.state==='pending'&&nativePending.includes(native.requestId)?()=>onOpenInput('native:'+native.requestId):undefined}/></div>;const tool=!['reasoning','progress','input'].includes(entry.type);const Icon=entry.iconKind==='read'?BookOpen:entry.iconKind==='listFiles'?Folder:entry.iconKind==='search'?Search:entry.type==='contextCompaction'?ListCollapse:entry.type==='reasoning'?Brain:entry.type==='webSearch'?Globe:entry.type==='fileChange'?FilePenLine:Terminal;return <div className={`process-entry ${entry.type} ${entry.live?'is-live':''}`} key={entry.id}>{entry.type==='contextCompaction'?<Marker role={entry.live?'status':undefined}><MarkerIcon>{entry.live?<Spinner className="motion-reduce:animate-none"/>:<ListCollapse/>}</MarkerIcon><MarkerContent>{t(entry.title)}</MarkerContent></Marker>:tool?<ProcessTool source={{toolId:toolsByEntry.get(entry.id)?.id||'',preview:toolsByEntry.get(entry.id)?.detailPreview,version:toolsByEntry.get(entry.id)?.detailVersion}} disclosureKey={entry.id} title={entry.title} summary={entry.summary} status={entry.status} live={entry.live} command={entry.command} output={entry.text} icon={entry.live?<Spinner className="motion-reduce:animate-none"/>:<Icon/>} steps={(toolsByEntry.get(entry.id)?.commandActions||[]).filter(action=>action.type!=='unknown').map(action=>[action.name||action.query||action.type,action.path].filter(Boolean).join(' · '))}/>:entry.type==='reasoning'?<ThinkingWindow message={messagesByEntry.get(entry.id)} disclosureKey={turn.active?entry.id:entry.id+'-history'} text={entry.text} title={entry.title} live={entry.live}/>:entry.type==='input'?<UserMessage message={messagesByEntry.get(entry.id)} text={entry.text}/>:<div className="process-milestone">{messagesByEntry.get(entry.id)?<MessageBody message={messagesByEntry.get(entry.id)!} context="trace"/>:<Markdown context="trace" text={entry.text||t('等待输出…')}/>}</div>}</div>;})}
+ {entries.map(entry=>{if(messagesByEntry.get(entry.id)?.reasoningCleared)return <small className="process-entry" key={entry.id}>{t('本轮思考记录已清理')}</small>;const analysis=(toolsByEntry.get(entry.id)?.type==='analysis'?toolsByEntry.get(entry.id):undefined);if(analysis)return showAnalysis?<AnalysisTask key={entry.id} tool={analysis}/>:null;const inputTool=(toolsByEntry.get(entry.id)?.type!=='commandExecution'&&inputToolName(toolsByEntry.get(entry.id)?.label||'')?toolsByEntry.get(entry.id):undefined);if(inputTool)return <div className="process-entry" key={entry.id}><InputToolRecord tool={inputTool} requests={allRequests}/></div>;const request=requestsByEntry.get(entry.id);const native=messagesByEntry.get(entry.id)?.inputRecord;if(request)return <div className="process-entry" key={entry.id}><PersistentInputRecord request={request} deliveries={deliveries} onOpen={onOpenInput}/></div>;if(native)return <div className="process-entry" key={entry.id}><InputProcessRecord title={t('补充信息')} status={native.state==='answered'?'已提交 · 已送达':nativePending.includes(native.requestId)?'等待补充':'已失效'} questions={native.questions} onOpen={native.state==='pending'&&nativePending.includes(native.requestId)?()=>onOpenInput('native:'+native.requestId):undefined}/></div>;const message=messagesByEntry.get(entry.id);const tool=!['reasoning','progress','input'].includes(entry.type);const Icon=entry.iconKind==='read'?BookOpen:entry.iconKind==='listFiles'?Folder:entry.iconKind==='search'?Search:entry.type==='contextCompaction'?ListCollapse:entry.type==='reasoning'?Brain:entry.type==='webSearch'?Globe:entry.type==='fileChange'?FilePenLine:Terminal;return <div className={`process-entry ${entry.type} ${entry.live?'is-live':''}`} key={entry.id}>{entry.type==='contextCompaction'?<Marker role={entry.live?'status':undefined}><MarkerIcon>{entry.live?<Spinner className="motion-reduce:animate-none"/>:<ListCollapse/>}</MarkerIcon><MarkerContent>{t(entry.title)}</MarkerContent></Marker>:tool?<ProcessTool type={entry.type} source={{toolId:toolsByEntry.get(entry.id)?.id||'',preview:toolsByEntry.get(entry.id)?.detailPreview,version:toolsByEntry.get(entry.id)?.detailVersion}} disclosureKey={entry.id} title={entry.title} summary={entry.summary} status={entry.status} live={entry.live} command={entry.command} output={entry.text} icon={entry.live?<Spinner className="motion-reduce:animate-none"/>:<Icon/>} steps={(toolsByEntry.get(entry.id)?.commandActions||[]).filter(action=>action.type!=='unknown').map(action=>[action.name||action.query||action.type,action.path].filter(Boolean).join(' · '))}/>:entry.type==='reasoning'?<ThinkingWindow source={{messageId:message?.id,preview:message?.textPreview,version:message?.textVersion}} disclosureKey={turn.active?entry.id:entry.id+'-history'} text={entry.text} title={entry.title} live={entry.live}/>:entry.type==='input'?<UserMessage message={messagesByEntry.get(entry.id)} text={entry.text}/>:<div className="process-milestone">{messagesByEntry.get(entry.id)?<MessageBody message={messagesByEntry.get(entry.id)!} context="trace"/>:<Markdown context="trace" text={entry.text||t('等待输出…')}/>}</div>}</div>;})}
  </Trace></section>;
 }

@@ -294,14 +294,28 @@ main.chat-main { --dock-surface: var(--chat-canvas); background: var(--chat-canv
 
 .conversation-body { display: flex; flex: 1; min-height: 0; position: relative; }
 .conversation-body .conversation-scroll { min-width: 0; }
-.turn-navigation { flex: 0 0 42px; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 12px 5px; overflow-y: auto; scrollbar-width: thin; }
-.turn-anchor:first-child { margin-block-start: auto; }
-.turn-anchor:last-child { margin-block-end: auto; }
-.turn-tick { width: 7px; height: 2px; background: currentColor; opacity: .32; }
-.turn-anchor:is(:hover,:focus-visible,[aria-current=true]) .turn-tick { width: 12px; opacity: .9; }
+.turn-navigation { flex:0 0 32px; min-height:0; min-width:0; display:flex; flex-direction:column; align-items:stretch; justify-content:center; padding:6px 0; overflow:clip; }
+.turn-ticks { flex:none; }
+.turn-navigation[data-paged] { justify-content:flex-start; }
+.turn-navigation[data-paged] .turn-page-slot:last-child { margin-top:auto; }
+.turn-anchor,.turn-page-button { display:flex; align-items:center; width:100%; border:0; padding:0; background:transparent; color:var(--text); cursor:pointer; }
+.turn-anchor { height:12px; justify-content:flex-start; padding-inline-start:6px; }
+.turn-anchor:focus-visible,.turn-page-button:focus-visible { outline:1px solid var(--focus); outline-offset:-1px; }
+.turn-tick { width:7px; height:2px; background:currentColor; opacity:.38; transition:width 90ms ease-out; }
+.turn-anchor[data-fade="0"] .turn-tick { opacity:.13; }
+.turn-anchor[data-fade="1"] .turn-tick { opacity:.24; }
+.turn-anchor[data-near="2"] .turn-tick { width:11px; }
+.turn-anchor[data-near="1"] .turn-tick { width:15px; }
+.turn-anchor[aria-current=true] .turn-tick { width:13px; opacity:.95; }
+.turn-anchor[data-near="0"] .turn-tick { width:21px; opacity:1; }
+.turn-page-slot,.turn-page-button { height:20px; flex:none; }
+.turn-page-button { justify-content:center; opacity:.32; }
+.turn-navigation:is(:hover,:focus-within) .turn-page-button { opacity:.85; }
+.turn-page-button[aria-disabled=true] { opacity:.35; cursor:progress; }
+@media (prefers-reduced-motion:reduce) { .turn-tick { transition:none; } }
 .conversation-turn { scroll-margin-top: 14px; margin-bottom: 24px; }
 
-@media(max-width:900px) { .turn-navigation { flex-basis: 34px; padding-inline: 3px; }.conversation-body .conversation-content { padding-left: 8px; } }
+@media(max-width:900px) { .conversation-body .conversation-content { padding-left: 8px; } }
 /* Project and conversation navigation */
 .sidebar { overflow: hidden; }
 .project-preview { position: fixed; z-index: 100; width: min(320px,calc(100vw - 260px)); padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-panel); box-shadow: 0 8px 30px #0002; background: var(--raised); }
