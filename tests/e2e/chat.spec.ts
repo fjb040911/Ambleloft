@@ -1285,7 +1285,8 @@ test('saved shell command uses one muted output surface without a redundant page
  await row.getByRole('button',{name:'复制命令'}).click();
  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(command);
  await row.getByRole('button',{name:'复制输出'}).click();
- expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(output);
+ // Windows clipboard APIs may convert LF to CRLF. Preserve every logical line.
+ expect((await page.evaluate(()=>navigator.clipboard.readText())).replace(/\r\n/g,'\n')).toBe(output);
 });
 
 test('streaming terminal output follows the tail until the reader scrolls up',async({page})=>{
