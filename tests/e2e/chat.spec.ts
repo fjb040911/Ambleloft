@@ -1285,7 +1285,8 @@ test('saved shell command uses one muted output surface without a redundant page
  await row.getByRole('button',{name:'复制命令'}).click();
  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(command);
  await row.getByRole('button',{name:'复制输出'}).click();
- expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(output);
+ // Windows clipboard APIs may convert LF to CRLF. Preserve every logical line.
+ expect((await page.evaluate(()=>navigator.clipboard.readText())).replace(/\r\n/g,'\n')).toBe(output);
 });
 
 test('streaming terminal output follows the tail until the reader scrolls up',async({page})=>{
@@ -1540,6 +1541,7 @@ test('visited history is actually unmounted and disclosure state survives remoun
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='completed';r.approvals=[];r.messages=Array.from({length:120},(_,i)=>[{id:'u'+i,role:'user',text:'Question '+i},{id:'a'+i,role:'assistant',phase:'final_answer',text:('Answer '+i+'\n\n').repeat(20)}]).flat();w.__emit();});
  const first=page.locator('[data-turn-id=u0]'),last=page.locator('[data-turn-id=u119]');
  const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
+ await expect(navigation.locator('.turn-anchor').last()).toHaveAttribute('data-turn-number','119');
  await clickTurn(navigation,1);await first.locator('.turn-progress-toggle').click();
  await page.getByRole('textbox',{name:'继续对话'}).focus();
  await page.getByRole('button',{name:'回到最新消息'}).click();await expect(last).toBeVisible();
@@ -1565,7 +1567,9 @@ test('evicted conversations restore the same reading turn and draft',async({page
   const row=[...el.querySelectorAll<HTMLElement>('[data-turn-id]')].find(item=>item.getBoundingClientRect().bottom>top);
   return {id:row?.dataset.turnId,offset:row?row.getBoundingClientRect().top-top:0};
  });
- await clickTurn(page.getByRole('navigation',{name:'对话轮次导航'}),25);
+ const navigation=page.getByRole('navigation',{name:'对话轮次导航'});
+ await expect(navigation.locator('.turn-anchor').last()).toHaveAttribute('data-turn-number','59');
+ await clickTurn(navigation,25);
  await viewport.evaluate(el=>{el.scrollTop+=55;});
  await expect.poll(async()=>(await reading()).id).toBe('read-u24');
  await page.getByRole('textbox',{name:'继续对话'}).fill('Keep this draft');
