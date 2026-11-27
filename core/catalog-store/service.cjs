@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {listingCategories} = require('./discovery-categories.cjs');
 const {PackageStore} = require('../extensions/packages.cjs');
 const {validateSource, verifyEnvelope, checkCompatibility, hashDirectory, MAX_CATALOG, MAX_ARTIFACT} = require('./catalog.cjs');
 
@@ -109,15 +110,20 @@ class CatalogStore {
       const {installedDigest, installedRevision, artifactSha256, ...display} = row;
       result.push({...display, locallyModified});
     }
-    return result;
+    // A previous version can still have a mapping after an upgrade or rollback.
+    return result.filter(row => !row.locallyModified || !result.some(other => !other.locallyModified &&
+      other.sourceId === row.sourceId && other.listingId === row.listingId && other.entityId === row.entityId));
   }
-  async catalog({refresh = false} = {}) {
+  async catalog({refresh = false, refreshIfExpired = false, page, detailId} = {}) {
     let value = this.source ? await this.readCache() : null, error;
-    if (this.source && (refresh || !value)) {
+    if (this.source && (refresh || !value || (value.stale && (refreshIfExpired || this.refreshing)))) {
       try { if (!this.refreshing) this.refreshing = this.refresh().finally(() => { this.refreshing = null; }); value = await this.refreshing; }
       catch (failure) { error = failure.message; }
     }
-    return {source: this.source ? {id: this.source.id, title: this.source.title} : null, items: value?.catalog.items || [], stale: !value || value.stale || !!error, ...(error ? {error} : !this.source ? {error: 'STORE_NOT_CONFIGURED'} : {}), installed: await this.installations(), busy: [...this.busy.keys()]};
+    const items=(value?.catalog.items || []).map(item => ({...item, categories: listingCategories(item)}));
+    if(detailId!==undefined&&(typeof detailId!=='string'||detailId.length>120))throw Error('STORE_INVALID_PAGE');
+    const result=detailId!==undefined?{items:items.filter(item=>item.id===detailId)}:page?require('./pagination.cjs').catalogPage(items,page,crypto.createHash('sha256').update(JSON.stringify(items)).digest('hex')):{items};
+    return {source: this.source ? {id: this.source.id, title: this.source.title} : null, ...result, stale: !value || value.stale || !!error, ...(error ? {error} : !this.source ? {error: 'STORE_NOT_CONFIGURED'} : {}), installed: await this.installations(), busy: [...this.busy.keys()]};
   }
   cancel({listingId}) { const operation = this.busy.get(listingId); if (operation && !operation.committing) operation.controller.abort(); return {cancelled: !!operation && !operation.committing}; }
   async shutdown() { this.closed = true; for (const operation of this.busy.values()) if (!operation.committing) operation.controller.abort(); await this.queue; }
@@ -135,7 +141,7 @@ class CatalogStore {
     const check = () => { if (signal.aborted) throw Error('STORE_INSTALL_CANCELLED'); if (expiresAt && expiresAt <= this.now()) throw Error('STORE_CATALOG_EXPIRED'); };
     check();
     const current = (await this.installations()).find(row => row.sourceId === input.sourceId && row.listingId === input.listingId);
-    if (current) return {kind: current.kind, entityId: current.entityId};
+    if (current && !input.upgradeFromDigest) return {kind: current.kind, entityId: current.entityId};
     // An install always revalidates the live signed catalog, including withdrawal status.
     const {catalog} = await this.refresh(signal); expiresAt = Date.parse(catalog.expiresAt); check();
     const item = catalog.items.find(entry => entry.id === input.listingId);
@@ -158,7 +164,12 @@ class CatalogStore {
           check();
           if (revision.id !== item.entityName || revision.digest !== release.packageDigest || revision.manifest.version !== release.version) throw Error('STORE_PACKAGE_IDENTITY');
           // Callback runs inside the extension service mutation queue. Never replace an unrelated install.
-          if (this.extensions.items.some(existing => existing.id === revision.id)) throw Error('STORE_IDENTITY_CONFLICT');
+          const existing = this.extensions.items.find(value => value.id === revision.id);
+          if (input.upgradeFromDigest || existing) {
+            const active = existing?.revisions?.find(value => value.digest === existing.active);
+            if (!active || existing.active !== input.upgradeFromDigest || !item.upgradeFromDigests?.includes(existing.active) ||
+                hashDirectory(path.join(this.extensions.packages.root, active.relativePath)) !== existing.active) throw Error('STORE_IDENTITY_CONFLICT');
+          }
           accepted = await confirmations.extension?.(revision, item) === true; check();
           if (accepted) { await journal(revision.digest); operation.committing = true; entityId = revision.id; installedRevision = revision.digest; }
           return accepted;

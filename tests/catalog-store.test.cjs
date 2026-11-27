@@ -151,3 +151,90 @@ test('safe but untrusted deep links produce a visible error without accepting th
   assert.equal(inspectStoreLink('ambleloft://store/item?source=https://evil.test&id=fixture.test', []), null);
   assert.equal(inspectStoreLink('ambleloft://store/item?source=curated&id=fixture.test&install=true', []), null);
 });
+
+test('catalog pages filter the complete signed snapshot and details are addressable outside the page',async t=>{
+ const {store,catalog,item,responses}=await fixture(t);
+ catalog.items=Array.from({length:61},(_,i)=>({...item,id:'item-'+i,entityName:'name-'+i,tags:i%2?['writing']:['research'],title:{zh:'工具 '+i,en:'Tool '+i}}));responses.envelope=sign(catalog);
+ const first=await store.catalog({page:{limit:24}});assert.equal(first.items.length,24);assert.equal(first.pagination.total,61);assert.deepEqual(first.pagination.tags,[{label:'research',count:31},{label:'writing',count:30}]);
+ const second=await store.catalog({page:{limit:24,cursor:first.pagination.nextCursor}});assert.equal(second.items[0].id,'item-24');
+ const third=await store.catalog({page:{limit:24,cursor:second.pagination.nextCursor}});assert.equal(third.items.length,13);assert.equal(third.pagination.nextCursor,null);
+ const filtered=await store.catalog({page:{query:'Tool 60',tag:'research'}});assert.equal(filtered.pagination.total,1);assert.equal(filtered.items[0].id,'item-60');
+ assert.equal((await store.catalog({detailId:'item-60'})).items[0].id,'item-60');
+ await assert.rejects(store.catalog({page:{limit:500}}),/INVALID_PAGE/);
+ await assert.rejects(store.catalog({page:{query:'changed',cursor:first.pagination.nextCursor}}),/PAGE_CHANGED/);
+ catalog.items.reverse();responses.envelope=sign(catalog);await store.catalog({refresh:true,page:{}});
+ await assert.rejects(store.catalog({page:{cursor:first.pagination.nextCursor}}),/PAGE_CHANGED/);
+});
+
+test('discovery checks expiry, keeps the signed cache on failure and replaces it after recovery', async t => {
+  const {store, catalog, responses} = await fixture(t);
+  let downloads = 0;
+  const fetcher = store.fetcher;
+  store.fetcher = (...args) => { downloads++; return fetcher(...args); };
+  const enter = () => store.catalog({refreshIfExpired: true});
+  await enter();
+  assert.equal((await enter()).stale, false);
+  assert.equal(downloads, 1);
+
+  const file = path.join(store.root, 'catalog.json');
+  const cached = await fs.readFile(file);
+  const now = Date.parse(catalog.expiresAt);
+  store.now = () => now;
+  responses.offline = true;
+  const fallback = await enter();
+  assert.equal(downloads, 2);
+  assert.equal(fallback.stale, true);
+  assert.match(fallback.error, /offline/);
+  assert.deepEqual(fallback.items, (await store.catalog()).items);
+  assert.equal(fallback.items[0].id, catalog.items[0].id);
+  assert.deepEqual(await fs.readFile(file), cached);
+  assert.equal(downloads, 2);
+
+  responses.offline = false;
+  const next = {...catalog, generatedAt: new Date(now).toISOString(), expiresAt: new Date(now + 86400000).toISOString()};
+  responses.envelope = sign(next);
+  const recovered = await enter();
+  assert.equal(recovered.stale, false);
+  assert.equal(recovered.error, undefined);
+  assert.equal((await store.readCache()).catalog.generatedAt, next.generatedAt);
+  assert.equal(downloads, 3);
+});
+
+test('extension discovery combines bilingual categories, exact tags and snapshot-bound cursors',async t=>{
+ const {store,catalog,item,responses}=await fixture(t,'extension');
+ catalog.items=Array.from({length:30},(_,i)=>({...item,id:'x-'+i,entityName:'x-'+i,tags:i%2?['business','equipment']:[],...(i===28?{categoryIds:['equipment','business']}: {})}));
+ responses.envelope=sign(catalog);
+ const first=await store.catalog({page:{kind:'extension',category:'business',limit:5}});
+ assert.equal(first.pagination.total,16);
+ assert.deepEqual(first.pagination.categories.map(c=>c.id),['business','equipment','other']);
+ const second=await store.catalog({page:{kind:'extension',category:'business',limit:5,cursor:first.pagination.nextCursor}});
+ assert.equal(second.items[0].id,'x-11');
+ await assert.rejects(store.catalog({page:{kind:'extension',category:'equipment',limit:5,cursor:first.pagination.nextCursor}}),/PAGE_CHANGED/);
+ for(const query of ['设备与工具','Devices & tools']){
+   const scoped=await store.catalog({page:{query,category:'business',tag:'equipment'}});
+   assert.equal(scoped.pagination.total,15);
+ }
+ const detail=await store.catalog({detailId:'x-28'});
+ assert.deepEqual(detail.items[0].categories.map(c=>c.id),['equipment','business']);
+ assert.equal((await store.catalog({page:{category:'other'}})).pagination.total,14);
+});
+
+test('updates a locally installed reviewed predecessor only after confirmation', async t => {
+  const f = await fixture(t, 'extension');
+  const oldDirectory = path.join(f.root, 'old');
+  await fs.cp(f.bundle, oldDirectory, {recursive: true});
+  await fs.writeFile(path.join(oldDirectory, 'extension.json'), JSON.stringify({...manifest, version: '0.9.0'}));
+  await f.extensions.installPackage(oldDirectory, 'directory', async () => true);
+  const digest = f.extensions.items[0].active;
+  const input = {...f.input, upgradeFromDigest: digest};
+  await assert.rejects(f.store.install(input, f.confirm), /STORE_IDENTITY_CONFLICT/);
+  f.item.upgradeFromDigests = [digest];
+  f.responses.envelope = sign(f.catalog);
+  const cancelled = await f.store.install(input, {extension: async () => false});
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(f.extensions.items[0].active, digest);
+  await assert.rejects(f.store.install({...input, upgradeFromDigest: 'f'.repeat(64)}, f.confirm), /STORE_IDENTITY_CONFLICT/);
+  await f.store.install(input, f.confirm);
+  assert.equal(f.extensions.items[0].active, f.item.release.packageDigest);
+  assert.equal((await f.store.installations())[0].releaseVersion, f.item.release.version);
+});

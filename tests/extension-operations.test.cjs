@@ -7,3 +7,33 @@ test('ordinary exemptions scoped to caller, revision/generation; important risks
 test('revocation after dispatch suppresses output and reports unknown outcome',async()=>{const f=fixture();f.service.hosts.invoke=async(_i,_o,_p,opts)=>{await opts.guard();opts.onDispatch();f.item.generation++;return {secret:'must not escape'};};const r=await f.router.invoke(f.op.id,{projectId:'p'},f.context);assert.equal(r.ok,false);assert.equal(r.error.effectStatus,'unknown');assert.equal(r.value,undefined);});
 test('invalidated approval aborts and cannot dispatch',async()=>{const f=fixture();f.router.confirm=async b=>{f.router.invalidate(f.item.id);assert.equal(b.abort.signal.aborted,true);return {};};assert.equal((await f.router.invoke(f.op.id,{projectId:'p'},f.context)).error.code,'CANCELLED');assert.equal(f.counts().dispatched,0);});
 test('resource bridge enforces operation permission and bound project, filters metadata',async()=>{const f=fixture({effect:'read'});f.router.workspace={read:async()=>({projects:[{id:'p',name:'Project',path:'/private',description:'desc'}]})};const b={item:f.item,operation:f.op,input:{projectId:'p'},projectId:'p',context:f.context};assert.deepEqual(await f.router.resource(b,'getProject',{projectId:'p'}),{id:'p',name:'Project',description:'desc'});await assert.rejects(f.router.resource(b,'getProjectPath',{projectId:'p'}));await assert.rejects(f.router.resource(b,'getProject',{projectId:'other'}));});
+
+test('WeKnora search reports the invalid optional ID through MCP before dispatch',async t=>{
+ const {PackageStore}=require('../core/extensions/packages.cjs');
+ const {createAgentChannel}=require('../core/extensions/agent-channel.cjs');
+ const operationId='local.weknora.search',query='context-engine 架构 模块 数据流 组件';
+ const f=fixture({id:operationId,effect:'read',projectScoped:false,requiredPermissions:[],inputSchema:{
+  type:'object',properties:{query:{type:'string',minLength:1,maxLength:2000},knowledgeBaseId:{type:'string',minLength:1,maxLength:200}},required:['query'],additionalProperties:false
+ }});
+ f.service.packages=new PackageStore('.');
+ const channel=await createAgentChannel({list:()=>f.router.list({caller:'agent'}),invoke:(id,input,signal)=>f.router.invoke(id,input,{caller:'agent',signal})});
+ t.after(()=>channel.close());
+ async function call(input){
+  const response=await fetch(channel.config.url,{method:'POST',headers:channel.config.http_headers,body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'extension_invoke_operation',arguments:{operationId,input}}})});
+  const {result}=await response.json();
+  return {...JSON.parse(result.content[0].text),isError:result.isError};
+ }
+ const failure=await call({query,knowledgeBaseId:''});
+ assert.equal(failure.isError,true);
+ assert.equal(failure.error.code,'INVALID_ARGUMENT');
+ assert.equal(failure.error.effectStatus,'notStarted');
+ assert.match(failure.error.message,/input\.knowledgeBaseId .*不能为空字符串.*可选字段.*省略/);
+ assert.ok(!failure.error.message.includes(query));
+ const missing=await call({});
+ assert.match(missing.error.message,/input\.query .*必填/);
+ assert.doesNotMatch(missing.error.message,/省略/);
+ assert.deepEqual(f.counts(),{dispatched:0,confirmed:0});
+ assert.equal((await call({query})).ok,true);
+ assert.equal((await call({query,knowledgeBaseId:'kb-1'})).ok,true);
+ assert.deepEqual(f.counts(),{dispatched:2,confirmed:0});
+});

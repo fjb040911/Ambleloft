@@ -20,7 +20,7 @@ async function launch(){app=await electron.launch({args:['.',`--user-data-dir=${
 const flows=id=>page.evaluate(runId=>window.desktop.forms.list({runId}),id);
 async function waitForm(id){return until(async()=>{const [flow]=await flows(id);if(flow)return flow;const run=await page.evaluate(id=>window.desktop.getRunPage({id}),id);if(run.status==='failed')throw Error('Real provider failed: '+run.error);return null;});}
 const center=()=>openExtensionCenter(page);
-async function listing(name){await page.getByRole('tab',{name:'发现',exact:true}).click();await button('查看详情',page.locator('.store-card').filter({has:page.getByText(name,{exact:true})})).click();}
+async function listing(name){await page.getByRole('tab',{name:'发现',exact:true}).click();await button('查看详情：'+name,page.locator('.store-card').filter({has:page.getByText(name,{exact:true})})).click();}
 try{
  await mkdir(project);await mkdir('test-results',{recursive:true});
  if(process.env.AMBLE_STORE_LIVE_PROVIDER_PROFILE){
@@ -36,8 +36,8 @@ try{
  await expect(page.getByRole('dialog')).toContainText('三步差旅登记');assert.equal((await page.evaluate(()=>window.desktop.store.catalog())).installed.length,0);await page.keyboard.press('Escape');
  await app.evaluate(({app})=>app.emit('open-url',{preventDefault(){}},'ambleloft://store/item?source=not-trusted&id=examples.travel-registration'));
  await expect(page.getByRole('alert')).toContainText('此链接来自尚未信任的目录');assert.equal(await page.getByRole('dialog').count(),0);assert.equal((await page.evaluate(()=>window.desktop.store.catalog())).installed.length,0);await button('关闭提示').click();result.deepLinkRouting=true;
- await listing('三步差旅登记');await button('安装此版本').click();await until(async()=> (await page.evaluate(()=>window.desktop.store.catalog())).installed.some(x=>x.listingId==='examples.travel-registration'));
- await listing('设备售后工单');await button('安装此版本').click();await button('授权扩展配置').click();await page.getByLabel('serviceUrl',{exact:false}).fill('http://127.0.0.1:18080');await button('保存配置').click();await expect(button('保存配置')).toBeDisabled();await page.screenshot({path:'test-results/store-desktop-configuration.png'});
+ await listing('三步差旅登记');await button('添加：三步差旅登记',page.getByRole('dialog')).click();await until(async()=> (await page.evaluate(()=>window.desktop.store.catalog())).installed.some(x=>x.listingId==='examples.travel-registration'));
+ await listing('设备售后工单');await button('添加：设备售后工单',page.getByRole('dialog')).click();await button('授权扩展配置').click();await page.getByLabel('serviceUrl',{exact:false}).fill('http://127.0.0.1:18080');await button('保存配置').click();await expect(button('保存配置')).toBeDisabled();await page.screenshot({path:'test-results/store-desktop-configuration.png'});
  result.store=true;assert.equal((await page.evaluate(()=>window.desktop.store.catalog())).installed.length,2);
  await button('返回技能与扩展').click();const travelRow=page.locator('.store-installed-row').filter({has:page.getByRole('heading',{name:'三步差旅登记',exact:true})});await button('在聊天中使用',travelRow).click();await button('填入聊天输入框').click();await expect(page.getByRole('textbox',{name:'任务内容',exact:true})).toHaveValue(/三步差旅登记/);assert.equal((await page.evaluate(()=>window.desktop.listRuns())).length,0,'Preparing use must not send');
  if(process.env.AMBLE_STORE_LIVE_PROVIDER_PROFILE){

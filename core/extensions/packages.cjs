@@ -12,7 +12,11 @@ function runWorker(workerData){return new Promise((resolve,reject)=>{
 });}
 class PackageStore{
  constructor(directory,validator){this.root=path.join(directory,'extension-packages');this.validator=validator||path.join(__dirname,'manifest.cjs');}
- async validateValue(valueSchema,value){return (await runWorker({validator:this.validator,valueSchema,value})).valid;}
+ async validateValue(valueSchema,value,onInvalid){
+  const result=await runWorker({validator:this.validator,valueSchema,value,explain:!!onInvalid});
+  if(!result.valid&&result.message)onInvalid?.(result.message);
+  return result.valid;
+ }
  async initialize(){await fs.rm(path.join(this.root,'staging'),{recursive:true,force:true});}
  async prepare(source,mode='archive'){
   const stage=path.join(this.root,'staging',randomUUID());await fs.mkdir(stage,{recursive:true});

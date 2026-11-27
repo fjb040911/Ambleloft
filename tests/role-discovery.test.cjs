@@ -1,7 +1,7 @@
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
+const {test,before}=require('node:test'),assert=require('node:assert/strict');
 const {validateDiscovery}=require('../core/catalog-store/role-discovery.cjs');
 const {legacyRoles}=require('../core/catalog-store/expert-contract.cjs');
-const out={};new Function('exports',ts.transpileModule(fs.readFileSync('src/role-discovery.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(out);
+let out;before(async()=>{out=await import('../core/catalog-store/role-search.mjs');});
 const authored=require('../specs/workforce/examples/expert-roles.authoring.json').roles;
 const roles=legacyRoles({roles:authored.map(r=>({...r,skills:[]})),skills:[],recommendations:[]},'test');
 const ids=(q,c='',t='')=>out.searchRoles(roles,q,c,t).map(r=>r.id);

@@ -962,10 +962,9 @@ test('subagent replay shares reasoning, terminal, stack and MCP details with the
  await panel.getByRole('button',{name:/已运行.*npm test/}).click();
  await expect(panel.locator('[data-slot=terminal] [aria-label="工具输出"]')).toHaveText('All passed');
  await panel.getByRole('button',{name:/npm lint/}).click();
- await panel.getByRole('button',{name:/错误调用栈/}).click();
  await expect(panel.locator('pre[aria-label="错误调用栈"]')).toContainText('/src/check.js:1:3');
  await panel.getByRole('button',{name:/lookup/}).click();
- await expect(panel.getByLabel('工具输入')).toContainText('index');
+ await expect(panel.getByLabel('工具输入',{exact:true})).toContainText('index');
  await expect(panel.getByText('found',{exact:true})).toBeVisible();
 });
 
@@ -1121,7 +1120,7 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  await expect(row.locator('[data-slot=trace-collapsible-trigger]')).toHaveAttribute('aria-expanded','false');
  await row.locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(row.locator('[data-slot=trace-collapsible-trigger]')).toHaveAttribute('aria-expanded','true');
- await expect(row.getByLabel('工具输出')).toBeVisible();
+ await expect(row.getByLabel('工具输出',{exact:true})).toBeVisible();
  for(const width of [1240,640]){
   await page.setViewportSize({width,height:840});
   await row.scrollIntoViewIfNeeded();
@@ -1133,7 +1132,7 @@ test('transcript keeps long tool metadata and reply typography readable in narro
  await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
  await page.screenshot({path:'test-results/chat-layout-dark.png'});
  await row.locator('[data-slot=trace-collapsible-trigger]').focus();await page.keyboard.press('Enter');
- await expect(row.getByLabel('工具输出')).not.toBeVisible();
+ await expect(row.getByLabel('工具输出',{exact:true})).not.toBeVisible();
 });
 
 test('reconciled forms replace stale local errors with the confirmed submission result',async({page})=>{
@@ -1205,21 +1204,21 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
  await prepare(page);
  await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='running';r.approvals=[];r.messages=[{id:'u',role:'user',text:'检查过程'},{id:'p',role:'assistant',phase:'commentary',text:'## 步骤\n\n**检查**\n\n- 项目\n\n> 引用',order:1}];r.tools=[{id:'tool',turnKey:'u',type:'commandExecution',label:'node check.js',status:'inProgress',detail:'first output',order:2}];(window as any).__emit();});
  const entry=page.locator('.process-entry.commandExecution');
- await expect(entry.getByLabel('工具输出')).toHaveCount(0);
+ await expect(entry.getByLabel('工具输出',{exact:true})).toHaveCount(0);
  await entry.locator('[data-slot=trace-collapsible-trigger]').click();
- await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await expect(entry.getByLabel('工具输出',{exact:true})).toBeVisible();
  await expect(entry.locator('[data-slot=code-block]')).toHaveCount(1);
  await entry.locator('[data-slot=trace-collapsible-trigger]').click();
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].detail+='\nnext output';(window as any).__emit();});
- await expect(entry.getByLabel('工具输出')).toBeHidden();
+ await expect(entry.getByLabel('工具输出',{exact:true})).toBeHidden();
  await entry.locator('[data-slot=trace-collapsible-trigger]').click();
- await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeHidden();
- await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeHidden();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeVisible();
  await expect(page.locator('.process-panel .markdown')).toHaveCount(0);
  await expect(page.locator('.trace-markdown h2')).toHaveText('步骤');
  await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='completed';r.tools[0].status='completed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeHidden();
- await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出')).toBeVisible();
+ await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeVisible();
  await expect.poll(()=>page.locator('.turn-progress > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-content]').evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(100);
  await page.screenshot({path:'test-results/trace-history.png',animations:'disabled'});
 });
@@ -1239,21 +1238,67 @@ test('chat tool details render MCP inputs, terminal commands and collapsible err
  },stack);
  const tools=page.locator('.process-entry [data-slot=tool]');
  await tools.nth(0).getByRole('button').click();
- await expect(tools.nth(0).getByLabel('工具输入')).toContainText('docs');
- await expect(tools.nth(0).getByLabel('工具输出')).toContainText('"count": 2');
+ await expect(tools.nth(0).getByLabel('工具输入',{exact:true})).toContainText('docs');
+ await expect(tools.nth(0).getByLabel('工具输出',{exact:true})).toContainText('"count": 2');
  for(const index of [1,2]){
   const row=tools.nth(index);
   await row.getByRole('button').click();
   if(index===1)await expect(row.locator('[data-slot=trace-line]').first()).toHaveAttribute('title','node build.js');
-  const toggle=row.getByRole('button',{name:'错误调用栈 · TypeError: Invalid value'});
-  await expect(toggle).toHaveAttribute('aria-expanded','false');
-  await toggle.click();
+  const toggle=row.getByRole('button').first();
   const frames=row.locator('pre[aria-label="错误调用栈"]');
-  await expect(frames).toContainText(stack);
+  await expect(frames).toContainText('/project/build.js:12:4');
+  await expect(frames).not.toContainText('node_modules');
+  await expect(row.getByRole('button',{name:'框架调用 · 1'})).toHaveAttribute('aria-expanded','false');
+  await row.getByRole('button',{name:'框架调用 · 1'}).click();
+  await expect(row.getByText('at run (/project/node_modules/runner.js:1:2)',{exact:true})).toBeVisible();
   if(index===2)await expect(frames).toContainText('"code": 123');
   await toggle.click();
   await expect(frames).toHaveCount(0);
  }
+});
+
+test('failed extension history shows the cause on first disclosure and wraps unbroken text',async({page})=>{
+ await prepare(page,'');
+ await page.setViewportSize({width:800,height:720});
+ const error={code:'INVALID_ARGUMENT',message:'INVALID_ARGUMENT',requestId:'a'.repeat(300),effectStatus:'notStarted'};
+ await page.evaluate(error=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
+  const operationId='local.weknora.search',input={query:'context-engine 架构 模块 数据流 组件',knowledgeBaseId:''};
+  const contract={id:operationId,inputSchema:{type:'object',properties:{knowledgeBaseId:{type:'string',minLength:1,maxLength:200},query:{type:'string',minLength:1,maxLength:2000}},required:['query'],additionalProperties:false}};
+  const mcp=(args:unknown,value:unknown)=>JSON.stringify({arguments:args,result:{content:[{type:'text',text:JSON.stringify(value)}],_meta:null,structuredContent:null}});
+  r.tools=[
+   {id:'list',turnKey:'u',type:'mcpToolCall',label:'extension_list_operations',status:'completed',detail:mcp({},[contract])},
+   {id:'search',turnKey:'u',type:'mcpToolCall',label:'extension_invoke_operation',status:'failed',detail:mcp({operationId,input},{ok:false,error})}
+  ];
+  w.__emit();
+ },error);
+ await page.locator('.turn-progress-toggle').click();
+ const row=page.locator('.process-entry.mcpToolCall').filter({has:page.getByRole('button',{name:/extension_invoke_operation/})});
+ await row.getByRole('button',{name:/extension_invoke_operation/}).click();
+ await expect(row.locator('p')).toHaveText('input.knowledgeBaseId 不能为空字符串，请填写有效内容。如无需指定此可选字段，请省略它。 操作尚未开始执行。');
+ await expect(row.getByRole('button',{name:/框架调用/})).toHaveCount(0);
+ const output=row.getByLabel('工具输出',{exact:true});
+ await expect(output).toContainText(error.requestId);
+ expect(await output.evaluate(el=>el.scrollWidth-el.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('new extension validation errors show the host message without a catalog',async({page})=>{
+ await prepare(page,'');
+ const message='input.knowledgeBaseId 不能为空字符串，请填写有效内容。如无需指定此可选字段，请省略它。';
+ await page.evaluate(message=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
+  const error={code:'INVALID_ARGUMENT',message,effectStatus:'notStarted',requestId:'test'};
+  r.tools=[{id:'invalid',turnKey:'u',type:'mcpToolCall',label:'extension_invoke_operation',status:'failed',
+   detail:JSON.stringify({arguments:{operationId:'local.weknora.search',input:{query:'context-engine 架构 模块 数据流 组件',knowledgeBaseId:''}},
+    result:{isError:true,content:[{type:'text',text:JSON.stringify({ok:false,error})}]}})}];
+  w.__emit();
+ },message);
+ await page.locator('.turn-progress-toggle').click();
+ const row=page.locator('.process-entry.mcpToolCall');
+ await row.getByRole('button',{name:/extension_invoke_operation/}).click();
+ await expect(row.locator('p')).toHaveText(message+' 操作尚未开始执行。');
 });
 
 test('saved shell command uses one muted output surface without a redundant pager',async({page,context})=>{
@@ -1279,7 +1324,7 @@ test('saved shell command uses one muted output surface without a redundant page
  await expect(block).toHaveCount(1);
  await expect(block).toHaveCSS('border-top-width','0px');
  expect(await block.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
- await expect(row.getByLabel('工具输出')).toHaveText(/^  Overview/);
+ await expect(row.getByLabel('工具输出',{exact:true})).toHaveText(/^  Overview/);
  await expect(row.getByRole('button',{name:'上一页'})).toHaveCount(0);
  await block.hover();
  await row.getByRole('button',{name:'复制命令'}).click();
@@ -1299,7 +1344,7 @@ test('streaming terminal output follows the tail until the reader scrolls up',as
  });
  const row=page.locator('.process-entry.commandExecution');
  await row.getByRole('button').click();
- const output=row.getByLabel('工具输出');
+ const output=row.getByLabel('工具输出',{exact:true});
  const append=()=>page.evaluate(()=>{
   const w=window as any;w.__demoRun.tools[0].detail+='\n'+Array.from({length:60},(_,i)=>'line '+i).join('\n');w.__emit();
  });
@@ -1311,27 +1356,38 @@ test('streaming terminal output follows the tail until the reader scrolls up',as
  expect(await output.evaluate(el=>el.scrollTop)).toBe(0);
 });
 
-test('completed history shows a styled tool status and decodes a fully loaded detail preview',async({page})=>{
+test('completed MCP history uses the shared trace and decodes a fully loaded detail preview',async({page,context})=>{
+ await context.grantPermissions(['clipboard-read','clipboard-write']);
  await prepare(page,'');
  await page.evaluate(()=>{
   const w=window as any,r=w.__demoRun;
-  const full=JSON.stringify({arguments:{query:'historical search'},result:{text:'payload '.repeat(1800)}});
+  const full=JSON.stringify({arguments:{},result:{structuredContent:null,_meta:null,content:[{type:'text',text:JSON.stringify([{title:'检查 FPGA 回归环境',detail:'payload '.repeat(1800)}])}]}});
   r.status='completed';r.approvals=[];r.messages=r.messages.slice(0,1);
-  r.tools=[{id:'saved',turnKey:'u',type:'mcpToolCall',label:'lookup',status:'completed',detail:full.slice(-2048),detailPreview:true,detailVersion:'v1'}];
+  r.tools=[{id:'saved',turnKey:'u',type:'mcpToolCall',label:'extension_list_operations',status:'completed',detail:full.slice(-2048),detailPreview:true,detailVersion:'v1'}];
   w.__reads=0;
   w.desktop.getToolText=async()=>{w.__reads++;return {text:full,offset:0,total:full.length,version:'v1'};};
   w.__emit();
  });
  await page.locator('.turn-progress-toggle').click();
  const tool=page.locator('.process-entry.mcpToolCall');
- const badge=tool.locator('.activity-tool-status');
- await expect(badge).toHaveText('已完成');
- expect(await badge.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+ await expect(tool.locator('[data-slot=badge]')).toHaveCount(0);
+ await expect(tool.getByRole('button')).toHaveAccessibleName(/extension_list_operations.*已完成/);
  expect(await page.evaluate(()=>(window as any).__reads)).toBe(0);
  await tool.getByRole('button').click();
- await expect(tool.getByLabel('工具输入')).toContainText('historical search');
- await expect(tool.getByLabel('工具输出')).toContainText('payload');
- expect(await tool.locator('[data-slot=code-block]').first().evaluate(el=>getComputedStyle(el).borderTopWidth)).toBe('1px');
+ const output=tool.getByLabel('工具输出',{exact:true});
+ await expect(output).toContainText('检查 FPGA 回归环境');
+ await expect(output).not.toContainText('"content"');
+ await expect(tool.getByLabel('工具输入',{exact:true})).toHaveCount(0);
+ await expect(tool.locator('[data-slot=code-block]')).toHaveCount(1);
+ await expect(tool.locator('[data-slot=code-block]')).toHaveCSS('border-top-width','0px');
+ await expect(tool.getByRole('button',{name:'上一页'})).toHaveCount(0);
+ await page.evaluate(()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('dark');});
+ await tool.scrollIntoViewIfNeeded();
+ await tool.screenshot({path:test.info().outputPath('extension-trace-dark.png'),animations:'disabled'});
+ await output.hover();
+ await tool.getByRole('button',{name:'复制 · 工具输出'}).click();
+ const copied=await page.evaluate(()=>navigator.clipboard.readText());
+ expect(JSON.parse(copied).content[0].text).toBe(await output.textContent());
  expect(await page.evaluate(()=>(window as any).__reads)).toBe(1);
 });
 
@@ -1457,7 +1513,7 @@ test('collapsed execution unmounts large histories and restores disclosure choic
  await expect(progress.locator('.process-entry.commandExecution')).toHaveCount(200);
  const first=progress.locator('.process-entry.commandExecution').first();
  await first.locator('[data-slot=trace-collapsible-trigger]').click();
- await expect(first.getByLabel('工具输出')).toBeVisible();
+ await expect(first.getByLabel('工具输出',{exact:true})).toBeVisible();
  const expandedCount=await progress.locator('*').count();
  await toggle.click();
  await expect(progress.locator('.process-panel')).toHaveCount(0);
@@ -1467,13 +1523,13 @@ test('collapsed execution unmounts large histories and restores disclosure choic
  await expect(toggle).toHaveAttribute('aria-expanded','false');
  await expect(progress.locator('.process-panel')).toHaveCount(0);
  await toggle.click();
- await expect(first.getByLabel('工具输出')).toHaveText('Newest output while collapsed');
+ await expect(first.getByLabel('工具输出',{exact:true})).toHaveText('Newest output while collapsed');
  await expect(progress.locator('.process-milestone')).toContainText('Latest progress');
  await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__emit();});
  await expect(toggle).toHaveAttribute('aria-expanded','false');
  await expect(toggle).not.toContainText('200');
  await expect(progress.locator('.process-panel')).toHaveCount(0);
- await toggle.click();await expect(first.getByLabel('工具输出')).toHaveText('Newest output while collapsed');
+ await toggle.click();await expect(first.getByLabel('工具输出',{exact:true})).toHaveText('Newest output while collapsed');
 });
 
 test('hidden conversation freezes transcript DOM while retaining draft and latest approvals',async({page})=>{
@@ -1530,9 +1586,9 @@ test('long tool output is fetched only on disclosure and pages without losing te
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=[{id:'paged',turnKey:'u',type:'commandExecution',label:'cat log',status:'completed',detail:'Tail preview',detailPreview:true,detailVersion:'v1'}];w.__detailReads=[];w.desktop.getToolText=async(input:any)=>{w.__detailReads.push(input);const text='BEGIN '+('x'.repeat(100000))+' END',offset=input.offset??text.length-64000;return {text:text.slice(offset,offset+64000),total:text.length,offset,version:'v1'};};w.__emit();});
  const tool=page.locator('.process-entry.commandExecution'),toggle=tool.locator('[data-slot=trace-collapsible-trigger]');
  expect(await page.evaluate(()=>(window as any).__detailReads.length)).toBe(0);
- await toggle.click();await expect(tool.getByLabel('工具输出')).toContainText('END');
- await tool.getByRole('button',{name:'上一页',exact:true}).click();await expect(tool.getByLabel('工具输出')).toContainText('BEGIN');
- await toggle.click();await expect(tool.getByLabel('工具输出')).toHaveCount(0);
+ await toggle.click();await expect(tool.getByLabel('工具输出',{exact:true})).toContainText('END');
+ await tool.getByRole('button',{name:'上一页',exact:true}).click();await expect(tool.getByLabel('工具输出',{exact:true})).toContainText('BEGIN');
+ await toggle.click();await expect(tool.getByLabel('工具输出',{exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>(window as any).__detailReads.length)).toBe(2);
 });
 

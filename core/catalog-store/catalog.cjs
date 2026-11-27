@@ -24,6 +24,7 @@ function validateCatalog(value) {
     text(item.publisher, 120); text(item.license, 120);
     if (!Array.isArray(item.tags) || item.tags.length > 20) fail('STORE_INVALID_CATALOG');
     item.tags.forEach(tag => text(tag, 80));
+    if (item.categoryIds !== undefined && (!Array.isArray(item.categoryIds) || item.categoryIds.length > 20 || item.categoryIds.some(id => !identifier(id)) || new Set(item.categoryIds).size !== item.categoryIds.length)) fail('STORE_INVALID_CATALOG');
     if (item.previewSteps !== undefined) {
       if (!Array.isArray(item.previewSteps) || item.previewSteps.length < 1 || item.previewSteps.length > 6) fail('STORE_INVALID_PREVIEW');
       for (const step of item.previewSteps) {
@@ -34,6 +35,8 @@ function validateCatalog(value) {
         }
       }
     }
+    if (item.upgradeFromDigests !== undefined && (item.kind !== 'extension' || !Array.isArray(item.upgradeFromDigests) ||
+        item.upgradeFromDigests.length > 32 || item.upgradeFromDigests.some(d => typeof d !== 'string' || !HEX.test(d)))) fail('STORE_INVALID_RELEASE');
     const release = item.release;
     if (!release || !/^\d+\.\d+\.\d+(?:-[\da-zA-Z.-]+)?$/.test(release.version) || !['published', 'yanked', 'revoked'].includes(release.status)) fail('STORE_INVALID_RELEASE');
     if (!HEX.test(release.artifactSha256) || !HEX.test(release.packageDigest) || !Number.isSafeInteger(release.artifactSize) || release.artifactSize <= 0 || release.artifactSize > MAX_ARTIFACT) fail('STORE_INVALID_ARTIFACT');

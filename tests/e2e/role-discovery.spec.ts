@@ -26,7 +26,7 @@ test('personal discovery edits survive steps and do not restore a removed skill'
 });
 test('offline refresh keeps filters and verified metadata; long content fits narrow cards',async({page})=>{
  await page.setViewportSize({width:390,height:950});await page.goto(url+'&theme=dark');
- await page.evaluate(()=>{const api=(window as any).desktop.workforce,load=api.roles;api.roles=async()=>{const catalog=await load();catalog.items[0].discovery.tags[0].title['zh-CN']='复杂业务领域的长能力标签'.repeat(5);return {...catalog,stale:true,error:'offline'};};});
+ await page.evaluate(()=>{const api=(window as any).desktop.workforce,load=api.roles;api.roles=async(input:any)=>{const catalog=await load(input);catalog.items[0].discovery.tags[0].title['zh-CN']='复杂业务领域的长能力标签'.repeat(5);return {...catalog,stale:true,error:'offline'};};});
  await page.getByRole('searchbox',{name:'搜索专家、能力或工作目标'}).fill('PM');await page.getByRole('button',{name:'刷新角色库'}).click();
  await expect(page.locator('.wf-role-card')).toHaveCount(1);await expect(page.getByRole('searchbox')).toHaveValue('PM');await expect(page.getByRole('alert').filter({hasText:'角色库暂时无法刷新。'})).toBeVisible();
  expect(await page.locator('.wf-role-card').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy();
