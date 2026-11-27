@@ -31,10 +31,10 @@ test('extension details render README, configuration and named project permissio
 
 test('installation actions stay in the header and dirty configuration survives cancelled navigation',async({page})=>{
  await page.goto('/');await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
- await page.getByRole('button',{name:'从本地安装',exact:true}).click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'从本地安装',exact:true}).click();await expect(page.getByRole('menuitem',{name:/扩展安装包/})).toBeVisible();
  await expect(page.getByRole('heading',{name:'已安装扩展',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'安装扩展',exact:true}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('package');
- await page.getByRole('button',{name:'更多安装方式'}).click();await page.getByRole('menuitem',{name:'加载开发目录'}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('directory');await page.getByRole('button',{name:'返回已安装',exact:true}).click();
+ await page.getByRole('menuitem',{name:/扩展安装包/}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('package');
+ await page.getByRole('button',{name:'从本地安装'}).click();await page.getByRole('menuitem',{name:'加载扩展开发目录'}).click();expect(await page.evaluate(()=>(window as any).__installation)).toBe('directory');
  await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await expect(page.getByRole('button',{name:'安装扩展',exact:true})).toHaveCount(0);
  await page.getByRole('tab',{name:'设置',exact:true}).click();await page.getByLabel('language').fill('English');
  await page.getByRole('button',{name:'返回已安装'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByLabel('language')).toHaveValue('English');

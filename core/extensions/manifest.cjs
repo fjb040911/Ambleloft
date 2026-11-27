@@ -196,12 +196,49 @@ function validateHandlerBindings(manifest, names) {
   const expected = [...(manifest.operations || []),...(manifest.hooks || [])].map(op => op.handler);
   return names.length === new Set(names).size && names.length === expected.length && names.every(name => expected.includes(name));
 }
+// Build public diagnostics from the declared contract. Never echo argument values or backend errors.
+function inputIssue(schema, error) {
+  const parts = error.instancePath.split('/').slice(1).map(key => key.replace(/~1/g, '/').replace(/~0/g, '~'));
+  if (error.keyword === 'required') parts.push(error.params.missingProperty);
+  if (error.keyword === 'additionalProperties') parts.push(error.params.additionalProperty);
+  let path = 'input', optional = false;
+  for (const key of parts) {
+    const isItem = schema?.type === 'array';
+    optional = !isItem && Object.hasOwn(schema?.properties || {}, key) && !schema.required?.includes(key);
+    schema = isItem ? schema.items : schema?.properties?.[key];
+    path += isItem ? `[${key}]` : /^[a-zA-Z_$][\w$]*$/.test(key) ? '.' + key : '[' + JSON.stringify(key.slice(0, 120)) + ']';
+  }
+  const {limit, type} = error.params;
+  let message;
+  switch (error.keyword) {
+    case 'required': message = '是必填字段，请补充该字段。'; break;
+    case 'additionalProperties': message = '不在工具声明的参数中，请移除该字段或核对字段名。'; break;
+    case 'minLength': message = limit === 1 ? '不能为空字符串，请填写有效内容。' : `长度不足，请至少填写 ${limit} 个字符。`; break;
+    case 'maxLength': message = `过长，请缩短至 ${limit} 个字符以内。`; break;
+    case 'type': message = `类型有误，请使用 ${type} 类型的值。`; break;
+    case 'enum': message = '取值无效，请从该字段声明的 enum 选项中选择。'; break;
+    case 'minimum': message = `过小，请填写大于等于 ${limit} 的数值。`; break;
+    case 'maximum': message = `过大，请填写小于等于 ${limit} 的数值。`; break;
+    case 'minItems': message = `条目不足，请提供至少 ${limit} 项。`; break;
+    case 'maxItems': message = `条目过多，请最多保留 ${limit} 项。`; break;
+    default: message = '不符合工具声明的参数格式，请核对输入。';
+  }
+  return path.slice(0, 512) + ' ' + message + (optional ? '如无需指定此可选字段，请省略它。' : '');
+}
 function compileValueValidator(valueSchema) {
   jsonGuard(valueSchema); const errors = [];
   const checkStructure = ajv.compile({ $ref: `${schema.$id || 'urn:amble:extension-manifest'}#/$defs/valueSchema` });
   if (!checkStructure(valueSchema)) throw new Error('Invalid value schema structure');
   validateValueSchema(valueSchema, '', errors); if (errors.length) throw new Error(errors[0].message);
   const check = ajv.compile(valueSchema);
-  return value => { try { jsonGuard(value); return check(value); } catch { return false; } };
+  return (value, onInvalid) => {
+    try { jsonGuard(value); } catch {
+      onInvalid?.('input 需要有效的 JSON，请检查输入结构并缩减过大或嵌套过深的内容。');
+      return false;
+    }
+    const valid = check(value);
+    if (!valid && onInvalid) onInvalid(check.errors.slice(0, 4).map(error => inputIssue(valueSchema, error)).join('\n'));
+    return valid;
+  };
 }
 module.exports = { validateSkillLocalization:require('../localization/skill.cjs').validateSkillLocalization, CONTRACT_REVISION, validateManifest, validatePackage, localizeManifest, validateHandlerBindings, compileValueValidator };

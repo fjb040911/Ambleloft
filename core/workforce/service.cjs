@@ -103,7 +103,7 @@ class WorkforceService {
     const checked=repository.validate(input),result=await repository.checkout(checked);
     try{return await this.previewImport(result.source,result.provenance);}finally{await result.cleanup();}
   }
-  roles(input){const action=this.roleQueue.then(()=>this.loadRoles(input||{}));this.roleQueue=action.catch(()=>{});return action;}
+  roles(input){input=input||{};const action=this.roleQueue.then(async()=>{const catalog=await this.loadRoles(input);if(!input.page)return catalog;const {rolePage}=await import('../catalog-store/role-pagination.mjs');return rolePage(catalog,input.page);});this.roleQueue=action.catch(()=>{});return action;}
   async loadRoles({refresh=false}={}) {
     if(this.expert){const value=await this.expert.roles(refresh);if(value.items.length||await this.expert.cached()||value.error?.startsWith('EXPERT_'))return value;}
     const source=this.catalog.source;if(!source)return {items:[],stale:true,error:'尚未连接角色库，可先创建自定义角色'};

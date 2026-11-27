@@ -39,7 +39,14 @@ function copy(source,relative=''){
  if(stat.isDirectory()){for(const name of fs.readdirSync(source).sort())copy(path.join(source,name),relative?relative+'/'+name:name);}
  else {if(stat.size>MAX-total)throw Error('Package size exceeded');write(relative,fs.readFileSync(source));}
 }
-if(workerData.valueSchema){try{parentPort.postMessage({valid:require(workerData.validator).compileValueValidator(workerData.valueSchema)(workerData.value)});}catch(error){parentPort.postMessage({error:error.message});}}else{
+if(workerData.valueSchema){
+ try{
+  const validate=require(workerData.validator).compileValueValidator(workerData.valueSchema);
+  let message;
+  const valid=validate(workerData.value,workerData.explain?reason=>{message=reason;}:undefined);
+  parentPort.postMessage({valid,message});
+ }catch(error){parentPort.postMessage({error:error.message});}
+}else{
 (async()=>{try{
  fs.mkdirSync(workerData.stage,{recursive:true});if(workerData.mode==='directory')copy(workerData.source);else unzip(workerData.source);
  const validator=require(workerData.validator);const result=validator.validatePackage(workerData.stage);if(!result.ok)throw Error(result.errors.map(e=>e.path+': '+e.message).join('\n'));

@@ -1,0 +1,8 @@
+{
+  "Existing authorized project/file tools; external tools only if the task needs them": "使用已授权的项目和文件工具。任务需要时才调用外部工具。",
+  "Pinned Impeccable engine and matching checksum; browser access for visual review": "需要指定版本的 Impeccable 引擎及匹配的校验和。视觉检查需要访问浏览器。",
+  "Node.js and browser access; network only when retrieving public reference assets": "需要 Node.js 和浏览器。获取公开参考素材时才需要联网。",
+  "Node.js/package manager and project-compatible shadcn CLI": "需要 Node.js、包管理器和与项目兼容的 shadcn CLI。",
+  "Python, Playwright, browser binaries and a test application": "需要 Python、Playwright、浏览器可执行文件和待测应用。",
+  "Python and required data/chart libraries for local files; database connector only for authorized live queries": "处理本地文件需要 Python 及相应的数据处理或绘图库。对数据库执行已授权的实时查询时才需要数据库连接器。"
+}

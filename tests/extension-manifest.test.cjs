@@ -112,3 +112,13 @@ test('authentication resources validate HTTPS, path boundaries, duplicate ids an
  const duplicate=structuredClone(manifest);duplicate.authentication.resources.push(duplicate.authentication.resources[0]);assert.equal(validateManifest(duplicate).ok,false);
  manifest.authentication.resources[0].title='%resource%';assert.equal(validateManifest(manifest).ok,false);assert.equal(validateManifest(manifest,{defaultMessages:{resource:'Business'}}).ok,true);
 });
+
+test('input diagnostics identify nested fields and never quote submitted values',()=>{
+ const schema={type:'object',additionalProperties:false,properties:{items:{type:'array',maxItems:8,items:{type:'object',properties:{limit:{type:'integer',minimum:1}},required:['limit'],additionalProperties:false}}}};
+ const check=require('../core/extensions/manifest.cjs').compileValueValidator(schema);
+ let message;
+ assert.equal(check({items:[{limit:0,extra:'do-not-echo'}]},detail=>{message=detail;}),false);
+ assert.match(message,/input\.items\[0\]\.limit .*大于等于 1/);
+ assert.match(message,/input\.items\[0\]\.extra .*移除/);
+ assert.doesNotMatch(message,/do-not-echo|可选字段/);
+});

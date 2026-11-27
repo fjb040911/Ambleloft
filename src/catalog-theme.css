@@ -1,0 +1,2 @@
+/* Shared Figma-inspired library palette for roles, skills and extensions. */
+.workforce,.skill-extension-center{--wf-lilac:light-dark(#e9e1fa,#3d354e);--wf-mint:light-dark(#dcebdc,#2e433a);--wf-cream:light-dark(#f4ecd6,#463e2b);--wf-pink:light-dark(#efdfe7,#49333f);--wf-ink:light-dark(#202124,var(--text));--wf-muted:light-dark(#616169,var(--secondary));--wf-edge:light-dark(#e5e5e7,var(--border));--wf-paper:light-dark(#ffffff,var(--surface));--wf-soft:light-dark(#f7f7f5,var(--hover));}

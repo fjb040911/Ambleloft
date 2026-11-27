@@ -12,7 +12,8 @@ export type GuideMessage={id:string;role:'user'|'assistant';text:string;fields?:
 export type RoleDraft={ephemeral?:boolean;sourceRef?:{id:string;version?:string;revision?:number}|null;id:string;revision:number;value:RoleDefinition;step:number;mode:'manual'|'guided';origin:'custom'|'template'|'copy'|'employee';employeeId:string|null;employeeRevision:number|null;brief:string;guide?:GuideMessage[];guideInput?:string;createdAt:string;updatedAt:string;suggestion?:RoleSuggestion};
 export type WorkforceSnapshot={employees:Employee[];globalSkills:Skill[];drafts?:RoleDraft[]};
 export type RoleTemplate={summary?:{'zh-CN':string;en:string};discovery?:RoleDiscovery;id:string;version:string;publisher:string;zh:Omit<RoleDefinition,'skills'>;en:Omit<RoleDefinition,'skills'>;skills:(SkillDeclaration&{labelEn?:string;purposeEn?:string})[]};
-export type RoleCatalog={categories?:RoleCategory[];items:RoleTemplate[];stale:boolean;error?:string;source?:string};
+export type RolePage={query?:string;category?:string;tag?:string;limit?:number;cursor?:string};
+export type RoleCatalog={pagination?:{total:number;nextCursor:string|null;tags?:(RoleCategory&{count:number})[]};categories?:RoleCategory[];items:RoleTemplate[];stale:boolean;error?:string;source?:string};
 export interface WorkforceAPI{
  snapshot():Promise<WorkforceSnapshot>;
  submit(input:{commandId:string;id?:string;expectedRevision?:number;value:RoleDefinition;draftId?:string;expectedDraftRevision?:number}):Promise<{id:string;revision:number;jobId?:string;noChange?:boolean}>;
@@ -29,7 +30,7 @@ export interface WorkforceAPI{
  save(input:{id?:string;expectedRevision?:number;value:RoleDefinition;draftId?:string;expectedDraftRevision?:number}):Promise<Employee>;
  remove(input:{id:string;expectedRevision:number}):Promise<{removed:boolean}>;
  activate(input:{id:string;expectedRevision:number;skillKey?:string}):Promise<WorkforceSnapshot>;
- roles(input?:{refresh?:boolean}):Promise<RoleCatalog>;
+ roles(input?:{refresh?:boolean;page?:RolePage}):Promise<RoleCatalog>;
  importLocal():Promise<SkillDeclaration|null>;
  importRepository(input:{repository:string;directory:string;ref?:string}):Promise<SkillDeclaration>;
  onChanged(listener:()=>void):()=>void;

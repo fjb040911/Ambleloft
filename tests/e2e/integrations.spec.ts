@@ -3,7 +3,7 @@ test('one center owns installed tools, settings and local installation',async({p
  await page.addInitScript(()=>{
   const extensions=[{manifest:{id:'demo',name:'示例扩展',description:'整理资料',version:'1',contributes:{}},enabled:true},{manifest:{id:'off',name:'停用扩展',description:'其他工具',version:'1',contributes:{}},enabled:false}];
   const skills=[{id:'skill',name:'写作技能',description:'整理文字',enabled:true,version:1,updatedAt:new Date().toISOString()}];
-  (window as any).desktop={readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),getDevice:async()=>({mode:'desktop'}),getProvider:async()=>({configured:false}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{list:async()=>({installed:extensions,capabilities:{}}),enable:async({id,enabled}:any)=>{extensions.find(x=>x.manifest.id===id)!.enabled=enabled;}},skills:{list:async()=>skills}};
+  (window as any).desktop={readWorkspace:async()=>({tasks:[],projects:[],theme:'light'}),getDevice:async()=>({mode:'desktop'}),getProvider:async()=>({configured:false}),listRuns:async()=>[],onRun:()=>()=>{},onCommand:()=>()=>{},extensions:{install:async()=>null,list:async()=>({installed:extensions,capabilities:{}}),enable:async({id,enabled}:any)=>{extensions.find(x=>x.manifest.id===id)!.enabled=enabled;}},skills:{list:async()=>skills,import:async(options:any)=>{if(!options)return {duplicate:skills[0],token:'selected-folder'};(window as any).__importOptions=options;return {skill:skills[0]};}}};
  });
  await page.goto('/');
  await page.getByRole('button',{name:'设置',exact:true}).click();
@@ -25,10 +25,25 @@ test('one center owns installed tools, settings and local installation',async({p
  await expect(center.getByRole('searchbox')).toHaveValue('整理资料');await expect(center.locator('.store-installed-row')).toHaveCount(1);
  await expect(center.locator('.store-installed-row')).toContainText('已停用');
  await center.getByRole('searchbox').fill('');await center.getByRole('button',{name:'从本地安装',exact:true}).click();
- const install=page.getByRole('dialog',{name:'从本地安装',exact:true});await expect(install.getByRole('button',{name:'导入本地技能',exact:true})).toBeVisible();await expect(install.getByRole('button',{name:'安装扩展',exact:true})).toBeVisible();
- await expect(install.locator('.integration-entry')).toHaveCount(0);await install.getByRole('button',{name:'返回已安装'}).click();
+ const menu=page.getByRole('menu',{name:'从本地安装'});
+ await expect(menu.getByRole('menuitem')).toHaveCount(3);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await menu.screenshot({path:'test-results/local-install-menu.png',animations:'disabled'});
+ await page.setViewportSize({width:480,height:720});
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ await expect.poll(()=>menu.evaluate(el=>el.getBoundingClientRect().right)).toBeLessThanOrEqual(480);
+ expect((await menu.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+ await menu.screenshot({path:'test-results/local-install-menu-dark.png',animations:'disabled'});
+ await page.keyboard.press('Escape');
+ await expect(center.getByRole('button',{name:'从本地安装',exact:true})).toBeFocused();
+ await page.setViewportSize({width:1240,height:840});
+ await page.evaluate(()=>document.documentElement.dataset.theme='light');
+ await center.getByRole('button',{name:'从本地安装',exact:true}).click();
+ await menu.getByRole('menuitem',{name:/技能文件夹/}).click();
+ await page.getByRole('button',{name:'另存为新技能'}).click();
+ expect(await page.evaluate(()=>(window as any).__importOptions)).toEqual({asNew:true,token:'selected-folder'});
  await center.getByRole('tab',{name:'发现',exact:true}).click();await expect(center.getByRole('heading',{name:'让现有软件，拥有新的交互入口。',exact:true})).toBeVisible();await expect(center.locator('.store-feature')).toBeVisible();await expect(center.getByRole('button',{name:'描述你想做的事',exact:true})).toHaveCount(1);await expect(center.getByRole('button',{name:'创建技能 / 扩展',exact:true})).toHaveCount(0);await page.screenshot({path:'test-results/discover-feature-restored.png'});
  await center.getByRole('tab',{name:'我的创作',exact:true}).click();await expect(center.getByRole('button',{name:'创建技能 / 扩展',exact:true})).toHaveCount(1);
  await center.getByRole('tab',{name:'已安装 3'}).click();await page.screenshot({path:'test-results/unified-center-desktop.png'});
- await page.setViewportSize({width:720,height:900});await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect.poll(()=>center.getByRole('combobox',{name:'类型'}).evaluate(el=>{const rgb=getComputedStyle(el).color.match(/\d+/g)!.slice(0,3).map(Number);return Math.min(...rgb);})).toBeGreaterThan(180);expect(await center.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/unified-center-narrow.png'});
+ await page.setViewportSize({width:720,height:900});await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect.poll(()=>center.getByRole('button',{name:'全部类型',exact:true}).evaluate(el=>{const rgb=getComputedStyle(el).color.match(/\d+/g)!.slice(0,3).map(Number);return Math.min(...rgb);})).toBeGreaterThan(180);expect(await center.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'test-results/unified-center-narrow.png'});
 });

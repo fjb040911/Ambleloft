@@ -9,7 +9,7 @@ class OperationRouter{
   if(!operation.exposeTo.includes(context.caller)||context.extensionId&&context.extensionId!==item.id)throw failure('FORBIDDEN','Operation is not exposed');
   if(operation.projectScoped&&(!binding.projectId||context.caller==='agent'&&context.projectId!==binding.projectId))throw failure('FORBIDDEN','Project mismatch');
   if(operation.projectScoped){if(!(await this.workspace.read()).projects.some(p=>p.id===binding.projectId)||context.canUseProject&&!context.canUseProject(binding.projectId))throw failure('FORBIDDEN','Project unavailable');}
-  if(input.projectId!==undefined&&input.projectId!==binding.projectId)throw failure('FORBIDDEN','Project mismatch');
+  if(input?.projectId!==undefined&&input.projectId!==binding.projectId)throw failure('FORBIDDEN','Project mismatch');
   const types={'project.exists':'boolean'},values={'project.exists':!!binding.projectId};for(const k of item.manifest.contextKeys||[]){types[k.key]=k.type;values[k.key]=this.service.hosts.entries.get(item.id)?.context[k.key]??k.default;}
   if(operation.enablement&&!compileCondition(operation.enablement,types)(values))throw failure('FORBIDDEN','Operation disabled');
   for(const capability of operation.requiredPermissions||[])await this.service.check({id:item.id,generation:item.generation,projectId:binding.projectId},capability,binding.projectId);
@@ -19,9 +19,13 @@ class OperationRouter{
  async invoke(operationId,input,context){const requestId=randomUUID();let binding;
   try{
    const item=structuredClone(this.item(operationId)),operation=item.manifest.operations.find(op=>op.id===operationId);
-   if(!await this.service.packages.validateValue(operation.inputSchema,input))throw failure('INVALID_ARGUMENT','Invalid operation input');
+   let message='工具参数无效，请核对该操作声明的输入格式。';
+   const valid=await this.service.packages.validateValue(operation.inputSchema,input,reason=>{message=reason;});
    input=structuredClone(input);const abort=new AbortController();const cancel=()=>abort.abort();context.signal?.addEventListener('abort',cancel,{once:true});
-   binding={item,operation,input,context:{...context,signal:abort.signal},projectId:operation.projectScoped?(context.caller==='agent'?context.projectId:input.projectId):undefined,abort,cancel,sourceSignal:context.signal,started:false};this.pending.add(binding);if(context.signal?.aborted)abort.abort();await this.check(binding);
+   binding={item,operation,input,context:{...context,signal:abort.signal},projectId:operation.projectScoped?(context.caller==='agent'?context.projectId:input?.projectId):undefined,abort,cancel,sourceSignal:context.signal,started:false};this.pending.add(binding);if(context.signal?.aborted)abort.abort();await this.check(binding);
+   if(!valid){
+    return {ok:false,error:{code:'INVALID_ARGUMENT',message,requestId,effectStatus:'notStarted'}};
+   }
    const key='extensions.approval.'+createHash('sha256').update(JSON.stringify([item.id,item.active,item.generation,operation,context.caller,binding.projectId])).digest('hex');
    const eligible=operation.effect==='write'&&operation.projectScoped&&operation.risk?.reversible===true&&operation.risk.impacts.length===0&&JSON.stringify(redactInput(input))===JSON.stringify(input);
    const exempt=!context.form&&!context.message&&eligible&&await this.service.database.call('readSetting',{key});

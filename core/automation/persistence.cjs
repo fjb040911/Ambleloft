@@ -33,7 +33,7 @@ function automationPersistence(db,transaction,check){
   for(const row of db.prepare("SELECT * FROM automation_events WHERE status IN ('pending','delivering','dead')").all())if(!installed.has(row.extension_id)||!allowed(installed.get(row.extension_id),'agent.hooks',row.project_id))db.prepare('DELETE FROM automation_events WHERE id=?').run(row.id);
   for(const row of db.prepare("SELECT * FROM automation_jobs WHERE status IN ('queued','running')").all()){
    const item=installed.get(row.extension_id),job=parse(row);
-   const sourceValid=job.input.every(ref=>{const current=db.prepare("SELECT project_id FROM conversation_identities WHERE id=? AND kind='run'").get(ref.conversationId);return current?.project_id===job.projectId&&db.prepare('SELECT 1 FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND created>=?').get(ref.conversationId,ref.turnId,ref.version,Date.now()-RETENTION);});
+   const sourceValid=job.input.every(ref=>{const current=db.prepare("SELECT project_id,record_id FROM conversation_identities WHERE id=? AND kind='run'").get(ref.conversationId);return current?.project_id===job.projectId&&db.prepare('SELECT 1 FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND created>=?').get(ref.conversationId,ref.turnId,ref.version,Date.now()-RETENTION);});
    if(!sourceValid||!item||!allowed(item,'background.jobs',row.project_id)||!allowed(item,'conversations.read',row.project_id)||(job.summaryJobId&&!allowed(item,'project.summaries.generate',row.project_id))){job.status=job.status==='running'?'unknown':'cancelled';job.error='FORBIDDEN';job.finishedAt=Date.now();saveJob(job);}
   }
  };
@@ -44,8 +44,8 @@ function automationPersistence(db,transaction,check){
    if(db.prepare('SELECT 1 FROM automation_turns WHERE conversation_id=? AND turn_id=?').get(conversationId,turnId))return;
    const start=run.messages.findIndex(m=>m.id===turnId);if(start<0)return;
    const next=run.messages.findIndex((m,i)=>i>start&&m.role==='user'&&(!m.turnKey||m.turnKey!==turnId));
-   const messages=run.messages.slice(start,next<0?undefined:next).map(({id,role,text})=>({id,role,text:text||''}));
-   const snapshot={conversationId,turnId,version:1,projectId:run.projectId,status:run.status,messages};
+   const messages=run.messages.slice(start,next<0?undefined:next).map(({id,role,kind,phase,text})=>({id,role,kind,phase,text:text||''}));
+   const snapshot={conversationId,turnId,version:1,projectId:run.projectId,status:run.status,typedMessages:true,messages};
    // The public automation API already rejects snapshots above 256 KiB. Keep
    // that explicit outcome without copying an unbounded transcript at commit.
    const data=require('../../electron/stored-json.cjs').boundedJSON(snapshot,256*1024)??JSON.stringify({conversationId,turnId,version:1,projectId:run.projectId,status:run.status,oversized:true});
@@ -54,15 +54,24 @@ function automationPersistence(db,transaction,check){
    if(run.status==='completed'&&run.recoveredSaveTurnId!==turnId)for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
   });},
   handlers:{
-   automationRead({context,input}){
+   automationPolicy({id}){return policy(id);},
+   automationRead({context,input,conversationOnly=false}){
     if(!input||typeof input.conversationId!=='string'||typeof input.turnId!=='string'||!Number.isSafeInteger(input.version)||input.version<1)fail('INVALID_ARGUMENT');
-    const identity=db.prepare("SELECT project_id FROM conversation_identities WHERE id=? AND kind='run'").get(input.conversationId);
+    const identity=db.prepare("SELECT project_id,record_id FROM conversation_identities WHERE id=? AND kind='run'").get(input.conversationId);
     if(!identity)fail('NOT_FOUND');check({...context,capability:'conversations.read',projectId:identity.project_id});
     const row=db.prepare('SELECT * FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=?').get(input.conversationId,input.turnId,input.version);
     if(!row||row.project_id!==identity.project_id)fail('NOT_FOUND');
     if(row.created<Date.now()-RETENTION)fail('SOURCE_EXPIRED');
     check({...context,capability:'conversations.read',projectId:row.project_id});
-    const value=parse(row);if(value.oversized||Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');return value;
+    const value=parse(row);if(value.oversized||Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');if(!conversationOnly)return value;
+    const typed=value.typedMessages;
+    const metadata=typed?null:db.prepare("SELECT json_extract(data,'$.kind') kind,json_extract(data,'$.phase') phase,json_extract(data,'$.role') role FROM run_items WHERE run_id=? AND collection='messages' AND item_key=? AND turn_key=?");
+    return {...value,messages:value.messages.flatMap(m=>{
+     const info=typed?m:metadata.get(identity.record_id,m.id,value.turnId);
+     if(!info||info.role!==m.role||info.kind||!(m.role==='user'||(m.role==='assistant'&&(!info.phase||info.phase==='final_answer'))))return [];
+     const text=m.role==='assistant'?m.text.replace(/<(think|thinking|reasoning)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,''):m.text;
+     return text.trim()?[{id:m.id,role:m.role,text}]:[];
+    })};
    },
    automationRecover(){return transaction(()=>{db.prepare("UPDATE automation_events SET status=CASE WHEN attempts>=6 THEN 'dead' ELSE 'pending' END WHERE status='delivering'").run();for(const row of db.prepare("SELECT * FROM automation_jobs WHERE status='running'").all()){const job=parse(row);job.status='unknown';job.error='OUTCOME_UNKNOWN';saveJob(job);resultEvent(job);}reconcile();});},
    automationReconcile(){return transaction(reconcile);},

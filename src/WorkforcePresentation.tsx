@@ -1,9 +1,12 @@
+import CatalogDetailsButton from './CatalogDetailsButton';
+import CatalogTagFilters from './CatalogTagFilters';
 import {X} from 'lucide-react';
-import {searchRoles} from './role-discovery';
+import LoadMore from './LoadMore';
+import {usePagedCatalog} from './usePagedCatalog';
 import {ToggleGroup,ToggleGroupItem} from './components/ui/toggle-group';
 import {useLanguage as useDiscoveryLanguage} from './i18n';
 import {WorkforceIntro,WorkforceIntroMap} from './WorkforceIntro';
-import {useState,useRef} from 'react';
+import {useState,useRef,useCallback} from 'react';
 import {RoleDetails} from './WorkforceRoleDetails';
 import {ArrowRight,BookOpen,BriefcaseBusiness,FolderOpen,HelpCircle,Layers,LoaderCircle,Plus,RefreshCw,Search,Sparkles,Users} from 'lucide-react';
 import {Button} from './components/ui/button';
@@ -14,7 +17,7 @@ import {Alert,AlertDescription} from './components/ui/alert';
 import {Empty,EmptyHeader,EmptyTitle,EmptyDescription,EmptyContent} from './components/ui/empty';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {useLanguage} from './i18n';
-import type {RoleCatalog,RoleTemplate} from './workforce-types';
+import type {RoleCatalog,RoleTemplate,RolePage,RoleCategory,WorkforceAPI} from './workforce-types';
 const useCopy=()=>{const language=useLanguage();return(zh:string,en:string)=>language==='en'?en:zh;};
 // Presentation copy from the approved v0.3 prototype. Actual roles and skill
 // declarations always come from the verified Store, never the demo inventory.
@@ -39,7 +42,8 @@ const examples:Record<string,Array<[string,string]>>={
  'amble.data':[['分析数据并整理关键发现','Analyze data and summarize findings'],['制作清晰的数据图表','Create clear data visualizations']],
  'amble.devops':[['检查构建与发布流程','Review build and release workflows'],['制定服务监控与恢复方案','Plan service monitoring and recovery']],
 };
-export function RoleLibrary({catalog,loading,refresh,create,select,quickAdd}:{catalog:RoleCatalog|null;loading:boolean;refresh():void;create():void;select(role:RoleTemplate):Promise<boolean>;quickAdd(role:RoleTemplate):Promise<boolean>}){
+const emptyRoles:RoleCatalog={items:[],stale:true};
+export function RoleLibrary({api,create,select,quickAdd}:{api:WorkforceAPI;create():void;select(role:RoleTemplate):Promise<boolean>;quickAdd(role:RoleTemplate):Promise<boolean>}){
  const L=useCopy(),language=useLanguage(),[query,setQuery]=useState(''),[detail,setDetail]=useState<RoleTemplate|null>(null);
  const [adding,setAdding]=useState<string|null>(null),[addError,setAddError]=useState('');const addingRef=useRef(false);
  const add=async(item:RoleTemplate)=>{if(addingRef.current)return false;addingRef.current=true;setAdding(item.id);setAddError('');try{return await quickAdd(item);}catch(e){setAddError((e as Error).message);return false;}finally{addingRef.current=false;setAdding(null);}};
@@ -47,9 +51,17 @@ export function RoleLibrary({catalog,loading,refresh,create,select,quickAdd}:{ca
  const inspect=(role:RoleTemplate,trigger:HTMLElement)=>{detailTrigger.current=trigger;setDetail(role);};
  const [category,setCategory]=useState(''),[tag,setTag]=useState('');
  const locale=useDiscoveryLanguage()==='en'?'en':'zh-CN';
- const categories=catalog?.categories||[];
- const selectedTag=catalog?.items.flatMap(r=>r.discovery?.tags||[]).find(t=>t.id===tag);
- const matches=searchRoles(catalog?.items||[],query,category,tag);
+ const fetchPage=useCallback((input:{refresh?:boolean;page:RolePage})=>api.roles(input),[api]);
+ const {catalog,loading,loadingMore,error,pageError,reload,loadMore}=usePagedCatalog(fetchPage,{query,category,tag},emptyRoles);
+ const refresh=()=>void reload(true);
+ const categoryCache=useRef<RoleCategory[]>([]),tagCache=useRef(new Map<string,RoleCategory>());
+ if(catalog.categories)categoryCache.current=catalog.categories;
+ for(const entry of catalog.pagination?.tags||[])tagCache.current.set(entry.id,entry);
+ for(const item of catalog.items)for(const entry of item.discovery?.tags||[])tagCache.current.set(entry.id,entry);
+ const categories=catalog.categories||categoryCache.current;
+ const selectedTag=tagCache.current.get(tag);
+ const matches=catalog.items;
+ const catalogError=error||catalog.error;
  const clear=()=>{setQuery('');setCategory('');setTag('');};
  const filtered=!!(query||category||tag);
 
@@ -59,14 +71,15 @@ export function RoleLibrary({catalog,loading,refresh,create,select,quickAdd}:{ca
   </WorkforceIntro>
   <div className="wf-library-heading"><div><h2>{L('官方精选角色','Curated roles')}</h2><p>{L('技能按能力推荐，可以替换；不会强制绑定某一个品牌或工具。','Skills are recommended by capability. Replace them to fit your tools and workflow.')}</p></div><div className="wf-library-tools"><InputGroup><InputGroupAddon><Search/></InputGroupAddon><InputGroupInput maxLength={200} type="search" aria-label={L('搜索专家、能力或工作目标','Search experts, capabilities or goals')} placeholder={L('搜索专家、能力或工作目标','Search experts or capabilities')} value={query} onChange={e=>setQuery(e.target.value)}/></InputGroup><Button variant="ghost" size="icon" aria-label={L('刷新角色库','Refresh role library')} disabled={loading} onClick={refresh}>{loading?<LoaderCircle className="animate-spin"/>:<RefreshCw/>}</Button></div></div>
   <div className="wf-discovery-toolbar">{!!categories.length&&<ToggleGroup className="wf-role-categories" aria-label={L('筛选工作分类','Filter work categories')} value={[category||'all']} onValueChange={values=>{setCategory(String(values[0]||'all')==='all'?'':String(values[0]));setTag('');}} variant="outline" size="sm"><ToggleGroupItem value="all">{L('全部','All')}</ToggleGroupItem>{categories.map(c=><ToggleGroupItem className="h-auto min-w-0 max-w-full whitespace-normal" key={c.id} value={c.id}>{c.title[locale]||c.title['zh-CN']}</ToggleGroupItem>)}</ToggleGroup>}
-  <div className="wf-discovery-results"><span role="status">{loading?L('正在刷新…','Refreshing…'):L(`${matches.length} 个角色`,`${matches.length} roles`)}</span>{tag&&<Button className="h-auto min-w-0 max-w-full whitespace-normal" size="sm" variant="outline" onClick={()=>setTag('')} aria-label={L('移除标签筛选：','Remove tag filter: ')+(selectedTag?.title[locale]||tag)}>{selectedTag?.title[locale]||tag}<X data-icon="inline-end"/></Button>}{filtered&&<Button size="sm" variant="ghost" onClick={clear}>{L('清除筛选','Clear filters')}</Button>}</div></div>
-  {addError&&<Alert variant="destructive"><AlertDescription>{addError}</AlertDescription></Alert>}{catalog?.error&&<Alert><AlertDescription>{L('角色库暂时无法刷新。已加载的角色仍可查看，也可以自己设计角色。','The library could not be refreshed. Browse loaded roles or design your own.')}<Button variant="outline" size="sm" disabled={loading} onClick={refresh}>{L('重试','Retry')}</Button><details><summary>{L('查看原因','Show details')}</summary>{catalog.error}</details></AlertDescription></Alert>}
-  {!catalog?<p role="status">{L('正在读取角色库…','Loading role library…')}</p>:<><div className="wf-role-grid">{matches.map(item=>{const value=language==='en'?item.en:item.zh,defaults=item.skills.filter(s=>s.defaultSelected!==false),optional=item.skills.length-defaults.length,caption=captions[item.id],index=catalog.items.indexOf(item);return <Card className="wf-role-card" key={item.id}>
+  <CatalogTagFilters tags={(catalog.pagination?.tags||[]).map(entry=>({id:entry.id,label:entry.title[locale],count:entry.count}))} value={tag} onChange={setTag}/>
+  <div className="wf-discovery-results"><span role="status">{loading?L('正在刷新…','Refreshing…'):L(`已显示 ${matches.length} 项，共 ${catalog.pagination?.total??matches.length} 项`,`Showing ${matches.length} of ${catalog.pagination?.total??matches.length} items`)}</span>{tag&&<Button className="h-auto min-w-0 max-w-full whitespace-normal" size="sm" variant="outline" onClick={()=>setTag('')} aria-label={L('移除标签筛选：','Remove tag filter: ')+(selectedTag?.title[locale]||tag)}>{selectedTag?.title[locale]||tag}<X data-icon="inline-end"/></Button>}{filtered&&<Button size="sm" variant="ghost" onClick={clear}>{L('清除筛选','Clear filters')}</Button>}</div></div>
+  {addError&&<Alert variant="destructive"><AlertDescription>{addError}</AlertDescription></Alert>}{catalogError&&<Alert><AlertDescription>{L('角色库暂时无法刷新。已加载的角色仍可查看，也可以自己设计角色。','The library could not be refreshed. Browse loaded roles or design your own.')}<Button variant="outline" size="sm" disabled={loading} onClick={refresh}>{L('重试','Retry')}</Button><details><summary>{L('查看原因','Show details')}</summary>{catalogError}</details></AlertDescription></Alert>}
+  {loading&&!matches.length?<p role="status">{L('正在读取角色库…','Loading role library…')}</p>:<><div className="wf-role-grid">{matches.map(item=>{const value=language==='en'?item.en:item.zh,defaults=item.skills.filter(s=>s.defaultSelected!==false),optional=item.skills.length-defaults.length,caption=captions[item.id],index=catalog.items.indexOf(item);return <Card className="wf-role-card" key={item.id}>
    <div className="wf-role-banner" data-tone={['lilac','mint','cream','lilac','pink','mint','cream'][index%7]}><BriefcaseBusiness aria-hidden="true"/><CardTitle><h3><button type="button" className="wf-role-name" aria-label={L('查看角色：','View role: ')+value.name} onClick={event=>inspect(item,event.currentTarget)}>{value.name}</button></h3></CardTitle><Badge variant="outline">{L('可自定义','Customizable')}</Badge></div>
    <CardHeader>{caption&&<strong className="wf-role-caption">{L(...caption)}</strong>}<CardDescription>{item.summary?.[locale]||value.responsibilities}</CardDescription></CardHeader>
    <CardContent>{!!item.discovery?.tags.length&&<div className="wf-role-tags" aria-label={L('能力标签','Capability tags')}>{item.discovery.tags.slice(0,3).map(t=><Button key={t.id} className="h-auto min-w-0 max-w-full whitespace-normal" variant="outline" size="sm" aria-pressed={tag===t.id} onClick={()=>setTag(tag===t.id?'':t.id)}>{t.title[locale]}</Button>)}</div>}<div className="wf-skill-tags">{defaults.map(skill=><Badge key={skill.name} variant="secondary">{language==='en'?skill.labelEn||skill.label:skill.label}</Badge>)}</div></CardContent>
-   <CardFooter><small>{defaults.length} {L('项默认技能','default skills')}{optional>0&&` · ${optional} ${L('项可选','optional')}`}</small><div className="wf-role-card-actions"><Button size="sm" variant="ghost" onClick={event=>inspect(item,event.currentTarget)} aria-label={L('查看详情：','View details: ')+value.name}>{L('详情','Details')}</Button><Button size="sm" disabled={!!adding} aria-label={L('添加专家：','Add expert: ')+value.name} onClick={()=>void add(item)}>{adding===item.id&&<LoaderCircle className="animate-spin" data-icon="inline-start"/>}{adding===item.id?L('添加中','Adding'):L('添加','Add')}</Button></div></CardFooter>
-  </Card>;})}</div>{!matches.length&&<Empty><EmptyHeader><EmptyTitle>{filtered?L('没有匹配的角色','No matching roles'):L('暂无可用角色','No roles available')}</EmptyTitle><EmptyDescription>{filtered?L('换一个关键词或清除筛选，也可以自己设计角色。','Try another search or design a role for your needs.'):L('可以先设计自己的角色，或刷新目录重试。','Design your own role or refresh the library.')}</EmptyDescription></EmptyHeader><EmptyContent>{filtered&&<Button variant="outline" onClick={clear}>{L('清除筛选','Clear filters')}</Button>}<Button onClick={create}>{L('自己设计角色','Design a role')}</Button></EmptyContent></Empty>}</>}
+   <CardFooter><small>{defaults.length} {L('项默认技能','default skills')}{optional>0&&` · ${optional} ${L('项可选','optional')}`}</small><div className="wf-role-card-actions"><CatalogDetailsButton title={value.name} onClick={event=>inspect(item,event.currentTarget)}/><Button size="sm" disabled={!!adding} aria-label={L('添加专家：','Add expert: ')+value.name} onClick={()=>void add(item)}>{adding===item.id&&<LoaderCircle className="animate-spin" data-icon="inline-start"/>}{adding===item.id?L('添加中','Adding'):L('添加','Add')}</Button></div></CardFooter>
+  </Card>;})}</div><LoadMore hasMore={!!catalog.pagination?.nextCursor} loading={loadingMore} error={pageError} onLoad={loadMore} onRestart={refresh}/>{!loading&&!catalogError&&!matches.length&&<Empty><EmptyHeader><EmptyTitle>{filtered?L('没有匹配的角色','No matching roles'):L('暂无可用角色','No roles available')}</EmptyTitle><EmptyDescription>{filtered?L('换一个关键词或清除筛选，也可以自己设计角色。','Try another search or design a role for your needs.'):L('可以先设计自己的角色，或刷新目录重试。','Design your own role or refresh the library.')}</EmptyDescription></EmptyHeader><EmptyContent>{filtered&&<Button variant="outline" onClick={clear}>{L('清除筛选','Clear filters')}</Button>}<Button onClick={create}>{L('自己设计角色','Design a role')}</Button></EmptyContent></Empty>}</>}
  {detail&&<RoleDetails examples={(examples[detail.id]||[]).map(item=>L(...item))} kind="template" definition={{...(language==='en'?detail.en:detail.zh),discovery:detail.discovery,skills:detail.skills.map(skill=>({...skill,label:language==='en'?skill.labelEn||skill.label:skill.label,purpose:language==='en'?skill.purposeEn||skill.purpose:skill.purpose,reason:language==='en'?skill.reasonEn||skill.reason:skill.reason,usage:language==='en'?skill.usageEn||skill.usage:skill.usage,runtime:language==='en'?skill.runtimeEn||skill.runtime:skill.runtime}))}} metadata={detail.publisher} returnFocus={detailTrigger.current} actionLabel={L('添加专家','Add expert')} onAction={()=>add(detail)} onCustomize={()=>select(detail)} onClose={()=>setDetail(null)}/>}
  </section>;
 }

@@ -9,6 +9,7 @@
       "version": "0.1.1",
       "publisher": "Ambleloft examples",
       "license": "Apache-2.0",
+      "categoryIds": ["business"],
       "tags": [
         "forms",
         "travel"
@@ -96,6 +97,7 @@
       "version": "0.1.0",
       "publisher": "Ambleloft labs",
       "license": "Apache-2.0",
+      "categoryIds": ["business", "equipment"],
       "tags": [
         "forms",
         "business",

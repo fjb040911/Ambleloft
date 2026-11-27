@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS project_activity(seq INTEGER PRIMARY KEY AUTOINCREMEN
 CREATE INDEX IF NOT EXISTS project_activity_range ON project_activity(project_id,occurred,seq);
 CREATE TABLE IF NOT EXISTS project_usage(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE,project_id TEXT,occurred INTEGER,data TEXT);
 CREATE INDEX IF NOT EXISTS project_usage_range ON project_usage(project_id,occurred,seq);
+CREATE INDEX IF NOT EXISTS project_usage_job ON project_usage(project_id,json_extract(data,'$.jobId'));
 CREATE TABLE IF NOT EXISTS project_usage_gaps(project_id TEXT PRIMARY KEY,occurred INTEGER);
 CREATE TABLE IF NOT EXISTS project_summaries(id TEXT PRIMARY KEY,extension_id TEXT,project_id TEXT,request_key TEXT,cache_key TEXT,created INTEGER,data TEXT,UNIQUE(extension_id,request_key));
 `;
@@ -26,8 +27,8 @@ function persistence(db,transaction,check,automation){
  const source=(projectId,ref,now=Date.now())=>{
   const current=db.prepare("SELECT project_id FROM conversation_identities WHERE id=? AND kind='run'").get(ref.conversationId);
   if(current?.project_id!==projectId)return 'unavailable';
-  const row=db.prepare('SELECT created FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND project_id=?').get(ref.conversationId,ref.turnId,ref.version,projectId);
-  return row&&row.created>=now-RAW_RETENTION?'available':'expired';
+  const row=db.prepare("SELECT created,CASE WHEN length(cast(data AS blob))<1024 THEN json_extract(data,'$.oversized') END oversized FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND project_id=?").get(ref.conversationId,ref.turnId,ref.version,projectId);
+  return row?.oversized?'unavailable':row&&row.created>=now-RAW_RETENTION?'available':'expired';
  };
  const cleanup=()=>{const now=Date.now();lastCleanup=now;db.prepare('DELETE FROM project_activity WHERE occurred<?').run(now-METADATA_RETENTION);db.prepare('DELETE FROM project_usage WHERE occurred<?').run(now-METADATA_RETENTION);db.prepare('DELETE FROM project_summaries WHERE created<?').run(now-CACHE_RETENTION);};
  const coverage=(projectId,from)=>({measurement:'client-observed',since:parse(db.prepare("SELECT data FROM settings WHERE key='insights.since'").get()),reasons:[...(from<Date.now()-RAW_RETENTION?['SOURCE_RETENTION_7_DAYS']:[]),...(db.prepare('SELECT 1 FROM project_usage_gaps WHERE project_id IN (?,?)').get(projectId,'*')?['LEDGER_WRITE_FAILED']:[])],excludedOrigins:['external-tools','server-billing','unassigned-workspace-inference'],metadataRetentionDays:90,sourceRetentionDays:7});
@@ -66,7 +67,7 @@ function persistence(db,transaction,check,automation){
    const from=Date.parse(input.from),to=Date.parse(input.to),limit=input.limit??50;
    if(!Number.isFinite(from)||!Number.isFinite(to)||!String(input.from).endsWith('Z')||!String(input.to).endsWith('Z')||from>=to||to-from>90*DAY||!Number.isInteger(limit)||limit<1||limit>100)fail('INVALID_ARGUMENT');
    try{new Intl.DateTimeFormat('en',{timeZone:input.timezone}).format();}catch{fail('INVALID_ARGUMENT');}
-   if(typeof input.timezone!=='string')fail('INVALID_ARGUMENT');cleanup();
+   if(typeof input.timezone!=='string')fail('INVALID_ARGUMENT');if(Date.now()-lastCleanup>3600000)cleanup();
    const table=kind==='activity'?'project_activity':'project_usage',binding=hash([context.id,context.generation,kind,input.projectId,from,to,input.timezone,input.purpose||null,input.model||null]);
    let cursor;try{cursor=input.cursor?JSON.parse(Buffer.from(input.cursor,'base64url').toString()):null;}catch{fail('INVALID_ARGUMENT');}
    const watermark=cursor?.watermark??db.prepare(`SELECT coalesce(max(seq),0) n FROM ${table}`).get().n;
@@ -75,7 +76,7 @@ function persistence(db,transaction,check,automation){
    const page=rows.slice(0,limit),items=page.map(r=>{const value=parse(r);return kind==='activity'?{...value,sourceAvailability:source(input.projectId,value.sourceRef)}:value;});
    return {items,nextCursor:rows.length>limit?Buffer.from(JSON.stringify({binding,watermark,after:page.at(-1).seq,tag:cursorTag({binding,watermark,after:page.at(-1).seq})})).toString('base64url'):null,watermark:String(watermark),coverage:coverage(input.projectId,from)};
   },
-  insightsSummaryPolicy({context,projectId}){auth(context,projectId,'project.summaries.generate');auth(context,projectId,'conversations.read');auth(context,projectId,'background.jobs');const {policy}=automation.automationManage({id:context.id});return {...policy};},
+  insightsSummaryPolicy({context,projectId}){auth(context,projectId,'project.summaries.generate');auth(context,projectId,'conversations.read');auth(context,projectId,'background.jobs');return automation.automationPolicy({id:context.id});},
   insightsSummaryCreate({context,input}){return transaction(()=>{
    auth(context,input.projectId,'project.summaries.generate');auth(context,input.projectId,'conversations.read');cleanup();
    const old=parse(db.prepare('SELECT data FROM project_summaries WHERE extension_id=? AND request_key=?').get(context.id,input.requestKey));
@@ -87,9 +88,9 @@ function persistence(db,transaction,check,automation){
    const job={...input,id:randomUUID(),extensionId:context.id,generation:context.generation,createdAt:Date.now(),children:[],status:'preparing'};
    db.prepare('INSERT INTO project_summaries VALUES (?,?,?,?,?,?,?)').run(job.id,context.id,job.projectId,job.requestKey,job.cacheKey,job.createdAt,JSON.stringify(job));return job;
   });},
-  insightsSummaryUsage({context,id}){const root=summaryRead(context,id);return root.children.flatMap(jobId=>db.prepare("SELECT data FROM project_usage WHERE project_id=? AND json_extract(data,'$.jobId')=? ORDER BY seq").all(root.projectId,jobId).map(parse));},
+  insightsSummaryUsage({context,id}){const root=summaryRead(context,id);return [...root.children,...Object.values(root.mergeNodes||{})].flatMap(jobId=>db.prepare("SELECT data FROM project_usage WHERE project_id=? AND json_extract(data,'$.jobId')=? ORDER BY seq").all(root.projectId,jobId).map(parse));},
   insightsSummaryGet({context,id}){return summaryRead(context,id);},
-  insightsSummaryUpdate({context,id,children,status,error}){return transaction(()=>{const job=summaryRead(context,id);if(['cancelled','unknown'].includes(job.status))return job;if(children)job.children=children;if(status)job.status=status;if(error)job.error=error;db.prepare('UPDATE project_summaries SET data=? WHERE id=?').run(JSON.stringify(job),id);return job;});},
+  insightsSummaryUpdate({context,id,children,mergeNodes,status,error}){return transaction(()=>{const job=summaryRead(context,id);if(['cancelled','unknown'].includes(job.status))return job;if(children)job.children=children;if(mergeNodes)job.mergeNodes={...job.mergeNodes,...mergeNodes};if(status)job.status=status;if(error)job.error=error;db.prepare('UPDATE project_summaries SET data=? WHERE id=?').run(JSON.stringify(job),id);return job;});},
   insightsCleanup(){cleanup();}
  };
 }
