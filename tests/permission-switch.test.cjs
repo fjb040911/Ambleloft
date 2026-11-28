@@ -71,17 +71,28 @@ test('a completed child without an archived rollout retains its identity and res
  assert.deepEqual(f.calls.filter(c=>c.method==='turn/start').map(c=>c.args.threadId),['parent']);
  assert.equal(f.child.detail,'existing result');assert.equal(f.child.status,'completed');
 });
-test('a missing archive cannot bypass identity and policy checks or hide an active child',async()=>{
- for(const scenario of ['active','wrong id','wrong policy','missing history']){
+test('an interrupted active child in regular history resumes exactly once with the new permissions',async()=>{
+ for(const permission of ['full','default']){
+  const f=fixture({hook(method,args){if(method==='thread/unarchive'&&args.threadId==='child')throw missingChildArchive();}});
+  f.run.permission=permission==='full'?'default':'full';
+  const result=await f.runtime.switchPermission({...full,permission});
+  assert.equal(result.state,'applied',result.error);assert.equal(result.effective,permission);
+  assert.equal(f.context.nativeThreads.get('child'),f.child);assert.equal(f.child.nativeTurnId,'new-child');
+  assert.deepEqual(f.calls.filter(c=>c.method==='turn/start').map(c=>c.args.threadId),['child','parent']);
+  assert.ok(f.calls.filter(c=>c.method==='turn/start').every(c=>c.args.approvalPolicy===(permission==='full'?'never':'on-request')));
+ }
+});
+test('recovering a child from regular history still requires its original identity, confirmed policy and a readable history',async()=>{
+ for(const status of ['completed','running'])for(const scenario of ['wrong id','wrong policy','missing history','unrelated error']){
   const f=fixture({hook(method,args){
    if(args.threadId!=='child')return;
-   if(method==='thread/unarchive')throw missingChildArchive();
+   if(method==='thread/unarchive')throw scenario==='unrelated error'?Error('transport lost'):missingChildArchive();
    if(method==='thread/resume'){
     if(scenario==='missing history')throw Error('no rollout found');
     return {thread:{id:scenario==='wrong id'?'another':'child'},sandbox:{type:scenario==='wrong policy'?'readOnly':'dangerFullAccess'},approvalPolicy:'never'};
    }
   }});
-  if(scenario!=='active')f.child.status='completed';
+  f.child.status=status;
   const record=await f.runtime.switchPermission(full);
   assert.equal(record.state,'failed');assert.equal(record.effective,null);assert.equal(f.run.status,'interrupted');
   assert.equal(f.calls.some(c=>c.method==='turn/start'),false);assert.ok(f.context.switchFailureReason.includes(record.error));

@@ -30,6 +30,10 @@ jobs:
         run: node --test --test-concurrency=2 tests/extension-packages.test.cjs tests/extension-hosts.test.cjs tests/skills.test.cjs tests/file-applications.test.cjs tests/terminal.test.cjs tests/docker.test.cjs tests/creation.test.cjs
       - name: Plan acceptance and recovery regressions
         run: node --test --test-concurrency=2 tests/workforce-acceptance.test.cjs tests/workforce-complex-acceptance.test.cjs tests/workforce-plans.test.cjs tests/workforce-task-guide.test.cjs tests/native-subagents.test.cjs tests/conversation-data.test.cjs
+      - name: Verify live permission and model switches with native subagents
+        run: |
+          npm run engine:prepare
+          node --test tests/live-switch-subagents.test.cjs
       - name: Storage retention, Windows junctions and save-only recovery
         run: node --test tests/storage-management.test.cjs tests/save-recovery.test.cjs tests/automation.test.cjs tests/database.test.cjs tests/updates.test.cjs tests/run-patches.test.cjs tests/runtime-text-cache.test.cjs
       - name: Hidden conversation interaction regression
