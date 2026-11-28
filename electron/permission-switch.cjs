@@ -66,9 +66,10 @@ async function switchPermission(input,change){
   for(const target of targets.values()){
    try{await request('thread/unarchive',{threadId:target.threadId});}
    catch(error){
-    // A completed child can already have a regular rollout. Ask the engine
-    // to resume that exact thread below, without starting another child turn.
-    if(!target.tool||target.resume||!error.rpcRejected||error.message!==`no archived rollout found for thread id ${target.threadId}`)throw error;
+    // Native children can retain a regular rollout after archive. An active
+    // child may use it only after the engine acknowledged its interruption.
+    const pausedChild=target.tool&&(!target.resume||transition.completed.get(target.turnId)==='interrupted');
+    if(!pausedChild||!error.rpcRejected||error.message!==`no archived rollout found for thread id ${target.threadId}`)throw error;
     target.verifyRestoredId=true;
    }
    archived.delete(target.threadId);
