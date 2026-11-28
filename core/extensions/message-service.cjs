@@ -11,6 +11,10 @@ class MessageService {
  async forExtension(context,method,input={}){if(this.closed)throw Error('HOST_UNAVAILABLE');const result=await this.database.call('extensionMessage',{id:context.id,generation:context.generation,method,input,locale:this.locale});if(['publish','update','withdraw','reportActionResult'].includes(method))this.publish();if(method==='publish')await this.remind(result);return result;}
  async execute(input,owner){
   if(this.closed||!this.router)throw Error('HOST_UNAVAILABLE');
+  if(input.actionId==='view-extension-update'){
+   const target=await this.database.call('storeUpdateOpen',input);
+   if(target){owner.window.webContents.send('catalog-store:open',target);this.publish();return {ok:true};}
+  }
   const call=(method,value)=>this.database.call('messageAction',{method,input:value});
   let record=await call('prepare',input);this.publish();
   const message={invocationId:record.id,messageId:record.messageId,actionId:record.snapshot.actionId};

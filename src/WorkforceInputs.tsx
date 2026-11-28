@@ -1,5 +1,6 @@
 import {useState,useEffect,useCallback,useId} from 'react';
-import {FolderOpen,LoaderCircle,ExternalLink} from 'lucide-react';
+import {FolderOpen,LoaderCircle} from 'lucide-react';
+import ContentSourceInfo from './ContentSourceInfo';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {Textarea} from './components/ui/textarea';
@@ -16,16 +17,45 @@ export const useCopy=()=>{const language=useLanguage();return (zh:string,en:stri
 // Presentation metadata is resolved from the catalog; persisted declarations keep their fixed identity.
 export function useSkillMetadata(roleId?:string,enabled=true){
  const [entries,setEntries]=useState<SkillDeclaration[]>([]);const language=useLanguage();
- useEffect(()=>{if(!enabled)return;let active=true;void Promise.allSettled([window.desktop?.store?.catalog({})||Promise.reject(Error('Store unavailable')),window.desktop?.workforce?.roles()||Promise.reject(Error('Roles unavailable'))]).then(([catalog,roles])=>{if(!active)return;const items:SkillDeclaration[]=[];if(catalog.status==='fulfilled'&&catalog.value.source)for(const s of catalog.value.items.filter(s=>s.kind==='skill'&&s.release.status==='published'))items.push({name:s.entityName,label:language==='en'?s.title.en:s.title.zh,purpose:language==='en'?s.summary.en:s.summary.zh,repository:s.repository,license:s.license,validation:s.validation,runtime:language==='en'?s.runtime.en:s.runtime.zh,source:{kind:'store',sourceId:catalog.value.source.id,listingId:s.id,version:s.release.version,packageDigest:s.release.packageDigest,artifactSha256:s.release.artifactSha256}});if(roles.status==='fulfilled')for(const role of roles.value.items.filter(r=>r.id===roleId))for(const s of role.skills)items.unshift({...s,reason:language==='en'?s.reasonEn||s.reason:s.reason,usage:language==='en'?s.usageEn||s.usage:s.usage});setEntries(items);});return()=>{active=false;};},[roleId,language,enabled]);
- return (skill:SkillDeclaration)=>{const found=entries.find(s=>sourceKey(s)===sourceKey(skill));return found?{...found,...skill,repository:skill.repository||found.repository,reason:skill.reason||found.reason,license:skill.license||found.license,validation:skill.validation||found.validation,runtime:skill.runtime||found.runtime}:skill;};
+ useEffect(()=>{
+  if(!enabled)return;
+  let active=true;
+  void Promise.allSettled([window.desktop?.store?.catalog({})||Promise.reject(),window.desktop?.workforce?.roles()||Promise.reject()]).then(([catalog,roles])=>{
+   if(!active)return;
+   const bySource=new Map<string,SkillDeclaration>();
+   if(catalog.status==='fulfilled'&&catalog.value.source){
+    for(const item of catalog.value.items.filter(item=>item.kind==='skill'&&item.release.status==='published')){
+     const entry:SkillDeclaration={name:item.entityName,label:item.title[language==='en'?'en':'zh'],purpose:item.summary[language==='en'?'en':'zh'],
+      installationChannel:catalog.value.source.title,repository:item.repository,contentSource:item.contentSource,publisher:item.publisher,license:item.license,validation:item.validation,runtime:item.runtime[language==='en'?'en':'zh'],
+      source:{kind:'store',sourceId:catalog.value.source.id,listingId:item.id,version:item.release.version,packageDigest:item.release.packageDigest,artifactSha256:item.release.artifactSha256}};
+     bySource.set(sourceKey(entry),entry);
+    }
+   }
+   if(roles.status==='fulfilled'){
+    for(const skill of roles.value.items.find(role=>role.id===roleId)?.skills||[]){
+     const key=sourceKey(skill), listing=bySource.get(key);
+     bySource.set(key,{...listing,...skill,repository:listing?.repository||skill.repository,contentSource:listing?.contentSource||skill.contentSource,
+      reason:language==='en'?skill.reasonEn||skill.reason:skill.reason,usage:language==='en'?skill.usageEn||skill.usage:skill.usage});
+    }
+   }
+   setEntries([...bySource.values()]);
+  });
+  return ()=>{active=false;};
+ },[roleId,language,enabled]);
+ return (skill:SkillDeclaration)=>{
+  const found=entries.find(entry=>sourceKey(entry)===sourceKey(skill));
+  if(!found)return skill;
+  return {...found,...skill,contentSource:found.contentSource||skill.contentSource,repository:found.repository||skill.repository,
+   reason:skill.reason||found.reason,license:skill.license||found.license,validation:skill.validation||found.validation,runtime:skill.runtime||found.runtime};
+ };
 }
 export function SkillSummary({skill}:{skill:SkillDeclaration}){
- const L=useCopy();const [error,setError]=useState('');
- const raw=skill.repository?.url||(skill.provenance?.kind==='github'?skill.provenance.repository:undefined);
- let url:URL|undefined;try{const candidate=new URL(raw||'');if(candidate.protocol==='https:'&&candidate.hostname.toLowerCase()==='github.com'&&!candidate.username&&!candidate.password)url=candidate;}catch{}
- const source=url?`GitHub · ${url.pathname.replace(/^\/+|\/+$/g,'')}`:skill.provenance?.kind==='local'?L('本地导入','Local import'):skill.source.kind==='installed'?L('本地技能','Local skill'):skill.source.kind==='store'?L('Store 收录','Store catalog'):L('导入来源','Imported source');
- const stars=skill.repository?.stars;
- return <div className="wf-skill-summary"><p>{skill.purpose||L('暂无功能说明','No description available')}</p><small>{source}{url&&skill.source.kind==='store'?' · Store':''}{url&&(stars===undefined?` · ${L('暂无仓库热度','Repository stars unavailable')}`:` · ☆ ${new Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1}).format(stars)}${skill.repository?.starsObservedAt?` · ${L('采集于','Observed')} ${new Date(skill.repository.starsObservedAt).toLocaleDateString()}`:''}`)}</small>{skill.reason&&<p className="wf-skill-reason">{L('推荐理由：','Why this role: ')}{skill.reason}</p>}{url&&<a href={url.href} target="_blank" rel="noopener noreferrer" onClick={event=>{if(window.desktop){event.preventDefault();void window.desktop.openLink(url!.href).catch(()=>setError(L('无法打开链接，请重试。','Could not open the link. Please retry.')));}}}>{L('在 GitHub 打开','Open on GitHub')} <ExternalLink aria-hidden="true" size={14}/></a>}{error&&<small role="alert">{error}</small>}</div>;
+ const L=useCopy();
+ const imported=skill.provenance?.kind==='github'&&skill.provenance.repository?{url:skill.provenance.repository,commit:skill.provenance.commit,directory:skill.provenance.directory}:undefined;
+ const fallback=skill.provenance?.kind==='local'?L('本地导入','Local import'):skill.source.kind==='installed'?L('本地技能','Local skill'):L('未记录内容来源','Content source not recorded');
+ return <div className="wf-skill-summary"><p>{skill.purpose||L('暂无功能说明','No description available')}</p>
+  <ContentSourceInfo packageDigest={skill.source.kind==='store'?skill.source.packageDigest:undefined} contentSource={skill.contentSource} repository={skill.repository||imported} publisher={skill.publisher} fallback={fallback}/>
+  {skill.reason&&<p className="wf-skill-reason">{L('推荐理由：','Why this role: ')}{skill.reason}</p>}</div>;
 }
 export function Failure({message,retry}:{message:string;retry?():void}){
  const L=useCopy();
@@ -45,13 +75,15 @@ export function SkillPicker({selected,installed,roleId,close,apply}:{roleId?:str
  const installedEntries=installed.filter(s=>!(catalog?.items||[]).some(item=>s.fixedRelease&&item.id===s.fixedRelease.listingId&&item.release.version===s.fixedRelease.version&&item.release.packageDigest===s.fixedRelease.packageDigest)).filter(s=>(s.name+' '+s.description).toLowerCase().includes(query.toLowerCase()));
  const storeEntries=(catalog?.items||[]).filter(s=>s.kind==='skill'&&s.release.status==='published'&&[s.entityName,s.title.zh,s.title.en,s.summary.zh,s.summary.en,s.repository?.url||''].join(' ').toLowerCase().includes(query.toLowerCase()));
  const template=roles.find(r=>r.id===roleId);
- const recommendations=(template?.skills||selected).map(s=>({...s,label:language==='en'&&'labelEn' in s?String(s.labelEn||s.label):s.label,purpose:language==='en'&&'purposeEn' in s?String(s.purposeEn||s.purpose||''):s.purpose,reason:language==='en'?s.reasonEn||s.reason:s.reason,usage:language==='en'?s.usageEn||s.usage:s.usage,runtime:language==='en'?s.runtimeEn||s.runtime:s.runtime})).filter(s=>(s.name+' '+s.label+' '+s.purpose).toLowerCase().includes(query.toLowerCase()));
+ const recommendations=(template?.skills||selected).map(s=>{
+  const listing=catalog?.items.find(item=>s.source.kind==='store'&&catalog.source?.id===s.source.sourceId&&item.id===s.source.listingId&&item.release.version===s.source.version);
+  return {...s,installationChannel:listing?catalog?.source?.title:s.installationChannel,repository:listing?.repository||s.repository,contentSource:listing?.contentSource||s.contentSource,publisher:listing?.publisher||s.publisher,label:language==='en'&&'labelEn' in s?String(s.labelEn||s.label):s.label,purpose:language==='en'&&'purposeEn' in s?String(s.purposeEn||s.purpose||''):s.purpose,reason:language==='en'?s.reasonEn||s.reason:s.reason,usage:language==='en'?s.usageEn||s.usage:s.usage,runtime:language==='en'?s.runtimeEn||s.runtime:s.runtime};}).filter(s=>(s.name+' '+s.label+' '+s.purpose).toLowerCase().includes(query.toLowerCase()));
  return <><Dialog open onOpenChange={open=>{if(!open)close();}}><DialogContent className="wf-dialog sm:max-w-[720px] p-6 flex"><DialogHeader><DialogTitle>{L('这个角色需要什么技能？','Which skills does this role need?')}</DialogTitle><DialogDescription>{L('勾选表示专家会使用。提交专家配置时，宿主自动安装缺少的技能。','Select the skills this expert will use. Missing skills are installed when you submit the expert configuration.')}</DialogDescription></DialogHeader>
 
  <Failure message={error}/><div className="wf-actions"><Button variant="outline" onClick={()=>setImporting(v=>!v)}><FolderOpen data-icon="inline-start"/>{importing?L('返回技能选择','Back to skills'):L('导入来源','Import a source')}</Button></div>
  {!importing&&<Tabs value={tab} onValueChange={setTab}><TabsList><TabsTrigger value="recommended">{L('角色推荐','Role recommendations')}</TabsTrigger><TabsTrigger value="all">{L('全部技能','All skills')}</TabsTrigger></TabsList><Input aria-label={L('搜索技能','Search skills')} type="search" placeholder={L('搜索名称或用途','Search by name or purpose')} value={query} onChange={e=>setQuery(e.target.value)}/>
  <TabsContent value="recommended" className="wf-picker-scroll">{recommendations.map(s=>row(s,s.defaultSelected===false?L('可选补充','Optional'):L('角色推荐','Recommended for this role')))}{!recommendations.length&&<p className="wf-muted">{L('暂时没有匹配的推荐，可浏览全部技能或导入来源。','No matching recommendations. Browse all skills or import a source.')}</p>}</TabsContent>
- <TabsContent value="all" className="wf-picker-scroll">{catalog?.error&&<Alert><AlertDescription>{L('暂时无法刷新，保留已缓存的技能。','Could not refresh. Cached skills are preserved.')}<Button variant="outline" size="sm" onClick={()=>void load()}>{L('重试','Retry')}</Button></AlertDescription></Alert>}{!catalog?<p role="status">{L('正在读取技能…','Loading skills…')}</p>:storeEntries.map(s=>row({name:s.entityName,label:L(s.title.zh,s.title.en),purpose:L(s.summary.zh,s.summary.en),repository:s.repository,license:s.license,validation:s.validation,runtime:L(s.runtime.zh,s.runtime.en),source:{kind:'store',sourceId:catalog.source!.id,listingId:s.id,version:s.release.version,packageDigest:s.release.packageDigest,artifactSha256:s.release.artifactSha256},usage:{mode:'when-relevant',when:L(s.summary.zh,s.summary.en),whenNot:L('仅在适用于当前任务时使用。','Use only when relevant to the task.')},selectionOrigin:{kind:'user-selected'}},s.publisher+' · '+s.release.version))}{installedEntries.map(s=>row({name:s.name,label:s.displayName||s.name,purpose:s.displayDescription||s.description,source:{kind:'installed',skillId:s.id,revision:s.revision,version:s.version}},L('自定义技能','Custom skill')))}{catalog&&!storeEntries.length&&!installedEntries.length&&<p className="wf-muted">{L('没有匹配技能，请换一个关键词。','No matches. Try another search term.')}</p>}</TabsContent></Tabs>}
+ <TabsContent value="all" className="wf-picker-scroll">{catalog?.error&&<Alert><AlertDescription>{L('暂时无法刷新，保留已缓存的技能。','Could not refresh. Cached skills are preserved.')}<Button variant="outline" size="sm" onClick={()=>void load()}>{L('重试','Retry')}</Button></AlertDescription></Alert>}{!catalog?<p role="status">{L('正在读取技能…','Loading skills…')}</p>:storeEntries.map(s=>row({name:s.entityName,label:L(s.title.zh,s.title.en),purpose:L(s.summary.zh,s.summary.en),installationChannel:catalog?.source?.title,repository:s.repository,contentSource:s.contentSource,publisher:s.publisher,license:s.license,validation:s.validation,runtime:L(s.runtime.zh,s.runtime.en),source:{kind:'store',sourceId:catalog.source!.id,listingId:s.id,version:s.release.version,packageDigest:s.release.packageDigest,artifactSha256:s.release.artifactSha256},usage:{mode:'when-relevant',when:L(s.summary.zh,s.summary.en),whenNot:L('仅在适用于当前任务时使用。','Use only when relevant to the task.')},selectionOrigin:{kind:'user-selected'}},s.publisher+' · '+s.release.version))}{installedEntries.map(s=>row({name:s.name,label:s.displayName||s.name,purpose:s.displayDescription||s.description,provenance:s.provenance,source:{kind:'installed',skillId:s.id,revision:s.revision,version:s.version}},L('自定义技能','Custom skill')))}{catalog&&!storeEntries.length&&!installedEntries.length&&<p className="wf-muted">{L('没有匹配技能，请换一个关键词。','No matches. Try another search term.')}</p>}</TabsContent></Tabs>}
  {importing&&<div className="wf-picker-scroll"><div className="wf-import-heading"><div><strong>{L('本地技能目录','Local skill directory')}</strong><p className="wf-muted">{L('选择包含 SKILL.md 的目录，预览后加入声明。','Choose a directory containing SKILL.md, then review it.')}</p></div><Button variant="outline" disabled={busy} onClick={()=>void inspect(true)}><FolderOpen data-icon="inline-start"/>{L('选择目录','Choose directory')}</Button></div>
  <form onSubmit={e=>{e.preventDefault();void inspect(false);}}><FieldGroup><FormField label={L('GitHub 仓库','GitHub repository')} value={repository} onChange={setRepository} placeholder="https://github.com/owner/repository" required/><FormField label={L('技能子目录','Skill subdirectory')} value={directory} onChange={setDirectory} placeholder="skills/example" required/><FormField label={L('分支、标签或提交（可选）','Branch, tag or commit (optional)')} value={ref} onChange={setRef}/><Button type="submit" variant="outline" disabled={busy||!repository||!directory}>{busy?<LoaderCircle className="animate-spin" data-icon="inline-start"/>:null}{L('解析并预览','Resolve and preview')}</Button></FieldGroup></form>
  {preview&&<div className="wf-import-preview"><strong>{preview.label}</strong><p>{preview.purpose}</p>{preview.provenance&&<p className="wf-muted">{preview.provenance.kind==='github'?preview.provenance.repository+' · '+preview.provenance.directory+' @ '+preview.provenance.commit?.slice(0,12):preview.provenance.path}</p>}<p className="wf-muted">{L('已固定来源，添加到选择后随专家配置一起准备。','Source frozen. Add it to prepare with the expert configuration.')}</p><Button variant="outline" onClick={()=>{toggle(preview);setPreview(null);}}>{L('加入选择','Add to selection')}</Button></div>}</div>}
@@ -64,6 +96,7 @@ export function SkillInformation({skill}:{skill:SkillDeclaration}){
  [L('推荐理由','Why this role'),skill.reason],
  [L('何时使用','When to use'),skill.usage?.when],
  [L('使用边界','When to skip'),skill.usage?.whenNot],
+ [L('安装渠道','Installation channel'),skill.source.kind==='store'?skill.installationChannel||skill.source.sourceId:undefined],
  [L('固定版本','Fixed release'),skill.source.kind==='store'?skill.source.version:undefined],
  [L('上游来源','Upstream source'),skill.repository?`${skill.repository.url}
 ${skill.repository.directory}
@@ -74,7 +107,7 @@ ${skill.provenance.commit}`:skill.provenance?.path],
  [L('运行要求','Runtime requirements'),skill.runtime],
  [L('制品校验时间','Package verified'),skill.validation?.packageVerifiedAt],
  [L('源码核验时间','Source checked'),skill.validation?.sourceCheckedAt],
- [L('仓库关注数（采集时）','Repository stars (observed)'),skill.repository?.stars===undefined?undefined:`${skill.repository.stars} · ${skill.repository.starsObservedAt||''}`],
+
  [L('内容摘要','Content digest'),skill.source.kind==='store'?skill.source.packageDigest:undefined]
  ];return <dl className="wf-role-definition">{rows.filter(([,value])=>value).map(([label,value])=><div key={label}><dt>{label}</dt><dd className="wf-source-value">{value}</dd></div>)}</dl>;
 }

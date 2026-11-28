@@ -18,7 +18,8 @@ async function evidence(runId:string,tool:Tool):Promise<Group|null>{
  if(record?.arguments?.operationId!=='local.weknora.search')return null;
  const result=record.result;
  const payload=result?.structuredContent??result?.content?.filter((part:{type:string})=>part.type==='text').map((part:{text:string})=>parse(part.text)).find((item:{ok?:boolean}|null)=>item?.ok!==undefined);
- if(!payload?.ok||!Array.isArray(payload.value?.hits))throw Error('检索未成功或证据不可用');
+ if(!payload?.ok)throw Error('WEKNORA_SETTINGS');
+ if(!Array.isArray(payload.value?.hits))throw Error('证据不可用');
  const scope=record.arguments.input?.knowledgeBaseId;
  const hits=payload.value.hits.filter((hit:Hit)=>hit&&[hit.knowledgeBaseId,hit.chunkId,hit.title,hit.text].every(value=>typeof value==='string'&&value.length)&&(!scope||scope===hit.knowledgeBaseId));
  return {scope:scope||'全部配置库',hits};
@@ -26,16 +27,16 @@ async function evidence(runId:string,tool:Tool):Promise<Group|null>{
 export default function WeKnoraAnswer({tools,runId,answer,children}:{tools:Tool[];runId:string;answer:string;children:React.ReactNode}){
  const candidates=tools.filter(tool=>tool.type==='mcpToolCall'&&tool.label==='extension_invoke_operation');
  const revision=JSON.stringify([runId,...candidates.map(tool=>[tool.id,tool.detailVersion??tool.detail,tool.status])]);
- const [state,setState]=useState<{revision:string;groups:Group[];error?:boolean}>();
+ const [state,setState]=useState<{revision:string;groups:Group[];error?:string}>();
  useEffect(()=>{
   if(!candidates.length)return;
   let active=true;
-  Promise.all(candidates.map(tool=>evidence(runId,tool))).then(groups=>{if(active)setState({revision,groups:groups.filter((group):group is Group=>!!group)});},()=>{if(active)setState({revision,groups:[],error:true});});
+  Promise.all(candidates.map(tool=>evidence(runId,tool))).then(groups=>{if(active)setState({revision,groups:groups.filter((group):group is Group=>!!group)});},(error)=>{if(active)setState({revision,groups:[],error:String(error?.message)});});
   return ()=>{active=false;};
  },[revision]);
  if(!candidates.length)return children;
  if(state?.revision!==revision)return <p role="status">正在核对工具记录…</p>;
- if(state.error)return <p role="alert">无法核对工具记录，本次不展示原文引用。</p>;
+ if(state.error)return <p role="alert">无法核对工具记录，本次不展示原文引用。{state.error==='WEKNORA_SETTINGS'&&<button type="button" className="underline" onClick={()=>window.dispatchEvent(new CustomEvent('extensions:settings',{detail:'local.weknora'}))}>打开 WeKnora 设置</button>}</p>;
  if(!state.groups.length)return children;
  return <div className="flex flex-col gap-3">{state.groups.map((group,index)=><Card key={index}><CardHeader><CardTitle>知识检索 · {group.scope}</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">
  {!group.hits.length&&<p>没有可核对的片段。</p>}

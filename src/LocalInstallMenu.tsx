@@ -17,7 +17,10 @@ export default function LocalInstallMenu({onError}:{onError:(message:string)=>vo
   setInstalling(true);
   onError('');
   try{
-   await extensions.install(development?{development:true}:undefined);
+   const before=await extensions.list();
+   const after=await extensions.install(development?{development:true}:undefined);
+   const target=after?.installed?.find(item=>item.hasConfiguration&&!item.home&&!before.installed.some(prior=>prior.manifest.id===item.manifest.id&&prior.active===item.active));
+   if(target)window.dispatchEvent(new CustomEvent('extensions:settings',{detail:target.manifest.id}));
    extensionsChanged();
   }catch(error){onError(error instanceof Error?error.message:String(error));}
   finally{setInstalling(false);}

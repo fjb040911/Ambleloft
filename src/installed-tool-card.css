@@ -1,9 +1,9 @@
 .store-installed-row{min-width:0;height:100%}
-.store-installed-title{display:flex;align-items:center;gap:16px;min-width:0}
-.store-installed-title [data-slot=card-title]{min-width:0;overflow-wrap:anywhere}
-.store-installed-title h2{font:inherit;margin:0}
+.store-tool-title{display:flex;align-items:center;gap:16px;min-width:0}
+.store-tool-title [data-slot=card-title]{min-width:0;overflow-wrap:anywhere}
+.store-tool-title h2{font:inherit;margin:0}
 .store-installed-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden;overflow-wrap:anywhere;line-height:1.65}
 .store-created-summary{display:block;overflow-wrap:anywhere}
-.store-installed-row .store-installed-header{gap:16px!important}
+.store-tool-header[data-slot=card-header]{gap:16px!important}
 .store-installed-row .store-installed-meta{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:auto}
 .store-installed-row .store-row-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}

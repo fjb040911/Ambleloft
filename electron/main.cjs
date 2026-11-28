@@ -222,7 +222,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('task-app:close',(event,input)=>taskApps.close(authorize(event),input.sessionId));
   ipcMain.handle('task-app:rpc',(event,input)=>taskApps.rpc(authorize(event),input.sessionId,input.message));
   services.extensions.options.invalidatePages=id=>{operationRouter.invalidate(id);pageHost.invalidate(id);taskApps.invalidate(id);};
-  services.extensions.options.pageChanged=async(id,action)=>{operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
+  services.extensions.options.pageChanged=async(id,action)=>{if(catalogService?.updates && ['commit','remove'].includes(action))await catalogService.updates.notify(id,null).catch(()=>{});operationRouter.invalidate(id);pageHost.changed(id,action);taskApps.invalidate(id);if(['commit','remove'].includes(action)||action==='enable'&&!services.extensions.items.find(item=>item.id===id)?.enabled)await inputRequests.invalidateOrigin('extension:'+id);};
   services.extensions.options.publish=()=>windows.broadcast(profileId,'extensions:event');
   terminals = new (require('./terminal.cjs').TerminalService)({onExit:(owner,session)=>{if(!owner.window.isDestroyed())owner.window.webContents.send('terminal:exit',session);},spawnRemote:(context,size)=>ssh.pty(context.connectionId,context.cwd,size,context.environment),resolveContext:async input=>{
     const project = input.projectId ? (await store.read()).projects.find(p=>p.id===input.projectId) : null;
@@ -256,13 +256,14 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated',()=>{taskApps.contextChanged();for(const p of pageHost.owners.values())p.view?.webContents.send('extension-page:context',pageHost.context(p));});
   ipcMain.handle('extensions:activate',async(event,id)=>{authorize(event);return extensionService().startHost(id);});
   ipcMain.handle('extensions:automation',(event,input)=>{authorize(event);return services.automation.manage(input);});
+  ipcMain.handle('extensions:connector',(event,input)=>require('./extensions/connector-settings.cjs').connectorAction(extensionService(),operationRouter,pageHost.interactions,authorize(event),input));
   ipcMain.handle('extensions:configuration',(event,input)=>{authorize(event);return extensionService().configuration(input);});
   ipcMain.handle('extensions:details',(event,id)=>{authorize(event);return require('../core/extensions/details.cjs').extensionDetails(extensionService(),id);});
   ipcMain.handle('extensions:list',event=>{const owner=authorize(event);return extensionService().snapshot(pageHost.contexts.get(owner.id)?.projectId);});
-  const {packageConfirmation, skillConfirmation} = require('./install-confirmation.cjs');
+  const {packageConfirmation, approveStoreUpgrade, skillConfirmation} = require('./install-confirmation.cjs');
   const confirmPackage=async (window,revision)=>{
     const {language} = await store.read();
-    const answer = await hostDialog('showMessageBox', window, packageConfirmation(revision, language, app.getLocale()));
+    const answer = await hostDialog('showMessageBox', window, packageConfirmation(revision, language, app.getLocale(), services.extensions.items.find(item=>item.id===revision.id)));
     return answer.response === 1;
   };
   const {CatalogStore, loadSources} = require('../core/catalog-store/service.cjs');
@@ -270,6 +271,16 @@ app.whenReady().then(async () => {
   try { catalogSources = await loadSources(); } catch { catalogSourceError = 'STORE_INVALID_SOURCE_FILE'; }
   catalogService = new CatalogStore({directory: app.getPath('userData'), database, skills, extensions: services.extensions, sources: catalogSources, publish: () => windows.broadcast(profileId, 'catalog-store:event')});
   await catalogService.initialize();
+  const {ExtensionUpdates}=require('../core/catalog-store/extension-updates.cjs');
+  const updates=new ExtensionUpdates(catalogService,require('../core/catalog-store/service.cjs').download,()=>services.messages.publish());
+  catalogService.updates=updates;
+  updates.locale=app.getLocale();
+  updates.start();
+  powerMonitor.on('resume',()=>void updates.check({automatic:true}).catch(()=>{}));
+  ipcMain.handle('catalog-store:checkUpdates',(event,input)=>{authorize(event);return updates.check({entityId:input?.entityId});});
+  ipcMain.handle('catalog-store:updateDetail',async(event,input)=>{authorize(event);const {item,outcome,currentVersion}=await updates.detail(input.entityId);return {item,outcome,currentVersion};});
+  ipcMain.handle('catalog-store:updateStatus',async event=>{authorize(event);return updates.status();});
+  ipcMain.handle('catalog-store:setAutoUpdates',async(event,enabled)=>{authorize(event);if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENT');await updates.setting('auto',enabled);return enabled;});
   const {WorkforceService}=require('../core/workforce/service.cjs');
   workforceService=new WorkforceService({directory:app.getPath('userData'),database,skills,catalog:catalogService,providers:services.providers,publish:()=>{windows.broadcast(profileId,'workforce:event');windows.broadcast(profileId,'skills:event');}});
   await workforceService.initialize();runtime.workforce=workforceService;
@@ -314,7 +325,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('catalog-store:install', async (event, input) => {
     const owner = authorize(event);
     const result = await catalogService.install(input, {
-      extension: revision => confirmPackage(owner.window, revision),
+      extension: async (revision,_listing,previous) => {
+        if(!previous)return confirmPackage(owner.window,revision);
+        const {language}=await store.read();
+        return approveStoreUpgrade(revision,previous,language,app.getLocale(),options=>hostDialog('showMessageBox',owner.window,options));
+      },
       skill: async item => {
         const {language} = await store.read();
         return (await hostDialog('showMessageBox', owner.window, skillConfirmation(item, language, app.getLocale()))).response === 1;
@@ -365,9 +380,11 @@ app.whenReady().then(async () => {
       const projects=(await store.read()).projects;if(!projects.length)throw Error('请先创建项目');
       if(typeof input.projectId!=='string'||!projects.some(p=>p.id===input.projectId))throw Error('请选择有效项目');projectId=input.projectId;
     }
-    const answer=await hostDialog('showMessageBox',window,{type:'question',title:'扩展资源授权',message:`允许 ${item.id} 使用以下宿主资源权限？`,detail:(projectId?'项目：'+(await store.read()).projects.find(p=>p.id===projectId)?.name+'\n':'')+permissions.map(p=>p.capability+' · '+(p.scope==='self'?'扩展私有资源':'所选项目')).join('\n')||'未声明资源权限',buttons:['取消','授权'],defaultId:0,cancelId:0});
+    const missing=permissions.filter(p=>!item.grants.some(g=>g.capability===p.capability && g.resource===(p.scope==='self'?'self':'project:'+projectId)));
+    if(!missing.length)return extensionService().snapshot();
+    const answer=await hostDialog('showMessageBox',window,{type:'question',title:'扩展资源授权',message:`允许 ${item.id} 使用以下宿主资源权限？`,detail:(projectId?'项目：'+(await store.read()).projects.find(p=>p.id===projectId)?.name+'\n':'')+missing.map(p=>p.capability+' · '+(p.scope==='self'?'扩展私有资源':'所选项目')).join('\n')||'未声明资源权限',buttons:['取消','授权'],defaultId:0,cancelId:0});
     if(answer.response!==1)return extensionService().snapshot();if(extensionService().items.find(i=>i.id===item.id)?.generation!==generation)throw Error('扩展已更新，请重新授权');
-    return extensionService().setGrants(item.id,[...(item.grants||[]),...permissions.map(p=>({capability:p.capability,resource:p.scope==='self'?'self':'project:'+projectId}))],generation);
+    return extensionService().setGrants(item.id,[...(item.grants||[]),...missing.map(p=>({capability:p.capability,resource:p.scope==='self'?'self':'project:'+projectId}))],generation);
   });
   ipcMain.handle('extensions:command',(event,id)=>{const owner=authorize(event);return extensionService().execute(id,pageHost.contexts.get(owner.id)?.projectId);});
 

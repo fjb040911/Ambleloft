@@ -2,12 +2,12 @@ import {useEffect,useState,type RefObject} from 'react';
 import {X} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Drawer,DrawerClose,DrawerContent,DrawerHeader,DrawerTitle,DrawerDescription} from './components/ui/drawer';
-import MessageCenter from './MessageCenter';
+import MessageCenter,{type MessagePosition} from './MessageCenter';
 import {ConfirmationProvider} from './Confirmation';
 import {t} from './i18n';
 import {cn} from 'cn';
 
-export default function MessageDrawer({windowsDesktop=false,open,onOpenChange,trigger}:{windowsDesktop?:boolean;open:boolean;onOpenChange(open:boolean):void;trigger:RefObject<HTMLElement|null>}) {
+export default function MessageDrawer({windowsDesktop=false,open,onOpenChange,trigger,position}:{windowsDesktop?:boolean;open:boolean;onOpenChange(open:boolean):void;position?:RefObject<MessagePosition|null>;trigger:RefObject<HTMLElement|null>}) {
  const [narrow,setNarrow]=useState(()=>window.matchMedia('(max-width:640px)').matches);
  useEffect(()=>{if(!open)return;const key='messages-'+crypto.randomUUID();window.desktop?.extensionPage?.overlay({key,enabled:true});return()=>{window.desktop?.extensionPage?.overlay({key,enabled:false});};},[open]);
  useEffect(()=>{const query=window.matchMedia('(max-width:640px)');const sync=()=>setNarrow(query.matches);query.addEventListener('change',sync);return()=>query.removeEventListener('change',sync);},[]);
@@ -18,7 +18,7 @@ export default function MessageDrawer({windowsDesktop=false,open,onOpenChange,tr
     <DrawerDescription className="sr-only">{t('关注重要进展，按自己的节奏处理。')}</DrawerDescription>
     <DrawerClose render={<Button variant="ghost" size="icon-sm" className="absolute right-5 top-5" aria-label={t('关闭消息中心')}/>}><X/></DrawerClose>
    </DrawerHeader>
-   <div className="message-drawer-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-2 pb-6"><ConfirmationProvider><MessageCenter compact/></ConfirmationProvider></div>
+   <div className="message-drawer-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-2 pb-6"><ConfirmationProvider><MessageCenter compact initialPosition={position?.current} remember={value=>{if(position)position.current=value;}}/></ConfirmationProvider></div>
   </DrawerContent>
  </Drawer>;
 }

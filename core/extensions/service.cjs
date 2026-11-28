@@ -28,11 +28,12 @@ class ExtensionService {
  install(input){const manifest=validate(input);return this.serial(()=>this.change({action:'legacy',id:manifest.id,item:{id:manifest.id,kind:'legacy',manifest,enabled:true,trusted:false,generation:0}}));}
  installPackage(source,mode,confirm){return this.serial(async()=>{
   if(!this.packages)throw Error('Package store unavailable');const revision=await this.packages.prepare(source,mode);
-  if(!await confirm(revision))return this.snapshot();
+  const consent=await confirm(revision);
+  if(consent!==true && consent?.accepted!==true)return this.snapshot();
   await this.change({action:'stage',id:revision.id,revision});
   // A4 supplies quiesce before switching a running generation.
   await this.options.stop?.(revision.id);
-  return this.change({action:'commit',id:revision.id,digest:revision.digest});
+  return this.change({action:'commit',id:revision.id,digest:revision.digest,approvedSelf:consent.approvedSelf});
  });}
  rollback(id,digest,confirm){return this.serial(async()=>{
   const item=this.items.find(i=>i.id===id),previous=item?.revisions?.find(r=>r.digest===digest);if(!previous)throw Error('NOT_FOUND: Revision');
@@ -61,7 +62,7 @@ class ExtensionService {
   const data=await this.storage(context,'settings',{kind:'configuration'});
   const schema=structuredClone(item.manifest.configuration);
   const localize=node=>{if(node.description)node.description=this.localized(item,node.description);for(const child of Object.values(node.properties||{}))localize(child);if(node.items)localize(node.items);};localize(schema);
-  return {schema,value:data.value||{},revision:data.revision,generation:item.generation};
+  return {schema,...(item.manifest.contributes?.connectorSettings?{connectorSettings:item.manifest.contributes.connectorSettings}:{}),value:data.value||{},revision:data.revision,generation:item.generation};
  });}
  async storage(context,key,{kind='kv',write=false,value,expectedRevision,deleteValue=value===null}={}){
   const capability={kv:'storage',secret:'secrets',configuration:'configuration'}[kind];let encoded;

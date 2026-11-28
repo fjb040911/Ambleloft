@@ -1,3 +1,4 @@
+import ConnectorSettings from './ConnectorSettings';
 import {useConfirm} from './Confirmation';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
@@ -10,7 +11,7 @@ import {useEffect,useState,useId,useRef} from 'react';
 import Modal from './Modal';
 import {t,useLanguage} from './i18n';
 import type {ConfigurationSchema,ExtensionConfiguration} from './types';
-export default function ExtensionSettings({id,name,close,inline=false,onDirtyChange,onBusyChange,generation}:{id:string;generation?:number;name:string;close:()=>void;inline?:boolean;onDirtyChange?(dirty:boolean):void;onBusyChange?(busy:boolean):void}){
+export default function ExtensionSettings({id,name,close,inline=false,onDirtyChange,onBusyChange,onSaved,generation,credentialsGranted}:{credentialsGranted:boolean;onSaved?():void;id:string;generation?:number;name:string;close:()=>void;inline?:boolean;onDirtyChange?(dirty:boolean):void;onBusyChange?(busy:boolean):void}){
  const confirm=useConfirm();const locale=useLanguage();
  const fieldPrefix=useId();
  const [data,setData]=useState<ExtensionConfiguration|null>(null),[value,setValue]=useState<Record<string,unknown>>({}),[error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
@@ -21,7 +22,7 @@ export default function ExtensionSettings({id,name,close,inline=false,onDirtyCha
  useEffect(()=>{let alive=true;if(dirtyRef.current){setError(t('扩展授权已变化。当前修改已保留，请重新加载配置后再保存。'));return;}setError('');window.desktop!.extensions!.configuration({id}).then(v=>{if(alive)accept(v);}).catch(e=>{if(alive)setError(e.message);});return()=>{alive=false;};},[id,generation,locale]);
  useEffect(()=>{onDirtyChange?.(dirty);},[dirty,onDirtyChange]);
  const dismiss=async()=>{if(!dirty||(await confirm({title:t('放弃未保存的修改？'),action:t('放弃修改'),destructive:true})))close();};
- const submit=async(action:'save'|'reset')=>{if(!data)return;setBusy(true);setError('');try{accept(await window.desktop!.extensions!.configuration({id,action,value,generation:data.generation,expectedRevision:data.revision}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
+ const submit=async(action:'save'|'reset')=>{if(!data)return;setBusy(true);setError('');try{accept(await window.desktop!.extensions!.configuration({id,action,value,generation:data.generation,expectedRevision:data.revision}));onSaved?.();}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
  const field=(key:string,s:ConfigurationSchema,required:boolean)=>{
   const current=value[key];
   const change=(next:unknown)=>{setValue(old=>({...old,[key]:next}));setDirty(true);};
@@ -48,9 +49,10 @@ export default function ExtensionSettings({id,name,close,inline=false,onDirtyCha
     try{change(JSON.parse(e.target.value));e.target.setCustomValidity('');}
     catch{e.target.setCustomValidity(t('请输入有效的 JSON'));}
    }}/>}
-   {description}
+   {description}{data?.connectorSettings?.originField===key&&String(current||'').startsWith('http:')&&<FieldDescription>{locale==='en'?'HTTP transmits the key and excerpts in plaintext. Use a trusted network only.':'HTTP 会明文传输密钥及检索内容，请仅在可信网络中使用。'}</FieldDescription>}
   </Field>;
  };
  const form=<form className="extension-config-form flex w-full min-w-0 flex-col gap-6" onSubmit={e=>{e.preventDefault();void submit('save');}}>{error&&<div><p className="error-banner" role="alert">{error}</p><Button type="button" variant="outline" disabled={busy} onClick={()=>void reload()}>{t('重新加载配置')}</Button></div>}{!data&&!error&&<p>{t('正在加载…')}</p>}{data&&<>{data.schema.description&&<p>{data.schema.description}</p>}<FieldGroup>{Object.entries(data.schema.properties||{}).map(([key,s])=>field(key,s,data.schema.required?.includes(key)||false))}</FieldGroup><Separator/><Field orientation="horizontal" className="flex-wrap justify-between gap-4"><Button type="button" variant="outline" disabled={busy} onClick={async()=>{if(await confirm({title:t('恢复默认值'),description:t('清除已保存的配置，恢复扩展默认行为？'),action:t('恢复默认值'),destructive:true}))void submit('reset');}}>{t('恢复默认值')}</Button><div className="extension-config-save"><span role="status" aria-live="polite">{t(busy?'正在保存…':dirty?'有未保存的修改':'已保存')}</span><Button type="submit" disabled={busy||!dirty}>{t('保存配置')}</Button></div></Field></>}</form>;
- return inline?form:<Modal title={name+' · '+t('扩展设置')} close={dismiss} busy={busy}>{form}</Modal>;
+ const content=<>{form}{data?.connectorSettings&&<ConnectorSettings key={id+':'+data.generation+':'+data.revision} id={id} data={data} granted={credentialsGranted} current={generation===undefined||generation===data.generation} onChanged={onSaved} disabled={busy||dirty}/>}</>;
+ return inline?content:<Modal title={name+' · '+t('扩展设置')} close={dismiss} busy={busy}>{content}</Modal>;
 }

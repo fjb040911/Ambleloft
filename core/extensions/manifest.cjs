@@ -71,6 +71,12 @@ function validateManifest(manifest, { defaultMessages = {} } = {}) {
   if (!structural(manifest)) return { ok: false, errors: structural.errors.map(e => ({ path: e.instancePath, message: e.message })) };
   const id = `${manifest.publisher}.${manifest.name}`;
   const add = (location, message) => errors.push({ path: location, message });
+  const connector=manifest.contributes?.connectorSettings;
+  if(connector){
+    const operation=manifest.operations?.find(entry=>entry.id===connector.testOperation);
+    if(manifest.configuration?.properties?.[connector.originField]?.type!=='string'||!['configuration','secrets'].every(cap=>manifest.permissions?.some(entry=>entry.capability===cap&&entry.scope==='self')))add('/contributes/connectorSettings','Requires a service origin field and self configuration/secrets permissions');
+    if(!operation||operation.effect!=='read'||operation.projectScoped||!operation.exposeTo.includes('page')||operation.inputSchema?.properties?.query?.type!=='string'||operation.outputSchema?.properties?.hits?.type!=='array')add('/contributes/connectorSettings','Test must be an owned, page-exposed, unscoped read operation accepting query and returning hits');
+  }
   const resourceIds=new Set();
   for(const resource of manifest.authentication?.resources||[]){
     if(resourceIds.has(resource.id))add('/authentication/resources','Duplicate resource id');resourceIds.add(resource.id);

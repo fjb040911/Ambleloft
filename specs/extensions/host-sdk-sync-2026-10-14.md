@@ -513,7 +513,7 @@ dispatch 前取消为 notExecuted；重启 prepared→notExecuted，dispatching�
 
 权限枚举包括 projects.read、projects.path.read、conversations.create、conversations.open、agent.hooks、conversations.read、background.jobs、storage、configuration、secrets。
 
-manifest 声明及 self/project scope、实际 grant、信任/启用状态、generation 和项目存在性共同约束访问。安装更新提交清除 grants；授权变化推进 generation。旧调用可能在确认后、dispatch 前或返回前失效；宿主可压制已经完成操作的成功返回。
+manifest 声明及 self/project scope、实际 grant、信任/启用状态、generation 和项目存在性共同约束访问。安装更新提交保留仍被两版声明的已有资源 grants，移除失效 grants；授权变化推进 generation。旧调用可能在确认后、dispatch 前或返回前失效；宿主可压制已经完成操作的成功返回。
 
 认证使用独立 manifest 资源和 session 绑定，不虚构 authentication permission。Node 独立进程也不等于任意文件/网络访问都受完整操作系统沙箱约束。
 
