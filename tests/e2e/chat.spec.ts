@@ -1549,6 +1549,8 @@ test('hidden conversation freezes transcript DOM while retaining draft and lates
  await prepare(page,'Before hidden');
  await page.getByRole('textbox',{name:'继续对话'}).fill('Draft survives hidden updates');
  await page.evaluate(()=>{const w=window as any;w.__demoRun.approvals=[];w.__demoRun.status='running';w.__emit();});
+ // Observe background updates only after the preceding approval transition has rendered.
+ await expect(page.getByLabel('待执行命令')).toHaveCount(0);
  const original=page.locator('.conversation-page').filter({hasText:'Before hidden'});
  await page.getByRole('button',{name:/新建任务/}).first().click();
  await expect(original).toBeHidden();
