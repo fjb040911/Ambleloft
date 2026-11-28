@@ -13,14 +13,14 @@ import {Separator} from './components/ui/separator';
 import {t} from './i18n';
 import {useConfirm} from './Confirmation';
 const statusName=(status:string)=>t(({queued:'等待执行',running:'运行中',succeeded:'已完成',failed:'失败',unknown:'结果不明',cancelled:'已取消',pending:'等待投递',delivering:'投递中',dead:'需要处理'} as Record<string,string>)[status]||status);
-export default function ExtensionAutomation({id,onDirtyChange,onBusyChange}:{id:string;onDirtyChange(dirty:boolean):void;onBusyChange?(busy:boolean):void}){
+export default function ExtensionAutomation({id,onDirtyChange,onBusyChange,onSaved}:{onSaved?():void;id:string;onDirtyChange(dirty:boolean):void;onBusyChange?(busy:boolean):void}){
  const confirm=useConfirm();
  const prefix=useId(),[state,setState]=useState<AutomationState>(),[policy,setPolicy]=useState<AutomationPolicy>(),[providers,setProviders]=useState<ProviderConfig[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false);
  useEffect(()=>{onBusyChange?.(busy);},[busy,onBusyChange]);
  const api=window.desktop!.extensions!.automation!;
  useEffect(()=>{let live=true;Promise.all([api({id}),window.desktop!.listProviders()]).then(([value,catalog])=>{if(live){setState(value);setPolicy(value.policy);setProviders(catalog.providers);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[id]);
  useEffect(()=>{onDirtyChange(!!policy&&!!state&&JSON.stringify(policy)!==JSON.stringify(state.policy));},[policy,state,onDirtyChange]);
- const act=async(input:Parameters<typeof api>[0])=>{setBusy(true);setError('');setSaved(false);try{const value=await api(input);setState(value);if(input.action==='policy'){setPolicy(value.policy);setSaved(true);}}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
+ const act=async(input:Parameters<typeof api>[0])=>{setBusy(true);setError('');setSaved(false);try{const value=await api(input);setState(value);if(input.action==='policy'){setPolicy(value.policy);setSaved(true);onSaved?.();}}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
  return <section className="flex max-w-3xl flex-col gap-6" aria-label={t('后台自动化')}>
   <div><h2>{t('后台自动化')}</h2><p className="text-sm text-muted-foreground">{t('扩展可读取已授权的轮次并生成摘要。作业不调用工具，也不会向原聊天发送消息。')}</p></div>
   {error&&<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}

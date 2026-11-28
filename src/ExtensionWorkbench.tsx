@@ -1,10 +1,10 @@
 import {useRef,useState} from 'react';
-import {Info,ArrowRight,Search,Puzzle} from 'lucide-react';
+import {SlidersHorizontal,ArrowRight,Search,Puzzle} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Input} from './components/ui/input';
 import {SidebarMenu,SidebarMenuItem,SidebarMenuButton} from './components/ui/sidebar';
 import {WorkforceDirectoryEmpty} from './WorkforceDirectoryEmpty';
-import ExtensionIcon from './ExtensionIcon';
+import {createPortal} from 'react-dom';
 import ExtensionSurface from './ExtensionSurface';
 import ExtensionsPage from './ExtensionsPage';
 import ManagementDialog from './ManagementDialog';
@@ -22,18 +22,24 @@ export function ExtensionNavigation({entries,selected,open,loading,error}:{entri
  return <div className="extension-navigation">
   <div className="extension-nav-search"><Search size={15} aria-hidden="true"/><Input className="ps-8" type="search" aria-label={t('搜索业务入口')} placeholder={t('搜索业务入口…')} value={query} onChange={e=>setQuery(e.target.value)}/></div>
   <p className="extension-nav-caption">{t('业务入口')}</p>
-  <SidebarMenu>{filtered.map(item=>{const title=businessTitle(item),duplicate=entries.filter(other=>businessTitle(other)===title).length>1;return <SidebarMenuItem key={item.manifest.id}><SidebarMenuButton variant="navigation" className="extension-nav-row h-auto min-h-9 rounded-lg py-2 text-sm font-normal data-active:font-medium data-active:text-[var(--text)]" isActive={selected===item.manifest.id} aria-current={selected===item.manifest.id?'page':undefined} title={title} onClick={()=>open(item.manifest.id)}><ExtensionIcon icon={item.manifest.icon} size={18}/><span className="extension-nav-copy"><span>{title}</span>{duplicate&&<small>{item.manifest.name===title?item.manifest.id:item.manifest.name}</small>}{item.home?.available===false&&<small>{t('待满足使用条件')}</small>}</span></SidebarMenuButton></SidebarMenuItem>;})}</SidebarMenu>
+  <SidebarMenu>{filtered.map(item=>{const title=businessTitle(item),duplicate=entries.filter(other=>businessTitle(other)===title).length>1;return <SidebarMenuItem key={item.manifest.id}><SidebarMenuButton variant="navigation" className="extension-nav-row h-auto min-h-9 rounded-lg py-2 text-sm font-normal data-active:font-medium data-active:text-[var(--text)]" isActive={selected===item.manifest.id} aria-current={selected===item.manifest.id?'page':undefined} title={title} onClick={()=>open(item.manifest.id)}><span className="extension-nav-copy"><span>{title}</span>{duplicate&&<small>{item.manifest.name===title?item.manifest.id:item.manifest.name}</small>}{item.home?.available===false&&<small>{t('待满足使用条件')}</small>}</span></SidebarMenuButton></SidebarMenuItem>;})}</SidebarMenu>
   {error?<p className="extension-nav-empty" role="alert">{t('暂时无法读取扩展。')}{error}</p>:loading?<p className="extension-nav-empty" role="status">{t('正在加载…')}</p>:!filtered.length&&<p className="extension-nav-empty">{t(term?'没有匹配的业务入口。':'有独立页面的扩展会显示在这里。')}</p>}
  </div>;
 }
-export default function ExtensionWorkbench({item,selected,loading,error,visible,projects,projectId,setProject,discover,manage}:{item?:Entry;selected:string|null;loading:boolean;error:string;visible:boolean;projects:Project[];projectId:string;setProject(id:string):void;discover():void;manage():void}){
+export default function ExtensionWorkbench({toolbar,item,selected,loading,error,visible,projects,projectId,setProject,discover,manage}:{toolbar:HTMLDivElement|null;item?:Entry;selected:string|null;loading:boolean;error:string;visible:boolean;projects:Project[];projectId:string;setProject(id:string):void;discover():void;manage():void}){
  const locale=useLanguage();const confirm=useConfirm();const [panel,setPanel]=useState<'settings'|'details'|null>(null);const guard=useRef<(()=>void)|null>(null);
- const close=()=>{if(guard.current)guard.current();else setPanel(null);};
+ const settingsChanged=useRef(false);
+ const [pageVersion,setPageVersion]=useState(0);
+ const finishSettings=()=>{
+  if(settingsChanged.current){settingsChanged.current=false;setPageVersion(version=>version+1);}
+  setPanel(null);
+ };
+ const close=()=>{if(guard.current)guard.current();else finishSettings();};
  const usable=item?.enabled&&item.trusted&&item.home;
  const setContext=async(id:string)=>{if(id===projectId)return;if(usable&&item.home?.available!==false&&!await confirm({title:t('切换入口项目？'),description:t('页面将重新打开。请先保存业务页面中的修改；切换不会新增项目授权。'),action:t('切换项目')}))return;setProject(id);};
  return <section className="extension-workbench" aria-label={t('扩展工作区')}>
-  {item?.home&&<header className="extension-workbench-header"><div className="extension-workbench-identity"><ExtensionIcon icon={item.manifest.icon} size={18}/><h1>{businessTitle(item)}</h1></div><div className="extension-workbench-actions">{item.home.when&&<div className="extension-entry-context" title={t('入口项目仅用于页面可用条件；业务操作由扩展选择项目并请求授权。')}><span>{t('入口项目')}</span><ProjectPicker projects={projects} value={projectId} onChange={id=>void setContext(id)} disabled={false}/></div>}<Button variant="ghost" size="icon" aria-label={t('设置与权限')} title={t('设置与权限')} aria-haspopup="dialog" data-extension-host-focus onClick={()=>setPanel('settings')}><Info/></Button></div></header>}
-  {usable&&item.home?.available!==false?<ExtensionSurface extensionId={item.manifest.id} revision={item.active} projectId={projectId} locale={locale} visible={visible&&!panel} onSettings={()=>setPanel('settings')}/>:<WorkforceDirectoryEmpty Icon={Puzzle} title={t(loading?'正在加载…':error?'暂时无法读取扩展。':usable?'此入口暂不可用':selected?'此扩展入口已不可用':'在这里使用你的业务工具')} description={error||t(usable?'当前项目或扩展状态尚未满足使用条件。可选择入口项目，或查看设置与权限。':selected?'扩展可能已停用、卸载或移除页面。可在技能与扩展中查看；不会自动打开其他业务。':'安装带有独立页面的扩展，在这里处理工单、查看设备或使用其他业务工具。技能仍在聊天中使用。')}><Button variant={selected?'outline':'default'} onClick={usable?()=>setPanel('settings'):selected?manage:discover}>{t(usable?'设置与权限':selected?'技能与扩展':'发现工具')}<ArrowRight data-icon="inline-end"/></Button></WorkforceDirectoryEmpty>}
-  {panel&&item&&<ManagementDialog title={item.manifest.name+' · '+t(panel==='settings'?'设置与权限':'扩展详情')} wide busy={false} close={close} className="extension-workbench-settings"><ExtensionsPage mode="detail" initialId={item.manifest.id} initialTab={panel} hideBack closeGuard={guard} onClose={()=>setPanel(null)}/></ManagementDialog>}
+  {toolbar&&item?.home&&createPortal(<>{item.home.when&&<div className="extension-entry-context" title={t('入口项目仅用于页面可用条件；业务操作由扩展选择项目并请求授权。')}><span>{t('入口项目')}</span><ProjectPicker projects={projects} value={projectId} onChange={id=>void setContext(id)} disabled={false}/></div>}<Button variant="ghost" size="icon" aria-label={t('设置与权限')} title={t('设置与权限')} aria-haspopup="dialog" data-extension-host-focus onClick={()=>setPanel('settings')}><SlidersHorizontal/></Button></>,toolbar)}
+  {usable&&item.home?.available!==false?<ExtensionSurface key={pageVersion} extensionId={item.manifest.id} revision={item.active} projectId={projectId} locale={locale} visible={visible&&!panel} onSettings={()=>setPanel('settings')}/>:<WorkforceDirectoryEmpty Icon={Puzzle} title={t(loading?'正在加载…':error?'暂时无法读取扩展。':usable?'此入口暂不可用':selected?'此扩展入口已不可用':'在这里使用你的业务工具')} description={error||t(usable?'当前项目或扩展状态尚未满足使用条件。可选择入口项目，或查看设置与权限。':selected?'扩展可能已停用、卸载或移除页面。可在技能与扩展中查看；不会自动打开其他业务。':'安装带有独立页面的扩展，在这里处理工单、查看设备或使用其他业务工具。技能仍在聊天中使用。')}><Button variant={selected?'outline':'default'} onClick={usable?()=>setPanel('settings'):selected?manage:discover}>{t(usable?'设置与权限':selected?'技能与扩展':'发现工具')}<ArrowRight data-icon="inline-end"/></Button></WorkforceDirectoryEmpty>}
+  {panel&&item&&<ManagementDialog title={item.manifest.name+' · '+t(panel==='settings'?'设置与权限':'扩展详情')} wide busy={false} close={close} className="extension-workbench-settings"><ExtensionsPage mode="detail" initialId={item.manifest.id} initialTab={panel} hideBack closeGuard={guard} onSettingsChanged={()=>{settingsChanged.current=true;}} onClose={finishSettings}/></ManagementDialog>}
  </section>;
 }

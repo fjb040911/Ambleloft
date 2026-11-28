@@ -52,6 +52,72 @@ test('catalog layouts remain readable in light, dark and narrow views',async({pa
  await page.setViewportSize({width:620,height:900});await expect(center.locator('.store-card').first()).toBeVisible();expect(await center.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:'/tmp/store-discover-narrow.png'});
 });
 
+test('a single discovery result keeps the role library column width across pane breakpoints',async({page,context})=>{
+ await openCenter(page);
+ await page.getByRole('tab',{name:'发现',exact:true}).click();
+ await page.getByRole('searchbox',{name:'搜索技能与扩展'}).fill('Research tool 60');
+ await expect(page.locator('.store-card')).toHaveCount(1);
+
+ const roles=await context.newPage();
+ await roles.goto('/tests/manual/project-space-qa.html?view=experts&role-demo=1');
+ await roles.getByRole('button',{name:'添加专家',exact:true}).click();
+ await roles.getByRole('button',{name:/从角色库中选择/}).click();
+ await expect(roles.getByRole('button',{name:'查看详情：产品经理'})).toBeVisible();
+ const catalogs=[
+  {pane:page.locator('.store-page'),grid:page.locator('.store-grid')},
+  {pane:roles.locator('.workforce'),grid:roles.locator('.wf-role-grid')},
+ ];
+ for(const [width,columns,gap] of [[781,2,24],[780,2,16],[581,2,16],[580,1,16]]){
+  for(const {pane,grid} of catalogs){
+   await pane.evaluate((el,width)=>{el.style.width=width+'px';},width);
+   const layout=await grid.evaluate(el=>{
+    const style=getComputedStyle(el);
+    return {columns:style.gridTemplateColumns.split(' ').length,gap:parseFloat(style.columnGap),
+     cardWidth:el.firstElementChild!.getBoundingClientRect().width};
+   });
+   expect(layout.columns).toBe(columns);
+   expect(layout.gap).toBe(gap);
+   const padding=columns===1?16:32;
+   expect(layout.cardWidth).toBeCloseTo((width-padding*2-gap*(columns-1))/columns,0);
+  }
+ }
+});
+
+test('compact discovery cards keep the name on one line and leave room for the source and actions',async({page})=>{
+ await openCenter(page);
+ await page.evaluate(()=>{
+  const store=(window as any).desktop.store,read=store.catalog;
+  store.catalog=async(input:any)=>{
+   const result=await read(input);
+   const sample=result.items.slice(0,2);
+   return {...result,items:sample.map((item:any,index:number)=>index===0?
+    {...item,title:{zh:'代码架构改进',en:'Architecture'},repository:{url:'https://github.com/mattpocock/skills'}}:
+    {...item,title:{zh:'AI 工作日志',en:'AI work log'},categories:sample.flatMap((entry:any)=>entry.categories),contentSource:{kind:'store',developer:'Ambleloft'}})};
+  };
+ });
+ await page.getByRole('tab',{name:'发现',exact:true}).click();
+ const cards=page.locator('.store-card');
+ await expect(cards).toHaveCount(2);
+ for(const width of [600,581,580,581,600]){
+  await page.locator('.store-page').evaluate((el,width)=>{el.style.width=width+'px';},width);
+  for(const card of await cards.all()){
+   const layout=await card.evaluate(el=>{
+    const title=document.createRange();
+    title.selectNodeContents(el.querySelector('.store-title-link')!);
+    const meta=el.querySelector('.store-card-meta')!.getBoundingClientRect();
+    const actions=el.querySelector('.store-card-actions')!.getBoundingClientRect();
+    const source=el.querySelector<HTMLElement>('.store-card-source > span')!;
+    return {lines:title.getClientRects().length,sourceClipped:source.scrollWidth>source.clientWidth+1,
+     gap:actions.left-meta.right,contained:actions.right<=el.getBoundingClientRect().right};
+   });
+   expect(layout.lines).toBe(1);
+   expect(layout.sourceClipped).toBe(false);
+   expect(layout.gap).toBeGreaterThan(0);
+   expect(layout.contained).toBe(true);
+  }
+ }
+});
+
 test('English discovery labels and results are localized',async({page})=>{
  await openCenter(page,'en');const center=page.locator('.skill-extension-center');await center.getByRole('tab',{name:'Discover',exact:true}).click();await expect(center.locator('.store-card')).toHaveCount(24);await expect(center.locator('.store-results [role=status]')).toContainText('Showing 24 of 61 items');await expect(center.getByLabel('Filter by purpose')).toBeVisible();await center.getByRole('searchbox').fill('Research tool 60');await expect(center.locator('.store-card')).toContainText('Research tool 60');await expect(center.getByRole('button',{name:'Clear filters',exact:true})).toBeVisible();
  const details=center.getByRole('button',{name:'View details: Research tool 60',exact:true});await details.focus();await details.press('Enter');await expect(page.getByRole('dialog')).toContainText('Full details 60');await page.keyboard.press('Escape');await expect(details).toBeFocused();await details.hover();await center.locator('.store-card').screenshot({path:'/tmp/store-details-button.png'});
@@ -91,17 +157,19 @@ test('discovery card and centered detail dialog add the same listing only on exp
  expect(await page.evaluate(()=>(window as any).installRequests)).toEqual(Array(2).fill({sourceId:'curated',listingId:'tool-0'}));
 });
 
-test('entering discovery checks expiry and offers an in-place retry beside cached results', async ({page}) => {
+test('each discovery visit refreshes once and keeps cached results available for retry', async ({page}) => {
  await openCenter(page);
  const center=page.locator('.skill-extension-center');
  await expect(center.locator('.store-installed-row')).toHaveCount(24);
  await page.evaluate(()=>{
   const store=(window as any).desktop.store, read=store.catalog;
-  let expired=true;
+  let refreshes=0;
   store.catalog=async(input:any)=>{
-   if(input.refresh)expired=false;
+   if(input.refresh)refreshes++;
    const result=await read(input);
-   return {...result,stale:expired,error:expired&&input.refreshIfExpired?'STORE_DOWNLOAD_FAILED':undefined};
+   if(refreshes===1)return {...result,stale:true,error:'STORE_DOWNLOAD_FAILED'};
+   if(refreshes>=3)return {...result,items:result.items.map((item:any)=>({...item,summary:{zh:'重新进入后发布的内容',en:'Updated listing'}}))};
+   return result;
   };
  });
  const discover=center.getByRole('tab',{name:'发现',exact:true});
@@ -114,9 +182,13 @@ test('entering discovery checks expiry and offers an in-place retry beside cache
  await alert.getByRole('button',{name:'重试'}).click();
  await expect(alert).toHaveCount(0);
  await expect(add).toBeEnabled();
+ await center.getByRole('searchbox').fill('Research tool 60');
+ await expect(center.locator('.store-card')).toHaveCount(1);
+ await expect(center.locator('.store-card')).not.toContainText('重新进入后发布的内容');
  await center.getByRole('tab',{name:/^已安装/}).click();
  await discover.click();
- await expect.poll(()=>page.evaluate(()=>(window as any).__pages.filter((input:any)=>input.refreshIfExpired).length)).toBe(2);
+ await expect(center.locator('.store-card').first()).toContainText('重新进入后发布的内容');
+ expect(await page.evaluate(()=>(window as any).__pages.filter((input:any)=>input.refresh).length)).toBe(3);
 });
 
 test('filter discovery by category from a card, combine with search and clear',async({page})=>{
@@ -145,9 +217,14 @@ for (const language of ['zh-CN','en']) {
    const title=(zh?'研究工具 ':'Research tool ')+index;
    const card=center.locator('.store-card').filter({has:page.getByRole('button',{name:title,exact:true})});
    await expect(card).toContainText(summary);
+   await expect(card).not.toContainText('1.0.0');
    await expect(card).not.toContainText(/Existing authorized|已授权的项目/);
    await card.getByRole('button',{name:title,exact:true}).click();
    const dialog=page.getByRole('dialog');
+   await dialog.getByText(zh?'版本与审核记录':'Release and review details',{exact:true}).click();
+   await expect(dialog.locator('dt').filter({hasText:zh?'安装渠道':'Installation channel'}).locator('+ dd')).toHaveText('Curated');
+   await expect(dialog.getByText('1.0.0',{exact:true})).toBeVisible();
+   await dialog.getByText(zh?'使用说明':'Usage details',{exact:true}).click();
    await expect(dialog.locator('dt').filter({hasText:zh?'运行环境与要求':'Runtime and requirements'}).locator('+ dd')).toContainText(zh?'已授权的项目和文件工具':'Existing authorized project/file tools');
    await page.keyboard.press('Escape');
   }
@@ -172,4 +249,67 @@ test('trial for a deep-linked extension uses the example in its detail outside t
  await expect(detail.locator('dt').filter({hasText:'Start with this prompt'}).locator('+ dd')).toHaveText(example);
  await detail.getByRole('button',{name:'Prepare a trial',exact:true}).click();
  await expect(page.locator('#store-use-prompt')).toHaveValue(new RegExp('org\\.demo\\)\\nLook up ticket SR-12 and show its current status\\.$'));
+});
+
+test('skill details distinguish the original authoring source from the installation channel',async({page})=>{
+ await openCenter(page);
+ await page.evaluate(()=>{
+  const api=(window as any).desktop.store,read=api.catalog;
+  api.catalog=async(input:any)=>{
+   const result=await read(input);
+   const repository={url:'https://github.com/example/library',commit:'b'.repeat(40),directory:'skills/review',stars:0};
+   return {...result,items:result.items.map((item:any)=>{
+    if(item.id==='tool-0')return {...item,repository:{...repository,starsObservedAt:'2026-10-11T12:00:00Z'},contentSource:{kind:'github',originalDescription:'Review module boundaries.'}};
+    if(item.id==='tool-1')return {...item,contentSource:{kind:'store',name:'Internal catalog',developer:'Design systems'}};
+    if(item.id==='tool-2')return {...item,repository};
+    if(item.id==='tool-3')return {...item,release:{...item.release,packageDigest:'8025e1aae929cb389c95f1a60348f342a90e1c3a08b9da32474adc6bab165b96'}};
+    return item;
+   })};
+  };
+ });
+ await page.getByRole('tab',{name:'发现',exact:true}).click();
+ const dialog=page.getByRole('dialog');
+ const open=(id:number)=>page.getByRole('button',{name:'查看详情：研究工具 '+id,exact:true}).click();
+ for(const [id,label] of [[0,'GitHub · example/library'],[1,'开发者 · Design systems'],[3,'开发者 · Ambleloft']] as const){
+  const footer=page.locator('.store-card').filter({has:page.getByRole('button',{name:'研究工具 '+id,exact:true})}).locator('[data-slot=card-footer]');
+  await expect(footer.getByTitle(label)).toBeVisible();
+  await expect(footer.getByRole('button',{name:'查看详情：研究工具 '+id,exact:true})).toBeVisible();
+  await expect(footer).not.toContainText(/Stars|采集于/);
+ }
+ await page.setViewportSize({width:390,height:800});
+ const narrowCard=page.locator('.store-card').filter({has:page.getByRole('button',{name:'研究工具 0',exact:true})});
+ const metrics=await narrowCard.evaluate(el=>{
+  const footer=el.querySelector('[data-slot=card-footer]')!,source=footer.querySelector('.store-card-source')!.getBoundingClientRect();
+  const buttons=footer.querySelector('.store-card-actions')!.getBoundingClientRect();
+  return {overflow:el.scrollWidth-el.clientWidth,gap:buttons.left-source.right,end:el.getBoundingClientRect().right-buttons.right};
+ });
+ expect(metrics.overflow).toBeLessThanOrEqual(1);
+ expect(metrics.gap).toBeGreaterThanOrEqual(0);
+ expect(metrics.end).toBeGreaterThanOrEqual(0);
+ await open(0);
+ await expect(dialog.getByText('Review module boundaries.',{exact:false})).toBeVisible();
+ await expect(dialog.locator('time')).toHaveAttribute('datetime','2026-10-11T12:00:00.000Z');
+ await expect(dialog.getByText(/0 Stars/)).toBeVisible();
+ await expect(dialog.getByRole('link',{name:'查看技能原文'})).toHaveAttribute('href','https://github.com/example/library/blob/'+'b'.repeat(40)+'/skills/review/SKILL.md');
+ await expect(dialog.getByText('安装渠道',{exact:true})).toBeHidden();
+ await dialog.getByText('版本与审核记录',{exact:true}).click();
+ await expect(dialog.getByText('Curated',{exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await open(1);
+ await expect(dialog.getByText('Internal catalog',{exact:true})).toBeVisible();
+ await expect(dialog.getByText('开发者 · Design systems')).toBeVisible();
+ await page.keyboard.press('Escape');
+ await open(2);
+ await expect(dialog.getByRole('link',{name:'在 GitHub 打开'})).toBeVisible();
+ await expect(dialog.locator('time')).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await open(3);
+ await expect(dialog.getByText('开发者 · Ambleloft')).toBeVisible();
+ await expect(dialog.getByText('Ambleloft Store',{exact:true})).toBeVisible();
+ await dialog.getByText('版本与审核记录',{exact:true}).click();
+ await expect(dialog.getByText('Curated',{exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await open(4);
+ await expect(dialog.getByText('发布方 · Ambleloft')).toBeVisible();
+ await expect(dialog.getByText(/开发者/)).toHaveCount(0);
 });

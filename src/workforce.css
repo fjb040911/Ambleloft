@@ -28,7 +28,7 @@
 /* Match the host’s important Tailwind utilities for scoped component overrides. */
 /* Approved workforce v0.3 palette and hierarchy. Scoped to this feature;
    host navigation keeps the shared Sidebar contract in both layout modes. */
-.workforce{color:var(--wf-ink);background:var(--wf-paper);container-type:inline-size}
+.workforce{color:var(--wf-ink);background:var(--wf-paper)}
 .workforce .wf-main{max-width:1340px;padding:0 32px 48px;gap:24px}
 .wf-page-context{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--wf-edge);margin:0 -32px 8px;padding:12px 32px;color:var(--wf-muted);font-size:13px}
 .wf-page-context>span{display:flex;align-items:center;gap:14px}
@@ -63,7 +63,7 @@
 .wf-library-heading p{font-size:13px;line-height:1.7;color:var(--wf-muted);margin:0}
 .wf-library-tools{display:flex;align-items:center;gap:8px;flex:0 1 290px;min-width:230px}
 .wf-library-tools>button{flex-shrink:0}
-.wf-role-grid,.wf-employee-grid,.wf-expert-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:stretch}
+.wf-employee-grid,.wf-expert-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:stretch}
 .wf-role-banner{height:84px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 24px;color:var(--wf-ink)}
 .wf-role-banner>svg{width:24px;height:24px}
 .wf-role-card .wf-role-banner{height:auto;min-height:84px}
@@ -104,8 +104,8 @@
 .workforce .wf-steps .wf-step-button[aria-current=step]{color:var(--text);font-weight:600}
 .workforce .wf-steps .wf-step-button:focus-visible{position:relative;z-index:1;outline:2px solid var(--ring);outline-offset:-3px}
 
-@container (max-width:780px){.wf-library-heading{align-items:flex-start;flex-direction:column;gap:16px}.wf-library-tools{flex-basis:auto;width:100%;max-width:none}.wf-role-grid,.wf-employee-grid,.wf-expert-grid{gap:16px}}
-@container (max-width:580px){.workforce .wf-main{padding:0 16px 32px;gap:20px}.wf-page-context{margin:0 -16px 4px;padding:12px 16px;min-height:60px}.wf-page-context>span{gap:8px}.wf-role-grid,.wf-employee-grid,.wf-expert-grid{grid-template-columns:1fr}.wf-library{gap:24px}.workforce .wf-steps .wf-step-button{padding:12px 8px;gap:6px;font-size:12px}.wf-library-heading h2{font-size:22px}}
+@container (max-width:780px){.wf-library-heading{align-items:flex-start;flex-direction:column;gap:16px}.wf-library-tools{flex-basis:auto;width:100%;max-width:none}.wf-employee-grid,.wf-expert-grid{gap:16px}}
+@container (max-width:580px){.workforce .wf-main{padding:0 16px 32px;gap:20px}.wf-page-context{margin:0 -16px 4px;padding:12px 16px;min-height:60px}.wf-page-context>span{gap:8px}.wf-employee-grid,.wf-expert-grid{grid-template-columns:1fr}.wf-library{gap:24px}.workforce .wf-steps .wf-step-button{padding:12px 8px;gap:6px;font-size:12px}.wf-library-heading h2{font-size:22px}}
 @layer utilities {
 /* Composer actions keep the shared InputGroupButton dimensions and radii. */
 .workforce [data-slot=button]:not(.catalog-tag-filters [data-slot=button]):not(.composer [data-slot=button]):not(.wf-graph-toolbar [data-slot=button]):not(.wf-context-desktop-toggle){border-radius:999px !important;min-height:36px !important}

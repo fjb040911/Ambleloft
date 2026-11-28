@@ -238,3 +238,37 @@ test('updates a locally installed reviewed predecessor only after confirmation',
   assert.equal(f.extensions.items[0].active, f.item.release.packageDigest);
   assert.equal((await f.store.installations())[0].releaseVersion, f.item.release.version);
 });
+
+test('a filter request during a refresh sees the new catalog even when the cache is still valid', async t => {
+  const {store,catalog,item,responses}=await fixture(t);
+  await store.catalog();
+  const updated={zh:'新工具',en:'New listing'};
+  responses.envelope=sign({...catalog,items:[{...item,title:updated}]});
+  const fetcher=store.fetcher;
+  let started,release,downloads=0;
+  const loading=new Promise(resolve=>{started=resolve;});
+  const gate=new Promise(resolve=>{release=resolve;});
+  store.fetcher=async(...args)=>{downloads++;started();await gate;return fetcher(...args);};
+  const updating=store.catalog({refresh:true});
+  await loading;
+  // Finish the read of the old signed snapshot before the download can replace it.
+  const readCache=store.readCache.bind(store);
+  store.readCache=async()=>{const cached=await readCache();release();return cached;};
+  const filtered=store.catalog({page:{query:'New listing'}});
+  const [first,second]=await Promise.all([updating,filtered]);
+  assert.deepEqual(first.items[0].title,updated);
+  assert.deepEqual(second.items.map(entry=>entry.title),[updated]);
+  assert.equal(downloads,1);
+});
+
+test('content origin is optional for earlier releases and independent of the signing store',async t=>{
+ const {catalog,item}=await fixture(t);
+ const verify=overrides=>verifyEnvelope(sign({...catalog,items:[{...item,...overrides}]}),source).catalog.items[0];
+ assert.equal(verify({}).contentSource,undefined);
+ const native={kind:'store',name:'Engineering catalog',developer:'Platform team'};
+ assert.deepEqual(verify({contentSource:native}).contentSource,native);
+ const github={kind:'github',originalDescription:'Find module boundaries.'};
+ assert.deepEqual(verify({contentSource:github,repository:{url:'https://github.com/example/tools'}}).contentSource,github);
+ assert.throws(()=>verify({contentSource:github}),/STORE_INVALID_CATALOG/);
+ assert.throws(()=>verify({contentSource:{...native,developer:' '}}),/STORE_INVALID_CATALOG/);
+});

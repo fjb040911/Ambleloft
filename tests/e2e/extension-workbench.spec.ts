@@ -26,11 +26,11 @@ async function settings(page:Page){await page.getByRole('button',{name:'设置�
 
 test('rail changes sidebar; direct pages, repeated clicks and manager return preserve location',async({page})=>{
  await setup(page);await rail(page).click();await expect(entries(page).locator('.extension-nav-row')).toHaveCount(2);await expect(page.getByRole('region',{name:'我的项目'})).toBeHidden();
- await expect(page.locator('.extension-workbench h1')).toHaveText('售后服务');await expect.poll(async()=>(await opens(page)).length).toBe(1);
+ await expect(entries(page).locator('.extension-nav-row svg')).toHaveCount(0);await expect(page.locator('.toolbar .toolbar-title')).toHaveText('售后服务');await expect.poll(async()=>(await opens(page)).length).toBe(1);
  await rail(page).click();await rail(page).click();expect((await opens(page)).length).toBe(1);
  await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('tab',{name:'发现',exact:true}).click();await expect(page.locator('.store-feature')).toBeVisible();
  await page.locator('.activity-rail').getByRole('button',{name:'任务',exact:true}).click();await rail(page).click();await expect(page.getByRole('tab',{name:'发现',exact:true})).toHaveAttribute('aria-selected','true');
- await entries(page).getByRole('button',{name:'售后服务',exact:true}).click();await expect(page.locator('.extension-workbench h1')).toHaveText('售后服务');
+ await entries(page).getByRole('button',{name:'售后服务',exact:true}).click();await expect(page.locator('.toolbar .toolbar-title')).toHaveText('售后服务');
  await entries(page).getByRole('searchbox').fill('设备');await expect(entries(page).locator('.extension-nav-row')).toHaveCount(1);await entries(page).getByRole('searchbox').fill('');
  expect(await entries(page).getByRole('searchbox').evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBeGreaterThanOrEqual(32);
  await page.screenshot({path:'test-results/extension-workbench.png'});
@@ -42,7 +42,7 @@ test('business settings retain native slot; every close path guards dirty config
  await expect(dialog.getByRole('button',{name:'返回业务页面'})).toHaveCount(0);await page.screenshot({path:'test-results/extension-settings-dialog.png',animations:'disabled'});
  await dialog.getByLabel('endpoint').fill('https://changed.test');await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(page.getByRole('alertdialog')).toBeVisible();await page.getByRole('alertdialog').getByRole('button',{name:'取消',exact:true}).click();await expect(dialog.getByLabel('endpoint')).toHaveValue('https://changed.test');
  await page.keyboard.press('Escape');await page.getByRole('alertdialog').getByRole('button',{name:'放弃修改',exact:true}).click();await expect(dialog).toBeHidden();expect((await opens(page)).length).toBe(1);expect(await page.evaluate(()=>(window as any).__fixture.calls.filter((c:any)=>c.type==='close').length)).toBe(closes);
- const reopened=await settings(page);await reopened.getByLabel('endpoint').fill('https://saved.test');await reopened.getByRole('button',{name:'保存配置',exact:true}).click();await expect(reopened.getByText('已保存',{exact:true})).toBeVisible();await expect(reopened.getByRole('button',{name:'返回业务页面'})).toHaveCount(0);await reopened.getByRole('button',{name:'关闭',exact:true}).click();await expect(reopened).toBeHidden();expect((await opens(page)).length).toBe(1);
+ const reopened=await settings(page);await reopened.getByLabel('endpoint').fill('https://saved.test');await reopened.getByRole('button',{name:'保存配置',exact:true}).click();await expect(reopened.getByText('已保存',{exact:true})).toBeVisible();await expect(reopened.getByRole('button',{name:'返回业务页面'})).toHaveCount(0);await reopened.getByRole('button',{name:'关闭',exact:true}).click();await expect(reopened).toBeHidden();await expect.poll(async()=>(await opens(page)).map(call=>call.extensionId)).toEqual(['service','service']);
 });
 
 test('conditions use host context; disable, remove and update never open another business',async({page})=>{
@@ -63,13 +63,14 @@ test('English empty workspace and keyboard navigation remain clear at narrow wid
 });
 
 test('global search opens a business page directly',async({page})=>{
- await setup(page);await page.getByRole('button',{name:'搜索工作台',exact:true}).click();await page.getByRole('tab',{name:'扩展',exact:true}).click();await page.getByRole('combobox').fill('服务台');await page.getByRole('option').filter({hasText:'服务台扩展'}).click();await expect(page.locator('.extension-workbench h1')).toHaveText('售后服务');await expect(entries(page)).toBeVisible();await expect.poll(async()=>(await opens(page)).length).toBe(1);
+ await setup(page);await page.getByRole('button',{name:'搜索工作台',exact:true}).click();await page.getByRole('tab',{name:'扩展',exact:true}).click();await page.getByRole('combobox').fill('服务台');await page.getByRole('option').filter({hasText:'服务台扩展'}).click();await expect(page.locator('.toolbar .toolbar-title')).toHaveText('售后服务');await expect(entries(page)).toBeVisible();await expect.poll(async()=>(await opens(page)).length).toBe(1);
 });
 
-test('info opens settings directly and closes without reopening the business page',async({page})=>{
+test('sliders open settings directly and viewing settings preserves the business page',async({page})=>{
  await setup(page);await rail(page).click();await expect.poll(async()=>(await opens(page)).length).toBe(1);
- const trigger=page.getByRole('button',{name:'设置与权限',exact:true});
- await expect(trigger.locator('svg.lucide-info')).toBeVisible();await trigger.focus();await page.keyboard.press('Enter');
+ await expect(page.locator('.extension-workbench header')).toHaveCount(0);
+ const trigger=page.locator('.toolbar').getByRole('button',{name:'设置与权限',exact:true});
+ await expect(trigger.locator('svg.lucide-sliders-horizontal')).toBeVisible();await trigger.focus();await page.keyboard.press('Enter');
  const dialog=page.getByRole('dialog',{name:'服务台扩展 · 设置与权限',exact:true});await expect(dialog).toBeVisible();
  await expect(page.getByRole('menu')).toHaveCount(0);await expect(dialog.getByRole('tab',{name:'设置',exact:true})).toHaveAttribute('aria-selected','true');
  const form=dialog.locator('.extension-config-form');

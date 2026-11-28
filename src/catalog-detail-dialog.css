@@ -10,3 +10,10 @@
 .wf-role-definition dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8;color:var(--secondary)}
 .wf-role-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .wf-dialog [data-slot=dialog-footer],.wf-dialog [data-slot=alert]{border-color:var(--border)}
+
+.content-origin{display:grid;justify-items:start;gap:6px;min-width:0;overflow-wrap:anywhere}
+.content-origin-links{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+.content-origin a{display:inline-flex;align-items:center;gap:5px;max-width:100%;color:var(--text);text-decoration:underline;text-underline-offset:3px}
+.content-origin p{margin:0;max-width:68ch;color:var(--secondary)}
+.content-origin small{color:var(--secondary)}
+.store-release-details[open]>summary{margin-bottom:12px}

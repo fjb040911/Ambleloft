@@ -10,7 +10,7 @@ function createMessageHandlers(db,messages,actions,transaction=fn=>fn()){
  const profile=()=>{const row=db.prepare("SELECT data FROM settings WHERE key='extensions.profile'").get();if(!row)throw failure('HOST_UNAVAILABLE','HOST_UNAVAILABLE: Profile');return JSON.parse(row.data);};
  const scope=source=>({profileId:profile(),source,accountScope:'local'});
  const sourceKey=id=>'extension:'+id;
- const sources=()=>{const setting=JSON.parse(db.prepare("SELECT data FROM settings WHERE key='workspace'").get()?.data||'{}');const locale=setting.language&&setting.language!=='system'?setting.language:systemLocale;const result=new Map([['host',{id:'host',name:'AmbleLoft',installed:true}]]);for(const r of db.prepare('SELECT id,data FROM extension_installations').all()){const i=JSON.parse(r.data);result.set(sourceKey(i.id),{id:sourceKey(i.id),name:require('./localization.cjs').localized(i,i.manifest?.displayName||i.manifest?.name,locale)||i.id,installed:true,enabled:i.enabled});}for(const r of db.prepare('SELECT DISTINCT scope FROM notification_records').all()){const [p,s,a]=JSON.parse(r.scope);if(p===profile()&&a==='local'&&!result.has(s))result.set(s,{id:s,name:s,installed:false,enabled:false});}return [...result.values()].map(s=>({...s,preferences:messages.getPreferences(scope(s.id))}));};
+ const sources=()=>{const setting=JSON.parse(db.prepare("SELECT data FROM settings WHERE key='workspace'").get()?.data||'{}');const locale=setting.language&&setting.language!=='system'?setting.language:systemLocale;const result=new Map([['host',{id:'host',name:'AmbleLoft',installed:true}]]);result.set('host-store-updates',{id:'host-store-updates',name:locale.startsWith('zh')?'扩展更新':'Extension updates',installed:true});for(const r of db.prepare('SELECT id,data FROM extension_installations').all()){const i=JSON.parse(r.data);result.set(sourceKey(i.id),{id:sourceKey(i.id),name:require('./localization.cjs').localized(i,i.manifest?.displayName||i.manifest?.name,locale)||i.id,installed:true,enabled:i.enabled});}for(const r of db.prepare('SELECT DISTINCT scope FROM notification_records').all()){const [p,s,a]=JSON.parse(r.scope);if(p===profile()&&a==='local'&&!result.has(s))result.set(s,{id:s,name:s,installed:false,enabled:false});}return [...result.values()].map(s=>({...s,preferences:messages.getPreferences(scope(s.id))}));};
  const requireSource=id=>{if(typeof id!=='string'||!sources().some(s=>s.id===id))throw failure('NOT_FOUND','NOT_FOUND: Source');return scope(id);};
  const filter=input=>{const value=input.filter??'all';if(!['all','unread','pending'].includes(value))throw failure('INVALID_ARGUMENT','INVALID_ARGUMENT');return value;};
  const find=id=>{if(typeof id!=='string')throw failure('INVALID_ARGUMENT','INVALID_ARGUMENT');for(const s of sources()){const c=scope(s.id);const m=messages.list(c).find(m=>m.id===id);if(m)return {c,m};}throw failure('NOT_FOUND','NOT_FOUND');};
@@ -24,7 +24,7 @@ function createMessageHandlers(db,messages,actions,transaction=fn=>fn()){
  return {
   messageHost({method,input={},locale}){if(typeof locale==='string')systemLocale=locale;if(!input||typeof input!=='object'||Array.isArray(input))throw failure('INVALID_ARGUMENT','INVALID_ARGUMENT');
    if(method==='sources')return sources();
-   if(method==='list'){const f=filter(input),selected=input.source?[{id:requireSource(input.source).source}]:sources();let unread=0;const items=[];for(const s of selected){const c=scope(s.id),all=messages.list(c);unread+=all.filter(m=>m.readAt==null).length;for(const m of messages.list(c,{filter:f}))items.push({...localization.render(m),source:s.id,actions:localization.render(m).actions.map(a=>{const row=db.prepare('SELECT data FROM extension_installations WHERE id=?').get(s.id.slice(10)),item=row&&JSON.parse(row.data);return {...a,effect:item?.manifest?.operations?.find(op=>op.id===a.commandId)?.effect||'write'};}),executions:actionState(c,m)});}items.sort((a,b)=>b.receivedAt-a.receivedAt||a.id.localeCompare(b.id));return {items,unread};}
+   if(method==='list'){const f=filter(input),selected=input.source?[{id:requireSource(input.source).source}]:sources();let unread=0;const items=[];for(const s of selected){const c=scope(s.id),all=messages.list(c);unread+=all.filter(m=>m.readAt==null).length;for(const m of messages.list(c,{filter:f}))items.push({...localization.render(m),source:s.id,actions:localization.render(m).actions.map(a=>{const row=db.prepare('SELECT data FROM extension_installations WHERE id=?').get(s.id.slice(10)),item=row&&JSON.parse(row.data);return {...a,effect:s.id==='host-store-updates'?'read':item?.manifest?.operations?.find(op=>op.id===a.commandId)?.effect||'write'};}),executions:actionState(c,m)});}items.sort((a,b)=>b.receivedAt-a.receivedAt||a.id.localeCompare(b.id));return {items,unread};}
    if(method==='setPreferences')return messages.setPreferences(requireSource(input.source),input.preferences);
    if(method==='markRead'||method==='dismiss'){const {c}=find(input.id);return messages[method](c,input.id);}
    if(method==='bulk'){const f=filter(input);if(!['read','clearRead'].includes(input.action))throw failure('INVALID_ARGUMENT','INVALID_ARGUMENT');const selected=input.source?[{id:requireSource(input.source).source}]:sources();let count=0;for(const s of selected)count+=messages.bulk(scope(s.id),{filter:f,action:input.action}).count;return {count};}
@@ -50,6 +50,34 @@ function createMessageHandlers(db,messages,actions,transaction=fn=>fn()){
    if(method==='unknown')return actions.unknown(record.id,input.expectedRevision);
    if(method==='report')return report(c,input.report);
    throw failure('UNSUPPORTED','UNSUPPORTED');
+  },
+  storeUpdateNotification({sourceId,entityId,target,locale}) {
+   if(locale)systemLocale=locale;
+   const c=scope('host-store-updates');
+   return transaction(()=>{
+    const r=target?.record;
+    const eventKey=r?JSON.stringify([sourceId,entityId,r.release.version,r.release.artifactSha256]):null;
+    let settled=false;
+    for(const prior of messages.list(c)){
+     const args=prior.actions[0]?.arguments;
+     if(args?.sourceId===sourceId && args.updateEntityId===entityId && prior.eventKey!==eventKey){messages.dismiss(c,prior.id);settled=true;}
+    }
+    if(!r)return {settled};
+    const zh=effectiveLocale().startsWith('zh'),lang=zh?'zh':'en';
+    const result=messages.publish(c,{eventKey,category:'notice',title:zh?r.title.zh+'有更新':'Update available for '+r.title.en,
+     body:target.version+' → '+r.release.version+'\n'+r.release.changelog[lang],
+     actions:[{id:'view-extension-update',commandId:'host.store.viewUpdate',label:zh?'查看更新':'View update',
+       arguments:{sourceId,listingId:r.id,updateEntityId:entityId}}]});
+    return {...result,settled};
+   });
+  },
+  storeUpdateOpen({messageId,actionId}){
+   const {c,m}=find(messageId);
+   if(c.source!=='host-store-updates')return null;
+   const action=m.actions.find(a=>a.id===actionId && a.commandId==='host.store.viewUpdate');
+   if(!action || m.validity!=='active')throw failure('NOT_FOUND','NOT_FOUND');
+   messages.markRead(c,messageId);
+   return action.arguments;
   },
   messageSystem({input}){validateActions(input);return messages.publish(scope('host'),input);},
   messageExpiry(){let count=0;for(const row of db.prepare('SELECT scope,id,data FROM notification_records').all()){const m=JSON.parse(row.data);if(m.validity==='active'&&m.expiresAt!=null&&m.expiresAt<=Date.now()){const [profileId,source,accountScope]=JSON.parse(row.scope);messages.get({profileId,source,accountScope},row.id);count++;}}return count;},

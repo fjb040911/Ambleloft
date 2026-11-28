@@ -14,6 +14,7 @@ export default function ExtensionPermissionsDialog({item,projects,projectId,setP
  const projectControl=useId();
  const permissions=item.permissions||[],grants=item.grants||[];
  const needsProject=permissions.some(permission=>permission.scope==='project');
+ const canGrant=permissions.some(p=>(p.scope==='self'||projectId) && !grants.some(g=>g.capability===p.capability && g.resource===(p.scope==='self'?'self':'project:'+projectId)));
  const hasSelf=permissions.some(permission=>permission.scope==='self');
  return <ManagementDialog title={t('管理权限')} busy={busy} close={close}>
   <DialogDescription>{item.manifest.name} · {t('查看扩展需要的权限，并管理授权范围。')}</DialogDescription>
@@ -29,6 +30,6 @@ export default function ExtensionPermissionsDialog({item,projects,projectId,setP
    <FieldGroup>{needsProject?<Field data-disabled={busy}><FieldLabel htmlFor={projectControl}>{t('选择授权项目')}</FieldLabel><NativeSelect id={projectControl} className="w-full" disabled={busy||!projects.length} value={projectId} onChange={event=>setProjectId(event.target.value)} aria-describedby={projectControl+'-description'}><NativeSelectOption value="">{t(hasSelf?'仅扩展私有权限（暂不授权项目）':'请选择项目')}</NativeSelectOption>{projects.map(project=><NativeSelectOption key={project.id} value={project.id}>{project.name}</NativeSelectOption>)}</NativeSelect><FieldDescription id={projectControl+'-description'}>{t(hasSelf&&!projectId?'只允许保存此扩展自己的设置、数据与凭据，不读取任何项目。':projects.length?'仅授权所选项目；不会授予其他项目的访问权限。':'暂无可授权项目，请先创建项目。')}</FieldDescription></Field>:<FieldDescription>{t('此扩展无需选择项目，仅授权其声明的扩展私有权限。')}</FieldDescription>}</FieldGroup>
    {error&&<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
   </div>
-  <DialogFooter className="mt-1 flex-wrap"><Button variant="destructive" className="sm:mr-auto" disabled={busy||!grants.length} onClick={revoke}>{t('撤销全部授权')}</Button><Button variant="outline" disabled={busy} onClick={close}>{t('取消')}</Button><Button disabled={busy||!permissions.length||(needsProject&&!hasSelf&&!projectId)} onClick={grant}>{t('确认授权')}</Button></DialogFooter>
+  <DialogFooter className="mt-1 flex-wrap"><Button variant="destructive" className="sm:mr-auto" disabled={busy||!grants.length} onClick={revoke}>{t('撤销全部授权')}</Button><Button variant="outline" disabled={busy} onClick={close}>{t('取消')}</Button><Button disabled={busy||!canGrant} onClick={grant}>{t('确认授权')}</Button></DialogFooter>
  </ManagementDialog>;
 }

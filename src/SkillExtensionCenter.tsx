@@ -1,14 +1,15 @@
 import runtimeTranslations from '../core/catalog-store/curated-runtime.zh-CN.json';
 import {storeTrialPrompt} from './store-trial-prompt';
+import ContentSourceInfo from './ContentSourceInfo';
 import CatalogDetailsButton from './CatalogDetailsButton';
 import CatalogTagFilters from './CatalogTagFilters';
-import InstalledToolCard from './InstalledToolCard';
+import InstalledToolCard,{ToolCardHeader} from './InstalledToolCard';
 import {Collapsible,CollapsibleTrigger,CollapsibleContent} from './components/ui/collapsible';
 import {useEffect,useMemo,useRef,useState} from 'react';
-import {ArrowLeft,ArrowRight,ChevronDown,BookOpen,Check,FolderOpen,Package,RefreshCw,Search,Settings2,Sparkles,WandSparkles} from 'lucide-react';
+import {ArrowLeft,ArrowRight,ChevronDown,BookOpen,Info,Check,FolderOpen,Package,RefreshCw,Search,Settings2,Sparkles,WandSparkles} from 'lucide-react';
 import {Button} from './components/ui/button';
 import {Badge} from './components/ui/badge';
-import {Card,CardHeader,CardTitle,CardDescription,CardContent,CardFooter} from './components/ui/card';
+import {Card,CardFooter} from './components/ui/card';
 import {Tabs,TabsList,TabsTrigger,TabsContent} from './components/ui/tabs';
 import CatalogDetailDialog from './CatalogDetailDialog';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from './components/ui/dialog';
@@ -41,11 +42,11 @@ function runtimeDescription(item:StoreListing,language:string){
  return zh===en ? runtimeChinese.get(en)??zh : zh;
 }
 
-export type CenterRequest={serial:number;tab?:'discover'|'installed'|'creations';kind?:'skill'|'extension';entityId?:string;listingId?:string;sourceId?:string;manage?:boolean;openError?:'STORE_UNTRUSTED_SOURCE'};
+export type CenterRequest={serial:number;updateEntityId?:string;tab?:'discover'|'installed'|'creations';kind?:'skill'|'extension';entityId?:string;listingId?:string;sourceId?:string;manage?:boolean;openError?:'STORE_UNTRUSTED_SOURCE'};
 type UseRequest={title:string;prompt:string;skillId?:string;localOnly?:boolean};
 const errorText=(error:unknown)=>{
  const message=error instanceof Error?error.message:String(error);const code=message.match(/STORE_[A-Z_]+/)?.[0];
- const labels:Record<string,string>={STORE_NOT_CONFIGURED:'尚未连接精选目录。已安装内容仍可管理和使用。',STORE_UNTRUSTED_SOURCE:'此链接来自尚未信任的目录，无法打开或安装。请向团队确认来源，并按测试文档配置可信目录。',STORE_DOWNLOAD_FAILED:'下载失败，请检查网络后重试。',STORE_CATALOG_EXPIRED:'目录已过期，请刷新后重试。',STORE_IDENTITY_CONFLICT:'已有同名内容。请先管理本机安装，避免覆盖已有工作。',STORE_INSTALL_BUSY:'此内容正在安装，请等待完成。',STORE_INSTALL_CANCELLED:'安装已取消，原有内容未改变。',STORE_DOWNLOAD_CANCELLED:'安装已取消，原有内容未改变。',STORE_RELEASE_UNAVAILABLE:'此发行版本已停止提供，请刷新目录。',STORE_HOST_VERSION_UNSUPPORTED:'当前应用版本不满足此内容的要求，请先更新应用。',STORE_PLATFORM_UNSUPPORTED:'此内容暂不支持当前系统或处理器。'};
+ const labels:Record<string,string>={STORE_EXTENSION_NOT_INSTALLED:'此扩展已卸载。',STORE_CHECK_UPDATE_FIRST:'本地版本已变化，请重新检查扩展更新。',STORE_INVALID_UPDATE_RECORD:'更新信息校验失败，请重新检查扩展更新。',STORE_UPDATE_CHANGED:'可用版本已变化，请重新检查扩展更新。',STORE_NOT_CONFIGURED:'尚未连接精选目录。已安装内容仍可管理和使用。',STORE_UNTRUSTED_SOURCE:'此链接来自尚未信任的目录，无法打开或安装。请向团队确认来源，并按测试文档配置可信目录。',STORE_DOWNLOAD_FAILED:'下载失败，请检查网络后重试。',STORE_CATALOG_EXPIRED:'目录已过期，请刷新后重试。',STORE_IDENTITY_CONFLICT:'已有同名内容。请先管理本机安装，避免覆盖已有工作。',STORE_INSTALL_BUSY:'此内容正在安装，请等待完成。',STORE_INSTALL_CANCELLED:'安装已取消，原有内容未改变。',STORE_DOWNLOAD_CANCELLED:'安装已取消，原有内容未改变。',STORE_RELEASE_UNAVAILABLE:'此发行版本已停止提供，请刷新目录。',STORE_HOST_VERSION_UNSUPPORTED:'当前应用版本不满足此内容的要求，请先更新应用。',STORE_PLATFORM_UNSUPPORTED:'此内容暂不支持当前系统或处理器。'};
  if(code)return t(labels[code]||'目录或安装包校验未通过，请刷新后重试。');
  if(/fetch failed|failed to fetch|networkerror|network request failed|ECONN|ENOTFOUND|ETIMEDOUT|ERR_CONNECTION|Download failed/i.test(message))return t('连接失败，请检查网络或测试服务连接后重试。');
  return message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/,'');
@@ -64,7 +65,7 @@ function StoreProcessPreview({steps}:{steps:NonNullable<StoreListing['previewSte
  </section>;
 }
 
-export default function SkillExtensionCenter({projects,runs,request,onUse,onOpenTask,onAddProject,draftContext}:{draftContext?:{projectId:string;prompt:string};projects:Project[];runs:AgentRun[];request?:CenterRequest;onUse(projectId:string,prompt:string,skillId?:string):void;onOpenTask(id:string):void;onAddProject():void}){
+export default function SkillExtensionCenter({projects,runs,request,onUse,onOpenTask,onAddProject,draftContext,onReturnToMessages}:{draftContext?:{projectId:string;prompt:string};projects:Project[];runs:AgentRun[];request?:CenterRequest;onUse(projectId:string,prompt:string,skillId?:string):void;onOpenTask(id:string):void;onAddProject():void;onReturnToMessages?():void}){
  const lang=useLanguage();const local=(value:{zh:string;en:string}|undefined)=>value?(lang==='en'?value.en:value.zh):'';
  const {skills,systemSkills,error:skillError}=useSkills();const {snapshot:extensions,error:extensionError}=useExtensions();
  const api=window.desktop?.store;
@@ -83,16 +84,35 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
  useEffect(()=>{if(receivedCategories && !loading)setLastCategories({kind,items:receivedCategories});},[receivedCategories,loading,kind]);
  const categories=receivedCategories ?? (loading && lastCategories.kind===kind ? lastCategories.items : []);
  const chooseCategory=(id:string)=>{setCategory(id);setTag('');};
+ const managementGuard=useRef<(()=>void)|null>(null);
  const managementTrigger=useRef<string|null>(null);
  const closeManagement=()=>{setManagement(null);void reload();requestAnimationFrame(()=>{const row=Array.from(document.querySelectorAll<HTMLElement>('.store-installed-row')).find(row=>row.dataset.toolId===managementTrigger.current);(row?.querySelector<HTMLButtonElement>('button:not(:disabled)')||document.querySelector<HTMLInputElement>('.store-search input'))?.focus();});};
  const detailTrigger=useRef<HTMLElement|null>(null);
+ const [updateId,setUpdateId]=useState<string>(),[updateInfo,setUpdateInfo]=useState<{outcome:string;currentVersion:string}|null>(null);
+ const fromMessage=useRef(false);
+ const [checking,setChecking]=useState(false),[checkNote,setCheckNote]=useState(''),[auto,setAuto]=useState(true);
+ const [available,setAvailable]=useState<Record<string,string>>({});
+ useEffect(()=>{void api?.updateStatus?.().then(state=>setAuto(state.auto)).catch(()=>{});},[api]);
+ async function checkInstalled(entityId?:string){
+  if(!api||checking)return;
+  setChecking(true);
+  try{
+   const result=await api.checkUpdates(entityId?{entityId}:undefined);
+   setAvailable(old=>{const next={...old};for(const id of Object.keys(result.outcomes))delete next[id];for(const row of result.updates)next[row.entityId]=row.listingId;return next;});
+   const outcome=entityId&&result.outcomes[entityId];
+   const complete=result.checked===0?t('没有可检查的扩展'):result.updates.length?t('可更新 {count} 项').replace('{count}',String(result.updates.length)):
+    Object.values(result.outcomes).every(s=>s==='current'||s==='not-newer')?t('已是最新'):t('没有符合升级条件的版本');
+   setCheckNote(result.failed?t('部分扩展未能检查')+' · '+(result.lastSuccess?new Date(result.lastSuccess).toLocaleString():t('尚未完成检查')):outcome==='unknown'?t('精选目录未收录此扩展'):complete);
+   if(entityId&&result.updates.length){fromMessage.current=false;setUpdateId(entityId);setSelectedSource(catalog.source?.id);setSelected(result.updates[0].listingId);}
+  }catch{setCheckNote(t('暂时无法检查扩展更新'));}finally{setChecking(false);}
+ }
  const [selectedSource,setSelectedSource]=useState<string|undefined>();
  const [selected,setSelected]=useState<string|null>(null),[management,setManagement]=useState<{kind:'skill'|'extension';id?:string}|null>(null);
  const [useRequest,setUseRequest]=useState<UseRequest|null>(null),[projectId,setProjectId]=useState(''),[draft,setDraft]=useState('');
  const [creations,setCreations]=useState<CreationState[]>([]),[creationError,setCreationError]=useState(''),[creationLoading,setCreationLoading]=useState(false);
  const mounted=useRef(true),installing=useRef(false);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
- useEffect(()=>{if(!request)return;detailTrigger.current=null;setNoticeError(request.openError||'');setTab(request.tab||(request.listingId||request.openError?'discover':'installed'));setManagement(request.manage&&request.kind&&request.entityId?{kind:request.kind,id:request.entityId}:null);setQuery('');setCategory('');setTag('');setKind(request.kind||'all');setSelectedSource(request.sourceId);setSelected(request.listingId||null);},[request?.serial]);
+ useEffect(()=>{if(!request)return;detailTrigger.current=null;setNoticeError(request.openError||'');setUpdateId(request.updateEntityId);fromMessage.current=!!request.updateEntityId;setTab(request.tab||(request.listingId||request.openError?'discover':'installed'));managementTrigger.current=request.manage?request.kind+':'+request.entityId:null;setManagement(request.manage&&request.kind&&request.entityId?{kind:request.kind,id:request.entityId}:null);setQuery('');setCategory('');setTag('');setKind(request.manage?'all':request.kind||'all');setSelectedSource(request.sourceId);setSelected(request.listingId||null);},[request?.serial]);
  const runIds=useMemo(()=>runs.filter(run=>!run.archivedAt).map(run=>run.id),[runs.map(run=>run.id+':'+Boolean(run.archivedAt)).join('|')]);
  useEffect(()=>{
   if(tab!=='creations'||!window.desktop?.creation)return;const creation=window.desktop.creation;let live=true,serial=0;
@@ -111,7 +131,7 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
  };
  const install=async(item:StoreListing)=>{
   if(!api||!catalog.source||installing.current)return;installing.current=true;setBusy(item.id);setError('');
-  try{const result=await api.install({listingId:item.id,sourceId:catalog.source.id,upgradeFromDigest:upgradeDigest(item)});if(result.cancelled)return;skillsChanged();extensionsChanged();await reload();if(mounted.current){setSelected(null);setTab('installed');if(result.kind==='extension')setManagement({kind:'extension',id:result.entityId});}}
+  try{const result=await api.install({listingId:item.id,sourceId:catalog.source.id,upgradeFromDigest:upgradeDigest(item),...(updateId?{updateEntityId:updateId,targetDigest:item.release.artifactSha256}:{})});if(result.cancelled)return;skillsChanged();extensionsChanged();await reload();if(mounted.current){clear();setAvailable(old=>{const next={...old};delete next[result.entityId];return next;});setCheckNote('');setSelected(null);setUpdateId(undefined);setTab('installed');if(result.kind==='extension')setManagement({kind:'extension',id:result.entityId});}}
   catch(e){if(mounted.current)setError(e instanceof Error?e.message:String(e));}finally{installing.current=false;if(mounted.current)setBusy(null);}
  };
  const cancel=async(id:string)=>{try{await api?.cancel({listingId:id});}catch(e){setError(e instanceof Error?e.message:String(e));}};
@@ -119,12 +139,30 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
  const matches=(name:string,description:string,type:string)=>(kind==='all'||kind===type)&&(!terms||(name+' '+description).toLocaleLowerCase().includes(terms));
  const visible=catalog.items;
  const filtered=!!(terms||kind!=='all'||category||tag),clear=()=>{setQuery('');setKind('all');setCategory('');setTag('');};
- const visibleSkills=skills.filter(skill=>!skill.builtIn&&matches(skill.displayName||skill.name,skill.displayDescription||skill.description,'skill'));
+ const installedSkills=skills.filter(skill=>!skill.builtIn);
+ const visibleSkills=installedSkills.filter(skill=>matches(skill.displayName||skill.name,skill.displayDescription||skill.description,'skill'));
  const visibleBuiltins=[...skills.filter(skill=>skill.builtIn),...systemSkills].filter(skill=>matches(skill.displayName||skill.name,skill.displayDescription||skill.description,'skill'));
  const visibleExtensions=extensions.installed.filter(item=>matches(item.manifest.name,item.manifest.description||'','extension'));
+ const matchedInstalledCount=visibleSkills.length+visibleExtensions.length;
+ const installedTabCount=tab==='installed'?matchedInstalledCount:installedSkills.length+extensions.installed.length;
  const [fetchedDetail,setFetchedDetail]=useState<StoreListing|null>(null),[detailLoading,setDetailLoading]=useState(false),[detailError,setDetailError]=useState(''),[detailRetry,setDetailRetry]=useState(0);
- useEffect(()=>{setFetchedDetail(null);setDetailError('');if(!selected||!api)return;let live=true;setDetailLoading(true);void api.catalog({detailId:selected}).then(result=>{if(live)setFetchedDetail(result.source?.id===selectedSource||!selectedSource?result.items.find(item=>item.id===selected)||null:null);}).catch(e=>{if(live)setDetailError(errorText(e));}).finally(()=>{if(live)setDetailLoading(false);});return()=>{live=false;};},[api,selected,selectedSource,detailRetry]);
- const detail=(fetchedDetail?.id===selected?fetchedDetail:null)||catalog.items.find(item=>item.id===selected&&(!selectedSource||selectedSource===catalog.source?.id));
+ useEffect(()=>{
+  setFetchedDetail(null);setUpdateInfo(null);setDetailError('');
+  if(!selected||!api)return;
+  let live=true;setDetailLoading(true);
+  const load=async()=>{
+   if(updateId){
+    const result=await api.updateDetail({entityId:updateId});
+    if(live && result.item.id===selected){setFetchedDetail(result.item);setUpdateInfo(result);}
+   }else{
+    const result=await api.catalog({detailId:selected});
+    if(live)setFetchedDetail(result.source?.id===selectedSource||!selectedSource?result.items.find(item=>item.id===selected)||null:null);
+   }
+  };
+  void load().catch(e=>{if(live)setDetailError(errorText(e));}).finally(()=>{if(live)setDetailLoading(false);});
+  return()=>{live=false;};
+ },[api,selected,selectedSource,detailRetry,updateId]);
+ const detail=(fetchedDetail?.id===selected?fetchedDetail:null)||(!updateId?catalog.items.find(item=>item.id===selected&&(!selectedSource||selectedSource===catalog.source?.id)):null);
  const detailInstalled=detail&&installed(detail);
  const detailUsable=detailInstalled&&(detailInstalled.kind==='skill'?skills.some(skill=>skill.id===detailInstalled.entityId&&skill.enabled):extensions.installed.some(item=>item.manifest.id===detailInstalled.entityId&&item.enabled&&item.trusted!==false));
  const promptFor=(kind:'skill'|'extension',id:string,name:string,listing?:StoreListing,sourceId?:string)=>{
@@ -143,22 +181,49 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
  const sourceError=catalog.error?errorText(catalog.error):'';
  const empty=(title:string,description?:string)=><WorkforceDirectoryEmpty Icon={Package} title={title} description={description}/>;
  const statusFor=(item:typeof extensions.installed[number])=>!item.enabled?'已停用':!item.trusted&&item.kind==='package'?'待信任':item.diagnostic||item.runtime?.state==='failed'?'运行异常':'已启用';
- const inspect=(item:StoreListing,trigger:HTMLElement)=>{detailTrigger.current=trigger;setError('');setNoticeError('');setSelectedSource(catalog.source?.id);setSelected(item.id);};
+ const inspect=(item:StoreListing,trigger:HTMLElement)=>{detailTrigger.current=trigger;setUpdateId(undefined);setError('');setNoticeError('');setSelectedSource(catalog.source?.id);setSelected(item.id);};
  const isInstalling=(item:StoreListing)=>busy===item.id||catalog.busy.includes(item.id);
  const addButton=(item:StoreListing,compact=false)=>{
   const added=!!installed(item),upgradable=!!upgradeDigest(item),working=isInstalling(item);
   const label=working?t('添加中'):upgradable?(lang==='en'?'Update':'更新'):added?t('已安装'):t('添加');
-  return <Button size={compact?'sm':'default'} className={compact?'rounded-full min-h-9':undefined}
-    disabled={(added&&!upgradable)||working||!api||!catalog.source||catalog.stale||!!busy||item.release.status!=='published'}
+  return <Button variant={compact?'outline':'default'} size={compact?'sm':'default'} className={compact?'min-h-9':undefined}
+    disabled={(added&&!upgradable)||working||!api||!catalog.source||(updateId?updateInfo?.outcome!=='update':catalog.stale)||!!busy||item.release.status!=='published'}
     aria-label={label+(lang==='en'?': ':'：')+local(item.title)} onClick={()=>void install(item)}>
     {working&&<Spinner data-icon="inline-start"/>}{label}{!compact&&!working&&<ArrowRight data-icon="inline-end"/>}
   </Button>;
  };
- const listCard=(item:StoreListing)=><Card key={item.id} className="store-card"><div className="store-card-banner" data-tone={item.kind==='skill'?'lilac':'mint'}>{item.kind==='skill'?<BookOpen aria-hidden="true"/>:<Package aria-hidden="true"/>}<CardTitle><button type="button" onClick={event=>inspect(item,event.currentTarget)}>{local(item.title)}</button></CardTitle><Badge variant="outline">{t(item.kind==='skill'?'技能':'扩展')}</Badge></div><CardHeader><CardDescription>{local(item.summary)}</CardDescription></CardHeader><CardContent><div className="store-card-tags" aria-label={t('分类与标签')}>{item.categories?.map(entry=><Button key={entry.id} variant="secondary" size="sm" aria-pressed={category===entry.id} onClick={()=>chooseCategory(category===entry.id?'':entry.id)}>{local(entry.title)}</Button>)}{!item.categories?.length && item.tags.slice(0,3).map(label=><Button variant="outline" size="sm" aria-pressed={tag===label} key={label} onClick={()=>setTag(tag===label?'':label)}>{label}</Button>)}</div><p className="store-publisher">{item.publisher} · {item.release.version}</p></CardContent><CardFooter><span className="store-state">{installed(item)?t('已安装'):item.release.status==='published'?t('精选目录'):t(item.release.status==='yanked'?'已停止分发':'风险公告')}</span><div className="ml-auto flex flex-wrap items-center gap-2"><CatalogDetailsButton title={local(item.title)} onClick={event=>inspect(item,event.currentTarget)}/>{addButton(item,true)}</div></CardFooter></Card>;
- return <section className="skill-extension-center" aria-label={t('技能与扩展')}>
-  <header className="store-heading"><div><h1>{t('技能与扩展')}</h1><p>{t('管理已安装的工具，发现新能力，或创建自己的工具。')}</p></div>{!management&&<div className="store-heading-actions"><LocalInstallMenu onError={setNoticeError}/>{!(tab==='discover'&&!filtered)&&<Button disabled={!window.desktop?.creation||!creator} onClick={create}><WandSparkles data-icon="inline-start"/>{t('创建技能 / 扩展')}</Button>}</div>}</header>
-  {management?.kind==='extension'&&management.id?<ExtensionsPage key={management.id} initialId={management.id} mode="detail" onClose={closeManagement}/>:<Tabs value={tab} onValueChange={value=>{setTab(String(value) as typeof tab);setQuery('');setKind('all');setCategory('');setTag('');}} className="gap-6">
-   <TabsList variant="line" aria-label={t('技能与扩展')}><TabsTrigger className="transition-none after:transition-none" value="installed">{t('已安装')} <span>{skills.length+systemSkills.length+extensions.installed.length}</span></TabsTrigger><TabsTrigger className="transition-none after:transition-none" value="discover">{t('发现')}</TabsTrigger><TabsTrigger className="transition-none after:transition-none" value="creations">{t('我的创作')}</TabsTrigger></TabsList>
+ const listCard=(item:StoreListing)=>{
+  const status=item.release.status==='revoked'?'风险公告':item.release.status==='yanked'?'已停止分发':installed(item)?'已安装':undefined;
+  return <Card key={item.id} className="store-card">
+   <ToolCardHeader Icon={item.kind==='skill'?BookOpen:Package}
+    title={<button type="button" className="store-title-link" onClick={event=>inspect(item,event.currentTarget)}>{local(item.title)}</button>}
+    details={<div className="store-card-labels">
+     {status&&<span className="store-state">{t(status)}</span>}
+     <Badge variant="outline">{t(item.kind==='skill'?'技能':'扩展')}</Badge>
+    </div>}>
+    {local(item.summary)}
+   </ToolCardHeader>
+   <CardFooter className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-border">
+    <div className="store-card-meta">
+     <div className="store-card-tags" aria-label={t('分类与标签')}>
+      {item.categories?.map(entry=><Button key={entry.id} variant="secondary" size="sm" aria-pressed={category===entry.id} onClick={()=>chooseCategory(category===entry.id?'':entry.id)}>{local(entry.title)}</Button>)}
+      {!item.categories?.length&&item.tags.slice(0,3).map(label=><Button key={label} variant="outline" size="sm" aria-pressed={tag===label} onClick={()=>setTag(tag===label?'':label)}>{label}</Button>)}
+     </div>
+     <ContentSourceInfo compact contentSource={item.contentSource} repository={item.repository} packageDigest={item.release.packageDigest}/>
+    </div>
+    <div className="store-card-actions">
+     <CatalogDetailsButton title={local(item.title)} onClick={event=>inspect(item,event.currentTarget)}/>{addButton(item,true)}
+    </div>
+   </CardFooter>
+  </Card>;
+ };
+ return <div className="store-page"><section className="skill-extension-center" data-discover={tab==='discover'||undefined} aria-label={t('技能与扩展')}>
+  {management?.kind==='extension'&&management.id?<nav className="extension-library-path" aria-label={t('技能与扩展')}>
+   <Button variant="ghost" size="sm" aria-label={t('返回已安装')} onClick={()=>managementGuard.current?managementGuard.current():closeManagement()}><ArrowLeft data-icon="inline-start"/>{t('已安装')}</Button>
+   <span aria-hidden="true">/</span><span aria-current="page">{t('扩展详情')}</span>
+  </nav>:<header className="store-heading"><div><h1>{t('技能与扩展')}</h1><p>{t('管理已安装的工具，发现新能力，或创建自己的工具。')}</p></div>{!management&&<div className="store-heading-actions"><LocalInstallMenu onError={setNoticeError}/>{!(tab==='discover'&&!filtered)&&<Button disabled={!window.desktop?.creation||!creator} onClick={create}><WandSparkles data-icon="inline-start"/>{t('创建技能 / 扩展')}</Button>}</div>}</header>}
+  {management?.kind==='extension'&&management.id?<ExtensionsPage key={management.id} initialId={management.id} initialTab="settings" mode="detail" hideBack closeGuard={managementGuard} onClose={closeManagement}/>:<Tabs value={tab} onValueChange={value=>{setTab(String(value) as typeof tab);setQuery('');setKind('all');setCategory('');setTag('');}} className="gap-6">
+   <TabsList variant="line" aria-label={t('技能与扩展')}><TabsTrigger className="transition-none after:transition-none" value="installed">{t('已安装')} <span>{installedTabCount}</span></TabsTrigger><TabsTrigger className="transition-none after:transition-none" value="discover">{t('发现')}</TabsTrigger><TabsTrigger className="transition-none after:transition-none" value="creations">{t('我的创作')}</TabsTrigger></TabsList>
    {!api&&<Alert><AlertDescription>{t('请在桌面应用中浏览精选目录、安装和使用技能与扩展。浏览器预览不会执行安装。')}</AlertDescription></Alert>}
    {noticeError&&<Alert variant="destructive"><AlertDescription>{errorText(noticeError)}<Button variant="ghost" size="sm" onClick={()=>setNoticeError('')}>{t('关闭提示')}</Button></AlertDescription></Alert>}
    {(error||skillError||extensionError)&&<Alert variant="destructive"><AlertDescription>{errorText(error||skillError||extensionError)}{error&&<Button variant="outline" size="sm" disabled={loading} onClick={()=>void reload(true)}>{t('重试')}</Button>}</AlertDescription></Alert>}
@@ -183,15 +248,17 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
     {catalog.source&&<p className="store-footnote">{t('目录来源')}：{catalog.source.title} · {t('按发行版本审核')}</p>}
    </TabsContent>
    <TabsContent value="installed" className="store-tab-content">
+    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" size="sm" disabled={checking||!api} onClick={()=>void checkInstalled()}>{t(checking?'正在检查…':'检查扩展更新')}</Button>
+     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={async e=>{try{setAuto(await api!.setAutoUpdates(e.target.checked));}catch{setCheckNote(t('暂时无法保存设置'));}}}/>{t('自动检查扩展更新')}</label><span role="status">{checkNote}</span></div>
     <p className="store-footnote">{t('在这里使用工具、修改设置和管理权限。聊天中输入 $ 可快速选择已启用的工具。')}</p>
 
-    {(!!visibleSkills.length||!!visibleExtensions.length)&&<div className="store-results"><span role="status">{t('已显示 {count} 项，共 {total} 项').replace('{count}',String(Math.min(localLimit,visibleSkills.length+visibleExtensions.length))).replace('{total}',String(visibleSkills.length+visibleExtensions.length))}</span>{terms||kind!=='all'?<Button variant="ghost" size="sm" onClick={clear}>{t('清除筛选')}</Button>:null}</div>}
+    {(!!visibleSkills.length||!!visibleExtensions.length)&&<div className="store-results"><span role="status">{t('已显示 {count} 项，共 {total} 项').replace('{count}',String(Math.min(localLimit,matchedInstalledCount))).replace('{total}',String(matchedInstalledCount))}</span>{terms||kind!=='all'?<Button variant="ghost" size="sm" onClick={clear}>{t('清除筛选')}</Button>:null}</div>}
     {(!!visibleSkills.length||!!visibleExtensions.length)&&<h2>{t('已安装的技能与扩展')}</h2>}
     <div className="store-installed-list">
-     {visibleSkills.slice(0,localLimit).map(skill=><InstalledToolCard id={'skill:'+skill.id} key={'skill:'+skill.id} Icon={BookOpen} title={skill.displayName||skill.name} description={skill.displayDescription||skill.description} onDetails={()=>openManaged('skill',skill.id)} metadata={<><Badge variant="outline">{t('技能')}</Badge><span>{t(skill.builtIn?'应用内置':'本机安装')}</span><span>{t(skill.enabled?'已启用':'已停用')}</span></>}><Button variant="ghost" size="icon" aria-label={t('管理')+' '+(skill.displayName||skill.name)} onClick={()=>openManaged('skill',skill.id)}><Settings2/></Button><Button variant="outline" disabled={!skill.enabled} onClick={()=>skill.id===CREATOR_ID?create():void useInstalled('skill',skill.id,skill.displayName||skill.name)}>{t('在聊天中使用')}<ArrowRight data-icon="inline-end"/></Button></InstalledToolCard>)}
-     {visibleExtensions.slice(0,Math.max(0,localLimit-visibleSkills.length)).map(item=><InstalledToolCard id={'extension:'+item.manifest.id} key={'extension:'+item.manifest.id} Icon={Package} title={item.manifest.name} description={item.manifest.description} onDetails={()=>openManaged('extension',item.manifest.id)} metadata={<><Badge variant="outline">{t('扩展')}</Badge><span>{item.manifest.version}</span><span>{t(statusFor(item))}</span></>}>{item.enabled&&!item.diagnostic&&(item.trusted||item.kind!=='package')&&<Button variant="ghost" size="icon" aria-label={t('管理')+' '+item.manifest.name} onClick={()=>openManaged('extension',item.manifest.id)}><Settings2/></Button>}{!item.enabled||item.diagnostic||!item.trusted&&item.kind==='package'?<Button variant="outline" onClick={()=>openManaged('extension',item.manifest.id)}>{t('设置与权限')}<ArrowRight data-icon="inline-end"/></Button>:item.home?<Button variant="outline" onClick={()=>openExtensionView(item.manifest.id)}>{t('打开扩展')}<ArrowRight data-icon="inline-end"/></Button>:<Button variant="outline" onClick={()=>void useInstalled('extension',item.manifest.id,item.manifest.name)}>{t('在聊天中使用')}<ArrowRight data-icon="inline-end"/></Button>}</InstalledToolCard>)}
+     {visibleSkills.slice(0,localLimit).map(skill=><InstalledToolCard id={'skill:'+skill.id} key={'skill:'+skill.id} Icon={BookOpen} title={skill.displayName||skill.name} description={skill.displayDescription||skill.description} onDetails={()=>openManaged('skill',skill.id)} metadata={<><Badge variant="outline">{t('技能')}</Badge><span>{t(skill.builtIn?'应用内置':'本机安装')}</span><span>{t(skill.enabled?'已启用':'已停用')}</span></>}><Button variant="ghost" size="icon" title={t('查看详情')} aria-haspopup="dialog" aria-label={t('查看详情')+' '+(skill.displayName||skill.name)} onClick={()=>openManaged('skill',skill.id)}><Info/></Button><Button variant="outline" disabled={!skill.enabled} onClick={()=>skill.id===CREATOR_ID?create():void useInstalled('skill',skill.id,skill.displayName||skill.name)}>{t('在聊天中使用')}<ArrowRight data-icon="inline-end"/></Button></InstalledToolCard>)}
+     {visibleExtensions.slice(0,Math.max(0,localLimit-visibleSkills.length)).map(item=><InstalledToolCard id={'extension:'+item.manifest.id} key={'extension:'+item.manifest.id} Icon={Package} title={item.manifest.name} description={item.manifest.description} onDetails={()=>openManaged('extension',item.manifest.id)} metadata={<><Badge variant="outline">{t('扩展')}</Badge><span>{item.manifest.version}</span><span>{t(statusFor(item))}</span></>}>{item.sourceMode==='archive'&&<Button variant="ghost" size="sm" disabled={checking} onClick={()=>{if(available[item.manifest.id]){fromMessage.current=false;setUpdateId(item.manifest.id);setSelected(available[item.manifest.id]);}else void checkInstalled(item.manifest.id);}}>{t(available[item.manifest.id]?'查看更新':'在精选 Store 检查更新')}</Button>}{item.enabled&&!item.diagnostic&&(item.trusted||item.kind!=='package')&&<Button variant="ghost" size="icon" aria-label={t('管理')+' '+item.manifest.name} onClick={()=>openManaged('extension',item.manifest.id)}><Settings2/></Button>}{!item.enabled||item.diagnostic||!item.trusted&&item.kind==='package'?<Button variant="outline" onClick={()=>openManaged('extension',item.manifest.id)}>{t('设置与权限')}<ArrowRight data-icon="inline-end"/></Button>:item.home?<Button variant="outline" onClick={()=>openExtensionView(item.manifest.id)}>{t('打开扩展')}<ArrowRight data-icon="inline-end"/></Button>:<Button variant="outline" onClick={()=>void useInstalled('extension',item.manifest.id,item.manifest.name)}>{t('在聊天中使用')}<ArrowRight data-icon="inline-end"/></Button>}</InstalledToolCard>)}
     </div>{!visibleSkills.length&&!visibleExtensions.length&&!visibleBuiltins.length&&empty(t('没有匹配的已安装内容'),t('在发现中选择工具，或导入你自己的技能与扩展。'))}
-    <LoadMore hasMore={localLimit<visibleSkills.length+visibleExtensions.length} onLoad={()=>setLocalLimit(value=>value+24)}/>
+    <LoadMore hasMore={localLimit<matchedInstalledCount} onLoad={()=>setLocalLimit(value=>value+24)}/>
     {!!visibleBuiltins.length&&<Collapsible key={terms?'search':'browse'} defaultOpen={!!terms}><CollapsibleTrigger render={<Button variant="ghost" className="group"/>}>{t('系统内置')} · {visibleBuiltins.length}<ChevronDown data-icon="inline-end" className="group-data-panel-open:rotate-180"/></CollapsibleTrigger><CollapsibleContent><section aria-label={t('系统内置')} className="flex flex-col gap-3"><p className="store-footnote">{t('随应用提供，无需安装；在对应场景自动使用。')}</p><div className="store-installed-list">{visibleBuiltins.slice(0,builtinLimit).map(skill=><InstalledToolCard id={'skill:'+skill.id} key={skill.id} Icon={BookOpen} title={skill.displayName||skill.name} description={skill.displayDescription||skill.description} onDetails={()=>openManaged('skill',skill.id)} metadata={<><Badge variant="outline">{t('内置 · 只读')}</Badge><span>{t(skill.builtIn?.hostManaged?'空间讨论与任务创建':skill.builtIn?.key==='skill-master'?'技能与扩展创建':'聊天中的信息补充')}</span><span>{t(skill.enabled?'已启用':'已停用')}</span></>}><Button variant="outline" aria-label={t('查看详情')+' '+(skill.displayName||skill.name)} onClick={()=>openManaged('skill',skill.id)}>{t('查看详情')}</Button></InstalledToolCard>)}<LoadMore hasMore={builtinLimit<visibleBuiltins.length} onLoad={()=>setBuiltinLimit(value=>value+24)}/></div></section></CollapsibleContent></Collapsible>}
    </TabsContent>
    <TabsContent value="creations" className="store-tab-content"><section className="store-create-banner"><WandSparkles aria-hidden="true"/><div><h2>{t('从想法到自己的工具')}</h2><p>{t('告诉技能大师你的需求，提供接口或工具文档，一起生成、验证、安装和试用。')}</p><small>{t('当前请在本地项目创建。远端产物需导入本机后安装。')}</small></div></section>{creationError&&<Alert variant="destructive"><AlertDescription>{creationError}</AlertDescription></Alert>}{creationLoading?<Skeleton className="h-24 w-full"/>:creations.length?<div className="store-installed-list">{creations.map(item=><InstalledToolCard key={item.runId} Icon={FolderOpen} title={item.title||t('创建技能 / 扩展')} description={item.nextStep||item.summary} metadata={<><Badge variant="outline">{t(item.kind==='skill'?'技能':'扩展')}</Badge><span>{t(item.trial==='confirmed'?'已试用确认':({brief:'了解需求',building:'生成与验证',ready:'文件已检查，待安装',installed:'已安装，待试用'}[item.stage]))}</span></>}><Button variant="outline" onClick={()=>onOpenTask(item.runId)}>{t('回到创建任务')}<ArrowRight data-icon="inline-end"/></Button></InstalledToolCard>)}</div>:empty(t('还没有创建记录'),t('从一个本地项目开始，由技能大师逐步协助你完成。'))}<LoadMore hasMore={creationLimit<runIds.length} loading={creationLoading} error={creationError} onLoad={()=>setCreationLimit(value=>value+24)}/></TabsContent>
@@ -200,23 +267,27 @@ export default function SkillExtensionCenter({projects,runs,request,onUse,onOpen
   {selected&&<CatalogDetailDialog
    title={detail?local(detail.title):t(detailLoading?'正在加载…':'目录条目')}
    description={detail?local(detail.summary):detailLoading?t('正在加载…'):detailError||t('当前可信目录中没有此条目。请刷新目录，或确认链接来源。')}
-   onClose={()=>setSelected(null)} returnFocus={useRequest||management?false:detailTrigger.current}
+   onClose={()=>{setSelected(null);setUpdateId(undefined);if(updateId&&fromMessage.current)onReturnToMessages?.();fromMessage.current=false;}} returnFocus={useRequest||management?false:detailTrigger.current}
    actions={detail?<>{isInstalling(detail)&&<Button variant="outline" onClick={()=>void cancel(detail.id)}>{t('取消')}</Button>}
     {detailInstalled&&!upgradeDigest(detail)?<><Button variant="outline" onClick={()=>openManaged(detailInstalled.kind,detailInstalled.entityId)}>{t('管理已安装内容')}</Button><Button disabled={!detailUsable} onClick={()=>prepareUse({title:local(detail.title),prompt:promptFor(detailInstalled.kind,detailInstalled.entityId,local(detail.title),detail,detailInstalled.sourceId),skillId:detailInstalled.kind==='skill'?detailInstalled.entityId:undefined})}>{t('准备试用')}<ArrowRight data-icon="inline-end"/></Button></>:addButton(detail)}</>
-    :<Button variant="outline" disabled={!api||loading||detailLoading} onClick={()=>void reload(true).then(()=>setDetailRetry(value=>value+1))}>{t('刷新目录')}</Button>}>
+    :<Button variant="outline" disabled={!api||loading||detailLoading} onClick={()=>updateId?void api!.checkUpdates({entityId:updateId}).then(()=>setDetailRetry(value=>value+1)).catch(e=>setDetailError(errorText(e))):void reload(true).then(()=>setDetailRetry(value=>value+1))}>{t(updateId?'检查扩展更新':'刷新目录')}</Button>}>
    {detail&&<>
-    <div className="wf-role-tags">{[t(detail.kind==='skill'?'技能':'扩展'),...(detail.categories||[]).map(entry=>local(entry.title)),...detail.tags].map((label,index)=><Badge variant="outline" key={index}>{label}</Badge>)}</div>
+    {updateInfo&&<p><strong>{updateInfo.currentVersion} → {detail.release.version}</strong> · {local(detail.release.changelog)}</p>}
     {error&&<Alert variant="destructive"><AlertDescription>{errorText(error)}</AlertDescription></Alert>}
     <dl className="wf-role-definition">
-     {[[t('用途'),local(detail.description)],[t('从这句话开始'),storeTrialPrompt(detail,selectedSource||catalog.source?.id,lang)],[t('运行环境与要求'),runtimeDescription(detail,lang)],[t('使用前准备'),local(detail.setup)],[t('许可'),detail.license],[t('来源'),detail.publisher+' · '+detail.release.version]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+     <div><dt>{t('内容来源')}</dt><dd><ContentSourceInfo packageDigest={detail.release.packageDigest} kind={detail.kind} contentSource={detail.contentSource} repository={detail.repository} publisher={detail.publisher}/></dd></div>
+     <div><dt>{t('从这句话开始')}</dt><dd>{storeTrialPrompt(detail,selectedSource||catalog.source?.id,lang)}</dd></div>
     </dl>
-    {!!detail.previewSteps?.length&&<StoreProcessPreview key={detail.id} steps={detail.previewSteps}/>}
+    <details className="store-release-details"><summary>{t('使用说明')}</summary>
+     <dl>{[[t('用途'),local(detail.description)],[t('运行环境与要求'),runtimeDescription(detail,lang)],[t('使用前准备'),local(detail.setup)]].filter(([,value])=>value&&value!==local(detail.summary)).map(([label,value])=><div className="contents" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+     {!!detail.previewSteps?.length&&<StoreProcessPreview key={detail.id} steps={detail.previewSteps}/>}
+    </details>
     {detailInstalled?.locallyModified&&<Alert><AlertDescription>{t('此技能有本地修改。当前版本将保留，不会被目录内容覆盖。')}</AlertDescription></Alert>}{detail.release.status!=='published'&&<Alert variant="destructive"><AlertDescription>{t(detail.release.status==='revoked'?'此发行版本有风险公告，已停止新安装。请查看发行说明。':'此发行版本已停止分发。已安装内容不会自动删除。')}</AlertDescription></Alert>}
-    <details className="store-release-details"><summary>{t('版本与审核记录')}</summary><p>{local(detail.release.changelog)}</p><dl><dt>{t('审核')}</dt><dd>{detail.release.reviewedBy} · {formatDate(detail.release.reviewedAt)}</dd><dt>{t('来源')}</dt><dd>{catalog.source?.title}</dd><dt>SHA-256</dt><dd><code>{detail.release.artifactSha256}</code></dd></dl></details>
-    <p className="store-footnote">{t(detail.kind==='extension'?'扩展可运行本机代码。安装前请核对来源、用途与权限。':'安装后可在聊天中选择使用；不会自动发送消息。')}</p>
+    <details className="store-release-details"><summary>{t('版本与审核记录')}</summary><p>{local(detail.release.changelog)}</p><dl><dt>{t('审核')}</dt><dd>{detail.release.reviewedBy} · {formatDate(detail.release.reviewedAt)}</dd><dt>{t('安装渠道')}</dt><dd>{catalog.source?.title||catalog.source?.id}</dd><dt>{t('发布方')}</dt><dd>{detail.publisher}</dd><dt>{t('版本')}</dt><dd>{detail.release.version}</dd><dt>{t('许可')}</dt><dd>{detail.license}</dd><dt>SHA-256</dt><dd><code>{detail.release.artifactSha256}</code></dd></dl></details>
+    {detail.kind==='extension'&&<p className="store-footnote">{t('扩展可运行本机代码。安装前请核对来源、用途与权限。')}</p>}
    </>}
   </CatalogDetailDialog>}
 
   <Dialog open={!!useRequest} onOpenChange={open=>{if(!open)setUseRequest(null);}}><DialogContent className="store-use-dialog"><DialogHeader><DialogTitle>{useRequest?.title}</DialogTitle><DialogDescription>{t('选择项目，将引导填入聊天输入框。你确认发送后才会开始。')}</DialogDescription></DialogHeader><FieldGroup><Field><FieldLabel htmlFor="store-use-project">{t('项目')}</FieldLabel><NativeSelect id="store-use-project" value={projectId} onChange={e=>setProjectId(e.target.value)}><NativeSelectOption value="" disabled>{t('请选择项目')}</NativeSelectOption>{projects.filter(project=>!useRequest?.localOnly||project.type!=='ssh').map(project=><NativeSelectOption value={project.id} key={project.id}>{project.name}{project.type==='ssh'?' · SSH':''}</NativeSelectOption>)}</NativeSelect>{useRequest?.localOnly&&<FieldDescription>{t('当前仅支持在本地项目中使用。远端项目暂不可选。')}</FieldDescription>}</Field><Field><FieldLabel htmlFor="store-use-prompt">{t('聊天引导')}</FieldLabel><Textarea id="store-use-prompt" rows={5} value={draft} onChange={e=>setDraft(e.target.value)}/></Field></FieldGroup><DialogFooter><Button variant="outline" onClick={()=>{setUseRequest(null);onAddProject();}}>{t('新建项目')}</Button><Button disabled={!projectId||!draft.trim()||!window.desktop} onClick={()=>{if(useRequest){onUse(projectId,draft.trim(),useRequest.skillId);setUseRequest(null);}}}>{t('填入聊天输入框')}<ArrowRight data-icon="inline-end"/></Button></DialogFooter></DialogContent></Dialog>
- </section>;
+ </section></div>;
 }

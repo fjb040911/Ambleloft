@@ -64,10 +64,33 @@ test('encrypted secrets, quota, tombstones and reinstallation invalidate old cal
  await service.storage(old,'k',{write:true,value:1,expectedRevision:0});await service.storage(old,'k',{write:true,value:null,expectedRevision:1});await assert.rejects(service.storage(old,'k',{write:true,value:2,expectedRevision:0}),/CONFLICT/);
  await service.remove(id);await service.installPackage(file,'archive',async()=>true);await service.setGrants(id,grants);assert.notEqual(service.items[0].generation,old.generation);await assert.rejects(service.storage(old,'token',{kind:'secret'}),/FORBIDDEN/);
 });
-test('updating clears grants and stale consent cannot authorize the new revision',async t=>{
- const {root,service}=await fixture(t);await service.installPackage(await archive(root),'archive',async()=>true);const id='fixture.package';await service.setGrants(id,[{capability:'storage',resource:'self'}]);const generation=service.items[0].generation;
- await service.installPackage(await archive(root,manifest('2.0.0')),'archive',async()=>true);assert.equal(service.items[0].grants.length,0);
- await assert.rejects(service.setGrants(id,[{capability:'storage',resource:'self'}],generation),/CONFLICT/);
+test('upgrades preserve granted resources, prune removed declarations and reject stale consent',async t=>{
+ const {root,db,service}=await fixture(t),id='fixture.package';
+ const source=await archive(root);await service.installPackage(source,'archive',async()=>true);
+ await db.call('patchWorkspace',{changes:['p','q'].map(id=>({kind:'project',action:'put',id,expectedRevision:null,value:{id,name:id,path:root,createdAt:'now'}}))});
+ const retained={capability:'projects.read',resource:'project:p'},removed={capability:'storage',resource:'self'};
+ await service.setGrants(id,[retained,removed]);
+ const old=service.items[0],next=manifest('2.0.0');
+ next.permissions=next.permissions.filter(p=>p.capability!=='storage').concat({capability:'configuration',scope:'self'});
+ await service.installPackage(await archive(root,next),'archive',async()=>false);
+ assert.equal(service.items[0].generation,old.generation);
+ await service.installPackage(await archive(root,next),'archive',async()=>true);
+ assert.deepEqual(service.items[0].grants,[retained]); // secrets was declared but never granted.
+ const ctx={id,generation:service.items[0].generation};
+ await service.check(ctx,'projects.read','p');
+ await assert.rejects(service.check(ctx,'projects.read','q'),/FORBIDDEN/);
+ await assert.rejects(service.check(ctx,'configuration'),/FORBIDDEN/);
+ await assert.rejects(service.setGrants(id,[removed],old.generation),/CONFLICT/);
+ await service.rollback(id,old.active,async()=>true);
+ assert.deepEqual(service.items[0].grants,[retained]);
+});
+test('self grants approved with an upgrade apply with its new revision; omitted grants stay omitted',async t=>{
+ const {root,service}=await fixture(t),id='fixture.package';
+ await service.installPackage(await archive(root),'archive',async()=>true);
+ const next=manifest('2.0.0');next.permissions.push({capability:'configuration',scope:'self'});
+ await service.installPackage(await archive(root,next),'archive',async()=>({accepted:true,approvedSelf:['configuration']}));
+ assert.deepEqual(service.items[0].grants,[{capability:'configuration',resource:'self'}]);
+ await service.check({id,generation:service.items[0].generation},'configuration');
 });
 test('development snapshots include dependencies and bundled validator works; profiles remain isolated',async t=>{
  const {root,db,service,registerDatabase}=await fixture(t);const dev=path.join(root,'dev');await fs.mkdir(path.join(dev,'node_modules','fixture'),{recursive:true});await fs.writeFile(path.join(dev,'extension.json'),JSON.stringify(manifest()));await fs.writeFile(path.join(dev,'main.cjs'),'module.exports={}');await fs.writeFile(path.join(dev,'node_modules','fixture','index.js'),'module.exports=42');

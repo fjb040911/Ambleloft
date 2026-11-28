@@ -28,3 +28,17 @@ test('Store skill prompt chooses the matching catalog copy and leaves scripts un
   assert.match(zh.detail, /差旅登记/); assert.doesNotMatch(zh.detail, /Travel registration/);
   assert.deepEqual(en.buttons, ['Cancel', 'Install and enable']); assert.equal(en.defaultId, 0); assert.equal(zh.cancelId, 0);
 });
+
+test('verified Store update requests consent only for new declarations',async()=>{
+  const {approveStoreUpgrade}=require('../electron/install-confirmation.cjs');
+  const previous={manifest:revision.manifest,grants:[]};
+  assert.equal(await approveStoreUpgrade(revision,previous,'en','en',()=>assert.fail('Unexpected dialog')),true);
+  const next={...revision,manifest:{version:'0.2.0',permissions:[...revision.manifest.permissions,{capability:'secrets',scope:'self'},{capability:'projects.read',scope:'project'}]}};
+  const choose=response=>approveStoreUpgrade(next,previous,'en','en',dialog=>{
+    assert.doesNotMatch(dialog.detail,/configuration/);
+    assert.match(dialog.detail,/secrets/);assert.match(dialog.detail,/projects.read/);
+    return {response};
+  });
+  assert.equal(await choose(0),false);assert.equal(await choose(1),true);
+  assert.deepEqual(await choose(2),{accepted:true,approvedSelf:['secrets']});
+});

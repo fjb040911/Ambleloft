@@ -22,6 +22,15 @@ function validateCatalog(value) {
     if (identities.has(identity)) fail('STORE_DUPLICATE_IDENTITY'); identities.add(identity);
     for (const field of ['title', 'summary', 'description', 'trialPrompt', 'runtime', 'setup']) localized(item[field]);
     text(item.publisher, 120); text(item.license, 120);
+    if (item.contentSource !== undefined) {
+      const source = item.contentSource;
+      if (source?.kind === 'github') {
+        if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(item.repository?.url || '')) fail('STORE_INVALID_CATALOG');
+        if (source.originalDescription !== undefined) text(source.originalDescription, 20000);
+      } else if (source?.kind === 'store') {
+        text(source.name, 120); text(source.developer, 120);
+      } else fail('STORE_INVALID_CATALOG');
+    }
     if (!Array.isArray(item.tags) || item.tags.length > 20) fail('STORE_INVALID_CATALOG');
     item.tags.forEach(tag => text(tag, 80));
     if (item.categoryIds !== undefined && (!Array.isArray(item.categoryIds) || item.categoryIds.length > 20 || item.categoryIds.some(id => !identifier(id)) || new Set(item.categoryIds).size !== item.categoryIds.length)) fail('STORE_INVALID_CATALOG');
@@ -58,11 +67,14 @@ function validateSource(source) {
   if (crypto.createPublicKey(source.publicKey).asymmetricKeyType !== 'ed25519') fail('STORE_INVALID_SOURCE_KEY');
   return {id: source.id, title: source.title, baseUrl: url.href, keyId: source.keyId, publicKey: source.publicKey};
 }
-function verifyEnvelope(envelope, source, now = Date.now()) {
+function signedPayload(envelope, source) {
   if (!envelope || envelope.keyId !== source.keyId || typeof envelope.payload !== 'string' || envelope.payload.length > MAX_CATALOG || typeof envelope.signature !== 'string') fail('STORE_INVALID_SIGNATURE');
   const bytes = Buffer.from(envelope.payload, 'base64'), sig = Buffer.from(envelope.signature, 'base64');
   if (bytes.toString('base64') !== envelope.payload || sig.toString('base64') !== envelope.signature || sig.length !== 64 || !crypto.verify(null, bytes, source.publicKey, sig)) fail('STORE_INVALID_SIGNATURE');
-  const catalog = validateCatalog(JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes)));
+  return JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+}
+function verifyEnvelope(envelope, source, now = Date.now()) {
+  const catalog = validateCatalog(signedPayload(envelope, source));
   if (catalog.sourceId !== source.id || Date.parse(catalog.generatedAt) > now + 5 * 60000) fail('STORE_INVALID_SOURCE');
   return {catalog, stale: Date.parse(catalog.expiresAt) <= now};
 }
@@ -108,4 +120,4 @@ function inspectStoreLink(value, sources) {
   } catch { return null; }
 }
 function parseStoreLink(value, sources) { const target = inspectStoreLink(value, sources); return target && !target.code ? target : null; }
-module.exports = {inspectStoreLink, checkCompatibility, validateCatalog, validateSource, verifyEnvelope, hashDirectory, parseStoreLink, MAX_CATALOG, MAX_ARTIFACT};
+module.exports = {signedPayload, inspectStoreLink, checkCompatibility, validateCatalog, validateSource, verifyEnvelope, hashDirectory, parseStoreLink, MAX_CATALOG, MAX_ARTIFACT};

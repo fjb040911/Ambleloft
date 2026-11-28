@@ -34,9 +34,24 @@ function extensionPersistence(db,transaction){
    item.pending=r.digest;item.pendingSourceMode=r.sourceMode;save(item);
   }else if(action==='commit'){
    const item=get(id);if(item.pending!==input.digest)throw Error('CONFLICT: Pending revision changed');const r=revision(id,input.digest);
+   const previous=item.trusted && item.active && item.kind==='package' ? item.manifest.permissions||[] : [];
+   const next=r.manifest.permissions||[];
+   const unchanged=next.filter(p=>previous.some(old=>old.capability===p.capability && old.scope===p.scope));
+   const grants=db.prepare('SELECT capability,resource FROM extension_grants WHERE id=?').all(id);
+   for(const grant of grants){
+    const retained=unchanged.some(p=>p.capability===grant.capability &&
+     (p.scope==='self' ? grant.resource==='self' : grant.resource.startsWith('project:') && db.prepare('SELECT 1 FROM projects WHERE id=?').get(grant.resource.slice(8))));
+    if(!retained)db.prepare('DELETE FROM extension_grants WHERE id=? AND capability=? AND resource=?').run(id,grant.capability,grant.resource);
+   }
+   if(input.approvedSelf?.length){
+    const added=require('./grant-selection.cjs').addedPermissions(previous,next);
+    for(const capability of input.approvedSelf){
+     if(!added.some(p=>p.capability===capability && p.scope==='self'))throw Error('FORBIDDEN: Invalid upgrade grant');
+     db.prepare('INSERT INTO extension_grants(id,capability,resource) VALUES (?,?,?)').run(id,capability,'self');
+    }
+   }
    Object.assign(item,{kind:'package',active:r.digest,sourceMode:item.pendingSourceMode||r.sourceMode,pendingSourceMode:null,pending:null,manifest:r.manifest,icons:r.icons,dictionaries:r.dictionaries,trusted:true,trustedAt:new Date().toISOString(),enabled:true,generation:epoch(),diagnostic:null});
-   // Every revision requires fresh host consent; no grant expansion or stale exemptions.
-   db.prepare('DELETE FROM extension_grants WHERE id=?').run(id);save(item);
+   save(item);
   }else if(action==='enable'){
    const item=get(id);if(input.enabled&&item.kind==='package'&&!item.trusted)throw Error('FORBIDDEN: Trust required');item.enabled=input.enabled;item.generation=epoch();save(item);
   }else if(action==='remove'){

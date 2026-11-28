@@ -18,7 +18,7 @@
 - 数据库升级到 v4。独立安装、revision、grant 和私有数据表替代旧 setting 注册表；旧 setting 保留作迁移备份，只发布统一注册表。无效旧记录隔离并报告，保留有效旧文本页及导航命令。
 - 当前一个 userData 数据库对应一个 profile，持久 default profile UUID；表的 profile 边界由数据库目录承担。两个隔离目录的安装/信任/授权不会继承。未来多 profile 共库时必须显式扩充复合键，不能复用当前隐式边界。
 - 授权只覆盖清单声明的 capability，作用域为 `self` 或精确 `project:<id>`；宿主选择项目并确认，不提供通配项目授权。声明权限不等于已授权。
-- 更新和回退清除已有 grants；停用、更新、撤权等改变持久 generation，卸载再装也不会复用旧 generation。资源检查校验信任、启用状态、generation、授权及项目存在性；调用绑定项目不得被替换。
+- A3 当时的更新和回退清除 grants。此规则已由 2026-11-28 的增量授权设计覆盖（见 store-update-notifications.md）。停用、更新、撤权等改变持久 generation，卸载再装也不会复用旧 generation。资源检查校验信任、启用状态、generation、授权及项目存在性；调用绑定项目不得被替换。
 - 私有 JSON KV、配置与加密 secrets 提供宿主内部存储接口。值不超过 256 KiB、键值总量不超过 10 MiB、最多 10000 条记录；版本与删除 tombstone 防止过期写入。配置 schema 在 worker 校验。secrets 通过宿主现有安全存储适配器加密，无可用加密后端则拒绝，不写明文。
 - 私有数据按 `(extensionId, kind, key)` 分区；`kv`、`configuration`、`secret` 共用表，但分别检查权限，secret 列内容只接受宿主加密结果。未向 renderer 提供私有存储/secret 读写 IPC。
 - 卸载由宿主询问保留或删除私有数据，清除安装/授权/信任注册；重装重新确认。包文件保留，不作为已信任或已安装的依据；启动仅清理中断 staging，历史包 GC 尚未实现。

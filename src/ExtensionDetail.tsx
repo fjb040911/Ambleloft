@@ -21,7 +21,7 @@ function DetailEmpty({title,description}:{title:string;description:string}) {
 }
 const permissionName=(key:string)=>t(({'project.activity.read':'读取项目活动记录','project.usage.read':'读取项目 AI 用量','project.summaries.generate':'按需生成项目摘要','agent.hooks':'订阅项目轮次事件','conversations.read':'读取项目聊天轮次','background.jobs':'提交后台模型作业','projects.read':'读取项目信息','projects.path.read':'读取项目路径','conversations.create':'创建聊天','conversations.open':'打开聊天','storage':'扩展数据存储','secrets':'安全凭据存储','configuration':'扩展配置'} as Record<string,string>)[key]||key);
 
-export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle,initialTab='details',backLabel='返回扩展列表',closeGuard,hideBack=false}:{hideBack?:boolean;closeGuard?:React.MutableRefObject<(()=>void)|null>;backLabel?:string;initialTab?:string;item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
+export default function ExtensionDetail({item,back,permissions,grantConfiguration,actions,busy,toggle,initialTab='details',backLabel='返回扩展列表',closeGuard,onSettingsChanged,hideBack=false}:{onSettingsChanged?():void;hideBack?:boolean;closeGuard?:React.MutableRefObject<(()=>void)|null>;backLabel?:string;initialTab?:string;item:ExtensionSnapshot['installed'][number];back():void;permissions():void;grantConfiguration():void;actions:ReactNode;busy:boolean;toggle():void}) {
  const confirm=useConfirm();const locale=useLanguage();
  const [settingsBusy,setSettingsBusy]=useState(false),[automationBusy,setAutomationBusy]=useState(false);
  const [dirty,setDirty]=useState(false),[automationDirty,setAutomationDirty]=useState(false);
@@ -58,7 +58,7 @@ export default function ExtensionDetail({item,back,permissions,grantConfiguratio
     <details className="extension-install-info"><summary>{t('安装信息')}</summary><dl><dt>{t('安装来源')}</dt><dd>{t(item.sourceMode==='directory'?'本地开发目录':'本地安装')}</dd><dt>{t('版本')}</dt><dd>{item.manifest.version}</dd><dt>{t('大小')}</dt><dd>{details?.size!=null?(details.size/1024).toFixed(1)+' KB':t('未记录')}</dd><dt>{t('运行状态')}</dt><dd>{runtimeLabel}</dd></dl></details>
    </TabsContent>
    <TabsContent value="settings" keepMounted>
-    {item.hasConfiguration&&item.enabled&&item.trusted?(canConfigure?<ExtensionSettings key={item.active} id={item.manifest.id} generation={item.generation} name={item.manifest.name} close={()=>{}} inline onDirtyChange={setDirty} onBusyChange={setSettingsBusy}/>:<section><h2>{t('需要授权扩展配置')}</h2><p>{t('仅授权此扩展读取自己的配置，不授予项目或密钥权限。')}</p><Button variant="outline" disabled={busy} onClick={grantConfiguration}>{t('授权扩展配置')}</Button></section>):<DetailEmpty title={item.hasConfiguration?'启用并信任扩展后可配置':'此扩展暂无设置项'} description="扩展提供的配置选项会显示在这里。"/>}
+    {item.hasConfiguration&&item.enabled&&item.trusted?(canConfigure?<ExtensionSettings credentialsGranted={!!item.grants?.some(g=>g.capability==='secrets'&&g.resource==='self')} onSaved={onSettingsChanged} key={item.active} id={item.manifest.id} generation={item.generation} name={item.manifest.name} close={()=>{}} inline onDirtyChange={setDirty} onBusyChange={setSettingsBusy}/>:<section><h2>{t('需要授权扩展配置')}</h2><p>{t('仅授权此扩展读取自己的配置，不授予项目或密钥权限。')}</p><Button variant="outline" disabled={busy} onClick={grantConfiguration}>{t('授权扩展配置')}</Button></section>):<DetailEmpty title={item.hasConfiguration?'启用并信任扩展后可配置':'此扩展暂无设置项'} description="扩展提供的配置选项会显示在这里。"/>}
    </TabsContent>
    <TabsContent value="permissions" keepMounted>
     <section className="extension-permissions" aria-label={t('已授权范围')}>
@@ -68,7 +68,7 @@ export default function ExtensionDetail({item,back,permissions,grantConfiguratio
      <details className="extension-install-info"><summary>{t('声明的权限')}</summary>{item.permissions?.length?<dl>{item.permissions.map(p=><div className="extension-permission-definition" key={p.capability}><dt>{permissionName(p.capability)}</dt><dd>{t(p.scope==='project'?'所选项目':'扩展私有数据')}</dd></div>)}</dl>:<p>{t('未声明权限')}</p>}</details>
     </section>
    </TabsContent>
-   <TabsContent value="automation" keepMounted>{item.permissions?.some(p=>['agent.hooks','background.jobs'].includes(p.capability))&&<ExtensionAutomation id={item.manifest.id} onDirtyChange={setAutomationDirty} onBusyChange={setAutomationBusy}/>}</TabsContent>
+   <TabsContent value="automation" keepMounted>{item.permissions?.some(p=>['agent.hooks','background.jobs'].includes(p.capability))&&<ExtensionAutomation onSaved={onSettingsChanged} id={item.manifest.id} onDirtyChange={setAutomationDirty} onBusyChange={setAutomationBusy}/>}</TabsContent>
   </Tabs>
  </div>;
 }

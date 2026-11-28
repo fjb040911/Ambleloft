@@ -1,2 +1,18 @@
 /* Shared Figma-inspired library palette for roles, skills and extensions. */
 .workforce,.skill-extension-center{--wf-lilac:light-dark(#e9e1fa,#3d354e);--wf-mint:light-dark(#dcebdc,#2e433a);--wf-cream:light-dark(#f4ecd6,#463e2b);--wf-pink:light-dark(#efdfe7,#49333f);--wf-ink:light-dark(#202124,var(--text));--wf-muted:light-dark(#616169,var(--secondary));--wf-edge:light-dark(#e5e5e7,var(--border));--wf-paper:light-dark(#ffffff,var(--surface));--wf-soft:light-dark(#f7f7f5,var(--hover));}
+
+/* Measure the whole page pane, before either directory applies its content padding. */
+.workforce,.store-page{container:catalog-page / inline-size}
+.store-page{width:100%;min-width:0}
+.wf-role-grid,.store-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:stretch;
+  gap:24px;
+}
+@container catalog-page (max-width:780px){
+  .wf-role-grid,.store-grid{gap:16px}
+}
+@container catalog-page (max-width:580px){
+  .wf-role-grid,.store-grid{grid-template-columns:minmax(0,1fr)}
+}

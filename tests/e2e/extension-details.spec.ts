@@ -64,7 +64,7 @@ test('configuration authorization is scoped and detail errors clear when returni
 
 test('permission dialog keeps failures visible and submits only the selected project',async({page})=>{
  await page.goto('/');
- await page.evaluate(()=>{(window as any).desktop.extensions.grants=async(input:any)=>{(window as any).__grantInput=input;if(!(window as any).__allowGrant)throw Error('授权失败，请重试');return {};};});
+ await page.evaluate(()=>{const extensions=(window as any).desktop.extensions;const list=extensions.list;extensions.list=async()=>{const snapshot=await list();return {...snapshot,installed:snapshot.installed.map((item:any)=>({...item,grants:item.grants.filter((grant:any)=>grant.resource!=='project:private-id')}))};};extensions.grants=async(input:any)=>{(window as any).__grantInput=input;if(!(window as any).__allowGrant)throw Error('授权失败，请重试');return {};};});
  await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('button',{name:'管理权限',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'管理权限'});
  await expect(dialog.getByRole('button',{name:'确认授权'})).toBeDisabled();
@@ -77,4 +77,76 @@ test('permission dialog keeps failures visible and submits only the selected pro
  expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
  await page.screenshot({path:'test-results/extension-permission-dialog-dark.png',animations:'disabled'});
  await page.evaluate(()=>{(window as any).__allowGrant=true;});await dialog.getByRole('button',{name:'确认授权'}).click();await expect(dialog).toHaveCount(0);
+});
+
+test('local package opens a stable detail and returns to the full installed inventory',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(async()=>{
+  const host=(window as any).desktop;
+  const snapshot=await host.extensions.list();
+  host.extensions.list=async()=>structuredClone(snapshot);
+  host.extensions.install=async()=>{
+   const first=snapshot.installed[0];
+   snapshot.installed.push({...first,manifest:{...first.manifest,id:'local',name:'本地检索'}});
+   return structuredClone(snapshot);
+  };
+  host.skills={list:async()=>[{id:'notes',name:'笔记',description:'写笔记',enabled:true}],
+   listSystem:async()=>Array.from({length:26},(_,i)=>({id:'builtin-'+i,name:'系统工具 '+i,description:'',enabled:true}))};
+  window.dispatchEvent(new Event('skills-changed'));
+ });
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
+ await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await page.getByRole('button',{name:'从本地安装'}).click();
+ await page.getByRole('menuitem',{name:/扩展安装包/}).click();
+ await expect(page.getByRole('heading',{name:'本地检索'})).toBeVisible();
+ const header=page.locator('.extension-detail-header');
+ const bounds=()=>header.evaluate(el=>{const {x,width}=el.getBoundingClientRect();return {x,width};});
+ const initial=await bounds();
+ for(const name of ['详情','权限','设置']){
+  await page.getByRole('tab',{name,exact:true}).click();
+  expect(await bounds()).toEqual(initial);
+ }
+ await page.getByRole('button',{name:'返回已安装'}).click();
+ await expect(page.getByRole('tab',{name:'已安装 3',exact:true})).toBeVisible();
+ await expect(page.locator('.store-installed-row:visible')).toHaveCount(3);
+ await expect(page.getByRole('button',{name:/系统内置.*26/})).toBeVisible();
+ await page.locator('.store-types').getByRole('button',{name:'扩展',exact:true}).click();
+ await expect(page.getByRole('tab',{name:'已安装 2',exact:true})).toBeVisible();
+ await expect(page.locator('.store-installed-row:visible')).toHaveCount(2);
+});
+
+test('connector grants credential storage in place before checking or entering a key',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(async()=>{
+  const api=(window as any).desktop.extensions;
+  const snapshot=await api.list(),item=snapshot.installed[0],configuration=api.configuration;
+  item.generation=1;
+  api.configuration=async(input:any)=>({...await configuration(input),generation:item.generation,connectorSettings:{originField:'endpoint'}});
+  const actions:string[]=(window as any).__connectorCalls=[];
+  api.connector=async({action,generation}:any)=>{
+   actions.push(action);
+   if(generation!==item.generation||!item.grants.some((g:any)=>g.capability==='secrets'))throw Error('FORBIDDEN');
+   return {saved:action==='saveSecret',count:1};
+  };
+  let cancel=true;
+  api.grants=async(input:any)=>{
+   (window as any).__grantInput=input;
+   if(cancel){cancel=false;return snapshot;}
+   item.grants.push({capability:'secrets',resource:'self'});item.generation++;
+   return snapshot;
+  };
+ });
+ await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();
+ await page.getByRole('button',{name:'技能与扩展',exact:true}).click();
+ await page.getByRole('button',{name:'管理 项目助手'}).click();
+ const grant=page.getByRole('button',{name:'去授权'});
+ await grant.click();await expect(grant).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).__connectorCalls)).toEqual([]);
+ expect(await page.evaluate(()=>(window as any).__grantInput)).toEqual({id:'demo',capabilities:['secrets']});
+ await grant.click();await page.getByRole('button',{name:'录入 / 更换 API Key'}).click();
+ await page.getByLabel('测试检索').fill('fixture');await page.getByRole('button',{name:'测试检索'}).click();
+ await expect(page.getByText('检索成功，命中 1 个片段。')).toBeVisible();
+ const actions:string[]=await page.evaluate(()=>(window as any).__connectorCalls);
+ expect(actions[0]).toBe('status');
+ expect(actions.filter(action=>action!=='status')).toEqual(['saveSecret','test']);
 });

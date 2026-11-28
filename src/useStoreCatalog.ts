@@ -5,11 +5,13 @@ const empty:StoreCatalog={source:null,items:[],stale:true,installed:[],busy:[]};
 export function useStoreCatalog(api:StoreAPI|undefined,filters:StorePage,discover:boolean){
  const fetchPage=useMemo(()=>{
   if(!api)return;
-  let checkOnEntry=discover;
+  let refreshOnEntry=discover;
   return (input:{refresh?:boolean;page:StorePage})=>{
-   const refreshIfExpired=checkOnEntry&&!input.page.cursor;
-   if(refreshIfExpired)checkOnEntry=false;
-   return api.catalog({...input,refreshIfExpired});
+   if(refreshOnEntry&&!input.page.cursor){
+    refreshOnEntry=false;
+    return api.catalog({...input,refresh:true});
+   }
+   return api.catalog({...input,localOnly:!discover});
   };
  },[api,discover]);
  const state=usePagedCatalog(fetchPage,filters,empty),{reload}=state;

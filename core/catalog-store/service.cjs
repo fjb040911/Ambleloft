@@ -15,12 +15,12 @@ async function loadSources(file = process.env.AMBLE_STORE_SOURCE_FILE ?? path.jo
   if (!Array.isArray(values) || values.length > 1) throw Error('STORE_INVALID_SOURCE_FILE');
   return values.map(validateSource);
 }
-async function download(url, limit, {signal, fetcher = fetch, timeout = 30000} = {}) {
+async function download(url, limit, {signal, fetcher = fetch, timeout = 30000, body} = {}) {
   const controller = new AbortController(), abort = () => controller.abort();
   signal?.addEventListener('abort', abort, {once: true}); if (signal?.aborted) abort();
   const timer = setTimeout(abort, timeout); let response;
   try {
-    response = await fetcher(url, {redirect: 'error', signal: controller.signal, headers: {'Accept': 'application/octet-stream'}});
+    response = await fetcher(url, {redirect: 'error', signal: controller.signal, ...(body ? {method:'POST',body,headers:{'Content-Type':'application/json'}} : {})});
     if (!response.ok || !response.body) throw Error('STORE_DOWNLOAD_FAILED');
     const length = response.headers.get('content-length');
     if (length && (!/^\d+$/.test(length) || Number(length) > limit)) throw Error('STORE_DOWNLOAD_TOO_LARGE');
@@ -114,9 +114,9 @@ class CatalogStore {
     return result.filter(row => !row.locallyModified || !result.some(other => !other.locallyModified &&
       other.sourceId === row.sourceId && other.listingId === row.listingId && other.entityId === row.entityId));
   }
-  async catalog({refresh = false, refreshIfExpired = false, page, detailId} = {}) {
+  async catalog({localOnly = false, refresh = false, refreshIfExpired = false, page, detailId} = {}) {
     let value = this.source ? await this.readCache() : null, error;
-    if (this.source && (refresh || !value || (value.stale && (refreshIfExpired || this.refreshing)))) {
+    if (!localOnly && this.source && (refresh || this.refreshing || !value || (value.stale && refreshIfExpired))) {
       try { if (!this.refreshing) this.refreshing = this.refresh().finally(() => { this.refreshing = null; }); value = await this.refreshing; }
       catch (failure) { error = failure.message; }
     }
@@ -126,7 +126,7 @@ class CatalogStore {
     return {source: this.source ? {id: this.source.id, title: this.source.title} : null, ...result, stale: !value || value.stale || !!error, ...(error ? {error} : !this.source ? {error: 'STORE_NOT_CONFIGURED'} : {}), installed: await this.installations(), busy: [...this.busy.keys()]};
   }
   cancel({listingId}) { const operation = this.busy.get(listingId); if (operation && !operation.committing) operation.controller.abort(); return {cancelled: !!operation && !operation.committing}; }
-  async shutdown() { this.closed = true; for (const operation of this.busy.values()) if (!operation.committing) operation.controller.abort(); await this.queue; }
+  async shutdown() { this.closed = true; await this.updates?.stop(); for (const operation of this.busy.values()) if (!operation.committing) operation.controller.abort(); await this.queue; }
   install(input, confirmations = {}) {
     if (this.closed) return Promise.reject(Error('STORE_CLOSED'));
     if (!input || input.sourceId !== this.source?.id || typeof input.listingId !== 'string') return Promise.reject(Error('STORE_INVALID_SOURCE'));
@@ -141,9 +141,11 @@ class CatalogStore {
     const check = () => { if (signal.aborted) throw Error('STORE_INSTALL_CANCELLED'); if (expiresAt && expiresAt <= this.now()) throw Error('STORE_CATALOG_EXPIRED'); };
     check();
     const current = (await this.installations()).find(row => row.sourceId === input.sourceId && row.listingId === input.listingId);
-    if (current && !input.upgradeFromDigest) return {kind: current.kind, entityId: current.entityId};
-    // An install always revalidates the live signed catalog, including withdrawal status.
-    const {catalog} = await this.refresh(signal); expiresAt = Date.parse(catalog.expiresAt); check();
+    if (current && !input.updateEntityId && !input.upgradeFromDigest) return {kind: current.kind, entityId: current.entityId};
+    // Notification-driven upgrades revalidate only this installed extension.
+    const target = input.updateEntityId ? await this.updates.detail(input.updateEntityId,signal) : null;
+    if (target && (target.outcome !== 'update' || target.item.id !== input.listingId || target.item.release.artifactSha256 !== input.targetDigest || !input.upgradeFromDigest)) throw Error('STORE_UPDATE_CHANGED');
+    const {catalog} = target || await this.refresh(signal); expiresAt = Date.parse(catalog.expiresAt); check();
     const item = catalog.items.find(entry => entry.id === input.listingId);
     if (!item || item.release.status !== 'published') throw Error('STORE_RELEASE_UNAVAILABLE');
     const release = item.release; checkCompatibility(release, {version: this.hostVersion});
@@ -170,9 +172,16 @@ class CatalogStore {
             if (!active || existing.active !== input.upgradeFromDigest || !item.upgradeFromDigests?.includes(existing.active) ||
                 hashDirectory(path.join(this.extensions.packages.root, active.relativePath)) !== existing.active) throw Error('STORE_IDENTITY_CONFLICT');
           }
-          accepted = await confirmations.extension?.(revision, item) === true; check();
-          if (accepted) { await journal(revision.digest); operation.committing = true; entityId = revision.id; installedRevision = revision.digest; }
-          return accepted;
+          const trustedUpgrade = existing?.kind==='package' && existing.trusted && existing.sourceMode==='archive' && !!input.upgradeFromDigest;
+          const consent = await confirmations.extension?.(revision, item, trustedUpgrade ? existing : undefined);
+          accepted = consent===true || consent?.accepted===true; check();
+          if (accepted && target) {
+            const latest = await this.updates.detail(input.updateEntityId,signal);
+            if (latest.outcome !== 'update' || latest.item.release.artifactSha256 !== release.artifactSha256) throw Error('STORE_UPDATE_CHANGED');
+            expiresAt = Date.parse(latest.catalog.expiresAt); check();
+          }
+          if (accepted) { await journal(revision.digest); operation.committing = true; entityId = revision.id; installedRevision = revision.digest; installedDigest = revision.digest; }
+          return accepted ? consent : false;
         });
         if (!accepted) return {kind: item.kind, entityId: '', cancelled: true};
       } else {

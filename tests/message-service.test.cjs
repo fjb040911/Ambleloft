@@ -51,3 +51,13 @@ test('localized notifications survive update/uninstall and language switches nev
  await s.forExtension(a,'update',{id:result.id,patch:{body:'Business %body% unchanged'},expectedRevision:1});await db.call('extensionMutation',{action:'remove',id:a.id});await db.call('writeSetting',{key:'workspace',value:{language:'en'}});view=(await s.list()).items[0];assert.equal(view.title,'客户门户 ready');assert.equal(view.body,'Business %body% unchanged');assert.equal(Object.hasOwn(view,'_localization'),false);
  await s.dismiss({id:result.id});assert.equal((await s.list()).items.length,0);assert.equal(reminders,1);
 });
+
+test('Store reminders remain deduplicated after dismissal; a higher release gets one new navigation action',async t=>{
+ const {db,service}=await fixture(t);
+ const post=version=>db.call('storeUpdateNotification',{sourceId:'curated',entityId:'test.one',target:{version:'1.0.0',record:{id:'store.one',title:{zh:'测试',en:'Test'},release:{version,artifactSha256:'a'.repeat(64),changelog:{zh:'修复',en:'Fix'}}}}});
+ const one=await post('1.0.1');await service.dismiss({id:one.id});
+ assert.equal((await post('1.0.1')).status,'dismissed');assert.equal((await service.list()).unread,0);
+ const two=await post('1.0.2');assert.equal((await post('1.0.2')).status,'duplicate');assert.equal((await service.list()).unread,1);
+ assert.deepEqual(await db.call('storeUpdateOpen',{messageId:two.id,actionId:'view-extension-update'}),{sourceId:'curated',listingId:'store.one',updateEntityId:'test.one'});
+ assert.equal((await service.list()).unread,0);
+});
