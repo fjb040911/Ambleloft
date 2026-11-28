@@ -20,8 +20,8 @@ try{
  db=new DatabaseSync(workerData.file,{timeout:5000});
  db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL;');
  const version=db.prepare('PRAGMA user_version').get().user_version;
- if(version>16)throw new Error('数据库版本高于当前应用，请升级应用');
- if(version>0&&version<16){const backup=workerData.file+'.before-v16-'+Date.now()+'.sqlite';db.prepare('VACUUM INTO ?').run(backup);fs.chmodSync(backup,0o600);}
+ if(version>17)throw new Error('数据库版本高于当前应用，请升级应用');
+ if(version>0&&version<17){const backup=workerData.file+'.before-v17-'+Date.now()+'.sqlite';db.prepare('VACUUM INTO ?').run(backup);fs.chmodSync(backup,0o600);}
  db.exec(`BEGIN;
  CREATE TABLE IF NOT EXISTS skills(id TEXT PRIMARY KEY, data TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -49,8 +49,9 @@ try{
  ${taskContextModule.schema}
  ${investigationModule.schema}
  ${require('./run-text-store.cjs').schema}
- PRAGMA user_version=16;
- COMMIT;`);
+ `);
+ if(version>0&&version<17)require('./run-text-store.cjs').migrateActivityFields(db);
+ db.exec('PRAGMA user_version=17; COMMIT;');
  resources=createWorkspaceResources(db);
  db.exec('BEGIN IMMEDIATE');
  try {for(const [kind,table] of [['draft','drafts'],['run','runs']])for(const row of db.prepare(`SELECT id,data FROM ${table}`).all()){const item=JSON.parse(row.data);resources.identify(kind,row.id,item.projectId);}db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}

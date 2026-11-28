@@ -1,8 +1,10 @@
 const {randomUUID,createHash}=require('node:crypto');
 const DAY=86400000,RETENTION=7*DAY;
 const fail=code=>{throw Object.assign(Error(code),{code});};
+const turnPages=require('./turn-pages.cjs');
 const schema=`
 CREATE TABLE IF NOT EXISTS automation_turns(conversation_id TEXT,turn_id TEXT,version INTEGER,project_id TEXT,created INTEGER,data TEXT,PRIMARY KEY(conversation_id,turn_id,version));
+${turnPages.schema}
 CREATE TABLE IF NOT EXISTS automation_events(id TEXT PRIMARY KEY,extension_id TEXT,project_id TEXT,conversation_id TEXT,created INTEGER,due INTEGER,status TEXT,attempts INTEGER,data TEXT);
 CREATE INDEX IF NOT EXISTS automation_events_due ON automation_events(status,due);
 CREATE TABLE IF NOT EXISTS automation_jobs(id TEXT PRIMARY KEY,extension_id TEXT,event_key TEXT,project_id TEXT,created INTEGER,status TEXT,data TEXT,UNIQUE(extension_id,event_key));
@@ -46,32 +48,51 @@ function automationPersistence(db,transaction,check){
    const next=run.messages.findIndex((m,i)=>i>start&&m.role==='user'&&(!m.turnKey||m.turnKey!==turnId));
    const messages=run.messages.slice(start,next<0?undefined:next).map(({id,role,kind,phase,text})=>({id,role,kind,phase,text:text||''}));
    const snapshot={conversationId,turnId,version:1,projectId:run.projectId,status:run.status,typedMessages:true,messages};
-   // The public automation API already rejects snapshots above 256 KiB. Keep
-   // that explicit outcome without copying an unbounded transcript at commit.
-   const data=require('../../electron/stored-json.cjs').boundedJSON(snapshot,256*1024)??JSON.stringify({conversationId,turnId,version:1,projectId:run.projectId,status:run.status,oversized:true});
-   db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,data);
+   const data=require('../../electron/stored-json.cjs').boundedJSON(snapshot,256*1024);
+   if(data!==null)db.prepare('INSERT INTO automation_turns VALUES (?,?,?,?,?,?)').run(conversationId,turnId,1,run.projectId,now,data);
+   else turnPages.freezePages(db,{conversationId,turnId,version:1,projectId:run.projectId,status:run.status},messages,now);
    require('../project-insights/persistence.cjs').captureActivity(db,snapshot,now);
    if(run.status==='completed'&&run.recoveredSaveTurnId!==turnId)for(const item of items())putEvent(item,{type:'conversation.turn.completed',eventId:randomUUID(),conversationId,turnId,version:1,projectId:run.projectId,occurredAt:new Date(now).toISOString()},now);
   });},
   handlers:{
    automationPolicy({id}){return policy(id);},
-   automationRead({context,input,conversationOnly=false}){
+   automationRead({context,input,conversationOnly=false,page}){
     if(!input||typeof input.conversationId!=='string'||typeof input.turnId!=='string'||!Number.isSafeInteger(input.version)||input.version<1)fail('INVALID_ARGUMENT');
     const identity=db.prepare("SELECT project_id,record_id FROM conversation_identities WHERE id=? AND kind='run'").get(input.conversationId);
     if(!identity)fail('NOT_FOUND');check({...context,capability:'conversations.read',projectId:identity.project_id});
-    const row=db.prepare('SELECT * FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=?').get(input.conversationId,input.turnId,input.version);
+    const args=[input.conversationId,input.turnId,input.version];
+    const lookup=db.prepare('SELECT * FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=?');
+    let row=lookup.get(...args);
+    if(!row&&page===0&&conversationOnly&&input.version===2){
+     const original=lookup.get(args[0],args[1],1);
+     if(original?.project_id===identity.project_id&&original.created>=Date.now()-RETENTION&&parse(original).oversized&&turnPages.canRecover(db,identity.record_id,input.turnId)){
+      const {conversationId,turnId,projectId,status}=parse(original);
+      transaction(()=>turnPages.freezePages(db,{conversationId,turnId,projectId,status,version:2,recovered:true},turnPages.retainedMessages(db,identity.record_id,turnId),original.created));
+      row=lookup.get(...args);
+     }
+    }
     if(!row||row.project_id!==identity.project_id)fail('NOT_FOUND');
     if(row.created<Date.now()-RETENTION)fail('SOURCE_EXPIRED');
     check({...context,capability:'conversations.read',projectId:row.project_id});
-    const value=parse(row);if(value.oversized||Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');if(!conversationOnly)return value;
+    const value=parse(row);
+    if(page!==undefined&&(!conversationOnly||!Number.isSafeInteger(page)||page<0||page>=(value.pageCount||1)))fail('INVALID_ARGUMENT');
+    if(value.pageCount){
+     if(page===undefined)fail('QUOTA_EXCEEDED');
+     const part=db.prepare('SELECT data FROM automation_turn_pages WHERE conversation_id=? AND turn_id=? AND version=? AND page=?').get(...args,page);
+     if(!part)fail('SOURCE_UNAVAILABLE');
+     const {pageCount,...header}=value;
+     return {pageCount,turn:{...header,messages:parse(part)}};
+    }
+    if(value.oversized||Buffer.byteLength(row.data)>256*1024)fail('QUOTA_EXCEEDED');if(!conversationOnly)return value;
     const typed=value.typedMessages;
     const metadata=typed?null:db.prepare("SELECT json_extract(data,'$.kind') kind,json_extract(data,'$.phase') phase,json_extract(data,'$.role') role FROM run_items WHERE run_id=? AND collection='messages' AND item_key=? AND turn_key=?");
-    return {...value,messages:value.messages.flatMap(m=>{
+    const turn={...value,messages:value.messages.flatMap(m=>{
      const info=typed?m:metadata.get(identity.record_id,m.id,value.turnId);
      if(!info||info.role!==m.role||info.kind||!(m.role==='user'||(m.role==='assistant'&&(!info.phase||info.phase==='final_answer'))))return [];
      const text=m.role==='assistant'?m.text.replace(/<(think|thinking|reasoning)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi,''):m.text;
      return text.trim()?[{id:m.id,role:m.role,text}]:[];
     })};
+    return page===undefined?turn:{turn,pageCount:1};
    },
    automationRecover(){return transaction(()=>{db.prepare("UPDATE automation_events SET status=CASE WHEN attempts>=6 THEN 'dead' ELSE 'pending' END WHERE status='delivering'").run();for(const row of db.prepare("SELECT * FROM automation_jobs WHERE status='running'").all()){const job=parse(row);job.status='unknown';job.error='OUTCOME_UNKNOWN';saveJob(job);resultEvent(job);}reconcile();});},
    automationReconcile(){return transaction(reconcile);},

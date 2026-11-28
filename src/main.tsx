@@ -4,7 +4,6 @@ import App from './App';
 import RenderErrorBoundary from './RenderErrorBoundary';
 import {ConfirmationProvider} from './Confirmation';
 import './shadcn.css';
-import './shimmer.css';
 import './styles.css';
 import './workspace-polish.css';
 import './windows-layout.css';

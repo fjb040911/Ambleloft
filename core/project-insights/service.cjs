@@ -1,5 +1,5 @@
 const {hash}=require('./persistence.cjs');
-const {planBatches,sliceTurn,sourceIndex}=require('./segments.cjs');
+const {createBatchPlanner,sliceTurn,sourceIndex}=require('./segments.cjs');
 const fail=code=>{throw Object.assign(Error(code),{code});};
 const outputSchema={type:'object',properties:{items:{type:'array',maxItems:20,items:{type:'object',properties:{text:{type:'string',minLength:1,maxLength:2000},sourceIndexes:{type:'array',minItems:1,maxItems:10,items:{type:'integer',minimum:0,maximum:9}}},required:['text','sourceIndexes'],additionalProperties:false}}},required:['items'],additionalProperties:false};
 class ProjectInsightsService{
@@ -41,11 +41,25 @@ class ProjectInsightsService{
   if(policy.paused||!policy.providerId||!policy.model)fail('INTERACTION_REQUIRED');
   if(input.modelRef?.providerId!==policy.providerId||input.modelRef?.model!==policy.model)fail('MODEL_UNAVAILABLE');
   let config;try{config=await this.providers.secret(policy.providerId,policy.model);}catch{fail('MODEL_UNAVAILABLE');}
+  const window=Math.min(config.effectiveLimits?.contextWindow||Infinity,config.detectedModelLimits?.contextWindow||Infinity);
+  const limit=Math.min(44000,Math.max(1024,(window-4096)*2));
+  const planner=createBatchPlanner(limit);
   const refs=[],snapshots=[],seen=new Set();
   for(const ref of input.turns){
    const clean={conversationId:ref.conversationId,turnId:ref.turnId,version:ref.version},key=hash(clean);if(seen.has(key))continue;seen.add(key);
-   const turn=await this.database.call('automationRead',{context,input:clean,conversationOnly:true});if(turn.projectId!==input.projectId)fail('FORBIDDEN');
-   refs.push(clean);snapshots.push(turn);
+   const refIndex=refs.length;refs.push(clean);
+   const fingerprints=[];
+   for(let page=0;;page++){
+    const {turn,pageCount}=await this.database.call('automationRead',{context,input:clean,conversationOnly:true,page});
+    if(turn.projectId!==input.projectId)fail('FORBIDDEN');
+    // Store only page locations in the plan. Re-read immutable pages at enqueue.
+    const paged=pageCount>1||turn.recovered;
+    planner.addTurn(turn,refIndex,paged?page:undefined);
+    if(paged)fingerprints.push(hash(turn));else snapshots.push(turn);
+    if(page+1===pageCount)break;
+   }
+   if(fingerprints.length)snapshots.push({pages:fingerprints});
+
   }
   if(input.summaryIds){
    if(input.turns.length||input.ruleVersion!=='ai-work-log-v3'||!Array.isArray(input.summaryIds)||input.summaryIds.length<2||input.summaryIds.length>4||new Set(input.summaryIds).size!==input.summaryIds.length)fail('INVALID_ARGUMENT');
@@ -60,12 +74,11 @@ class ProjectInsightsService{
     }
    }
    for(const {ref,lines} of notes.values()){
-    refs.push(ref);snapshots.push({...ref,projectId:input.projectId,messages:[{role:'assistant',text:[...lines].join('\n')}]});
+    const note={...ref,projectId:input.projectId,messages:[{role:'assistant',text:[...lines].join('\n')}]};
+    planner.addTurn(note,refs.length);refs.push(ref);snapshots.push(note);
    }
   }
-  const window=Math.min(config.effectiveLimits?.contextWindow||Infinity,config.detectedModelLimits?.contextWindow||Infinity);
-  const limit=Math.min(44000,Math.max(1024,(window-4096)*2));
-  const batches=planBatches(snapshots,limit);
+  const batches=planner.finish();
   const cacheKey=hash([context.id,context.generation,input.projectId,input.ruleVersion,input.format||'work',input.language,refs,snapshots,config.id,config.model,config.baseUrl,config.protocol,config.effectiveLimits,config.revision||0,3]);
   const root=await this.database.call('insightsSummaryCreate',{context,input:{projectId:input.projectId,requestKey:input.requestKey,ruleVersion:input.ruleVersion,format:input.format||'work',language:input.language,modelRef:input.modelRef,cacheKey,refs,batches,...(input.summaryIds?{notes:snapshots}:{}),providerRevision:config.revision||0}});
   if(root.status==='preparing')await this.enqueue(context,root);
@@ -78,8 +91,12 @@ class ProjectInsightsService{
    const turns=[],loaded=new Map();
    for(const part of root.batches[index]){
     const i=sourceIndex(part);
-    if(!loaded.has(i))loaded.set(i,root.notes?.[i]||await this.database.call('automationRead',{context,input:root.refs[i],conversationOnly:true}));
-    turns.push(sliceTurn(loaded.get(i),part));
+    const page=part.page??0,key=i+':'+page;
+    if(!loaded.has(key)){
+     const turn=root.notes?.[i]||(await this.database.call('automationRead',{context,input:root.refs[i],conversationOnly:true,page})).turn;
+     loaded.set(key,turn);
+    }
+    turns.push(sliceTurn(loaded.get(key),part));
    }
    const policy=await this.database.call('insightsSummaryPolicy',{context,projectId:root.projectId});
    if(policy.providerId!==root.modelRef.providerId||policy.model!==root.modelRef.model)fail('MODEL_UNAVAILABLE');

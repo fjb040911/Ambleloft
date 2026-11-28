@@ -42,9 +42,27 @@ for(const [english,dark,reduced] of [[false,false,false],[true,true,true]] as co
  await page.setViewportSize({width:english?390:1280,height:950});await page.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});await enter(page,{english,dark});
  await page.evaluate(()=>{const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');r.host={status:'running',revision:1,ruleVersion:'fixture',steps:[],brief:null,activity:{id:'model-pass',phase:'waiting',reasoning:'',reasoningFormat:'text',startedAt:new Date().toISOString()}};window.desktop!.spaces!.stopDiscussionHost=async()=>{r.host.status='interrupted';q.emit();return {stopped:true};};q.emit();});
  const host=page.getByRole('region',{name:english?'Host response':'主持人回复'});await expect(host.getByRole('status')).toContainText(english?'Waiting for the model':'等待模型响应');
+ const label=host.locator('[data-slot=marker-content]');
+ await expect(label).toHaveCSS('animation-name',reduced?'none':'tw-shimmer');
+ if(!reduced){
+  const position=await label.evaluate(el=>getComputedStyle(el).backgroundPosition);
+  await expect.poll(()=>label.evaluate(el=>getComputedStyle(el).backgroundPosition)).not.toBe(position);
+ }else{
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  await expect(label).toHaveCSS('animation-name','tw-shimmer');
+  await expect(label).toHaveCSS('background-clip','text');
+  // Keep the sampled glyphs above the discussion's sticky composer.
+  await label.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));
+  const atPhase=async(ms:number)=>{
+   await label.evaluate((el,time)=>{const sweep=el.getAnimations()[0];sweep.pause();sweep.currentTime=time;},ms);
+   return label.screenshot();
+  };
+  expect((await atPhase(0)).equals(await atPhase(1000))).toBe(false);
+  await page.emulateMedia({reducedMotion:'reduce'});
+ }
  expect(await host.locator('[data-slot=spinner]').evaluate(el=>getComputedStyle(el).animationName)).toBe(reduced?'none':'spin');
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.phase='reasoning';h.activity.reasoning=Array.from({length:30},(_,i)=>'Provider reasoning '+i).join('\n');h.revision++;q.emit();});
- const thought=host.getByRole('region',{name:english?'Thinking':'思考过程'});await expect(thought).toContainText('Provider reasoning 29');await expect(thought).toBeVisible();await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const thought=host.getByRole('region',{name:english?'Thinking':'思考过程'});await expect(thought).toHaveCount(0);await host.getByRole('button',{name:english?'Thinking':'思考中',exact:true}).click();await expect(thought).toContainText('Provider reasoning 29');await expect(thought).toBeVisible();await page.locator('.qa-scroll').evaluate(el=>{el.scrollTop=el.scrollHeight;});
  await expect.poll(()=>thought.evaluate(el=>el.scrollTop)).toBeGreaterThan(100);
  await thought.evaluate(el=>{el.dispatchEvent(new WheelEvent('wheel',{deltaY:-50,bubbles:true}));el.scrollTop=0;});
  await page.evaluate(()=>{const q=(window as any).spaceQA,h=q.snapshot.requests.find((r:any)=>r.id==='discussion').host;h.activity.reasoning+='\nNew provider text';h.revision++;q.emit();});await expect(thought).toContainText('New provider text');expect(await thought.evaluate(el=>el.scrollTop)).toBe(0);
@@ -66,4 +84,44 @@ test('host closes previously opened reasoning when the round completes',async({p
  await expect(thought).toBeHidden();
  await trace.locator('[data-slot=trace-collapsible-trigger]').click();await expect(thought).toBeVisible();await expect(thought).toContainText('保留这段思考记录');
  await page.evaluate(()=>{(window as any).spaceQA.emit();});await expect(thought).toBeVisible();
+});
+
+test('host hands off to experts in one live slot and preserves its coordination messages',async({page})=>{
+ await enter(page);
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');
+  r.participants=[];
+  r.host={status:'running',revision:1,steps:[{id:'scope',text:'先确认范围'}],activity:{id:'pass',phase:'waiting',reasoning:''}};
+  q.emit();
+ });
+ const host=page.getByRole('region',{name:'主持人回复'}),slot=host.locator('.live-trace-activity');
+ await expect(slot).toHaveText('等待下一步响应');
+ const element=await slot.elementHandle();
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');
+  r.host.activity.phase='experts';r.host.steps.push({id:'delegate',text:'请专家检查实现'});r.host.revision++;q.emit();
+ });
+ await expect(slot).toHaveText('正在启动专家');
+ await expect(host.getByText('先确认范围',{exact:true})).toBeVisible();
+ await expect(host.getByText('请专家检查实现',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');
+  r.participants=[{employeeId:'writer',status:'preparing',output:''}];r.host.revision++;q.emit();
+ });
+ await page.getByRole('button',{name:/专家分析与执行记录/}).click();
+ const preview=page.locator('[data-expert-id="writer"] .wf-output');
+ await expect(preview.getByRole('status')).toHaveText('正在启动专家');
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');
+  r.participants=[{employeeId:'writer',runId:'expert',status:'running',output:''}];r.host.revision++;q.emit();
+ });
+ await expect(slot).toHaveText('等待专家完成分析');
+ expect(await slot.evaluate((el,previous)=>el===previous,element)).toBe(true);
+ await page.evaluate(()=>{
+  const q=(window as any).spaceQA,r=q.snapshot.requests.find((r:any)=>r.id==='discussion');
+  r.participants[0].status='completed';r.host.status='completed';r.host.revision++;q.emit();
+ });
+ await expect(slot).toHaveCount(0);
+ await host.getByRole('button',{name:/查看协调过程/}).click();
+ await expect(host.getByText('先确认范围',{exact:true})).toBeVisible();
 });

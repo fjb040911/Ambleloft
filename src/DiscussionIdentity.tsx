@@ -8,6 +8,8 @@ import {Button} from './components/ui/button';
 import {Popover,PopoverTrigger,PopoverContent,PopoverTitle} from './components/ui/popover';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuGroup,DropdownMenuItem} from './components/ui/dropdown-menu';
 import {useCopy} from './WorkforceInputs';
+import LiveTraceActivity from './LiveTraceActivity';
+import Markdown from './Markdown';
 import type {SpaceParticipant,SpaceRequest} from './workforce-types';
 import type {AgentRun} from './types';
 
@@ -17,6 +19,18 @@ export function DiscussionStatus({participant,run}:{participant:SpaceParticipant
  const L=useCopy(),status=run?.status||participant.status;
  const [label,Icon]=status==='completed'?[L('已完成','Completed'),Check]:['failed','error'].includes(status)?[L('失败','Failed'),TriangleAlert]:status==='interrupted'?[L('已停止','Stopped'),Pause]:status==='waiting'?[L('等待处理','Needs input'),Pause]:status==='stopping'?[L('正在停止','Stopping'),LoaderCircle]:run?.queued?[L('排队中','Queued'),Clock]:status==='running'?[L('分析中','Analyzing'),LoaderCircle]:['preparing','started'].includes(status)?[L('准备中','Preparing'),Clock]:[L('状态未知','Unknown status'),Clock];
  return <Badge variant={['failed','error'].includes(status)?'destructive':'secondary'} className="wf-discussion-status"><Icon aria-hidden="true"/>{label}</Badge>;
+}
+// A participant can arrive before its run ID or the first transcript page.
+export function ExpertOutputPreview({participant:p}:{participant:SpaceParticipant}){
+ const L=useCopy();
+ const starting=!p.runId&&['preparing','started'].includes(p.status);
+ const awaiting=['preparing','started','running'].includes(p.status);
+ return <div className="wf-output">
+  {p.output&&<Markdown text={p.output}/>}
+  {awaiting&&<LiveTraceActivity label={starting?L('正在启动专家','Starting experts'):L('等待专家回复…','Waiting for the expert…')}/>}
+  {!p.output&&['completed','failed','error','interrupted'].includes(p.status)&&<p>{L('本次未产生回复。','No response was produced.')}</p>}
+  {p.outputTruncated&&<p>{L('仅显示回复预览，打开执行记录可查看全文。','Response preview. Open the execution record for the full text.')}</p>}
+ </div>;
 }
 export function revealContribution(request:SpaceRequest,participant:SpaceParticipant){
  const group=document.getElementById('wf-experts-'+request.id);

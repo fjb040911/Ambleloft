@@ -202,7 +202,7 @@ test('version 10 databases upgrade without rewriting existing workspace and reje
  const sql=new DatabaseSync(path.join(root,'atelier.sqlite'));
  sql.exec("CREATE TABLE settings(key TEXT PRIMARY KEY,data TEXT NOT NULL); INSERT INTO settings VALUES('workspace','{\"theme\":\"dark\"}'); PRAGMA user_version=10;");sql.close();
  db=new Database(root);await db.call('ready');assert.equal((await db.call('readWorkspace')).theme,'dark');await db.close();db=null;
- const check=new DatabaseSync(path.join(root,'atelier.sqlite'));assert.equal(check.prepare('PRAGMA user_version').get().user_version,16);check.exec('PRAGMA user_version=17');check.close();
+ const check=new DatabaseSync(path.join(root,'atelier.sqlite'));assert.equal(check.prepare('PRAGMA user_version').get().user_version,17);check.exec('PRAGMA user_version=18');check.close();
  db=new Database(root);await assert.rejects(db.call('ready'),/数据库版本高于/);await db.close().catch(()=>{});db=null;
 });
 test('discussion projections preserve underlying document and historical-space restrictions',async t=>{

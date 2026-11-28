@@ -1,17 +1,18 @@
 import { test, expect } from '@playwright/test';
 import {createRequire} from 'node:module';
 
-test('silent model preserves compositor sweep, readable status and editable draft',async({page})=>{
+test('silent model preserves the shadcn shimmer, readable status and editable draft',async({page})=>{
  await prepare(page,'');
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.questions=[];r.tools=[];r.lastEventAt=new Date(Date.now()-30000).toISOString();r.messages=[{id:'u',role:'user',text:'Wait for the model',timing:{startedAt:r.lastEventAt}}];w.__emit();});
  await expect(page.locator('.run-activity')).toHaveCount(0);
  const pending=page.getByRole('region',{name:'任务执行过程'});await expect(pending).toContainText('等待模型响应');
  const labels=page.locator('.process-entry [data-slot="marker-content"]');
  await expect(labels).toHaveCount(1);
- await expect(labels.locator('[data-shimmer-layer]')).toHaveCount(3);
- expect(await labels.evaluateAll(elements=>elements.flatMap(el=>el.getAnimations({subtree:true}).filter(a=>a.playState==='running').map(a=>(a as CSSAnimation).animationName)))).toEqual(Array(3).fill('composite-text-sweep'));
- expect(await labels.evaluateAll(elements=>elements.map(el=>el.textContent))).toEqual(['等待模型响应']);
- expect(await labels.evaluateAll(elements=>elements.map(el=>getComputedStyle(el).animationName))).toEqual(['none']);
+ await expect(labels).toHaveText('等待模型响应');
+ await expect(labels).toHaveCSS('animation-name','tw-shimmer');
+ await expect(labels).toHaveCSS('background-clip','text');
+ const initial=await labels.evaluate(el=>getComputedStyle(el).backgroundPosition);
+ await expect.poll(()=>labels.evaluate(el=>getComputedStyle(el).backgroundPosition)).not.toBe(initial);
  await expect(pending.locator('[data-slot=spinner]')).toBeVisible();
  const composer=page.getByRole('textbox',{name:'继续对话',exact:true});await composer.fill('Unsent while the model is silent');await expect(composer).toHaveValue('Unsent while the model is silent');
 });
@@ -350,7 +351,7 @@ test('turn anchors preview the question and jump without moving the composer',as
  const box=await page.getByRole('textbox',{name:'继续对话'}).boundingBox();expect(box!.y+box!.height).toBeLessThan(600);
 });
 
-test('progress stays until completion and can be reopened alongside plans and files',async({page})=>{
+test('live steps clear on completion and can be reopened alongside plans and files',async({page})=>{
  await prepare(page);
  await page.evaluate(()=>{
   const run=(window as any).__demoRun;run.status='running';run.approvals=[];
@@ -362,12 +363,10 @@ test('progress stays until completion and can be reopened alongside plans and fi
  await panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]').click();
  await expect(panel).toContainText('Downloading python-docx');
  await expect(panel.locator('.thinking-window')).toHaveCount(0);
- await panel.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
- await expect(panel.locator('.thinking-window pre')).toHaveText('检查可用环境');
- await expect(panel.locator('.process-milestone')).toHaveText(['有个 Python 3.11 可用。','安装进行中，等待完成。']);
+ await expect(panel.locator('.reasoning')).toHaveCount(0);
  await page.evaluate(()=>{(window as any).__demoRun.tools[0].status='completed';(window as any).__emit();});
- await expect(panel.locator('.commandExecution [data-slot=trace-collapsible-trigger]')).toBeVisible();
- await expect(panel.locator('.process-entry-title')).toHaveText(['思考摘要']);
+ await expect(panel.locator('.commandExecution')).toHaveCount(0);
+ await expect(panel.locator('.process-milestone')).toHaveText(['有个 Python 3.11 可用。','安装进行中，等待完成。']);
  await expect(panel.getByRole('button',{name:/查看已完成操作/})).toHaveCount(0);
  await expect(page.locator('[data-slot=message][data-align=start]')).toHaveCount(0);
  await page.screenshot({path:'test-results/turn-process.png'});
@@ -414,7 +413,7 @@ test('folded process leaves the composer clear and restores tool details on expa
 
 test('thinking scrolls independently, disappears after interruption, and tools stop shimmering',async({page})=>{
  await prepare(page);
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'研究任务'},{id:'a',role:'assistant',phase:'commentary',text:'**核实关键前提**',order:1},{id:'r',role:'assistant',kind:'reasoning',text:Array.from({length:60},(_,i)=>'分析步骤 '+i).join('\n'),order:2}];run.tools=[{id:'t',turnKey:'u',order:3,type:'commandExecution',label:'pwd',status:'inProgress',detail:''}];(window as any).__emit();});
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.messages=[{id:'u',role:'user',text:'研究任务'},{id:'a',role:'assistant',phase:'commentary',text:'**核实关键前提**',order:1},{id:'r',role:'assistant',kind:'reasoning',text:Array.from({length:60},(_,i)=>'分析步骤 '+i).join('\n'),order:2}];run.tools=[];(window as any).__emit();});
  await page.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
  const window=page.locator('.thinking-window');
  await expect(page.locator('.process-milestone strong')).toHaveText('核实关键前提');
@@ -423,8 +422,10 @@ test('thinking scrolls independently, disappears after interruption, and tools s
  await window.evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
  await page.evaluate(()=>{(window as any).__demoRun.messages[2].text+='\n更多分析';(window as any).__emit();});
  await expect.poll(()=>window.evaluate(el=>el.scrollTop)).toBe(0);
+ await page.evaluate(()=>{const run=(globalThis.window as any).__demoRun;run.tools=[{id:'t',turnKey:'u',order:3,type:'commandExecution',label:'pwd',status:'inProgress',detail:''}];(globalThis.window as any).__emit();});
  const tool=page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]');
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
+ await expect(tool.locator('[data-trace-sweeping]')).toHaveCSS('animation-name','tw-shimmer');
  await expect(tool.locator('[data-slot=spinner]')).toBeVisible();
  await page.emulateMedia({reducedMotion:'reduce'});
  expect(await tool.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
@@ -842,9 +843,9 @@ test('latest commentary shimmers in place without a running label above the comp
  const dockLabel=page.locator('.conversation-dock').getByText('执行中',{exact:true});
  await expect(dockLabel).toHaveCount(0);
  const progress=page.locator('.process-milestone').filter({hasText:'正在汇总审查结果'});
- const prose=progress.locator('p');
+ const prose=progress;
  const animation=()=>prose.evaluate(el=>getComputedStyle(el).animationName);
- await expect.poll(animation).toBe('progress-commentary-sweep');
+ await expect.poll(animation).toBe('tw-shimmer');
  await expect(prose).toHaveCSS('background-clip','text');
  expect(await prose.evaluate(el=>el.getBoundingClientRect().height/parseFloat(getComputedStyle(el).lineHeight))).toBeGreaterThan(1);
  const atPhase=async(ms:number)=>{
@@ -864,24 +865,31 @@ test('activity and thinking sweeps preserve text, stop on attention and respect 
  await prepare(page,'完成');
  await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.lastEventAt=new Date().toISOString();r.messages=r.messages.slice(0,1);w.__emit();});
  const status=page.locator('.turn-progress-toggle');await expect(status).toContainText('执行中');
- const label=status.locator('[data-slot="trace-title"]').first(),layer=label.locator('[data-shimmer-layer="0"]');
- await expect(label.locator('[data-shimmer-layer]')).toHaveCount(3);
- await expect(label).toHaveCSS('animation-name','none');await expect(layer).toHaveCSS('animation-name','composite-text-sweep');
- const position=await layer.evaluate(e=>getComputedStyle(e).backgroundPosition),opacity=await layer.evaluate(e=>getComputedStyle(e).opacity);
- await expect.poll(()=>layer.evaluate(e=>getComputedStyle(e).opacity)).not.toBe(opacity);await expect(layer).toHaveCSS('background-position',position);
- expect(await label.textContent()).toBe('执行中');
- await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=0;}));const sweepStart=await label.screenshot();
- await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>{a.currentTime=666;}));const sweepEnd=await label.screenshot();
- expect(sweepStart.equals(sweepEnd)).toBe(false);await label.evaluate(e=>e.getAnimations({subtree:true}).forEach(a=>a.play()));
+ await expect(status.locator('[data-trace-sweeping]')).toHaveCount(0);
+ const label=page.locator('.live-trace-activity [data-slot=marker-content]');
+ await expect(label).toHaveCSS('animation-name','tw-shimmer');
+ // A competing !important background-position can freeze a running animation.
+ const atPhase=async(time:number)=>{
+  await label.evaluate((el,ms)=>{const animation=el.getAnimations()[0];animation.pause();animation.currentTime=ms;},time);
+  return label.screenshot();
+ };
+ expect((await atPhase(0)).equals(await atPhase(1000))).toBe(false);
  await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.push({id:'thinking',role:'assistant',kind:'reasoning',reasoningFormat:'text',text:'正在分析输入'});w.__emit();});
  const thinking=page.locator('.process-entry.reasoning [data-slot="trace-line"]'),title=thinking.locator('[data-slot="trace-title"]');
- await expect(title).toContainText('思考过程');await expect(title.locator('[data-shimmer-layer]')).toHaveCount(3);
- await page.evaluate(()=>document.documentElement.dataset.theme='dark');await expect(title).toBeVisible();
- expect(await title.evaluate(e=>getComputedStyle(e).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
- await page.emulateMedia({reducedMotion:'reduce'});await expect(layer).toHaveCSS('display','none');await expect(layer).toHaveCSS('animation-name','none');
- await page.emulateMedia({reducedMotion:'no-preference'});await expect(layer).toHaveCSS('animation-name','composite-text-sweep');
+ await expect(title).toContainText('思考中');
+ await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+ await expect(title).toHaveCSS('animation-name','tw-shimmer');
+ await expect(title).toHaveCSS('-webkit-text-fill-color','rgba(0, 0, 0, 0)');
+ for(const media of [{reducedMotion:'reduce'},{reducedMotion:'no-preference',forcedColors:'active'}] as const){
+  await page.emulateMedia(media);
+  await expect(title).toHaveCSS('animation-name','none');
+  await expect(title).toHaveCSS('background-image','none');
+  expect(await title.evaluate(el=>getComputedStyle(el).webkitTextFillColor)).not.toBe('rgba(0, 0, 0, 0)');
+ }
+ await page.emulateMedia({forcedColors:'none',reducedMotion:'no-preference'});
+ await expect(title).toHaveCSS('animation-name','tw-shimmer');
  await page.evaluate(()=>{const w=window as any;w.__demoRun.status='waiting';w.__emit();});
- await expect(title.locator('[data-shimmer-layer]')).toHaveCount(0);await expect(status).toContainText('等待审批');await expect(status.locator('[data-shimmer-layer]')).toHaveCount(0);await expect(status.locator('[data-slot="spinner"]')).toHaveCount(0);
+ await expect(status).toContainText('等待审批');await expect(page.locator('[data-trace-sweeping]')).toHaveCount(0);await expect(status.locator('[data-slot="spinner"]')).toHaveCount(0);
 });
 
 for(const resume of ['button','wheel'] as const)test(`message scroller follows output, pauses for reading, and resumes at the latest message via ${resume}`,async({page})=>{
@@ -921,6 +929,12 @@ test('tool summaries describe actions while commands and output remain expandabl
  {id:'unknown',turnKey:'u',type:'commandExecution',label:'cat a.md && rm b.md',status:'completed',detail:'mixed commands'},
  {id:'compact',turnKey:'u',type:'contextCompaction',label:'上下文压缩',status:'inProgress',detail:''}
  ];(window as any).__emit();});
+ await expect(page.locator('.process-entry.contextCompaction')).toContainText('正在压缩上下文');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.tools.at(-1).status='completed';w.__emit();});
+ await expect(page.locator('.process-entry.contextCompaction')).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__emit();});
+ await expect(page.locator('.process-panel')).toBeHidden();
+ await page.locator('.turn-progress-toggle').click();
  const rows=page.locator('.process-entry.commandExecution');
  await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).toContainText('读取文件');
  await expect(rows.nth(0).locator('[data-slot=trace-collapsible-trigger]')).toContainText('design.md');
@@ -931,8 +945,6 @@ test('tool summaries describe actions while commands and output remain expandabl
  await expect(rows.nth(0).locator('pre').last()).toHaveText('file contents');
  await expect(rows.nth(1).locator('[data-slot=trace-collapsible-trigger]')).toContainText('读取文件');
  await expect(rows.nth(2).locator('[data-slot=trace-collapsible-trigger]')).toContainText('cat a.md && rm b.md');
- await expect(page.locator('.process-entry.contextCompaction')).toContainText('正在压缩上下文');
- await page.evaluate(()=>{(window as any).__demoRun.tools.at(-1).status='completed';(window as any).__emit();});
  await expect(page.locator('.process-entry.contextCompaction')).toContainText('上下文已压缩');
 });
 
@@ -973,7 +985,7 @@ test('wheel over reasoning scrolls the chat for short text and at both boundarie
  await page.evaluate(()=>{
   const w=window as any,r=w.__demoRun;
   const paragraph='Reading the conversation.\n\n'.repeat(100);
-  r.status='running';r.approvals=[];r.tools=[];
+  r.status='interrupted';r.approvals=[];r.tools=[];
   r.messages=[
    {id:'u',role:'user',text:'Check progress'},
    {id:'before',role:'assistant',phase:'commentary',text:paragraph,order:1},
@@ -982,6 +994,8 @@ test('wheel over reasoning scrolls the chat for short text and at both boundarie
   ];
   w.__emit();
  });
+ await expect(page.locator('.process-panel')).toBeHidden();
+ await page.locator('.turn-progress-toggle').click();
  await page.locator('.reasoning [data-slot=trace-collapsible-trigger]').click();
  const thought=page.locator('.thinking-window'),chat=page.locator('.conversation-scroll:visible');
  const chatTop=()=>chat.evaluate(el=>el.scrollTop);
@@ -1215,10 +1229,10 @@ test('Trace history preserves tool disclosure and isolates terminal and markdown
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeHidden();
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeVisible();
  await expect(page.locator('.process-panel .markdown')).toHaveCount(0);
- await expect(page.locator('.trace-markdown h2')).toHaveText('步骤');
  await page.evaluate(()=>{const r=(window as any).__demoRun;r.status='completed';r.tools[0].status='completed';(window as any).__emit();});
  await expect(page.locator('.process-panel')).toBeHidden();
  await page.locator('.turn-progress-toggle').click();await expect(entry.getByLabel('工具输出',{exact:true})).toBeVisible();
+ await expect(page.locator('.trace-markdown h2')).toHaveText('步骤');
  await expect.poll(()=>page.locator('.turn-progress > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-content]').evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThan(100);
  await page.screenshot({path:'test-results/trace-history.png',animations:'disabled'});
 });
@@ -1228,7 +1242,7 @@ test('chat tool details render MCP inputs, terminal commands and collapsible err
  const stack='TypeError: Invalid value\n    at build (/project/build.js:12:4)\n    at run (/project/node_modules/runner.js:1:2)';
  await page.evaluate(stack=>{
   const w=window as any,r=w.__demoRun;
-  r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);
+  r.status='failed';r.approvals=[];r.messages=r.messages.slice(0,1);
   r.tools=[
    {id:'lookup',turnKey:'u',type:'mcpToolCall',label:'lookup',status:'completed',detail:JSON.stringify({arguments:{query:'docs'},result:{count:2}})},
    {id:'command',turnKey:'u',type:'commandExecution',label:'node build.js',status:'failed',detail:stack},
@@ -1499,37 +1513,36 @@ test('single review retries failures without acting on other concurrent approval
 
 test('thinking and tool streams default to summaries and mount text only on demand',async({page})=>{
  await prepare(page,'');
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.questions=[];run.messages=[run.messages[0],{id:'reasoning-lazy',role:'assistant',kind:'reasoning',text:'Hidden reasoning payload',order:1}];run.tools=[{id:'tool-lazy',turnKey:run.messages[0].id,type:'commandExecution',label:'pwd',status:'inProgress',detail:'Hidden tool payload',order:2}];(window as any).__emit();});
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.status='running';run.approvals=[];run.questions=[];run.messages=[run.messages[0],{id:'reasoning-lazy',role:'assistant',kind:'reasoning',text:'Hidden reasoning payload',order:1}];run.tools=[];(window as any).__emit();});
  await expect(page.locator('.thinking-window')).toHaveCount(0);await expect(page.getByText('Hidden tool payload',{exact:true})).toHaveCount(0);
  const thinking=page.locator('.process-entry.reasoning [data-slot=trace-collapsible-trigger]');await thinking.click();await expect(page.locator('.thinking-window')).toContainText('Hidden reasoning payload');await thinking.click();await expect(page.locator('.thinking-window')).toHaveCount(0);
- await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[1].text+=' more';run.tools[0].detail+=' more';(window as any).__emit();});await expect(page.locator('.thinking-window')).toHaveCount(0);
+ await page.evaluate(()=>{const run=(window as any).__demoRun;run.messages[1].text+=' more';run.tools=[{id:'tool-lazy',turnKey:run.messages[0].id,type:'commandExecution',label:'pwd',status:'inProgress',detail:'Hidden tool payload more',order:2}];(window as any).__emit();});await expect(page.locator('.thinking-window')).toHaveCount(0);
  const tool=page.locator('.process-entry.commandExecution [data-slot=trace-collapsible-trigger]');await tool.click();await expect(page.getByText('Hidden tool payload more',{exact:true})).toBeVisible();await tool.click();await expect(page.getByText('Hidden tool payload more',{exact:true})).toHaveCount(0);
 });
 
 test('collapsed execution unmounts large histories and restores disclosure choices with latest output',async({page})=>{
  await prepare(page,'');
- await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.questions=[];r.messages=[r.messages[0],{id:'progress-heavy',role:'assistant',phase:'commentary',text:'**Progress evidence**\n\n'+('Long progress record. '.repeat(1000)),order:1}];r.tools=Array.from({length:200},(_,i)=>({id:'heavy-'+i,turnKey:r.messages[0].id,type:'commandExecution',label:'echo step-'+i,status:'completed',detail:'Output '+i+' '+('x'.repeat(12000)),order:i+2}));w.__emit();});
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.questions=[];r.messages=[r.messages[0],{id:'progress-heavy',role:'assistant',phase:'commentary',text:'**Progress evidence**\n\n'+('Long progress record. '.repeat(1000)),order:1}];r.tools=Array.from({length:200},(_,i)=>({id:'heavy-'+i,turnKey:r.messages[0].id,type:'commandExecution',label:'echo step-'+i,status:i===0?'inProgress':'completed',detail:'Output '+i+' '+('x'.repeat(12000)),order:i+2}));w.__emit();});
  const progress=page.locator('.turn-progress'),toggle=progress.locator('.turn-progress-toggle');
- await expect(progress.locator('.process-entry.commandExecution')).toHaveCount(200);
+ await expect(progress.locator('.process-entry.commandExecution')).toHaveCount(1);
  const first=progress.locator('.process-entry.commandExecution').first();
  await first.locator('[data-slot=trace-collapsible-trigger]').click();
  await expect(first.getByLabel('工具输出',{exact:true})).toBeVisible();
- const expandedCount=await progress.locator('*').count();
  await toggle.click();
  await expect(progress.locator('.process-panel')).toHaveCount(0);
  await expect(progress.locator('.markdown')).toHaveCount(0);
- expect(await progress.locator('*').count()).toBeLessThan(expandedCount/10);
  await page.evaluate(()=>{const w=window as any;w.__demoRun.tools[0].detail='Newest output while collapsed';w.__demoRun.messages[1].text+=' Latest progress';w.__emit();});
  await expect(toggle).toHaveAttribute('aria-expanded','false');
  await expect(progress.locator('.process-panel')).toHaveCount(0);
  await toggle.click();
  await expect(first.getByLabel('工具输出',{exact:true})).toHaveText('Newest output while collapsed');
- await expect(progress.locator('.process-milestone')).toContainText('Latest progress');
  await page.evaluate(()=>{const w=window as any;w.__demoRun.status='completed';w.__emit();});
  await expect(toggle).toHaveAttribute('aria-expanded','false');
  await expect(toggle).not.toContainText('200');
  await expect(progress.locator('.process-panel')).toHaveCount(0);
  await toggle.click();await expect(first.getByLabel('工具输出',{exact:true})).toHaveText('Newest output while collapsed');
+ await expect(progress.locator('.process-entry.commandExecution')).toHaveCount(200);
+ await expect(progress.locator('.process-milestone')).toContainText('Latest progress');
 });
 
 test('hidden conversation freezes transcript DOM while retaining draft and latest approvals',async({page})=>{
@@ -1583,7 +1596,7 @@ test('versioned streaming recovers a missing patch and preserves historical DOM'
 
 test('long tool output is fetched only on disclosure and pages without losing text',async({page})=>{
  await prepare(page,'');
- await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=[{id:'paged',turnKey:'u',type:'commandExecution',label:'cat log',status:'completed',detail:'Tail preview',detailPreview:true,detailVersion:'v1'}];w.__detailReads=[];w.desktop.getToolText=async(input:any)=>{w.__detailReads.push(input);const text='BEGIN '+('x'.repeat(100000))+' END',offset=input.offset??text.length-64000;return {text:text.slice(offset,offset+64000),total:text.length,offset,version:'v1'};};w.__emit();});
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.status='running';r.approvals=[];r.messages=r.messages.slice(0,1);r.tools=[{id:'paged',turnKey:'u',type:'commandExecution',label:'cat log',status:'inProgress',detail:'Tail preview',detailPreview:true,detailVersion:'v1'}];w.__detailReads=[];w.desktop.getToolText=async(input:any)=>{w.__detailReads.push(input);const text='BEGIN '+('x'.repeat(100000))+' END',offset=input.offset??text.length-64000;return {text:text.slice(offset,offset+64000),total:text.length,offset,version:'v1'};};w.__emit();});
  const tool=page.locator('.process-entry.commandExecution'),toggle=tool.locator('[data-slot=trace-collapsible-trigger]');
  expect(await page.evaluate(()=>(window as any).__detailReads.length)).toBe(0);
  await toggle.click();await expect(tool.getByLabel('工具输出',{exact:true})).toContainText('END');
@@ -1958,4 +1971,187 @@ test('a guide stays in place with its focused field while the final answer strea
  await expect(page.locator('[data-turn-id="u"]').getByLabel('配置引导',{exact:true})).toContainText('已提交');
  await expect(card).toHaveCount(1);
  await expect(page.getByRole('textbox',{name:'继续对话',exact:true})).toBeInViewport();
+});
+
+test('concurrent tools share one stable live row and replay individually after interruption',async({page})=>{
+ await prepare(page,'');
+ await page.setViewportSize({width:700,height:850});
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.questions=[];
+  r.messages=[r.messages[0],{id:'ack',agentRole:'conversation',role:'assistant',phase:'commentary',text:'收到，分别核对三项。',order:1},
+   {id:'milestone',role:'assistant',phase:'commentary',status:'completed',text:'先检查 **三个模块** 的配置。',order:2}];
+  r.plans=[{turnKey:'u',steps:[{step:'核对结果',status:'inProgress'}]}];
+  r.tools=[
+   {id:'review',turnKey:'u',type:'analysis',label:'Audit',status:'running',detail:'',order:2,nativeLifecycle:[{status:'running',at:new Date().toISOString()}]},
+   {id:'one',turnKey:'u',type:'commandExecution',label:'node first.js',status:'inProgress',detail:'first',order:3}
+  ];
+  w.__emit();
+ });
+ const slot=page.locator('.live-trace-activity');
+ const row=slot.locator('.process-entry');
+ const plan=page.getByLabel('任务清单');
+ await expect(row).toHaveCount(1);
+ await expect(row).toContainText('node first.js');
+ await expect(page.getByText('收到，分别核对三项。',{exact:true})).toBeVisible();
+ await expect(plan).toContainText('0/1');
+ await expect(page.locator('.analysis-agent')).toContainText('开始工作');
+ const firstMessage=page.locator('.process-milestone').filter({hasText:'先检查'});
+ await expect(firstMessage.locator('strong')).toHaveText('三个模块');
+ const originalMessage=await firstMessage.elementHandle();
+ const original=await slot.elementHandle();
+ const height=await slot.evaluate(el=>el.offsetHeight);
+ const planTop=(await plan.boundingBox())!.y;
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.messages.push({id:'update',role:'assistant',phase:'commentary',status:'completed',order:6,text:'配置已读取，正在校验结果。'});
+  r.tools.push(...['two','three'].map((id,i)=>({id,turnKey:'u',type:'commandExecution',label:'node '+id+'.js '+'--argument '.repeat(80),status:'inProgress',detail:id,order:4+i})));
+  w.__emit();
+ });
+ await expect(row).toHaveCount(1);
+ await expect(row).toContainText('node first.js');
+ await expect(page.locator('.process-milestone')).toHaveText(['先检查 三个模块 的配置。','配置已读取，正在校验结果。']);
+ for(const [i,next] of ['two','three',''].entries()){
+  await page.evaluate(index=>{const w=window as any;w.__demoRun.tools[index+1].status='completed';w.__emit();},i);
+  if(next)await expect(row).toContainText('node '+next+'.js');
+  else await expect(row).toHaveText('子代理工作中');
+  expect(await firstMessage.evaluate((el,initial)=>el===initial,originalMessage)).toBe(true);
+  expect(await slot.evaluate((el,initial)=>el===initial,original)).toBe(true);
+  expect(await slot.evaluate(el=>el.offsetHeight)).toBe(height);
+  expect((await plan.boundingBox())!.y).toBeCloseTo(planTop,0);
+ }
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.tools[0].status='completed';r.plans[0].steps[0].status='completed';w.__emit();});
+ await expect(plan).toContainText('1/1');
+ await expect(slot.getByRole('status')).toHaveText('等待下一步响应');
+ await expect(page.locator('.analysis-agent')).toContainText('开始工作');
+ await expect(page.locator('.analysis-agent')).toContainText('已完成');
+ await page.evaluate(()=>{
+  const w=window as any;
+  w.__replayFlashed=false;
+  const observer=new MutationObserver(records=>{
+   for(const record of records)for(const node of record.addedNodes){
+    if(node instanceof Element&&(node.matches('.commandExecution')||node.querySelector('.commandExecution')))w.__replayFlashed=true;
+   }
+  });
+  observer.observe(document.querySelector('.turn-progress')!,{childList:true,subtree:true});
+  w.__finishTraceCheck=()=>{observer.disconnect();return w.__replayFlashed;};
+  w.__demoRun.status='interrupted';w.__emit();
+ });
+ const toggle=page.locator('.turn-progress-toggle');
+ await expect(toggle).toHaveAttribute('aria-expanded','false');
+ expect(await page.evaluate(()=>(window as any).__finishTraceCheck())).toBe(false);
+ await toggle.click();
+ const history=page.locator('.process-panel .process-entry.commandExecution');
+ await expect(history).toHaveCount(3);
+ await expect(history.locator('.activity-tool-summary')).toHaveText([/node first/,/node two/,/node three/]);
+ await history.nth(1).getByRole('button').click();
+ await expect(history.nth(1).getByLabel('工具输出',{exact:true})).toHaveText('two');
+});
+
+test('idle Trace feedback follows actual activity and stays out of history',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.messages=[r.messages[0],{id:'update',role:'assistant',phase:'commentary',status:'completed',text:'检查完配置，接下来读文件。',order:1}];
+  r.tools=[];w.__emit();
+ });
+ const slot=page.locator('.live-trace-activity');
+ const wait=slot.getByRole('status',{name:''}).filter({hasText:'等待下一步响应'});
+ await expect(wait).toBeVisible();
+ await page.evaluate(()=>{
+  const w=window as any;w.__demoRun.tools.push({id:'cmd',turnKey:'u',order:2,type:'commandExecution',label:'cat report.md',status:'inProgress',detail:''});w.__emit();
+ });
+ await expect(slot).toContainText('report.md');await expect(wait).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.tools[0].status='completed';w.__emit();});
+ await expect(wait).toBeVisible();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages.push({id:'think',role:'assistant',kind:'reasoning',status:'running',order:3,text:'核对结果'});w.__emit();});
+ await expect(slot).toContainText('思考中');await expect(wait).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.messages[2].status='completed';r.status='waiting';r.approvals=[{id:'ask',method:'commandExecution',detail:'{"command":"cat report.md"}'}];w.__emit();});
+ await expect(page.getByLabel('待执行命令')).toHaveText('cat report.md');
+ await expect(slot).toBeEmpty();
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.approvals=[];w.__demoRun.status='completed';w.__emit();});
+ const toggle=page.locator('.turn-progress-toggle');await expect(toggle).toHaveAttribute('aria-expanded','false');await toggle.click();
+ await expect(page.locator('.process-panel')).toContainText('report.md');
+ await expect(page.locator('.process-panel')).not.toContainText('等待下一步响应');
+});
+
+test('batched fast tools stay readable between thinking and waiting without replaying every command',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.tools=[];
+  r.messages=[r.messages[0],{id:'reason',role:'assistant',kind:'reasoning',status:'running',order:1,text:'检查输入'}];
+  w.__emit();
+ });
+ const slot=page.locator('.live-trace-activity');
+ await expect(slot).toContainText('思考中');
+ const height=await slot.evaluate(el=>el.offsetHeight);
+ await page.clock.install();
+ await page.clock.pauseAt(new Date(Date.now()+1000));
+ const emitFast=(id:string)=>page.evaluate(id=>{
+  const w=window as any,r=w.__demoRun;
+  // No running snapshot reaches the renderer, and the next reasoning is already live.
+  r.tools.push({id,type:'commandExecution',label:'cat '+id+'.ts',status:'completed',order:r.tools.length+2,detail:'',turnKey:'u'});
+  r.messages[1].order=r.tools.length+10;w.__emit();
+ },id);
+ await emitFast('first');await page.clock.runFor(100);
+ await expect(slot).toHaveText('已读取文件 first.ts');
+ await emitFast('second');await page.clock.runFor(100);
+ await emitFast('third');await page.clock.runFor(500);
+ await expect(slot).toHaveText('已读取文件 first.ts');
+ await page.clock.runFor(700);await expect(slot).toHaveText('已读取文件 third.ts');
+ await page.clock.runFor(1250);await expect(slot).toContainText('思考中');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages[1].status='completed';w.__emit();});
+ await page.clock.runFor(50);await expect(slot).toHaveText('等待下一步响应');
+ expect(await slot.evaluate(el=>el.offsetHeight)).toBe(height);
+});
+
+test('commentary hands off to native spawn, initialization and running in the same live slot',async({page})=>{
+ await prepare(page,'');
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  r.status='running';r.approvals=[];r.tools=[];
+  r.messages=[r.messages[0],{id:'progress',role:'assistant',phase:'commentary',order:1,text:'先并行核对两个模块。'}];w.__emit();
+ });
+ const slot=page.locator('.live-trace-activity');
+ await expect(slot).toHaveText('等待下一步响应');
+ const original=await slot.elementHandle(),height=await slot.evaluate(el=>el.offsetHeight);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages[1].status='running';w.__emit();});
+ await expect(slot).toHaveText('正在接收进展');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.startingSubagents=true;w.__emit();});
+ await expect(slot).toHaveText('正在启动子代理');await expect(page.locator('.analysis-agent')).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;delete r.startingSubagents;r.tools=[{id:'child',nativeThreadId:'native',type:'analysis',label:'Module review',order:2,turnKey:'u',status:'pending',detail:''}];w.__emit();});
+ await expect(slot).toHaveText('正在启动子代理');await expect(page.locator('.analysis-agent')).toContainText('初始化中');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.tools[0].status='running';w.__emit();});
+ await expect(slot).toHaveText('子代理工作中');await expect(page.locator('.analysis-agent')).toContainText('开始工作');
+ expect(await slot.evaluate((el,previous)=>el===previous,original)).toBe(true);
+ expect(await slot.evaluate(el=>el.offsetHeight)).toBe(height);
+});
+
+test('latest execution message sweeps once across text appends and hands off to the next event',async({page})=>{
+ await prepare(page,'');
+ await page.clock.install();
+ await page.evaluate(()=>{
+  const w=window as any,r=w.__demoRun;
+  Object.assign(r,{status:'running',approvals:[],tools:[],messages:[r.messages[0],{id:'update',role:'assistant',phase:'commentary',order:1,text:'检查消息顺序。'}]});
+  w.__emit();
+ });
+ const owner=page.locator('[data-trace-sweeping]');
+ await expect(owner).toHaveCount(1);await expect(owner).toHaveText('检查消息顺序。');
+ await expect(owner).toHaveCSS('animation-iteration-count','1');
+ const sweep=await owner.evaluateHandle(el=>el.getAnimations()[0]);
+ await page.clock.runFor(1000);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages[1].text+='\n\n收到第二段。';w.__emit();});
+ await expect(owner).toContainText('收到第二段。');
+ expect(await owner.evaluate((el,previous)=>el.getAnimations()[0]===previous,sweep)).toBe(true);
+ await page.clock.runFor(1100);await expect(owner).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.messages[1].text+='继续补全。';w.__emit();});
+ await expect(page.locator('.process-milestone')).toContainText('继续补全。');await expect(owner).toHaveCount(0);
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.tools=[{id:'inspect',turnKey:'u',type:'commandExecution',order:2,label:'echo inspect',status:'running',detail:''}];w.__emit();});
+ await expect(owner).toHaveCount(1);await expect(owner).toContainText('echo inspect');
+ await page.evaluate(()=>{const w=window as any,r=w.__demoRun;r.tools[0].status='completed';r.tools.push({id:'review',nativeThreadId:'review',turnKey:'u',type:'analysis',order:3,status:'running',label:'Module review',detail:''});w.__emit();});
+ await expect(owner).toHaveCount(1);await expect(owner).toHaveText('Module review');
+ await page.evaluate(()=>{const w=window as any;w.__demoRun.status='interrupted';w.__emit();});
+ await expect(owner).toHaveCount(0);
+ await page.locator('.turn-progress-toggle').click();await expect(page.locator('.process-panel')).toBeVisible();await expect(owner).toHaveCount(0);
 });

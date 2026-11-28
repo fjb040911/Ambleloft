@@ -7,7 +7,8 @@ function previewMessage(message){
 // Transient UI state is deliberately absent from the serialized run.
 function saveView(run){
  const pending=run.pendingRecord;
- return pending?{...run,status:pending.final.status,error:pending.final.error,recordSaving:true,saveIssue:pending.issue}:run;
+ if(pending)return {...run,status:pending.final.status,error:pending.final.error,recordSaving:true,saveIssue:pending.issue};
+ return run.pendingNativeSpawns?.size?{...run,startingSubagents:true}:run;
 }
 function summary(run) {
  const {messages,tools,plans,fileChanges,artifacts,taskApps,approvals,questions,modelRequests,...meta}=saveView(run);

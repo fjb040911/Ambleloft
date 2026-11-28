@@ -12,6 +12,7 @@ function clearedReasoning(message){
  next.reasoningCleared=true;
  return next;
 }
+const {activityKeys}=require('./run-text-path.cjs');
 const {reference,digest}=require('./runtime-text-cache.cjs');
 // Keep strings by reference, not a second serialized copy of the complete run.
 function splitItem(item){
@@ -19,7 +20,14 @@ function splitItem(item){
  const keep=(path,ref)=>{if(ref.kind==='joined'&&!ref.hash){const hash=require('node:crypto').createHash('sha256');for(const chunk of require('./text-spool.cjs').chunks(ref))hash.update(chunk,'utf16le');ref.hash=hash.digest('hex');}texts.set(JSON.stringify(path),ref);};
  function visit(value,path){
   if(typeof value==='string'&&path.length&&value.length>threshold){texts.set(JSON.stringify(path),value);return '';}
-  if(Array.isArray(value))return Array.from({length:value.length},(_,i)=>{const ref=reference(value,String(i));if(ref){keep([...path,i],ref);return '';}return visit(value[i],[...path,i]);});
+  if(Array.isArray(value)){
+   const keys=path.length===1&&path[0]==='nativeActivity'?activityKeys(value):null;
+   return Array.from({length:value.length},(_,i)=>{
+    const next=[...path,keys?keys[i]:i],ref=reference(value,String(i));
+    if(ref){keep(next,ref);return '';}
+    return visit(value[i],next);
+   });
+  }
   if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).map(k=>{const ref=reference(value,k);if(ref){keep([...path,k],ref);return [k,''];}return [k,visit(value[k],[...path,k])];}));
   return value;
  }

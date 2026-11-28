@@ -47,6 +47,10 @@ test('SQLite disk full is reported distinctly; retry uses the original terminal 
   const run={id:'r',status:'running',messages:[],tools:[],approvals:[]};runtime.runs=[run];
   await runtime.finish({run,key:'attempt',turnKey:'turn',conversationOnly:true},'failed','tool failed');
   assert.equal(run.pendingRecord.issue.kind,'space');
+  assert.equal(run.saveFailure.sqliteCode,13);
+  const report=require('../electron/run-diagnostics.cjs').diagnosticReport(run,'test');
+  assert.equal(report.saveFailure.code,run.pendingRecord.issue.code);
+  assert.equal(report.saveFailure.stage,'commit');
   disk.exec('PRAGMA max_page_count=100');
   await runtime.retrySave('r');await runtime.retrySave('r');
   assert.equal(run.status,'failed');assert.equal(run.error,'tool failed');

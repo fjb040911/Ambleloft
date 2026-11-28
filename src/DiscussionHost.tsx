@@ -1,3 +1,4 @@
+import {useTraceSweep} from './useTraceSweep';
 import ChatDisclosure from './ChatDisclosure';
 import {Message, MessageContent, MessageHeader} from './components/ui/message';
 import {useDraftState} from './useDraftState';
@@ -10,7 +11,8 @@ import {Button} from './components/ui/button';
 import {Alert,AlertDescription} from './components/ui/alert';
 import FormFields,{type FormValues} from './FormFields';
 import Markdown from './Markdown';
-import {ThinkingWindow,ProcessIndicator} from './ThinkingWindow';
+import {ThinkingWindow} from './ThinkingWindow';
+import LiveTraceActivity from './LiveTraceActivity';
 import {useCopy} from './WorkforceInputs';
 import {revealContribution} from './DiscussionIdentity';
 import UserMessage from './UserMessage';
@@ -47,21 +49,41 @@ export function ExpertContributions({request,children,actions,onVisibility}:{req
  </div>;
 }
 
-export function DiscussionHostReply({requestId,host,children}:{requestId:string;host:DiscussionHost;children?:React.ReactNode}){
+export function DiscussionHostReply({requestId,host,participants,children}:{requestId:string;host:DiscussionHost;participants:SpaceRequest['participants'];children?:React.ReactNode}){
  const L=useCopy(),live=['preparing','running','stopping'].includes(host.status),activity=host.activity;
  const [reasoningOpen,setReasoningOpen]=useDraftState('discussion-host-reasoning:'+requestId,false),[stepsOpen,setStepsOpen]=useDraftState('discussion-host-steps:'+requestId,false);
  const previousActivity=useRef({live,id:activity?.id});
  useLayoutEffect(()=>{const previous=previousActivity.current;if(previous.live&&(!live||previous.id!==activity?.id))setReasoningOpen(false);previousActivity.current={live,id:activity?.id};},[live,activity?.id]);
  const labels:Record<string,string>={preparing:L('准备中','Preparing'),running:L('协调中','Coordinating'),'needs-input':L('待你确认','Your input needed'),ready:L('可整理为任务','Ready to shape into tasks'),completed:L('本轮已完成','Round complete'),failed:L('协调未完成','Coordination incomplete'),interrupted:L('已停止','Stopped')};
+ const thinking=host.status==='running'&&activity?.phase==='reasoning';
+ let phaseLabel:string|undefined;
+ if(host.status==='preparing')phaseLabel=L('正在准备','Preparing');
+ else if(host.status==='stopping')phaseLabel=L('正在停止','Stopping');
+ else switch(activity?.phase){
+  case 'retrying': phaseLabel=L('模型连接中断，正在重试…','Model connection interrupted. Retrying…');break;
+  case 'planning': phaseLabel=L('正在规划任务与检查项目关系','Planning tasks and checking project relationships');break;
+  case 'experts': {
+   const started=participants.some(p=>p.runId&&['started','preparing','running','waiting','stopping'].includes(p.status));
+   phaseLabel=started?L('等待专家完成分析','Waiting for expert analysis'):L('正在协调专家','Coordinating experts');
+   if(!started&&(!participants.length||participants.some(p=>!p.runId&&p.status==='preparing')))phaseLabel=L('正在启动专家','Starting experts');
+   break;
+  }
+  case 'responding': phaseLabel=L('正在整理回复','Preparing a response');break;
+  case 'reasoning': phaseLabel=L('思考中','Thinking');break;
+ }
+ const lastStep=host.steps.at(-1);
+ const showStepSweep=host.status==='running'&&!!lastStep&&(!activity||activity.phase==='complete'||
+  (activity.phase==='waiting'||activity.phase==='responding')&&lastStep.at>=activity.startedAt);
+ const stepSweep=useTraceSweep<HTMLDivElement>(showStepSweep?lastStep.id:undefined);
  return <Message role="region" className="wf-response wf-host-response" aria-label={L('主持人回复','Host response')}>
   <MessageContent><MessageHeader className="wf-speaker-header"><Avatar aria-hidden="true"><AvatarFallback><MessageCircle className="size-4"/></AvatarFallback></Avatar><div className="wf-speaker-name"><strong>{L('主持人','Host')}</strong><span>{host.model||(live?L('正在准备模型','Preparing model'):L('模型信息未记录','Model not recorded'))}</span></div><Badge variant={host.status==='failed'?'destructive':'secondary'}>{host.task?.restarted&&host.status==='completed'?L('新引导已开始','New guide started'):labels[host.status]||host.status}</Badge></MessageHeader>
-  {live&&<div className="wf-host-activity" aria-label={L('主持人运行状态','Host activity')}>
-   {activity?.reasoning&&activity.phase==='reasoning'?<ThinkingWindow collapsible={false} text={activity.reasoning} title={activity.reasoningFormat==='text'?'思考过程':'思考摘要'} live/>:<ProcessIndicator title={host.status==='preparing'?L('正在准备','Preparing'):host.status==='stopping'?L('正在停止','Stopping'):activity?.phase==='retrying'?L('模型连接中断，正在重试…','Model connection interrupted. Retrying…'):activity?.phase==='planning'?L('正在规划任务与检查项目关系','Planning tasks and checking project relationships'):activity?.phase==='experts'?L('等待专家完成分析','Waiting for expert analysis'):activity?.phase==='responding'?L('正在整理回复','Preparing a response'):L('等待模型响应','Waiting for the model')}/>}
-  </div>}
   {activity?.reasoningCleared&&<small>{L('本轮思考记录已清理','Reasoning for this turn was cleared')}</small>}
-  {activity?.reasoning&&(!live||activity.phase!=='reasoning')&&<div className="wf-host-trace"><ThinkingWindow key={`${activity.id}:${live}`} text={activity.reasoning} title={L('查看模型思考','View model reasoning')} live={false} disclosure={{open:reasoningOpen,onOpenChange:setReasoningOpen}}/></div>}
-  {host.steps.length>1&&<ChatDisclosure className="wf-host-trace" open={stepsOpen} onOpenChange={setStepsOpen} heading={<>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</>}>{stepsOpen&&host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</ChatDisclosure>}
-  {host.steps.at(-1)&&<Markdown text={host.steps.at(-1)!.text}/>}
+  {activity?.reasoning&&!thinking&&<div className="wf-host-trace"><ThinkingWindow key={activity.id} text={activity.reasoning} title={L('查看模型思考','View model reasoning')} live={false} disclosure={{open:reasoningOpen,onOpenChange:setReasoningOpen}}/></div>}
+  {!live&&host.steps.length>1&&<ChatDisclosure className="wf-host-trace" open={stepsOpen} onOpenChange={setStepsOpen} heading={<>{L('查看协调过程','View coordination steps')} · {host.steps.length-1}</>}>{stepsOpen&&host.steps.slice(0,-1).map(s=><div key={s.id}><Markdown text={s.text}/></div>)}</ChatDisclosure>}
+  {(live?host.steps:host.steps.slice(-1)).map(step=><div key={step.id} ref={step===lastStep?stepSweep:undefined}><Markdown text={step.text}/></div>)}
+  {live&&<LiveTraceActivity activityId={activity?.id} highlight={!showStepSweep&&host.status!=='stopping'} waiting hasProgress={host.steps.length>0} label={phaseLabel}>
+   {thinking&&activity?.reasoning?<ThinkingWindow sweepKey={activity.id} text={activity.reasoning} title="思考中" live disclosure={{open:reasoningOpen,onOpenChange:setReasoningOpen}}/>:null}
+  </LiveTraceActivity>}
   {host.error&&<Alert variant="destructive"><AlertDescription>{host.error==='terminated'?L('模型连接中断，本轮回复未完成。','The model connection was interrupted before this reply finished.'):host.error}</AlertDescription></Alert>}
   {host.retryPass===undefined&&['failed','interrupted'].includes(host.status)&&<p className="wf-muted">{L('已保留本轮结果。在输入框补充或发送“继续”，主持人会重新评估下一步。','Results are preserved. Add a message or send “continue” to reassess the next step.')}</p>}
   {host.task&&!host.task.restarted&&<p className="wf-muted">{L('计划草稿','Plan draft')} · v{host.task.draftRevision}{host.task.changes&&<> · {L('新增','Added')} {host.task.changes.added.length} · {L('调整','Changed')} {host.task.changes.changed.length} · {L('移除','Removed')} {host.task.changes.removed.length}</>}</p>}

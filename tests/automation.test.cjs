@@ -37,11 +37,21 @@ test('events retain eventId across crash recovery, retry six attempts then enter
  assert.equal((await f.state()).events[0].status,'dead');await f.automation.manage({id,action:'retry',eventId:row.id});row=await f.db.call('automationNextEvent');assert.equal(row.event.eventId,eventId);await f.db.call('automationAck',{id:row.id,ok:true});assert.equal((await f.state()).events.length,0);
 });
 
-test('oversized terminal snapshot preserves explicit quota failure across restart and later source edits',async t=>{
- const f=await fixture(t);f.run.messages[1].text='中文😀'.repeat(100000);await f.commit();
+test('oversized turns retain immutable, paged chat through a database restart',async t=>{
+ const f=await fixture(t);
+ const original='中文😀'.repeat(100000)+'最后结论';
+ f.run.messages[1].text=original;await f.commit();
  await assert.rejects(f.automation.forExtension(f.context,'getTurn',f.ref),/QUOTA_EXCEEDED/);
  f.run.messages[1].text='short later edit';await f.commit();await f.restart();
  await assert.rejects(f.automation.forExtension(f.context,'getTurn',f.ref),/QUOTA_EXCEEDED/);
+ const first=await f.db.call('automationRead',{context:f.context,input:f.ref,conversationOnly:true,page:0});
+ assert(first.pageCount>1);
+ let answer='';
+ for(let page=0;page<first.pageCount;page++){
+  const {turn}=page===0?first:await f.db.call('automationRead',{context:f.context,input:f.ref,conversationOnly:true,page});
+  answer+=turn.messages.filter(m=>m.id==='answer').map(m=>m.text).join('');
+ }
+ assert.equal(answer,original);
  assert.equal((await f.state()).events.length,1);
 });
 test('jobs require opt-in, deduplicate durable keys, validate output, isolate source chat and respect budget',async t=>{

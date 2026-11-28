@@ -5,6 +5,7 @@ export interface ConversationTurn {
   tools: AgentRun['tools'];
   final?: AgentRun['messages'][number];
   active: boolean;
+  startingSubagents?:boolean;
   model?: string;
   outcome?: 'completed'|'failed'|'interrupted';
   plan?:TaskPlan;
@@ -32,6 +33,7 @@ export function conversationTurns(run: AgentRun): ConversationTurn[] {
     turn.model = model;
     const last = index === turns.length - 1;
     turn.active = last && ['preparing','running','waiting','stopping'].includes(run.status);
+    if(turn.active&&run.startingSubagents)turn.startingSubagents=true;
     turn.outcome=turn.active?undefined:turn.user.timing?.outcome||(last?(run.status==='failed'?'failed':run.status==='interrupted'?'interrupted':'completed'):'completed');
     const answers = turn.messages.filter(message => message.role === 'assistant' && !message.kind);
     turn.final = [...answers].reverse().find(message => message.phase === 'final_answer');

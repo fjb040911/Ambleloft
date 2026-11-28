@@ -15,6 +15,19 @@ const {fields:streamFields,secrets:streamSecrets,cleanText}=require('./stream-re
 const rpcText=require('./rpc-text.cjs');
 const BUSY = ['preparing', 'running', 'waiting', 'stopping'];
 
+// Persist identifiers only. Error messages may include a path or user content.
+function recordSaveFailure(run, error, stage) {
+  const code = /^[A-Z][A-Z0-9_]{0,63}$/.test(error.code || '') ? error.code :
+    /^(TEXT_BASELINE_CHANGED|TEXT_REFERENCE_CHANGED|TEXT_REVISION_CONFLICT|RUN_BASELINE_CHANGED|INVALID_TEXT_PATH)$/.test(error.message) ? error.message : 'SAVE_FAILED';
+  const sqliteCode = Number.isInteger(error.errcode) ? error.errcode : undefined;
+  const previous = run.saveFailure;
+  if (previous?.code !== code || previous?.stage !== stage || previous?.sqliteCode !== sqliteCode || previous?.turnId !== run.turnId) {
+    run.saveFailure = {stage, code, sqliteCode, turnId:run.turnId, at:new Date().toISOString()};
+    console.warn('RUN_SAVE_FAILED', run.id, stage, code, sqliteCode ?? '');
+  }
+  return code;
+}
+
 class AgentRuntime {
   constructor({ directory, provider, workspace, publish, publishChanges, projectRun = run => run, database, skills, conversationOptions, rpcFactory = options => new CodexRPC(options) }) {
     this.skills = skills; this.database = database; this.directory = directory; this.provider = provider; this.workspace = workspace; this.publish = publish;this.publishChanges=publishChanges;this.projectRun=projectRun;this.publications=new WeakMap();
@@ -169,7 +182,7 @@ class AgentRuntime {
       const kind=sqlite===13||['ENOSPC','EDQUOT','SQLITE_FULL'].includes(error.code)?'space':
         sqlite===8||['EPERM','EROFS','EACCES','SQLITE_READONLY'].includes(error.code)?'permission':
         error.code==='DATABASE_BACKPRESSURE'?'queue':'write';
-      entry.issue={kind,outcome:final.status};
+      entry.issue={kind,outcome:final.status,code:recordSaveFailure(run,error,'commit')};
       if(turnId)final.recoveredSaveTurnId=turnId;
       this.publishRun(run);
       throw error;
@@ -205,7 +218,7 @@ class AgentRuntime {
         for(const run of runs){
           const version=this.dirtyRuns.get(run.id),bytes=this.streamBytes.get(run.id)||0,value=this.dirtyItems.get(run.id),hints=new Map([[run.id,value instanceof Set?new Set(value):null]]);
           try{await this.database.call('saveRunUpdates',this.database.incrementalRuns?[run]:structuredClone([run]),{hints});this.acknowledgeBytes(new Map([[run.id,bytes]]));if(this.dirtyRuns.get(run.id)===version){this.dirtyRuns.delete(run.id);this.dirtyItems.delete(run.id);}}
-          catch(error){errors.push({id:run.id,error});}
+          catch(error){recordSaveFailure(run,error,'incremental');errors.push({id:run.id,error});}
         }
         if(errors.length)throw Object.assign(errors[0].error,{runIds:errors.map(item=>item.id)});
         return;

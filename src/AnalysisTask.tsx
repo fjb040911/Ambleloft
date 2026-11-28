@@ -1,9 +1,10 @@
+import {useTraceSweep} from './useTraceSweep';
 import {ThinkingWindow} from './ThinkingWindow';
 import ProcessTool from './ProcessTool';
 import {commandPresentation,toolBusy} from './tool-presentation';
 import {useToolText} from './ToolText';
 import {useProcessDisclosure} from './process-disclosure';
-import {useState} from 'react';
+import {useLayoutEffect,useRef,useState} from 'react';
 import {BookOpen,Play,Terminal,Folder,Search,Wrench} from 'lucide-react';
 import {Trace,TraceLine,TraceIcon,TraceTitle,TraceDescription,TraceCollapsible,TraceCollapsibleTrigger,TraceCollapsibleContent} from './components/ui/trace';
 import {Badge} from './components/ui/badge';
@@ -26,12 +27,18 @@ function AgentAvatar({name,variant}:{name:string;variant:number}){
   <circle cx="12" cy="12" r="2.4" fill="currentColor"/>
  </svg>;
 }
-export default function AnalysisTask({tool}:{tool:Tool}) {
+export default function AnalysisTask({tool,highlight=false,trackLifecycle=false}:{tool:Tool;highlight?:boolean;trackLifecycle?:boolean}) {
  const [open,setOpen]=useProcessDisclosure('agent-'+tool.id);
  const detail=useToolText({toolId:tool.id,text:tool.detail,preview:tool.detailPreview,version:tool.detailVersion},open);
  const [error,setError]=useState(''),[stopping,setStopping]=useState(false);
  const active=['pending','running','waiting'].includes(tool.status),agent=identity(tool);
  const labels:Record<string,string>={pending:tool.nativeThreadId?'初始化中':'排队中',running:'开始工作',waiting:'等待输入',inProgress:'进行中',completed:'已完成',failed:'失败',interrupted:'已停止'};
+ // A child may finish after a later sibling started. Its terminal event
+ // is new even though the card retains its original position in the trace.
+ const initialStatus=useRef<string|null>(tool.status);
+ useLayoutEffect(()=>{if(tool.status!==initialStatus.current)initialStatus.current=null;},[tool.status]);
+ const changed=trackLifecycle&&tool.status!==initialStatus.current;
+ const sweep=useTraceSweep<HTMLSpanElement>(highlight||changed?tool.id+':'+tool.status:undefined);
  const started=tool.nativeLifecycle?.find(event=>event.status==='running');
  async function stop(){setStopping(true);setError('');try{if(!window.desktop)throw Error(t('停止分析不可用'));await window.desktop.stopRun(tool.id);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setStopping(false);}}
  return <Trace className="analysis-agent my-2" data-agent-id={tool.analysisAgent?.id||tool.id}>
@@ -40,7 +47,7 @@ export default function AnalysisTask({tool}:{tool:Tool}) {
    <TraceCollapsibleTrigger>
     <TraceLine status={tool.status==='running'?'running':tool.status==='pending'?'pending':tool.status==='failed'?'error':undefined}>
      <TraceIcon aria-hidden={false}><AgentAvatar name={agent.name} variant={agent.avatar}/></TraceIcon>
-     <TraceTitle title={agent.name}>{agent.name}</TraceTitle>
+     <TraceTitle ref={sweep} title={agent.name}>{agent.name}</TraceTitle>
      <TraceDescription role="status">{t(labels[tool.status]||tool.status)}</TraceDescription>
     </TraceLine>
    </TraceCollapsibleTrigger>

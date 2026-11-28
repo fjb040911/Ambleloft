@@ -22,6 +22,8 @@ function diagnosticReport(run, appVersion) {
   return {
     format: 'ambleloft-run-diagnostics', version: 1, exportedAt: new Date().toISOString(), appVersion,
     runId: run.id, threadId: run.threadId, model: run.model, status: run.status,
+    ...(run.saveFailure && ['incremental','commit'].includes(run.saveFailure.stage) && /^[A-Z][A-Z0-9_]{0,63}$/.test(run.saveFailure.code)
+      ? {saveFailure:pick(run.saveFailure,['stage','code','sqliteCode','turnId','at'])} : {}),
     coverage: 'Most recent 100 model requests. Tool metadata is available only for requests recorded after this feature was installed. No prompts, reasoning, commands, argument values, output text, URLs or credentials are exported.',
     requests: (run.modelRequests || []).slice(-100).map(d => ({
       ...pick(d, ['requestId', 'threadId', 'parentThreadId', 'turnKey', 'startedAt', 'durationMs', 'protocol', 'stage', 'httpStatus', 'events', 'done', 'finishReason', 'failed', 'cancelled', 'timedOut', 'requestBytes', 'messageCount', 'toolCorrectionAttempts', 'diagnosticVersion', 'toolChoice']),

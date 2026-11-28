@@ -5,7 +5,7 @@ const projectionVersion=run=>projectionVersions.get(run)||0;
 const tail=(text,limit)=>Buffer.from(text.slice(-limit),'utf16le').toString('utf16le');
 const digest=text=>createHash('sha256').update(text,'utf16le').digest('hex');
 function reference(owner,key){const spool=require('./text-spool.cjs').reference(owner,key);if(spool)return spool;const value=references.get(Object.getOwnPropertyDescriptor(owner,key)?.get);if(!value)return;const {cache,...ref}=value;return ref;}
-function locate(item,field){const path=JSON.parse(field);let owner=item;for(const key of path.slice(0,-1)){if(!owner||!Object.hasOwn(owner,key))return null;owner=owner[key];}return owner&&Object.hasOwn(owner,path.at(-1))?{owner,key:path.at(-1)}:null;}
+const {locate}=require('./run-text-path.cjs');
 function install(item,ref,cache){
  const target=locate(item,ref.field);if(!target)throw Error('INVALID_TEXT_PATH');
  const {owner,key}=target,get=()=>cache.read(ref);previews.delete(owner);references.set(get,{...ref,cache});
