@@ -5,6 +5,7 @@ import {readReading,saveReading} from './conversation-view-state';
 import {useComposerReceipt} from './useComposerReceipt';
 import {useDraftState,restoreComposerOptions} from './useDraftState';
 import MessageBody from './MessageBody';
+import WeKnoraAnswer from './WeKnoraAnswer';
 import {ProcessDisclosureScope} from './process-disclosure';
 import {RunDetailsContext} from './ToolText';
 import {InvestigationDetails} from './Investigation';
@@ -305,11 +306,13 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
   const saveNotice=run.saveIssue&&(collapsedSave===saveKey
     ? <Button variant="ghost" onClick={()=>setCollapsedSave(undefined)}>{t('记录待保存')}</Button>
     : <ComposerErrorNotice dismiss={()=>setCollapsedSave(saveKey)} message={t(saveLabels[run.saveIssue.kind])+' '+t('关闭应用前请重试保存。')}>
+    {run.saveIssue.code&&<code>{run.saveIssue.code}</code>}
     {retryFailed&&<p>{t('仍未保存，请处理后重试。')}</p>}
     <div className="settings-actions"><Button variant="outline" disabled={savingRecord} onClick={async()=>{
       setRetryFailed(false);setSavingRecord(true);
       try{await window.desktop!.retrySave!(run.id);}catch{setRetryFailed(true);}finally{setSavingRecord(false);}
     }}>{t(savingRecord?'正在保存…':'重试保存记录')}</Button>
+    <RunDiagnosticsButton runId={run.id}/>
     <Button variant="ghost" onClick={()=>openSettings('storage')}>{t('管理存储空间')}</Button></div>
   </ComposerErrorNotice>);
   const historicalSaveError=['执行已结束，但记录保存失败。','对话保存失败，请检查磁盘空间。','记录写入失败，执行已中断。请核对已完成的操作。'].includes(run.error||'');
@@ -406,7 +409,7 @@ function ConversationBody({ onOptionsChange,autoOpenPending=true,inputsInPanel=f
     {!hidePendingActions&&<>{inlineInputs}{outboxPanel}{pendingSurface}</>}
   </div>;
   const historyNavigation={loadEarlier:before?loadOlder:undefined,loadingEarlier:loadingHistory};
-  const view=<div className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
+  const view=<div data-trace-scope="" className={`conversation-page${floatingHost?' file-chat-floating':''}${recentOpen?' recent-open':''}`}>
     {floatingHost&&<Button variant="ghost" className="file-chat-toggle" aria-label={t(recentOpen?'收起最近对话':'展开最近对话')} title={t(recentOpen?'收起最近对话':'展开最近对话')} aria-expanded={recentOpen} onClick={()=>{setRecentOpen(value=>!value);following.current=true;}}><span>{t(active?'进行中的对话':'最近对话')} · {run.title}</span><ChevronUp data-icon="inline-end" aria-hidden="true"/></Button>}
     <ConversationViewport inert={!!floatingHost&&!recentOpen} busy={active} ref={scroll} onScroll={trackScroll}
       onWheel={cancelReturnToLatest} onTouchMove={cancelReturnToLatest} onPointerDown={cancelReturnToLatest}
@@ -533,7 +536,7 @@ function RetainedConversation(props:Omit<ComponentProps<typeof ConversationBody>
 const FrozenConversationBody=memo(ConversationBody,(previous,next)=>previous.run.id===next.run.id&&previous.visible===false&&next.visible===false);
 
 function sameItems(a:readonly unknown[]|undefined,b:readonly unknown[]|undefined){return a===b||(a?.length||0)===(b?.length||0)&&(a||[]).every((item,index)=>item===b?.[index]);}
-function sameTurn(a:ConversationTurn,b:ConversationTurn){return a.user===b.user&&a.final===b.final&&a.active===b.active&&a.outcome===b.outcome&&a.plan===b.plan&&a.model===b.model&&sameItems(a.messages,b.messages)&&sameItems(a.tools,b.tools)&&sameItems(a.artifacts,b.artifacts);}
+function sameTurn(a:ConversationTurn,b:ConversationTurn){return a.user===b.user&&a.final===b.final&&a.active===b.active&&a.startingSubagents===b.startingSubagents&&a.outcome===b.outcome&&a.plan===b.plan&&a.model===b.model&&sameItems(a.messages,b.messages)&&sameItems(a.tools,b.tools)&&sameItems(a.artifacts,b.artifacts);}
 type TurnTranscriptProps={turn:ConversationTurn;run:AgentRun;requests:import('./types').PersistentInputRequest[];allRequests:import('./types').PersistentInputRequest[];deliveries:import('./types').InputDelivery[];nativePending:string[];onOpenInput(id:string):void;onToggle():void;paused:boolean;status:string;hidePrompt:boolean;language:string;openFile?(file:import('./types').DeliveredFile):void;openReference?(path:string):void;openChanges(changes:import('./types').TurnFileChanges):void};
 const TurnTranscript=memo(function TurnTranscript({turn,run,requests,allRequests,deliveries,nativePending,onOpenInput,onToggle,paused,status,hidePrompt,openFile,openReference,openChanges}:TurnTranscriptProps){
  return <>
@@ -541,7 +544,7 @@ const TurnTranscript=memo(function TurnTranscript({turn,run,requests,allRequests
   {!hidePrompt&&<UserMessage message={turn.user.formSubmissionId?undefined:turn.user} context={<SkillTags snapshots={turn.user.skills}/>} text={allRequests.some(r=>r.deliveryId&&r.deliveryId===turn.user.formSubmissionId)?t('已提交补充信息'):turn.user.text}/>}
   {turn.messages.filter(message=>isConversationMessage(message)&&!isCompletedPlan(message,turn)&&message.id!==turn.final?.id).map(message=>message.role==='user'?<UserMessage key={message.id} message={message} text={message.text}/>:<Message key={message.id} role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={message}/></MessageContent></Message>)}
   <TurnProgress allRequests={allRequests} requests={requests} deliveries={deliveries} nativePending={nativePending} onOpenInput={onOpenInput} paused={paused} onToggle={onToggle} turn={turn} status={status} duration={turn.user.timing?.outcome&&!turn.active?<Duration timing={turn.user.timing}/>:null}/>
-  {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><MessageBody message={turn.final} onFileLink={openReference}/></MessageContent></Message>}
+  {turn.final&&<Message role="article" aria-label={t('助手消息')}><MessageContent><WeKnoraAnswer tools={turn.tools} runId={run.id} answer={turn.final.text}><MessageBody message={turn.final} onFileLink={openReference}/></WeKnoraAnswer></MessageContent></Message>}
   <TurnFiles run={run} turnKey={turn.user.id} openFile={openFile} openReference={openReference} openChanges={openChanges}/>{!turn.active&&<TurnActions turn={turn} runId={run.id}/>}
  </>;
 },(a,b)=>a.turn===b.turn&&a.paused===b.paused&&a.status===b.status&&a.hidePrompt===b.hidePrompt&&a.language===b.language&&a.run.id===b.run.id&&a.run.cwd===b.run.cwd&&a.run.archivedAt===b.run.archivedAt&&sameItems(a.run.fileChanges,b.run.fileChanges)&&sameItems(a.requests,b.requests)&&sameItems(a.allRequests,b.allRequests)&&sameItems(a.deliveries,b.deliveries)&&sameItems(a.nativePending,b.nativePending)&&a.onOpenInput===b.onOpenInput&&a.onToggle===b.onToggle&&a.openFile===b.openFile&&a.openReference===b.openReference&&a.openChanges===b.openChanges);

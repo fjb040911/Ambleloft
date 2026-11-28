@@ -47,6 +47,18 @@ class NativeSubagents {
   const item=params.item,clean=value=>cleanText(context,value);
   if((parent||child)&&item?.type==='collabAgentToolCall'){
    if(parent&&params.turnId&&context.run.turnId&&params.turnId!==context.run.turnId)return true;
+   // Spawn begins before the engine can supply a child thread ID. Track calls
+   // separately from real child records, including overlapping spawns.
+   if(parent&&item.tool==='spawnAgent'&&item.id&&!context.cancelled){
+    const run=context.run;
+    if(method==='item/started'){
+     if(!run.pendingNativeSpawns)Object.defineProperty(run,'pendingNativeSpawns',{value:new Set(),configurable:true});
+     run.pendingNativeSpawns.add(item.id);
+    }else if(method==='item/completed'&&run.pendingNativeSpawns){
+     run.pendingNativeSpawns.delete(item.id);
+     if(!run.pendingNativeSpawns.size)delete run.pendingNativeSpawns;
+    }
+   }
    for(const id of item.receiverThreadIds||[]){
     const state=item.agentsStates?.[id];
     let tool=this.child(context,id);
@@ -121,7 +133,7 @@ class NativeSubagents {
    tool.status='interrupted';
   }));
  }
- finish(context){streamFields(context).finish(true);for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';this.changed(context);context.nativeThreads?.clear();}
+ finish(context){delete context.run.pendingNativeSpawns;streamFields(context).finish(true);for(const lookup of context.nativeIdentity?.values()||[])clearTimeout(lookup.timer);for(const tool of context.nativeThreads?.values()||[])if(live(tool.status))tool.status='interrupted';this.changed(context);context.nativeThreads?.clear();}
  recover(run,onChange){for(const [index,tool] of (run.tools||[]).entries())if(tool.type==='analysis'&&live(tool.status)){tool.status='interrupted';onChange?.(String(tool.id||tool.turnKey||index));}}
 }
 module.exports={NativeSubagents};

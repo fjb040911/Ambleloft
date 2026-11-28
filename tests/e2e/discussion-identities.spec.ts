@@ -62,3 +62,46 @@ test('discussion experts share functional subagent names, streaming details and 
  await expect(trigger).toContainText('已完成');if(await trigger.getAttribute('aria-expanded')==='false')await trigger.click();
  await expect(card.getByRole('list',{name:'执行记录'})).toContainText('开始工作');await expect(card.getByRole('list',{name:'执行记录'})).toContainText('已完成');await expect(card.getByRole('button',{name:'停止分析',exact:true})).toHaveCount(0);
 });
+
+test('expert transcript hands a concurrent command slot to a native launch without hiding progress',async({page})=>{
+ await prepare(page);
+ await page.evaluate(()=>{
+  const q=(window as any).identityQA,run=q.runs['expert-0'];
+  q.update(run.id,{status:'running',messages:[run.messages[0],{id:'progress',role:'assistant',phase:'commentary',order:1,text:'正在检查实现。'}],
+   tools:['first','second'].map((id,i)=>({id,type:'commandExecution',status:'running',turnKey:'u0',order:i+2,label:'echo '+id,detail:''}))});
+ });
+ const expert=page.locator('[data-expert-id="writer"] .discussion-expert-transcript'),slot=expert.locator('.live-trace-activity');
+ await expect(slot).toHaveCount(1);await expect(slot).toContainText('echo first');await expect(slot).not.toContainText('echo second');
+ const command=slot.locator('.activity-tool-summary');
+ await expect(command).toHaveCSS('animation-name','tw-shimmer');
+ await expect(command).toHaveCSS('background-clip','text');
+ const element=await slot.elementHandle();
+ await page.evaluate(()=>{
+  const q=(window as any).identityQA,r=q.runs['expert-0'];
+  r.tools.forEach((tool:any)=>tool.status='completed');q.update(r.id,{startingSubagents:true});
+ });
+ await expect(slot).toHaveText('正在启动子代理');await expect(expert.locator('.analysis-agent')).toHaveCount(0);
+ await page.evaluate(()=>{
+  const q=(window as any).identityQA,r=q.runs['expert-0'];
+  q.update(r.id,{startingSubagents:false,tools:[...r.tools,{id:'child',nativeThreadId:'child',turnKey:'u0',type:'analysis',order:4,label:'Module review',status:'running',detail:''}]});
+ });
+ await expect(slot).toHaveText('子代理工作中');await expect(expert.getByText('正在检查实现。',{exact:true})).toBeVisible();
+ expect(await slot.evaluate((el,previous)=>el===previous,element)).toBe(true);
+});
+
+test('parallel experts share one finite sweep in the discussion',async({page})=>{
+ await prepare(page);
+ await page.clock.install();
+ const scope=page.locator('.wf-request-list'),owner=scope.locator('[data-trace-sweeping]');
+ for(const id of ['expert-0','expert-1']){
+  await page.evaluate(id=>{
+   const q=(window as any).identityQA,r=q.runs[id];
+   q.update(id,{status:'running',messages:[r.messages[0],{id:'progress',role:'assistant',phase:'commentary',order:1,text:'Checking '+id}]});
+  },id);
+  await expect(owner).toHaveCount(1);await expect(owner).toHaveText('Checking '+id);
+ }
+ await page.evaluate(()=>{const q=(window as any).identityQA;q.runs['expert-0'].messages[1].text+=' more text';q.update('expert-0',{});});
+ await expect(scope.getByText('Checking expert-0 more text',{exact:true})).toBeVisible();
+ await expect(owner).toHaveText('Checking expert-1');
+ await page.clock.runFor(2200);await expect(owner).toHaveCount(0);
+});

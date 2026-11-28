@@ -32,6 +32,7 @@ export type ModelChoice={providerId?:string;model:string};
 export interface ModelChange {id:string;turnKey?:string;requested:ModelChoice;previous:ModelChoice;state:'switching'|'configured'|'applied'|'failed';effective:ModelChoice|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface PermissionChange {id:string;requested:'default'|'full';previous:'default'|'full';state:'switching'|'applied'|'configured'|'failed';effective:'default'|'full'|null;error?:string;startedAt?:string;finishedAt?:string}
 export interface AgentRun {
+  startingSubagents?:boolean;
   originHandoff?:{id:string;originConversationId:string;mode:'investigate'|'implement'};
   modelChange?:ModelChange;
   permissionChange?:PermissionChange;
@@ -42,7 +43,7 @@ export interface AgentRun {
   fileChanges?:TurnFileChanges[];
   queued?:boolean;
   recordSaving?:boolean;
-  saveIssue?:{kind:'space'|'permission'|'queue'|'write';outcome:string};
+  saveIssue?:{kind:'space'|'permission'|'queue'|'write';outcome:string;code?:string};
   storageBackpressure?:boolean;
   lastTurnStartedAt?:string;summaryOnly?:boolean;historyBefore?:string|null;turnOffset?:number;totalTurns?:number;
   lastEventAt?:string;plans?:TaskPlan[];artifacts?:DeliveredFile[];

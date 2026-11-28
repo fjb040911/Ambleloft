@@ -30,11 +30,27 @@ function persistence(db,transaction,check,automation){
   const row=db.prepare("SELECT created,CASE WHEN length(cast(data AS blob))<1024 THEN json_extract(data,'$.oversized') END oversized FROM automation_turns WHERE conversation_id=? AND turn_id=? AND version=? AND project_id=?").get(ref.conversationId,ref.turnId,ref.version,projectId);
   return row?.oversized?'unavailable':row&&row.created>=now-RAW_RETENTION?'available':'expired';
  };
+ // Older hosts only froze an oversized marker. Advertise a separate recovery
+ // version when the original run still has the user turn; materialize it only
+ // after an authorized conversation read, with the original expiry.
+ const activitySource=(projectId,value)=>{
+  const ref=value.sourceRef,availability=source(projectId,ref);
+  if(availability==='unavailable'&&ref.version===1){
+   const recovered={...ref,version:2};
+   const old=db.prepare(`SELECT c.record_id FROM automation_turns a JOIN conversation_identities c
+    ON c.id=a.conversation_id AND c.kind='run' AND c.project_id=a.project_id
+    WHERE a.conversation_id=? AND a.turn_id=? AND a.version=1 AND a.project_id=? AND a.created>=?
+    AND json_extract(a.data,'$.oversized')=1`).get(ref.conversationId,ref.turnId,projectId,Date.now()-RAW_RETENTION);
+   if(old&&(source(projectId,recovered)==='available'||require('../automation/turn-pages.cjs').canRecover(db,old.record_id,ref.turnId)))
+    return {...value,sourceRef:recovered,sourceAvailability:'available'};
+  }
+  return {...value,sourceAvailability:availability};
+ };
  const cleanup=()=>{const now=Date.now();lastCleanup=now;db.prepare('DELETE FROM project_activity WHERE occurred<?').run(now-METADATA_RETENTION);db.prepare('DELETE FROM project_usage WHERE occurred<?').run(now-METADATA_RETENTION);db.prepare('DELETE FROM project_summaries WHERE created<?').run(now-CACHE_RETENTION);};
  const coverage=(projectId,from)=>({measurement:'client-observed',since:parse(db.prepare("SELECT data FROM settings WHERE key='insights.since'").get()),reasons:[...(from<Date.now()-RAW_RETENTION?['SOURCE_RETENTION_7_DAYS']:[]),...(db.prepare('SELECT 1 FROM project_usage_gaps WHERE project_id IN (?,?)').get(projectId,'*')?['LEDGER_WRITE_FAILED']:[])],excludedOrigins:['external-tools','server-billing','unassigned-workspace-inference'],metadataRetentionDays:90,sourceRetentionDays:7});
  if(!db.prepare("SELECT 1 FROM settings WHERE key='insights.since'").get())db.prepare('INSERT INTO settings VALUES (?,?)').run('insights.since',JSON.stringify(new Date().toISOString()));
  // Preserve existing frozen sources without fabricating historical usage.
- for(const row of db.prepare('SELECT data,created FROM automation_turns').all())captureActivity(db,parse(row),row.created);
+ for(const row of db.prepare('SELECT data,created FROM automation_turns WHERE version=1').iterate())captureActivity(db,parse(row),row.created);
  db.prepare("UPDATE project_usage SET data=json_set(data,'$.status','unknown') WHERE json_extract(data,'$.status')='running'").run();
  const summaryRead=(context,id)=>{
   const row=db.prepare('SELECT * FROM project_summaries WHERE id=? AND extension_id=?').get(id,context.id);if(!row)fail('NOT_FOUND');
@@ -73,7 +89,7 @@ function persistence(db,transaction,check,automation){
    const watermark=cursor?.watermark??db.prepare(`SELECT coalesce(max(seq),0) n FROM ${table}`).get().n;
    if(cursor&&(cursor.tag!==cursorTag(cursor)||cursor.binding!==binding||!Number.isSafeInteger(cursor.after)||!Number.isSafeInteger(watermark)))fail('INVALID_ARGUMENT');
    const rows=db.prepare(`SELECT seq,data FROM ${table} WHERE project_id=? AND occurred>=? AND occurred<? AND seq>? AND seq<=? ${kind==='usage'?"AND (? IS NULL OR json_extract(data,'$.purpose')=?) AND (? IS NULL OR json_extract(data,'$.model')=?)":''} ORDER BY seq LIMIT ?`).all(input.projectId,from,to,cursor?.after||0,watermark,...(kind==='usage'?[input.purpose||null,input.purpose||null,input.model||null,input.model||null]:[]),limit+1);
-   const page=rows.slice(0,limit),items=page.map(r=>{const value=parse(r);return kind==='activity'?{...value,sourceAvailability:source(input.projectId,value.sourceRef)}:value;});
+   const page=rows.slice(0,limit),items=page.map(r=>{const value=parse(r);return kind==='activity'?activitySource(input.projectId,value):value;});
    return {items,nextCursor:rows.length>limit?Buffer.from(JSON.stringify({binding,watermark,after:page.at(-1).seq,tag:cursorTag({binding,watermark,after:page.at(-1).seq})})).toString('base64url'):null,watermark:String(watermark),coverage:coverage(input.projectId,from)};
   },
   insightsSummaryPolicy({context,projectId}){auth(context,projectId,'project.summaries.generate');auth(context,projectId,'conversations.read');auth(context,projectId,'background.jobs');return automation.automationPolicy({id:context.id});},

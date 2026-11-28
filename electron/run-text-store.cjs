@@ -1,3 +1,4 @@
+const {activityKeys,locate}=require('./run-text-path.cjs');
 const schema=`
 CREATE TABLE IF NOT EXISTS run_texts(run_id TEXT NOT NULL,collection TEXT NOT NULL,item_key TEXT NOT NULL,field TEXT NOT NULL,length INTEGER NOT NULL,next_seq INTEGER NOT NULL,revision TEXT NOT NULL DEFAULT '',PRIMARY KEY(run_id,collection,item_key,field),FOREIGN KEY(run_id,collection,item_key) REFERENCES run_items(run_id,collection,item_key) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS run_text_chunks(run_id TEXT NOT NULL,collection TEXT NOT NULL,item_key TEXT NOT NULL,field TEXT NOT NULL,seq INTEGER NOT NULL,start INTEGER NOT NULL,text BLOB NOT NULL,PRIMARY KEY(run_id,collection,item_key,field,seq),FOREIGN KEY(run_id,collection,item_key,field) REFERENCES run_texts(run_id,collection,item_key,field) ON DELETE CASCADE);
@@ -6,6 +7,36 @@ CREATE INDEX IF NOT EXISTS task_context_active_run ON task_context_projections(j
 CREATE TABLE IF NOT EXISTS composer_start_receipts(id TEXT PRIMARY KEY,digest TEXT NOT NULL,run_id TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS run_patch_receipts(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,result TEXT NOT NULL);
 `;
+// Called inside the schema upgrade transaction. Relink chunks without decoding
+// their bodies, preserving every revision and UTF-16 offset.
+function migrateActivityFields(db) {
+ const rows = db.prepare(`SELECT run_id,collection,item_key,data FROM run_items AS item
+   WHERE EXISTS (SELECT 1 FROM run_texts AS text WHERE text.run_id=item.run_id
+     AND text.collection=item.collection AND text.item_key=item.item_key AND text.field LIKE '["nativeActivity",%')`);
+ const fields = db.prepare('SELECT field FROM run_texts WHERE run_id=? AND collection=? AND item_key=?');
+ const insert = db.prepare(`INSERT INTO run_texts(run_id,collection,item_key,field,length,next_seq,revision)
+   SELECT run_id,collection,item_key,?,length,next_seq,revision FROM run_texts
+   WHERE run_id=? AND collection=? AND item_key=? AND field=?`);
+ const move = db.prepare('UPDATE run_text_chunks SET field=? WHERE run_id=? AND collection=? AND item_key=? AND field=?');
+ const remove = db.prepare('DELETE FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?');
+ for (const row of rows.iterate()) {
+  const activities = JSON.parse(row.data).nativeActivity;
+  if (!Array.isArray(activities)) continue;
+  const keys = activityKeys(activities);
+  const identity = [row.run_id, row.collection, row.item_key];
+  for (const {field} of fields.all(...identity)) {
+   const path = JSON.parse(field);
+   if (path[0] !== 'nativeActivity' || !Number.isInteger(path[1])) continue;
+   const key = keys[path[1]];
+   if (typeof key !== 'string') continue;
+   path[1] = key;
+   const stableField = JSON.stringify(path);
+   insert.run(stableField, ...identity, field);
+   move.run(stableField, ...identity, field);
+   remove.run(...identity, field);
+  }
+ }
+}
 function writeText(db,runId,collection,key,change){
  if(change.source){let at=change.start||0,first=true;for(const text of require('./text-spool.cjs').chunks(change.source,at)){writeText(db,runId,collection,key,{field:change.field,mode:first?change.mode:'append',baseLength:first?change.baseLength:at,text});at+=text.length;first=false;}if(first)writeText(db,runId,collection,key,{...change,source:undefined,text:''});return;}
  const args=[runId,collection,key,change.field];
@@ -25,9 +56,8 @@ function writeText(db,runId,collection,key,change){
 function hydrateItem(db,runId,collection,row){
  const item=JSON.parse(row.data);
  for(const field of db.prepare('SELECT field FROM run_texts WHERE run_id=? AND collection=? AND item_key=?').all(runId,collection,row.item_key)){
-  const path=JSON.parse(field.field);let target=item;for(const key of path.slice(0,-1)){if(!Object.hasOwn(target,key))throw Error('INVALID_TEXT_PATH');target=target[key];}
-  const key=path.at(-1);if(!Object.hasOwn(target,key))throw Error('INVALID_TEXT_PATH');
-  const text=db.prepare('SELECT text FROM run_text_chunks WHERE run_id=? AND collection=? AND item_key=? AND field=? ORDER BY seq').all(runId,collection,row.item_key,field.field).map(r=>Buffer.from(r.text).toString('utf16le')).join('');Object.defineProperty(target,key,{value:text,writable:true,enumerable:true,configurable:true});
+  const target=locate(item,field.field);if(!target)throw Error('INVALID_TEXT_PATH');
+  const text=db.prepare('SELECT text FROM run_text_chunks WHERE run_id=? AND collection=? AND item_key=? AND field=? ORDER BY seq').all(runId,collection,row.item_key,field.field).map(r=>Buffer.from(r.text).toString('utf16le')).join('');Object.defineProperty(target.owner,target.key,{value:text,writable:true,enumerable:true,configurable:true});
  }
  return item;
 }
@@ -48,7 +78,7 @@ function readToolText(db,{id,toolId,activityId,offset,limit=64000}){
  const row=db.prepare("SELECT data FROM run_items WHERE run_id=? AND collection='tools' AND item_key=?").get(id,toolId);if(!row)throw Error('工具记录不存在');
  const tool=JSON.parse(row.data),index=activityId?tool.nativeActivity?.findIndex(a=>a.id===activityId):undefined;
  if(activityId&&!(index>=0))throw Error('工具输出不存在');
- const path=activityId?['nativeActivity',index,'text']:['detail'],field=JSON.stringify(path),args=[id,'tools',toolId,field];
+ const path=activityId?['nativeActivity',activityKeys(tool.nativeActivity)[index],'text']:['detail'],field=JSON.stringify(path),args=[id,'tools',toolId,field];
  const stored=db.prepare('SELECT length,revision FROM run_texts WHERE run_id=? AND collection=? AND item_key=? AND field=?').get(...args);
  if(!stored){const text=activityId?tool.nativeActivity[index].text:tool.detail;if(typeof text!=='string')throw Error('工具输出不存在');const start=Math.min(offset??Math.max(0,text.length-limit),text.length);return {text:text.slice(start,start+limit),offset:start,total:text.length,version:require('node:crypto').createHash('sha256').update(text).digest('hex').slice(0,20)};}
  const start=Math.min(offset??Math.max(0,stored.length-limit),stored.length),end=Math.min(stored.length,start+limit);
@@ -56,4 +86,4 @@ function readToolText(db,{id,toolId,activityId,offset,limit=64000}){
  const text=rows.map(row=>Buffer.from(row.text).subarray(Math.max(0,start-row.start)*2,Math.min(Buffer.byteLength(row.text)/2,end-row.start)*2).toString('utf16le')).join('');
  return {text,offset:start,total:stored.length,version:stored.revision};
 }
-module.exports={schema,writeText,hydrateItem,readItems,readRun,readRunReferences,readToolText};
+module.exports={schema,migrateActivityFields,writeText,hydrateItem,readItems,readRun,readRunReferences,readToolText};

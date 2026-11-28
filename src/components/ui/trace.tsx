@@ -1,6 +1,5 @@
 import * as React from "react"
 import { cn } from "cn"
-import { ShimmerLayers } from "./shimmer"
 
 import {
   Collapsible,
@@ -22,8 +21,6 @@ function Trace({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-const TraceRunningContext = React.createContext(false)
-
 function TraceLine({
   className,
   status,
@@ -32,17 +29,15 @@ function TraceLine({
   status?: "running" | "error" | "pending"
 }) {
   return (
-    <TraceRunningContext.Provider value={status === "running"}>
-      <span
-        data-slot="trace-line"
-        data-status={status}
-        className={cn(
-          "flex w-fit max-w-full min-w-0 items-center gap-2 text-sm text-muted-foreground transition-colors in-[a,button]:cursor-pointer in-[a:hover,button:hover]:text-foreground data-[status=error]:text-destructive data-[status=error]:in-[a:hover,button:hover]:text-destructive data-[status=pending]:opacity-60",
-          className
-        )}
-        {...props}
-      />
-    </TraceRunningContext.Provider>
+    <span
+      data-slot="trace-line"
+      data-status={status}
+      className={cn(
+        "flex w-fit max-w-full min-w-0 items-center gap-2 text-sm text-muted-foreground transition-colors in-[a,button]:cursor-pointer in-[a:hover,button:hover]:text-foreground data-[status=error]:text-destructive data-[status=error]:in-[a:hover,button:hover]:text-destructive data-[status=pending]:opacity-60",
+        className
+      )}
+      {...props}
+    />
   )
 }
 
@@ -61,15 +56,13 @@ function TraceIcon({ className, ...props }: React.ComponentProps<"span">) {
 }
 
 function TraceTitle({ className, children, ...props }: React.ComponentProps<"span">) {
-  const running = React.useContext(TraceRunningContext)
   return (
     <span
       data-slot="trace-title"
-      className={cn("min-w-0 truncate", running && "composite-shimmer", className)}
+      className={cn("min-w-0 truncate", className)}
       {...props}
     >
       {children}
-      {running && <ShimmerLayers>{children}</ShimmerLayers>}
     </span>
   )
 }

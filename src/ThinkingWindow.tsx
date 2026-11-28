@@ -1,3 +1,4 @@
+import {useTraceSweep} from './useTraceSweep';
 import {useLayoutEffect,useRef} from 'react';
 import {Brain} from 'lucide-react';
 import {CodeBlock} from './components/ui/code-block';
@@ -7,11 +8,12 @@ import {useProcessDisclosure} from './process-disclosure';
 import {useToolText,type TextSource} from './ToolText';
 import {t} from './i18n';
 
-export function ProcessIndicator({title,live=true}:{title:string;live?:boolean}){
- return <TraceLine className="process-entry-title" status={live?'running':undefined} role={live?'status':undefined}><TraceIcon>{live?<Spinner aria-hidden="true" role="presentation" className="motion-reduce:animate-none"/>:<Brain/>}</TraceIcon><TraceTitle>{title}</TraceTitle></TraceLine>;
+export function ProcessIndicator({title,live=true,sweepKey}:{title:string;live?:boolean;sweepKey?:string}){
+ const sweep=useTraceSweep<HTMLSpanElement>(live?sweepKey:undefined);
+ return <TraceLine className="process-entry-title" status={live?'running':undefined} role={live?'status':undefined}><TraceIcon>{live?<Spinner aria-hidden="true" role="presentation" className="motion-reduce:animate-none"/>:<Brain/>}</TraceIcon><TraceTitle ref={sweep}>{title}</TraceTitle></TraceLine>;
 
 }
-export function ThinkingWindow({text,title,live,disclosureKey,source,collapsible=true,disclosure}:{source?:TextSource;text:string;title:string;live:boolean;disclosureKey?:string;collapsible?:boolean;disclosure?:{open:boolean;onOpenChange:(open:boolean)=>void}}) {
+export function ThinkingWindow({text,title,live,disclosureKey,source,collapsible=true,disclosure,sweepKey}:{sweepKey?:string;source?:TextSource;text:string;title:string;live:boolean;disclosureKey?:string;collapsible?:boolean;disclosure?:{open:boolean;onOpenChange:(open:boolean)=>void}}) {
  const [expanded,setOpen]=useProcessDisclosure(disclosureKey);
  const open=!collapsible||(disclosure?.open??expanded);
  const body=useToolText({...source,text},open,true);
@@ -56,6 +58,6 @@ export function ThinkingWindow({text,title,live,disclosureKey,source,collapsible
    </div>
   </CodeBlock>
  </>;
- if(!collapsible)return <><ProcessIndicator title={t(title)} live={live}/>{contentBody}</>;
- return <TraceCollapsible open={open} onOpenChange={disclosure?.onOpenChange??setOpen}><TraceCollapsibleTrigger aria-label={t(title)}><ProcessIndicator title={t(title)} live={live}/></TraceCollapsibleTrigger><TraceCollapsibleContent>{contentBody}</TraceCollapsibleContent></TraceCollapsible>;
+ if(!collapsible)return <><ProcessIndicator sweepKey={sweepKey} title={t(title)} live={live}/>{contentBody}</>;
+ return <TraceCollapsible open={open} onOpenChange={disclosure?.onOpenChange??setOpen}><TraceCollapsibleTrigger aria-label={t(title)}><ProcessIndicator sweepKey={sweepKey} title={t(title)} live={live}/></TraceCollapsibleTrigger><TraceCollapsibleContent>{contentBody}</TraceCollapsibleContent></TraceCollapsible>;
 }

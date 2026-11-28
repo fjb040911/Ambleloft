@@ -35,7 +35,7 @@ test('migration backs up version 15 and lazily externalizes old text without cha
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'run-migration-'));let db=new Database(dir);await db.call('ready');await db.call('saveRuns',[run()]);await db.close();
  const sql=new DatabaseSync(path.join(dir,'atelier.sqlite'));sql.exec('PRAGMA foreign_keys=OFF; DROP TABLE run_text_chunks; DROP TABLE run_texts; DROP TABLE run_patch_receipts; PRAGMA user_version=15;');const text='USER '+('旧消息'.repeat(4000));sql.prepare("UPDATE run_items SET data=? WHERE item_key='u'").run(JSON.stringify({id:'u',role:'user',inputSource:'user',inputDeliveryState:'delivered',text}));sql.close();
  db=new Database(dir);t.after(async()=>{await db.close();await fs.rm(dir,{recursive:true,force:true});});const rows=await db.call('readRuns');assert.equal(rows[0].messages[0].text,text);await db.call('saveRunUpdates',rows);
- assert.equal((await db.call('inputRequest',{action:'messages',runId:'r'}))[0].text,text);assert.equal((await fs.readdir(dir)).filter(f=>f.includes('before-v16')).length,1);
+ assert.equal((await db.call('inputRequest',{action:'messages',runId:'r'}))[0].text,text);assert.equal((await fs.readdir(dir)).filter(f=>f.includes('before-v17')).length,1);
 });
 test('disk detail pagination reads exact ranges including native activity and split emoji',async t=>{
  const {db}=await fixture(t),r=run();await db.call('saveRuns',[r]);
@@ -90,4 +90,72 @@ test('queued writes freeze metadata and dirty text together before later runtime
 });
 test('legacy host snapshot writes replace chunk references instead of resurrecting old text',async t=>{
  const {db}=await fixture(t),r=run();await db.call('saveRuns',[r]);r.tools[0].detail='legacy replacement';await db.request('saveRunUpdates',[r]);assert.equal((await db.call('readRuns'))[0].tools[0].detail,'legacy replacement');
+});
+
+test('v16 activity bodies follow their IDs across a rolling window, retry and terminal reopen', async t => {
+ const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'activity-rollover-'));
+ let db = new Database(dir);
+ t.after(async () => { await db.close(); await fs.rm(dir, {recursive:true, force:true}); });
+ await db.call('ready');
+ const r = run();
+ const activities = Array.from({length:100}, (_,i) => ({
+  id: i === 1 ? '1' : 'step/"' + i,
+  text: i < 4 ? (i + '中文😀').repeat(9000) : 'short ' + i,
+ }));
+ r.tools[0].nativeActivity = activities;
+ r.tools[0].status = 'interrupted';
+ const expected = structuredClone(activities.slice(1));
+ // Write the old on-disk representation directly, including positional chunk keys.
+ const batch = createRunPatches().prepare([r]);
+ for (const item of batch.input.patches[0].upserts) {
+  for (const text of item.texts) {
+   const field = JSON.parse(text.field);
+   if (field[0] === 'nativeActivity') {
+    field[1] = activities.findIndex(activity => activity.id === field[1]);
+    text.field = JSON.stringify(field);
+   }
+  }
+ }
+ await db.request('saveRunPatches', batch.input);
+ await db.close();
+ const old = new DatabaseSync(path.join(dir, 'atelier.sqlite'));
+ const revisions = old.prepare("SELECT field,revision FROM run_texts WHERE field LIKE '%nativeActivity%' ORDER BY field").all();
+ assert.equal(revisions.length, 4);
+ old.exec('PRAGMA user_version=16');
+ old.close();
+
+ db = new Database(dir);
+ const [restored] = await db.call('readRuntimeRuns');
+ const tool = restored.tools[0];
+ const {reference} = require('../electron/runtime-text-cache.cjs');
+ for (let i=0; i<4; i++) {
+  const ref = reference(tool.nativeActivity[i], 'text');
+  assert.equal(ref.field, JSON.stringify(['nativeActivity', activities[i].id, 'text']));
+  assert.equal(ref.revision, revisions[i].revision);
+ }
+ tool.status = 'running';
+ const next = {id:'next', text:'new output'};
+ tool.nativeActivity = [...tool.nativeActivity, next].slice(-100);
+ expected.push(next);
+ const check = new DatabaseSync(db.file);
+ try {
+  check.exec("CREATE TRIGGER reject_activity_save BEFORE INSERT ON run_patch_receipts BEGIN SELECT RAISE(ABORT,'test rollback'); END");
+  await assert.rejects(db.call('saveRunUpdates',[restored]), /test rollback/);
+  assert.deepEqual((await db.call('readRun',{id:r.id})).tools[0].nativeActivity, activities);
+  check.exec('DROP TRIGGER reject_activity_save');
+  await db.call('saveRunUpdates',[restored]);
+  const remaining = check.prepare("SELECT revision FROM run_texts WHERE field LIKE '%nativeActivity%'").all();
+  assert.deepEqual(remaining.map(row=>row.revision).sort(), revisions.slice(1).map(row=>row.revision).sort());
+  assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []);
+ } finally { check.close(); }
+ restored.status = 'completed';
+ await db.call('commitTurn', {runId:r.id, turnId:'u', partial:true, runs:[restored]});
+ await db.close();
+ db = new Database(dir);
+ const saved = await db.call('readRun',{id:r.id});
+ assert.equal(saved.status,'completed');
+ assert.deepEqual(saved.tools[0].nativeActivity, expected);
+ const page = await db.call('readToolText',{id:r.id,toolId:'t',activityId:'1',offset:32762,limit:20});
+ assert.equal(page.text, expected[0].text.slice(32762,32782));
+ await assert.rejects(db.call('readToolText',{id:r.id,toolId:'t',activityId:activities[0].id}), /工具输出不存在/);
 });

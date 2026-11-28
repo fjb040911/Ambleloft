@@ -105,3 +105,15 @@ test('unsubscribing drops the rest of a transfer after the outstanding packet is
  assert.notEqual(sent[1].id,sent[0].id);
  assert.deepEqual(JSON.parse(sent[1].data),next);
 });
+
+test('in-flight spawn survives text-only deltas until its handoff completes',()=>{
+ const {run,first,publication}=fixture();
+ Object.defineProperty(run,'pendingNativeSpawns',{value:new Set(['spawn']),configurable:true});
+ publication.subscribe(first,[run.id]);
+ let state=applyRunEvent(null,first.details[0]);
+ assert.equal(state.run.startingSubagents,true);
+ run.messages[1].text+=' progress';publication.publish(run,new Set([messageHint('a')]));
+ state=applyRunEvent(state,first.details.at(-1));assert.equal(state.run.startingSubagents,true);
+ delete run.pendingNativeSpawns;publication.publish(run);
+ state=applyRunEvent(state,first.details.at(-1));assert.equal(state.run.startingSubagents,undefined);
+});

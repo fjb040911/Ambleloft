@@ -83,6 +83,7 @@ async function switchPermission(input,change){
   if(change)change.commit(context);else run.permission=input.permission;
   // Keep durable forms, queued answers, original turn attribution and child IDs.
   // Native RPC questions from the interrupted turn are retained in message history.
+  delete run.pendingNativeSpawns;
   run.approvals=[];run.questions=[];run.turnId=null;
   for(const target of targets.values())if(target.tool)target.tool.nativeTurnId=undefined;
   transition.phase='resuming';context.extensionChannel?.resume();

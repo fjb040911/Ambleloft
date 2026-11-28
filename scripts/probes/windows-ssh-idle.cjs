@@ -44,13 +44,14 @@ async function phase(name,seconds,move){
  const run=await page.evaluate(history=>window.desktop.startRun({...(history?{runId:'history-probe'}:{projectId:'ssh-idle-probe'}),prompt:'Wait for synthetic SSH validation. Do not run tools.',permission:'default'}),process.env.SSH_PROBE_HISTORY==='1');await app.evaluate(({BrowserWindow},id)=>BrowserWindow.getAllWindows()[0].webContents.send('extension:open-conversation',{kind:'run',recordId:id}),run.id);
  const until=Date.now()+30000;while(!engineRequests&&Date.now()<until)await sleep(100);assert.ok(engineRequests,'Native engine never reached local model');
  await phase('awaiting-first-byte-static',15,false);
- if(process.env.SSH_PROBE_LEGACY_LABELS==='1'){
+ // Older builds exposed a compositor alternative. Only compare when it exists.
+ if(process.env.SSH_PROBE_LEGACY_LABELS==='1'&&await page.locator('.composite-shimmer').count()){
   const selector='.composite-shimmer';
   await page.locator(selector).evaluateAll(es=>es.forEach(e=>{e.classList.add('shimmer');e.querySelectorAll('[data-shimmer-layer]').forEach(l=>l.style.display='none')} ));await phase('legacy-labels-restored',15,false);
   await page.locator(selector).evaluateAll(es=>es.forEach(e=>{e.classList.remove('shimmer');e.querySelectorAll('[data-shimmer-layer]').forEach(l=>l.style.removeProperty('display'))}));await phase('fixed-labels-restored',15,false);
  }
  if(process.env.SSH_PROBE_ANIMATION==='1'){
-  for(const [name,css] of [['shimmer-off','.shimmer,.shimmer::before,.shimmer::after{animation:none!important}'],['spinner-off','svg{animation:none!important}'],['all-animation-off','*,*::before,*::after{animation:none!important;transition:none!important}']]){const style=await page.addStyleTag({content:css});await phase(name,15,false);await style.evaluate(e=>e.remove());}
+  for(const [name,css] of [['shimmer-off','[data-trace-sweeping],.shimmer,.shimmer::before,.shimmer::after{animation:none!important}'],['spinner-off','svg{animation:none!important}'],['all-animation-off','*,*::before,*::after{animation:none!important;transition:none!important}']]){const style=await page.addStyleTag({content:css});await phase(name,15,false);await style.evaluate(e=>e.remove());}
   await phase('animations-restored',15,false);
  }
  if(process.env.SSH_PROBE_MANUAL==='1')await phase('awaiting-first-byte-native-drag',90,false);await phase('awaiting-first-byte-moving',15,true);assert.equal(firstOutputAt,null,'Must measure before any model response');finish=true;

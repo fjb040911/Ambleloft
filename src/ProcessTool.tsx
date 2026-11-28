@@ -1,3 +1,4 @@
+import {useTraceSweep} from './useTraceSweep';
 import {useToolText,type TextSource} from './ToolText';
 import {useProcessDisclosure} from './process-disclosure';
 import {type ReactNode} from 'react';
@@ -7,7 +8,7 @@ import {Terminal} from './components/ai-elements/terminal';
 import {t} from './i18n';
 
 /** Shared tool/terminal state. User disclosure choices win over later stream updates. */
-export default function ProcessTool({type,source,disclosureKey,title,summary,status,live,command,output,icon,steps=[],operationCatalog}:{operationCatalog?:string;type:string;source?:TextSource;disclosureKey?:string;title:string;summary:string;status:string;live:boolean;command:string;output:string;icon:ReactNode;steps?:string[]}) {
+export default function ProcessTool({type,source,disclosureKey,highlight=false,title,summary,status,live,command,output,icon,steps=[],operationCatalog}:{highlight?:boolean;operationCatalog?:string;type:string;source?:TextSource;disclosureKey?:string;title:string;summary:string;status:string;live:boolean;command:string;output:string;icon:ReactNode;steps?:string[]}) {
  const [open,setOpen]=useProcessDisclosure(disclosureKey);
  const terminal=type==='commandExecution';
  const detail=useToolText({...source,toolId:source?.toolId||'',text:output},open,true);
@@ -16,9 +17,10 @@ export default function ProcessTool({type,source,disclosureKey,title,summary,sta
  const waiting=['pending','approval-requested','waiting'].includes(status);
  const statusLabel=denied?'已拒绝':waiting?'待处理':live?'进行中':status==='completed'?'已完成':status==='interrupted'?'已中断':status==='failed'?'失败':status;
  const showSummary=!!summary&&summary!==title;
+ const sweep=useTraceSweep<HTMLSpanElement>(highlight?disclosureKey:undefined);
  const line=<TraceLine title={terminal?command:undefined} status={failed||denied?'error':waiting?'pending':live?'running':undefined}>
-  <TraceIcon>{icon}</TraceIcon><TraceTitle className={showSummary?'activity-tool-title shrink-0':'activity-tool-title'}>{t(title)}</TraceTitle>
-  {showSummary&&<TraceTitle className="activity-tool-summary" title={terminal?command:summary}>{summary}</TraceTitle>}
+  <TraceIcon>{icon}</TraceIcon><TraceTitle ref={showSummary?undefined:sweep} className={showSummary?'activity-tool-title shrink-0':'activity-tool-title'}>{t(title)}</TraceTitle>
+  {showSummary&&<TraceTitle ref={sweep} className="activity-tool-summary" title={terminal?command:summary}>{summary}</TraceTitle>}
   {status==='completed'?<span className="sr-only">{t(statusLabel)}</span>:<span className="activity-tool-status shrink-0">{t(statusLabel)}</span>}
  </TraceLine>;
  const truncated=!source?.preview&&!source?.activityId&&output.length>12000;

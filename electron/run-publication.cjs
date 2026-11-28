@@ -1,4 +1,4 @@
-const {pageRun,previewMessage,summary}=require('./history-pages.cjs');
+const {pageRun,previewMessage,summary,saveView}=require('./history-pages.cjs');
 const {previewTool}=require('./tool-previews.cjs');
 const {projectionVersion}=require('./runtime-text-cache.cjs');
 const {createRunPublisher}=require('./run-events.mjs');
@@ -7,7 +7,7 @@ const collections=['messages','tools','plans','artifacts','fileChanges','taskApp
 const previews={messages:previewMessage,tools:previewTool};
 
 function projectChanges(run, previous, items){
- const {modelRequests,...view}=run;
+ const {modelRequests,...view}=saveView(run);
  for(const name of collections)view[name]=previous[name];
  const copies=new Set();
  for(const key of items){

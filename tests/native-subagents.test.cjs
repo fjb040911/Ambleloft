@@ -72,3 +72,25 @@ test('functional title and streaming tool details retain lifecycle and original 
  assert.deepEqual(tool.nativeLifecycle.map(e=>e.status),['pending','running','completed']);assert.equal(tool.nativeActivity[0].text,'verified');assert.equal(tool.nativeActivity[0].status,'completed');
  runtime.notification(context,{method:'item/completed',params:{threadId:'parent',turnId:'turn',item:{type:'collabAgentToolCall',tool:'wait',receiverThreadIds:['child'],agentsStates:{child:{status:'running'}}}}});assert.equal(tool.status,'completed');
 });
+
+test('spawn handoff is visible before a receiver exists and clears after all calls settle',()=>{
+ const {runtime,context}=fixture(),run=context.run;
+ const {saveView}=require('../electron/history-pages.cjs');
+ const spawnEvent=(method,id,status,receiverThreadIds=[],turnId='turn')=>runtime.notification(context,{method,params:{
+  threadId:'parent',turnId,item:{id,type:'collabAgentToolCall',tool:'spawnAgent',status,receiverThreadIds,prompt:'Review'}
+ }});
+ spawnEvent('item/started','ignored','inProgress',[],'stale-turn');
+ assert.equal(saveView(run).startingSubagents,undefined);
+ spawnEvent('item/started','a','inProgress');spawnEvent('item/started','b','inProgress');
+ spawnEvent('item/started','a','inProgress');
+ assert.equal(saveView(run).startingSubagents,true);
+ assert.equal(run.tools.length,0);
+ assert.equal(Object.hasOwn(structuredClone(run),'pendingNativeSpawns'),false);
+ spawnEvent('item/completed','a','completed',['child']);
+ assert.equal(run.tools.length,1);assert.equal(saveView(run).startingSubagents,true);
+ spawnEvent('item/completed','b','failed');
+ assert.equal(saveView(run).startingSubagents,undefined);
+ assert.equal(run.tools.length,1);
+ spawnEvent('item/started','c','inProgress');runtime.native.finish(context);
+ assert.equal(saveView(run).startingSubagents,undefined);
+});
