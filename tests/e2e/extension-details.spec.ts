@@ -64,7 +64,7 @@ test('configuration authorization is scoped and detail errors clear when returni
 
 test('permission dialog keeps failures visible and submits only the selected project',async({page})=>{
  await page.goto('/');
- await page.evaluate(()=>{(window as any).desktop.extensions.grants=async(input:any)=>{(window as any).__grantInput=input;if(!(window as any).__allowGrant)throw Error('授权失败，请重试');return {};};});
+ await page.evaluate(()=>{const extensions=(window as any).desktop.extensions;const list=extensions.list;extensions.list=async()=>{const snapshot=await list();return {...snapshot,installed:snapshot.installed.map((item:any)=>({...item,grants:item.grants.filter((grant:any)=>grant.resource!=='project:private-id')}))};};extensions.grants=async(input:any)=>{(window as any).__grantInput=input;if(!(window as any).__allowGrant)throw Error('授权失败，请重试');return {};};});
  await page.locator('.activity-rail').getByRole('button',{name:'扩展',exact:true}).click();await page.getByRole('button',{name:'技能与扩展',exact:true}).click();await page.getByRole('button',{name:/^(管理|Manage) /}).click();await page.getByRole('tab',{name:/^(详情|Details)$/,exact:true}).click();await page.getByRole('tab',{name:'权限',exact:true}).click();await page.getByRole('button',{name:'管理权限',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'管理权限'});
  await expect(dialog.getByRole('button',{name:'确认授权'})).toBeDisabled();
