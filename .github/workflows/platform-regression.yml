@@ -31,4 +31,9 @@ jobs:
       - name: Plan acceptance and recovery regressions
         run: node --test --test-concurrency=2 tests/workforce-acceptance.test.cjs tests/workforce-complex-acceptance.test.cjs tests/workforce-plans.test.cjs tests/workforce-task-guide.test.cjs tests/native-subagents.test.cjs tests/conversation-data.test.cjs
       - name: Storage retention, Windows junctions and save-only recovery
-        run: node --test tests/storage-management.test.cjs tests/save-recovery.test.cjs tests/automation.test.cjs tests/database.test.cjs tests/updates.test.cjs
+        run: node --test tests/storage-management.test.cjs tests/save-recovery.test.cjs tests/automation.test.cjs tests/database.test.cjs tests/updates.test.cjs tests/run-patches.test.cjs tests/runtime-text-cache.test.cjs
+      - name: Hidden conversation interaction regression
+        if: runner.os == 'Windows'
+        run: |
+          npx playwright install chromium
+          npx playwright test tests/e2e/chat.spec.ts --grep 'hidden conversation freezes' --workers=1
