@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
+import {verifyLegacyActivityHistory} from './test-packaged-legacy-history.mjs';
 const require = createRequire(import.meta.url);
 const {CodexRPC} = require('../electron/codex-rpc.cjs');
 const root = path.resolve(import.meta.dirname, '..');
@@ -41,3 +42,4 @@ try {
   rpc?.close();
   await application?.close();
 }
+await verifyLegacyActivityHistory(executablePath);
